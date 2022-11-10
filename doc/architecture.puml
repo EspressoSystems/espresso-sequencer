@@ -51,6 +51,7 @@ User --> JsonRPC: EVM txn, queries
 JsonRPC -> Submit: EVM txn
 JsonRPC --> L2DB: read
 JsonRPC --> Tree: read
+JsonRPC -> Executor: call, estimate gas
 
 User -> BridgeL1
 Submit -> App: wrap in HotShot txn
