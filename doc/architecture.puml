@@ -8,9 +8,9 @@ package "WWW" {
 
 package "Decentralized Sequencer" {
   package "zkEVM app" as zkApp {
+    component "Submit API" as Submit
+    component Events
     package "Txn-ordering HotShot app" as App {
-      component "Submit API" as Submit
-      component QueryService
       package HotShot {
         component "Gossip" as GossipInternal
       }
@@ -44,11 +44,12 @@ package L1 {
 
 GossipInternal <--> GossipExternal
 Prover -> BridgeL2
-User -down-> Submit
+User -down-> Submit: EVM txn
 User --> BridgeL1
+Submit -> App: HotShot txn
 
 Executor --> Tree: execute (dry-run)
 Prover --> Tree: apply txns
-QueryService --> Prover: stream block
+Events --> Prover: stream batch
 Prover --> Rollup: proof, QC
 @enduml
