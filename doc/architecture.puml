@@ -8,17 +8,19 @@ package "WWW" {
 
 package "Decentralized Sequencer" {
   package "zkEVM app" as zkApp {
-    component "Submit API" as Submit
     component Events
+    component "Submit API" as Submit
     package "Txn-ordering HotShot app" as App {
       package HotShot {
         component "Gossip" as GossipInternal
+        component "Events" as HotShotEvents
       }
     }
   }
 }
 
 package L2 {
+  component JsonRPC
   component L2DB #lightgrey [
     L2 Blockchain DB
 
@@ -42,14 +44,20 @@ package L1 {
   component "Bridge L1" as BridgeL1 #lightgrey
 }
 
-GossipInternal <--> GossipExternal
+GossipInternal <-> GossipExternal
 Prover -> BridgeL2
-User -down-> Submit: EVM txn
-User --> BridgeL1
-Submit -> App: HotShot txn
+
+User --> JsonRPC: EVM txn, queries
+JsonRPC -> Submit: EVM txn
+JsonRPC --> L2DB: read
+JsonRPC --> Tree: read
+
+User -> BridgeL1
+Submit -> App: wrap in HotShot txn
+HotShotEvents -> Events
 
 Executor --> Tree: execute (dry-run)
 Prover --> Tree: apply txns
-Events --> Prover: stream batch
-Prover --> Rollup: proof, QC
+Events --> Prover: stream\norder commit,\nQC,\nbatch
+Prover --> Rollup: order commit,\nQC, proof
 @enduml
