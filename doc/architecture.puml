@@ -1,0 +1,54 @@
+@startuml
+package "WWW" {
+  component User
+  package "HotShot" as HotShotExternal {
+    component "Gossip" as GossipExternal
+  }
+}
+
+package "Decentralized Sequencer" {
+  package "zkEVM app" as zkApp {
+    package "Txn-ordering HotShot app" as App {
+      component "Submit API" as Submit
+      component QueryService
+      package HotShot {
+        component "Gossip" as GossipInternal
+      }
+    }
+  }
+}
+
+package L2 {
+  component L2DB #lightgrey [
+    L2 Blockchain DB
+
+    blocks
+    receipts
+    logs
+  ]
+  component Prover
+  component Executor #lightgrey
+  component Tree [
+    L2 State DB
+    Merkle Tree
+  ]
+  component "Bridge L2" as BridgeL2 #lightgrey
+}
+
+package L1 {
+  component Rollup [
+    Rollup Contract
+  ]
+  component "Bridge L1" as BridgeL1 #lightgrey
+}
+
+GossipInternal <--> GossipExternal
+Prover -> BridgeL2
+User -down-> Submit
+User --> BridgeL1
+
+Executor --> Tree: execute (dry-run)
+Prover --> Tree: apply txns
+QueryService --> Prover: stream block
+Prover --> Rollup: proof, QC
+@enduml
