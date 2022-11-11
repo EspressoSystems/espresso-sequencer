@@ -28,12 +28,14 @@ package L2 {
     receipts
     logs
   ]
-  component Prover
-  component Executor #lightgrey
-  component Tree [
-    L2 State DB
-    Merkle Tree
-  ]
+  package "Hermez Prover" as HermezProver {
+    component Prover
+    component Executor #lightgrey
+    component Tree [
+      L2 State DB
+      Merkle Tree
+    ]
+  }
   component "Bridge L2" as BridgeL2 #lightgrey
 }
 
