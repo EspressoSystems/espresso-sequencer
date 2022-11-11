@@ -37,7 +37,9 @@ package L2 {
     ]
   }
   component "Bridge L2" as BridgeL2 #lightgrey
+  component "Rollup Coordinator" as RollupCoordinator
 }
+
 
 package L1 {
   component Rollup [
@@ -47,20 +49,21 @@ package L1 {
 }
 
 GossipInternal <-down-> GossipExternal
-Prover -> BridgeL2
+Prover .up.> BridgeL2
 
 User --> JsonRPC: EVM txn, queries
-JsonRPC -> Submit: EVM txn
+JsonRPC -up-> Submit: EVM txn
 JsonRPC --> L2DB: read
 JsonRPC --> Tree: read
-JsonRPC -> Executor: call, estimate gas
+JsonRPC --> Executor: call, estimate gas
 
-User -> BridgeL1
+User --> BridgeL1
 Submit -up-> App: wrap in HotShot txn
 HotShotEvents -down-> Events
 
 Executor --> Tree: execute (dry-run)
 Prover --> Tree: apply txns
-Events --> Prover: stream\norder commit,\nQC,\nbatch
-Prover --> Rollup: order commit,\nQC, proof
+Events --> RollupCoordinator: stream\norder commit,\nQC,\nbatch
+RollupCoordinator -up-> Prover: get proof
+RollupCoordinator --> Rollup: order commit,\nQC, proof
 @enduml
