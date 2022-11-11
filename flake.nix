@@ -25,6 +25,7 @@
             buildInputs = [
               graphviz
               plantuml
+              coreutils
             ];
           };
       }

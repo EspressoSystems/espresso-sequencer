@@ -44,7 +44,7 @@ package L1 {
   component "Bridge L1" as BridgeL1 #lightgrey
 }
 
-GossipInternal <-> GossipExternal
+GossipInternal <-down-> GossipExternal
 Prover -> BridgeL2
 
 User --> JsonRPC: EVM txn, queries
@@ -54,8 +54,8 @@ JsonRPC --> Tree: read
 JsonRPC -> Executor: call, estimate gas
 
 User -> BridgeL1
-Submit -> App: wrap in HotShot txn
-HotShotEvents -> Events
+Submit -up-> App: wrap in HotShot txn
+HotShotEvents -down-> Events
 
 Executor --> Tree: execute (dry-run)
 Prover --> Tree: apply txns
