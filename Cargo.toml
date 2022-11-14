@@ -17,3 +17,9 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.0", features = ["derive", "env"] }
+derive_more = "0.99"
+serde = { version = "1.0", features = ["derive"] }
+snafu = { version = "0.7", features = ["backtraces"] }
+tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }
+toml = "0.5"
