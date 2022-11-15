@@ -17,6 +17,7 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
 [dependencies]
+async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 derive_more = "0.99"
 serde = { version = "1.0", features = ["derive"] }

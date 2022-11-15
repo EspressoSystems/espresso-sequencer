@@ -51,6 +51,18 @@ where
             Api::<State, Error>::new(toml)?
         }
     };
-    api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+    api.with_version("0.0.1".parse().unwrap());
     Ok(api)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::data_source::QueryData;
+    use async_std::sync::RwLock;
+
+    #[test]
+    fn instantiate_api() {
+        define_api::<RwLock<QueryData>>(&Default::default()).unwrap();
+    }
 }
