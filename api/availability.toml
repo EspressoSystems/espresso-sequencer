@@ -65,6 +65,7 @@ Returns
     "block": application-specific block type,
     "hash": TaggedBase64,
     "height": integer,
+    "size": integer,
     "txn_hashes": [TaggedBase64],
 }
 ```

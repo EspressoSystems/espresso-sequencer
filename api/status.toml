@@ -1,0 +1,51 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+NAME = "hotshot-status"
+DESCRIPTION = "Snapshots of consensus related state"
+FORMAT_VERSION = "0.1.0"
+
+[route.latest_block_height]
+PATH = ["/latest_block_height"]
+DOC = """
+Get the height of the latest committed block.
+"""
+
+[route.mempool_info]
+PATH = ["/mempool_info"]
+DOC = """
+Get information about the mempool.
+
+Returns 
+```
+{
+	"transaction_count": "integer",
+	"output_count": "integer",
+	"memory_footprint": "integer",
+}
+```
+"""
+
+[route.success_rate]
+PATH = ["/success_rate"]
+DOC = """
+Get the view success rate.
+
+Returns the fraction of views which resulted in a committed block, as a floating point number.
+"""
+
+[route.metrics]
+PATH = ["/metrics"]
+DOC = """
+Prometheus endpoint exposing various consensus-related metrics.
+"""

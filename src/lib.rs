@@ -12,3 +12,4 @@
 
 pub mod availability;
 mod data_source;
+pub mod status;
