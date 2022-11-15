@@ -1,0 +1,139 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+NAME = "hotshot-availability"
+DESCRIPTION = "Historical HotShot ledger state"
+FORMAT_VERSION = "0.1.0"
+
+[route.getleaf]
+PATH = ["getleaf/:height", "getleaf/hash/:hash"]
+":height" = "Integer"
+":hash" = "TaggedBase64"
+DOC = """
+Get a leaf by its position in the ledger (0 is the genesis leaf) or its hash.
+
+Returns
+```
+{
+    "leaf": {
+        "view_number": integer,
+        "justify_qc": {
+            "block_commitment": TaggedBase64,
+            "leaf_commitment": TaggedBase64,
+            "view_number": integer,
+            // Map from signing keys to (signature, vote) pairs
+            "signatures": {TaggedBase64 -> (TaggedBase64, TaggedBase64)},
+            genesis: boolean,
+        },
+        "parent_commitment": TaggedBase64,
+        "block_hash": TaggedBase64,
+        "timestamp": integer,
+        "proposer_id": TaggedBase64,
+    },
+    "hash": TaggedBase64,
+    "height": integer,
+}
+```
+"""
+
+[route.getblock]
+PATH = ["getblock/:height", "getblock/hash/:hash"]
+":height" = "Integer"
+":hash" = "TaggedBase64"
+DOC = """
+Get a block by its position in the ledger (0 is the genesis block) or its hash.
+
+Note that block data in HotShot disseminates asynchronously. That means that the full data for a
+block may not be available immediately after that block is committed. In this situation, `getleaf/i`
+may succeed but `getblock/i` may fail. However, once `getleaf/i` succeeds, it is guaranteed that
+`getblock/i` will _eventually_ succeed, and return a block whose `hash` is the same as the
+`block_hash` from the corresponding leaf.
+
+Returns
+```
+{
+    "block": application-specific block type,
+    "hash": TaggedBase64,
+    "height": integer,
+    "txn_hashes": [TaggedBase64],
+}
+```
+"""
+
+[route.gettransaction]
+PATH = ["gettransaction/:height/:index", "gettransaction/hash/:hash"]
+":height" = "Integer"
+":index" = "Integer"
+":hash" = "TaggedBase64"
+DOC = """
+Get a transaction by its `index` in the block at `height` or by its hash.
+
+If specified, `:height` and `:index` represent the block containing the transaction and the index
+of the transaction within the block, respectively. Otherwise, `:hash` is the hash of the
+transaction.
+
+Returns
+```
+{
+    "transaction": application-specific transaction type,
+    "height": integer,
+    "index": integer,
+    "hash": TaggedBase64,
+}
+```
+"""
+
+[route.countproposals]
+PATH = ["countproposals/:proposer_id"]
+":proposer_id" = "TaggedBase64"
+DOC = """
+Get the number of committed blocks proposed by `proposer_id`
+
+Returns 
+```
+{
+    "count": Integer,
+}
+```
+
+"""
+
+[route.getproposals]
+PATH = ["getproposals/:proposer_id", "getproposals/:proposer_id/:count"]
+":proposer_id" = "TaggedBase64"
+":count" = "Integer"
+DOC = """
+Get the block data of `:count` blocks from the proposer with `:proposer_id`, starting
+backwards from the most recent block from this proposer. If the proposer has proposed less
+blocks than `:count`, return all the blocks from the proposer.
+
+Returns a list of 
+```
+{
+    "block": application-specific block type,
+    "hash": TaggedBase64,
+    "height": integer,
+    "txn_hashes": [TaggedBase64],
+}
+```
+"""
+
+[route.getstaketable]
+PATH = ["getstaketable/:height", "getstaketable/view/:view_number"]
+":height" = "Integer"
+":view_number" = "Integer"
+DOC = """
+Get the stake table after `:height` leaves or after `:view_number`.
+
+Returns a map from staking public keys to amounts.
+"""
