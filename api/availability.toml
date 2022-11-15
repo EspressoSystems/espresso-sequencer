@@ -100,7 +100,7 @@ PATH = ["countproposals/:proposer_id"]
 DOC = """
 Get the number of committed blocks proposed by `proposer_id`
 
-Returns 
+Returns
 ```
 {
     "count": Integer,
@@ -118,7 +118,7 @@ Get the block data of `:count` blocks from the proposer with `:proposer_id`, sta
 backwards from the most recent block from this proposer. If the proposer has proposed less
 blocks than `:count`, return all the blocks from the proposer.
 
-Returns a list of 
+Returns a list of
 ```
 {
     "block": application-specific block type,

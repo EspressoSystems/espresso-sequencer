@@ -26,12 +26,12 @@ PATH = ["/mempool_info"]
 DOC = """
 Get information about the mempool.
 
-Returns 
+Returns
 ```
 {
-	"transaction_count": "integer",
-	"output_count": "integer",
-	"memory_footprint": "integer",
+    "transaction_count": "integer",
+    "output_count": "integer",
+    "memory_footprint": "integer",
 }
 ```
 """
