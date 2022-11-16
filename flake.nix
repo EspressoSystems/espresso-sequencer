@@ -39,6 +39,7 @@
         devShells.default = mkShell
           {
             buildInputs = [
+              entr
               graphviz
               plantuml
               coreutils

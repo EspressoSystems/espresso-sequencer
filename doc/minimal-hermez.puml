@@ -1,0 +1,83 @@
+@startuml
+skinparam componentStyle rectangle
+
+frame Legend {
+  component "from zkevm-node" #PaleGreen
+  component "from zkevm-node\nmodified" #LightPink
+  component "new/to be developed"
+}
+
+component User
+package "HotShot\n(other instances)" as HotShotExternal {
+  component "Gossip" as GossipExternal
+}
+
+package "Decentralized Sequencer" {
+  package "zkEVM app" as zkApp {
+    component Events
+    component "Submit API" as Submit
+    package "Txn-ordering HotShot app" as App {
+      package HotShot {
+        component "Gossip" as GossipInternal
+        component "Events" as HotShotEvents
+      }
+    }
+  }
+}
+
+
+package "Espresso L2 Connector" as Connector {
+  component "HotShot-Hermez Adapter" as Adapter
+  component "RPC dispatch" as Dispatch
+}
+
+package "Ethereum L1" as L1 {
+  component "Rollup Contract" as Rollup
+  ' component "Bridge L1" as BridgeL1 #PaleGreen
+}
+
+
+package "L2 (zkevm-node)" as L2 {
+  component JsonRPC #PaleGreen
+  database L2DB #PaleGreen [
+    L2 Blockchain DB
+  ]
+  package "Hermez Prover" as HermezProver {
+    component Prover #PaleGreen
+    component Executor #PaleGreen
+    database Tree #PaleGreen [
+      L2 State DB
+      Merkle Tree
+    ]
+  }
+  'component "Bridge L2" as BridgeL2 #PaleGreen
+  component Etherman #LightPink
+  component Aggregator #PaleGreen
+}
+
+User -> Dispatch: EVM txn\nqueries
+Dispatch --> JsonRPC: Queries
+Dispatch -up-> Submit: EVM txn
+
+GossipInternal <-> GossipExternal
+
+Events --> Adapter: stream:\norder commit\nQC\nbatch
+
+Adapter -> L2DB: batch
+Adapter -> Rollup: order commit\nQC
+
+JsonRPC --> L2DB: read
+JsonRPC --> Tree: accounts
+JsonRPC --> Executor: call, etc.
+
+Aggregator -up-> L2DB: fetch\nproof\ninput
+Aggregator -up-> Etherman: proof
+Aggregator -up-> Prover: generate\nproof
+Etherman -> Rollup: proof
+
+' Prover ..> BridgeL2
+' User --> BridgeL1
+Submit -up-> App: wrap in HotShot txn
+HotShotEvents -down-> Events
+
+@enduml
