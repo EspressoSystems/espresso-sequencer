@@ -65,12 +65,11 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data_source::QueryData;
+    use crate::{data_source::QueryData, testing::mocks::MockTypes};
     use async_std::sync::RwLock;
-    use hotshot::demos::dentry::DEntryTypes;
 
     #[test]
     fn instantiate_api() {
-        define_api::<RwLock<QueryData<DEntryTypes, ()>>, DEntryTypes>(&Default::default()).unwrap();
+        define_api::<RwLock<QueryData<MockTypes, ()>>, MockTypes>(&Default::default()).unwrap();
     }
 }

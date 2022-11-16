@@ -51,6 +51,7 @@ impl<Types: NodeTypes> BlockQueryData<Types> {
         if i >= self.len() {
             return None;
         }
+        #[allow(unreachable_code)]
         Some(TransactionQueryData {
             transaction: unimplemented!(), // TODO the block trait should expose some way of getting the `i`th transaction
             height: self.height,

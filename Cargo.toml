@@ -16,6 +16,10 @@ version = "0.0.1"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
+[features]
+default = []
+testing = []
+
 [dependencies]
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 clap = { version = "4.0", features = ["derive", "env"] }

@@ -1,3 +1,5 @@
+#![cfg(any(test, feature = "testing"))]
+
 // Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
@@ -10,7 +12,4 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-pub mod availability;
-mod data_source;
-pub mod status;
-pub mod testing;
+pub mod mocks;
