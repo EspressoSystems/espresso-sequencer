@@ -17,9 +17,15 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
 [dependencies]
+ark-serialize = { version = "0.3.0", features = ["derive"] }
+ark-std = { version = "0.3.0", default-features = false }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 clap = { version = "4.0", features = ["derive", "env"] }
+commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.0" }
 derive_more = "0.99"
+hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", branch = "main", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", branch = "main" }
+jf-utils = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2" }
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }

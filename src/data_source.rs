@@ -10,5 +10,61 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::availability::{
+    data_source::AvailabilityDataSource,
+    query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
+};
+use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
+
+pub trait ExtensibleDataSource {
+    type UserData;
+    fn user_data(&self) -> &Self::UserData;
+    fn user_data_mut(&mut self) -> &mut Self::UserData;
+}
+
 #[derive(Debug)]
-pub(crate) struct QueryData;
+pub(crate) struct QueryData<Types: NodeTypes, UserData> {
+    user_data: UserData,
+    _marker: std::marker::PhantomData<Types>,
+}
+
+impl<Types: NodeTypes, UserData> ExtensibleDataSource for QueryData<Types, UserData> {
+    type UserData = UserData;
+
+    fn user_data(&self) -> &Self::UserData {
+        &self.user_data
+    }
+
+    fn user_data_mut(&mut self) -> &mut Self::UserData {
+        &mut self.user_data
+    }
+}
+
+impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Types, UserData> {
+    type LeafIterType<'a> = std::vec::IntoIter<Option<LeafQueryData<Types>>> where UserData: 'a;
+    type BlockIterType<'a> = std::vec::IntoIter<Option<BlockQueryData<Types>>> where UserData: 'a;
+
+    fn get_nth_leaf_iter(&self, _n: usize) -> Self::LeafIterType<'_> {
+        unimplemented!()
+    }
+
+    fn get_nth_block_iter(&self, _n: usize) -> Self::BlockIterType<'_> {
+        unimplemented!()
+    }
+
+    fn get_leaf_index_by_hash(&self, _hash: LeafHash<Types>) -> Option<u64> {
+        unimplemented!()
+    }
+
+    fn get_block_index_by_hash(&self, _hash: BlockHash<Types>) -> Option<u64> {
+        unimplemented!()
+    }
+
+    fn get_txn_index_by_hash(&self, _hash: TransactionHash<Types>) -> Option<(u64, u64)> {
+        unimplemented!()
+    }
+
+    fn get_block_ids_by_proposer_id(&self, _id: EncodedPublicKey) -> Vec<u64> {
+        unimplemented!()
+    }
+}

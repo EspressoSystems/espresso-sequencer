@@ -60,9 +60,10 @@ mod test {
     use super::*;
     use crate::data_source::QueryData;
     use async_std::sync::RwLock;
+    use hotshot::demos::dentry::DEntryTypes;
 
     #[test]
     fn instantiate_api() {
-        define_api::<RwLock<QueryData>>(&Default::default()).unwrap();
+        define_api::<RwLock<QueryData<DEntryTypes, ()>>>(&Default::default()).unwrap();
     }
 }

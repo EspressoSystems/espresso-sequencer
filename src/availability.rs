@@ -12,10 +12,16 @@
 
 use clap::Args;
 use derive_more::From;
+use hotshot_types::traits::node_implementation::NodeTypes;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
+
+pub(crate) mod data_source;
+pub(crate) mod query_data;
+pub use data_source::*;
+pub use query_data::*;
 
 #[derive(Args, Default)]
 pub struct Options {
@@ -36,9 +42,10 @@ impl Error {
     }
 }
 
-pub fn define_api<State>(options: &Options) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Types: NodeTypes>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
 {
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error>::from_file(path)?,
@@ -60,9 +67,10 @@ mod test {
     use super::*;
     use crate::data_source::QueryData;
     use async_std::sync::RwLock;
+    use hotshot::demos::dentry::DEntryTypes;
 
     #[test]
     fn instantiate_api() {
-        define_api::<RwLock<QueryData>>(&Default::default()).unwrap();
+        define_api::<RwLock<QueryData<DEntryTypes, ()>>, DEntryTypes>(&Default::default()).unwrap();
     }
 }
