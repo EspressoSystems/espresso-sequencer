@@ -39,6 +39,12 @@ package "Ethereum L1" as L1 {
 
 package "L2 (zkevm-node)" as L2 {
   component JsonRPC #PaleGreen
+  note left of JsonRPC
+    Optionally dispatch copy of EVM
+    txns to JsonRPC and attach a
+    fake local mempool for queries
+    with pending txns.
+  end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
   ]
