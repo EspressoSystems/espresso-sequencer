@@ -1,9 +1,15 @@
 @startuml
-package "WWW" {
-  component User
-  package "HotShot" as HotShotExternal {
-    component "Gossip" as GossipExternal
-  }
+skinparam componentStyle rectangle
+
+frame Legend {
+  component "from zkevm-node" #PaleGreen
+  component "from zkevm-node\nmodified" #LightPink
+  component "new/to be developed"
+}
+
+component User
+package "HotShot\n(other instances)" as HotShotExternal {
+  component "Gossip" as GossipExternal
 }
 
 package "Decentralized Sequencer" {
@@ -19,51 +25,68 @@ package "Decentralized Sequencer" {
   }
 }
 
-package L2 {
-  component JsonRPC
-  component L2DB #lightgrey [
-    L2 Blockchain DB
 
-    blocks
-    receipts
-    logs
+package "Espresso L2 Connector" as Connector {
+  component "HotShot-Hermez Adapter" as Adapter
+  component "RPC dispatch" as Dispatch
+}
+
+package "Ethereum L1" as L1 {
+  component "Rollup Contract" as Rollup
+  ' component "Bridge L1" as BridgeL1 #PaleGreen
+}
+
+
+package "L2 (zkevm-node)" as L2 {
+  component JsonRPC #PaleGreen
+  note left of JsonRPC
+    Optionally dispatch copy of EVM
+    txns to JsonRPC and attach a
+    fake local mempool for queries
+    with pending txns.
+  end note
+  database L2DB #PaleGreen [
+    L2 Blockchain DB
   ]
   package "Hermez Prover" as HermezProver {
-    component Prover
-    component Executor #lightgrey
-    component Tree [
+    component Prover #PaleGreen
+    component Executor #PaleGreen
+    database Tree #PaleGreen [
       L2 State DB
       Merkle Tree
     ]
   }
-  component "Bridge L2" as BridgeL2 #lightgrey
-  component "Rollup Coordinator" as RollupCoordinator
+  'component "Bridge L2" as BridgeL2 #PaleGreen
+  component Etherman #LightPink
+  component Aggregator #PaleGreen
+  component "State\nLibrary" as State #PaleGreen
 }
 
+User -> Dispatch: EVM txn\nqueries
+Dispatch --> JsonRPC: Queries
+Dispatch -up-> Submit: EVM txn
 
-package L1 {
-  component Rollup [
-    Rollup Contract
-  ]
-  component "Bridge L1" as BridgeL1 #lightgrey
-}
+GossipInternal <-> GossipExternal
 
-GossipInternal <-down-> GossipExternal
-Prover .up.> BridgeL2
+Events --> Adapter: stream:\norder commit\nQC\nbatch
 
-User --> JsonRPC: EVM txn, queries
-JsonRPC -up-> Submit: EVM txn
-JsonRPC --> L2DB: read
-JsonRPC --> Tree: read
-JsonRPC --> Executor: call, estimate gas
+Adapter -> L2DB: batch
+Adapter -> Rollup: order commit\nQC
 
-User --> BridgeL1
+JsonRPC --> State
+
+State -> L2DB: read
+State --> Tree: accounts
+State --> Executor: call, etc.
+
+Aggregator -> State: fetch\nprover\ninput
+Aggregator --> Etherman: proof
+Aggregator -> Prover: generate\nproof
+Etherman --> Rollup: proof
+
+' Prover ..> BridgeL2
+' User --> BridgeL1
 Submit -up-> App: wrap in HotShot txn
 HotShotEvents -down-> Events
 
-Executor --> Tree: execute (dry-run)
-Prover --> Tree: apply txns
-Events --> RollupCoordinator: stream\norder commit,\nQC,\nbatch
-RollupCoordinator -up-> Prover: get proof
-RollupCoordinator --> Rollup: order commit,\nQC, proof
 @enduml
