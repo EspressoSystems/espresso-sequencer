@@ -10,29 +10,15 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use ark_serialize::*;
 use commit::Commitment;
-use derive_more::{AsRef, From, Into};
 use hotshot::{data::Leaf, traits::Block};
 use hotshot_types::traits::node_implementation::NodeTypes;
-use jf_utils::tagged_blob;
 use serde::{Deserialize, Serialize};
 
-#[tagged_blob("LEAF")]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    CanonicalDeserialize,
-    CanonicalSerialize,
-    PartialEq,
-    Eq,
-    Hash,
-    From,
-    Into,
-    AsRef,
-)]
-pub struct LeafHash<Types: NodeTypes>(Commitment<Leaf<Types>>);
+pub type LeafHash<Types> = Commitment<Leaf<Types>>;
+pub type BlockHash<Types> = Commitment<<Types as NodeTypes>::BlockType>;
+pub type TransactionHash<Types> =
+    Commitment<<<Types as NodeTypes>::BlockType as Block>::Transaction>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(bound = "")]
@@ -41,38 +27,6 @@ pub struct LeafQueryData<Types: NodeTypes> {
     pub hash: LeafHash<Types>,
     pub height: u64,
 }
-
-#[tagged_blob("BLOCK")]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    CanonicalDeserialize,
-    CanonicalSerialize,
-    PartialEq,
-    Eq,
-    Hash,
-    From,
-    Into,
-    AsRef,
-)]
-pub struct BlockHash<Types: NodeTypes>(Commitment<Types::BlockType>);
-
-#[tagged_blob("TXN")]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    CanonicalDeserialize,
-    CanonicalSerialize,
-    PartialEq,
-    Eq,
-    Hash,
-    From,
-    Into,
-    AsRef,
-)]
-pub struct TransactionHash<Types: NodeTypes>(Commitment<<Types::BlockType as Block>::Transaction>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
