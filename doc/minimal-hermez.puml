@@ -53,6 +53,7 @@ package "L2 (zkevm-node)" as L2 {
   'component "Bridge L2" as BridgeL2 #PaleGreen
   component Etherman #LightPink
   component Aggregator #PaleGreen
+  component "State\nLibrary" as State #PaleGreen
 }
 
 User -> Dispatch: EVM txn\nqueries
@@ -66,14 +67,16 @@ Events --> Adapter: stream:\norder commit\nQC\nbatch
 Adapter -> L2DB: batch
 Adapter -> Rollup: order commit\nQC
 
-JsonRPC --> L2DB: read
-JsonRPC --> Tree: accounts
-JsonRPC --> Executor: call, etc.
+JsonRPC --> State
 
-Aggregator -up-> L2DB: fetch\nproof\ninput
-Aggregator -up-> Etherman: proof
-Aggregator -up-> Prover: generate\nproof
-Etherman -> Rollup: proof
+State -> L2DB: read
+State --> Tree: accounts
+State --> Executor: call, etc.
+
+Aggregator -> State: fetch\nprover\ninput
+Aggregator --> Etherman: proof
+Aggregator -> Prover: generate\nproof
+Etherman --> Rollup: proof
 
 ' Prover ..> BridgeL2
 ' User --> BridgeL1
