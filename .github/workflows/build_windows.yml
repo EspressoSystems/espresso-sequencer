@@ -41,6 +41,9 @@ jobs:
           default: true
           components: rustfmt, clippy
 
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+
       - name: Checkout Repository
         uses: actions/checkout@v3
 
