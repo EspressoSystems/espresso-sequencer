@@ -2,10 +2,13 @@
 skinparam componentStyle rectangle
 
 frame Legend {
-  component "from zkevm-node" #PaleGreen
-  component "from zkevm-node\nmodified" #LightPink
-  component "new/to be developed"
+  component "zkevm-node "as is"" as Original #PaleGreen
+  component "zkevm-node modified" as Modified #LightPink
+  component "new" as New
 }
+
+New -[hidden]r-> Original
+Original -[hidden]r-> Modified
 
 component User
 package "HotShot\n(other instances)" as HotShotExternal {
@@ -32,7 +35,7 @@ package "Espresso L2 Connector" as Connector {
 }
 
 package "Ethereum L1" as L1 {
-  component "Rollup Contract" as Rollup
+  component "Rollup Contract" as Rollup #LightPink
   ' component "Bridge L1" as BridgeL1 #PaleGreen
 }
 
@@ -63,6 +66,9 @@ package "L2 (zkevm-node)" as L2 {
 }
 
 User -> Dispatch: EVM txn\nqueries
+'positions the box in a better place
+User -[hidden]> L2
+
 Dispatch --> JsonRPC: Queries
 Dispatch -up-> Submit: EVM txn
 
