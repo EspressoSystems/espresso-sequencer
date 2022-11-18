@@ -10,7 +10,7 @@ frame Legend {
 New -[hidden]r-> Original
 Original -[hidden]r-> Modified
 
-component User
+component User #White
 package "HotShot\n(other instances)" as HotShotExternal {
   component "Gossip" as GossipExternal
 }
@@ -65,11 +65,11 @@ package "L2 (zkevm-node)" as L2 {
   component "State\nLibrary" as State #PaleGreen
 }
 
-User -> Dispatch: EVM txn\nqueries
-'positions the box in a better place
+User -> Dispatch: EVM txn\nEVM queries
+'positions the User box in a better place
 User -[hidden]> L2
 
-Dispatch --> JsonRPC: Queries
+Dispatch --> JsonRPC: EVM queries
 Dispatch -up-> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
@@ -79,7 +79,7 @@ Events --> Adapter: stream:\norder commit\nQC\nbatch
 Adapter -> L2DB: batch
 Adapter -> Rollup: order commit\nQC
 
-JsonRPC --> State
+JsonRPC --> State: EVM queries
 
 State -> L2DB: read
 State --> Tree: accounts
