@@ -17,6 +17,11 @@ use snafu::Snafu;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 
+pub(crate) mod data_source;
+pub(crate) mod query_data;
+pub use data_source::*;
+pub use query_data::*;
+
 #[derive(Args, Default)]
 pub struct Options {
     #[arg(long = "status-api-path", env = "HOTSHOT_STATUS_API_PATH")]
@@ -39,6 +44,7 @@ impl Error {
 pub fn define_api<State>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
+    <State as ReadState>::State: Send + Sync + StatusDataSource,
 {
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error>::from_file(path)?,

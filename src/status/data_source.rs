@@ -10,8 +10,21 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-pub mod availability;
-mod data_source;
-mod metrics;
-pub mod status;
-pub mod testing;
+use super::query_data::MempoolQueryData;
+use hotshot_types::traits::metrics::Metrics;
+use std::error::Error;
+use std::fmt::Debug;
+
+pub trait StatusDataSource {
+    type Error: Error + Debug;
+    fn block_height(&self) -> Result<usize, Self::Error>;
+    fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error>;
+    fn success_rate(&self) -> Result<f64, Self::Error>;
+
+    /// Export all available metrics in the Prometheus text format.
+    fn export_metrics(&self) -> Result<String, Self::Error>;
+}
+
+pub(crate) trait UpdateStatusData {
+    fn metrics(&self) -> Box<dyn Metrics>;
+}
