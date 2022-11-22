@@ -86,9 +86,9 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
     }
 
     fn success_rate(&self) -> Result<f64, Self::Error> {
-        let failure_rate = (self.metrics.get_counter("invalid_qc_views")?.get() as f64)
-            / (self.metrics.get_counter("currenv_view")?.get() as f64);
-        Ok(1f64 - failure_rate)
+        let total_views = self.metrics.get_counter("currenv_view")?.get() as f64;
+        // By definition, a successful view is any which committed a block.
+        Ok(self.block_height()? as f64 / total_views)
     }
 
     fn export_metrics(&self) -> Result<String, Self::Error> {
