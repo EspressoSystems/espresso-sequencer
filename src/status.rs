@@ -58,11 +58,11 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data_source::QueryData;
+    use crate::{data_source::QueryData, testing::mocks::MockTypes};
     use async_std::sync::RwLock;
 
     #[test]
     fn instantiate_api() {
-        define_api::<RwLock<QueryData>>(&Default::default()).unwrap();
+        define_api::<RwLock<QueryData<MockTypes, ()>>>(&Default::default()).unwrap();
     }
 }

@@ -140,6 +140,7 @@
               nixpkgs-fmt
               git
               mdbook # make-doc, documentation generation
+              protobuf
               rustToolchain
             ] ++ myPython ++ rustDeps;
 
