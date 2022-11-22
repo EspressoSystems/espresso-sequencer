@@ -1,0 +1,9 @@
+[package]
+name = "sequencer"
+version = "0.1.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot", version = "0.3.3", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot", version = "0.1.0", features = ["async-std-executor", "channel-async-std"] }
