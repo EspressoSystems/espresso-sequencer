@@ -53,7 +53,7 @@
               cargo-clippy = {
                 enable = true;
                 description = "Run clippy";
-                entry = "cargo clippy --workspace -- -D clippy::dbg-macro";
+                entry = "cargo clippy --workspace --examples --bins --tests -- -D warnings";
                 pass_filenames = false;
               };
             };
