@@ -344,10 +344,6 @@ impl metrics::Histogram for Histogram {
 }
 
 /// A [Label](metrics::Label) metric.
-///
-/// Note that there is no Prometheus equivalent of a [Label], so this metric does not export its
-/// value with the Prometheus data; however, it can still be queried directly from a
-/// [PrometheusMetrics] collection using [get_label](PrometheusMetrics::get_label).
 #[derive(Clone, Debug)]
 pub struct Label(Arc<RwLock<String>>);
 
