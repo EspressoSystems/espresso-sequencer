@@ -15,8 +15,8 @@
 use hotshot_types::traits::metrics;
 use itertools::Itertools;
 use prometheus::{
-    core::{AtomicU64, GenericCounter, GenericGauge},
-    Encoder, Opts, Registry, TextEncoder,
+    core::{AtomicU64, Collector, GenericCounter, GenericGauge},
+    Encoder, Opts, TextEncoder,
 };
 use snafu::Snafu;
 use std::collections::HashMap;
@@ -39,6 +39,59 @@ pub enum MetricsError {
 impl From<prometheus::Error> for MetricsError {
     fn from(source: prometheus::Error) -> Self {
         Self::Prometheus { source }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Registry {
+    prometheus: prometheus::Registry,
+    // There is nothing in the Prometheus standard corresponding to our notion of a [Label] (which
+    // is like a gauge whose value is text). As a workaround we serialize labels using special
+    // Prometheus comments, like `# LABEL <name> "<text>"`. `labels` collects _all_ labels (as a map
+    // from fully-qualified name to label value) in this tree of metric groups.
+    //
+    // We store all the labels here, rather than storing the labels for each sub-group in the
+    // appropriate [PrometheusMetrics], to match the behavior of Prometheus-native metrics, where
+    // all metrics from any related subgroup are serialied when [PrometheusMetrics::prometheus] is
+    // called on any subgroup.
+    labels: Arc<RwLock<HashMap<Vec<String>, Label>>>,
+}
+
+impl Registry {
+    fn register(&self, metric: Box<dyn Collector>) {
+        self.prometheus.register(metric).unwrap();
+    }
+
+    fn register_label(&self, fq_name: Vec<String>, value: Label) {
+        self.labels.write().unwrap().insert(fq_name, value);
+    }
+
+    fn get_label(&self, fq_name: &[String]) -> Option<Label> {
+        self.labels.read().unwrap().get(fq_name).cloned()
+    }
+
+    fn export(&self) -> Result<String, MetricsError> {
+        // First write all the labels as Prometheus comments.
+        let mut labels = self
+            .labels
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(fq_name, label)| format!("# LABEL {} {}", fq_name.iter().join("_"), label.get()))
+            .join("\n");
+        labels.push('\n');
+
+        // Now append the Prometheus metrics.
+        let mut buffer = labels.into_bytes();
+        let encoder = TextEncoder::new();
+        let metric_families = self.prometheus.gather();
+        encoder.encode(&metric_families, &mut buffer)?;
+        String::from_utf8(buffer).map_err(|err| MetricsError::Prometheus {
+            source: prometheus::Error::Msg(format!(
+                "could not convert Prometheus output to UTF-8: {}",
+                err
+            )),
+        })
     }
 }
 
@@ -69,22 +122,12 @@ pub(crate) struct PrometheusMetrics {
     counters: Arc<RwLock<HashMap<String, Counter>>>,
     gauges: Arc<RwLock<HashMap<String, Gauge>>>,
     histograms: Arc<RwLock<HashMap<String, Histogram>>>,
-    labels: Arc<RwLock<HashMap<String, Label>>>,
 }
 
 impl PrometheusMetrics {
     /// Export all metrics in the Prometheus text format.
     pub fn prometheus(&self) -> Result<String, MetricsError> {
-        let mut buffer = vec![];
-        let encoder = TextEncoder::new();
-        let metric_families = self.metrics.gather();
-        encoder.encode(&metric_families, &mut buffer)?;
-        String::from_utf8(buffer).map_err(|err| MetricsError::Prometheus {
-            source: prometheus::Error::Msg(format!(
-                "could not convert Prometheus output to UTF-8: {}",
-                err
-            )),
-        })
+        self.metrics.export()
     }
 
     /// Get a counter in this sub-group by name.
@@ -104,7 +147,14 @@ impl PrometheusMetrics {
 
     /// Get a label in this sub-group by name.
     pub fn get_label(&self, name: &str) -> Result<Label, MetricsError> {
-        self.get_metric(&self.labels, name)
+        let mut fq_name = self.namespace.clone();
+        fq_name.push(name.to_string());
+        self.metrics
+            .get_label(&fq_name)
+            .ok_or_else(|| MetricsError::NoSuchMetric {
+                namespace: self.namespace.clone(),
+                label: name.to_string(),
+            })
     }
 
     /// Get a (possibly nested) subgroup of this group by its path.
@@ -196,9 +246,7 @@ impl metrics::Metrics for PrometheusMetrics {
     }
 
     fn create_label(&self, name: String) -> Box<dyn metrics::Label> {
-        let label = Label::default();
-        self.labels.write().unwrap().insert(name, label.clone());
-        Box::new(label)
+        Box::new(Label::new(&self.metrics, self.metric_opts(name, None)))
     }
 
     fn subgroup(&self, subgroup_name: String) -> Box<dyn metrics::Metrics> {
@@ -228,7 +276,7 @@ pub struct Counter(GenericCounter<AtomicU64>);
 impl Counter {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let counter = GenericCounter::with_opts(opts).unwrap();
-        registry.register(Box::new(counter.clone())).unwrap();
+        registry.register(Box::new(counter.clone()));
         Self(counter)
     }
 
@@ -250,7 +298,7 @@ pub struct Gauge(GenericGauge<AtomicU64>);
 impl Gauge {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let gauge = GenericGauge::with_opts(opts).unwrap();
-        registry.register(Box::new(gauge.clone())).unwrap();
+        registry.register(Box::new(gauge.clone()));
         Self(gauge)
     }
 
@@ -272,7 +320,7 @@ pub struct Histogram(prometheus::Histogram);
 impl Histogram {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let histogram = prometheus::Histogram::with_opts(opts.into()).unwrap();
-        registry.register(Box::new(histogram.clone())).unwrap();
+        registry.register(Box::new(histogram.clone()));
         Self(histogram)
     }
 
@@ -300,10 +348,24 @@ impl metrics::Histogram for Histogram {
 /// Note that there is no Prometheus equivalent of a [Label], so this metric does not export its
 /// value with the Prometheus data; however, it can still be queried directly from a
 /// [PrometheusMetrics] collection using [get_label](PrometheusMetrics::get_label).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Label(Arc<RwLock<String>>);
 
 impl Label {
+    fn new(registry: &Registry, opts: Opts) -> Self {
+        let label = Self(Default::default());
+        let mut fq_name = vec![];
+        if !opts.namespace.is_empty() {
+            fq_name.extend(opts.namespace.split('_').map(String::from));
+        }
+        if !opts.subsystem.is_empty() {
+            fq_name.extend(opts.subsystem.split('_').map(String::from));
+        }
+        fq_name.push(opts.name.clone());
+        registry.register_label(fq_name, label.clone());
+        label
+    }
+
     pub fn get(&self) -> String {
         self.0.read().unwrap().clone()
     }
@@ -372,6 +434,7 @@ mod test {
         assert!(lines.contains(&"gauge 100"));
         assert!(lines.contains(&"histogram_sum 42"));
         assert!(lines.contains(&"histogram_count 2"));
+        assert!(lines.contains(&"# LABEL label another"));
     }
 
     #[test]
@@ -380,7 +443,9 @@ mod test {
         let subgroup1 = metrics.subgroup("subgroup1".into());
         let subgroup2 = subgroup1.subgroup("subgroup2".into());
         let counter = subgroup2.create_counter("counter".into(), None);
+        let label = subgroup2.create_label("label".into());
         counter.add(42);
+        label.set("value".into());
 
         // Check namespacing.
         assert_eq!(
@@ -426,12 +491,40 @@ mod test {
             42
         );
 
-        // Check fully-qualified metric name in export.
-        println!("{}", metrics.prometheus().unwrap());
+        // Check fully-qualified counter name in export.
         assert!(metrics
             .prometheus()
             .unwrap()
             .lines()
             .contains(&"subgroup1_subgroup2_counter 42"));
+
+        // Check different ways of accessing the label.
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1", "subgroup2"])
+                .unwrap()
+                .get_label("label")
+                .unwrap()
+                .get(),
+            "value"
+        );
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1"])
+                .unwrap()
+                .get_subgroup(["subgroup2"])
+                .unwrap()
+                .get_label("label")
+                .unwrap()
+                .get(),
+            "value"
+        );
+
+        // Check fully-qualified label name in export.
+        assert!(metrics
+            .prometheus()
+            .unwrap()
+            .lines()
+            .contains(&"# LABEL subgroup1_subgroup2_label value"));
     }
 }
