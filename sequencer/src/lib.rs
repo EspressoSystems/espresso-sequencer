@@ -1,16 +1,17 @@
 use commit::{Commitment, Committable};
-use hotshot::{
-    traits::{
-        election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
-        implementations::{CentralizedServerNetwork, MemoryStorage},
-        Block as HotShotBlock, NodeImplementation, State as HotShotState,
+use hotshot::traits::{
+    election::{
+        static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
+        vrf::JfPubKey,
     },
-    types::ed25519::Ed25519Pub,
+    implementations::{CentralizedServerNetwork, MemoryStorage},
+    Block as HotShotBlock, NodeImplementation, State as HotShotState,
 };
 use hotshot_types::{
     data::ViewNumber,
     traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
 };
+use jf_primitives::signatures::BLSSignatureScheme;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -22,7 +23,7 @@ impl NodeImplementation<SeqTypes> for Node {
 
     type Networking = CentralizedServerNetwork<SeqTypes>;
 
-    type Election = StaticCommittee; // ???
+    type Election = StaticCommittee<SeqTypes>;
 }
 
 #[derive(
@@ -30,7 +31,7 @@ impl NodeImplementation<SeqTypes> for Node {
 )]
 struct SeqTypes;
 
-type SignatureKey = Ed25519Pub;
+type SignatureKey = JfPubKey<BLSSignatureScheme<ark_bls12_381::Parameters>>;
 
 impl NodeTypes for SeqTypes {
     type Time = ViewNumber;
@@ -58,7 +59,7 @@ impl HotShotBlock for Block {
 
     fn add_transaction_raw(
         &self,
-        tx: &Self::Transaction,
+        _tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
         todo!()
     }
@@ -104,14 +105,14 @@ impl HotShotState for State {
         todo!()
     }
 
-    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
+    fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
         todo!()
     }
 
     fn append(
         &self,
-        block: &Self::BlockType,
-        view_number: &Self::Time,
+        _block: &Self::BlockType,
+        _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
         todo!()
     }
