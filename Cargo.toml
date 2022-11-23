@@ -27,6 +27,8 @@ commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" 
 derive_more = "0.99"
 hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "835b55489f22ae9a16f4f4e41d4549b76a10f8ae", features = ["async-std-executor", "channel-async-std"] }
 hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "835b55489f22ae9a16f4f4e41d4549b76a10f8ae" }
+itertools = "0.10"
+prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", rev = "a4ae3bf7feba517c305f03e21db4f1192dc45248" }

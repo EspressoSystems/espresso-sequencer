@@ -10,9 +10,13 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::availability::{
-    data_source::AvailabilityDataSource,
-    query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
+use crate::{
+    availability::{
+        data_source::AvailabilityDataSource,
+        query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
+    },
+    metrics::{MetricsError, PrometheusMetrics},
+    status::{data_source::StatusDataSource, query_data::MempoolQueryData},
 };
 use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
 
@@ -23,7 +27,8 @@ pub trait ExtensibleDataSource {
 }
 
 #[derive(Debug)]
-pub(crate) struct QueryData<Types: NodeTypes, UserData> {
+pub struct QueryData<Types: NodeTypes, UserData> {
+    metrics: PrometheusMetrics,
     user_data: UserData,
     _marker: std::marker::PhantomData<Types>,
 }
@@ -66,5 +71,29 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
 
     fn get_block_ids_by_proposer_id(&self, _id: EncodedPublicKey) -> Vec<u64> {
         unimplemented!()
+    }
+}
+
+impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData> {
+    type Error = MetricsError;
+
+    fn block_height(&self) -> Result<usize, Self::Error> {
+        unimplemented!()
+    }
+
+    fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
+        Ok(MempoolQueryData {
+            transaction_count: self.metrics.get_gauge("outstanding_transactions")?.get() as u64,
+        })
+    }
+
+    fn success_rate(&self) -> Result<f64, Self::Error> {
+        let total_views = self.metrics.get_counter("currenv_view")?.get() as f64;
+        // By definition, a successful view is any which committed a block.
+        Ok(self.block_height()? as f64 / total_views)
+    }
+
+    fn export_metrics(&self) -> Result<String, Self::Error> {
+        self.metrics.prometheus()
     }
 }

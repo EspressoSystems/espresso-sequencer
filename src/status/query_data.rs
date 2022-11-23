@@ -10,8 +10,9 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-pub mod availability;
-mod data_source;
-mod metrics;
-pub mod status;
-pub mod testing;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct MempoolQueryData {
+    pub transaction_count: u64,
+}

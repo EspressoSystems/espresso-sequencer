@@ -11,12 +11,11 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash};
-use crate::data_source::ExtensibleDataSource;
 use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
 use std::error::Error;
 use std::fmt::Debug;
 
-pub trait AvailabilityDataSource<Types: NodeTypes>: ExtensibleDataSource {
+pub trait AvailabilityDataSource<Types: NodeTypes> {
     type LeafIterType<'a>: 'a + Iterator<Item = Option<LeafQueryData<Types>>>
     where
         Self: 'a;

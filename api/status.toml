@@ -30,8 +30,6 @@ Returns
 ```
 {
     "transaction_count": "integer",
-    "output_count": "integer",
-    "memory_footprint": "integer",
 }
 ```
 """
