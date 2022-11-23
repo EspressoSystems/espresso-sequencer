@@ -82,7 +82,9 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
     }
 
     fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        unimplemented!()
+        Ok(MempoolQueryData {
+            transaction_count: self.metrics.get_gauge("outstanding_transactions")?.get() as u64,
+        })
     }
 
     fn success_rate(&self) -> Result<f64, Self::Error> {

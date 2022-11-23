@@ -15,5 +15,4 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct MempoolQueryData {
     pub transaction_count: u64,
-    pub memory_footprint: u64,
 }
