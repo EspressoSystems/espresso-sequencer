@@ -150,7 +150,8 @@ impl PrometheusMetrics {
     }
 
     fn metric_opts(&self, label: String, unit_label: Option<String>) -> Opts {
-        let mut opts = Opts::new(label, unit_label.unwrap_or_default());
+        let help = unit_label.unwrap_or_else(|| label.clone());
+        let mut opts = Opts::new(label, help);
         let mut group_names = self.namespace.iter();
         if let Some(namespace) = group_names.next() {
             opts = opts
@@ -205,8 +206,16 @@ impl metrics::Metrics for PrometheusMetrics {
             self.children
                 .write()
                 .unwrap()
-                .entry(subgroup_name)
-                .or_default()
+                .entry(subgroup_name.clone())
+                .or_insert_with(|| Self {
+                    metrics: self.metrics.clone(),
+                    namespace: {
+                        let mut namespace = self.namespace.clone();
+                        namespace.push(subgroup_name);
+                        namespace
+                    },
+                    ..Default::default()
+                })
                 .clone(),
         )
     }
@@ -303,5 +312,126 @@ impl Label {
 impl metrics::Label for Label {
     fn set(&self, value: String) {
         *self.0.write().unwrap() = value;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use metrics::Metrics;
+
+    #[test]
+    fn test_prometheus_metrics() {
+        let metrics = PrometheusMetrics::default();
+
+        // Register one metric of each type.
+        let counter = metrics.create_counter("counter".into(), None);
+        let gauge = metrics.create_gauge("gauge".into(), None);
+        let histogram = metrics.create_histogram("histogram".into(), None);
+        let label = metrics.create_label("label".into());
+
+        // Set the metric values.
+        counter.add(20);
+        gauge.set(42);
+        histogram.add_point(20f64);
+        label.set("value".into());
+
+        // Check the values.
+        assert_eq!(metrics.get_counter("counter").unwrap().get(), 20);
+        assert_eq!(metrics.get_gauge("gauge").unwrap().get(), 42);
+        assert_eq!(
+            metrics.get_histogram("histogram").unwrap().sample_count(),
+            1
+        );
+        assert_eq!(metrics.get_histogram("histogram").unwrap().sum(), 20f64);
+        assert_eq!(metrics.get_histogram("histogram").unwrap().mean(), 20f64);
+        assert_eq!(metrics.get_label("label").unwrap().get(), "value");
+
+        // Set the metric values again, to be sure they update properly.
+        counter.add(22);
+        gauge.set(100);
+        histogram.add_point(22f64);
+        label.set("another".into());
+
+        // Check the updated values.
+        assert_eq!(metrics.get_counter("counter").unwrap().get(), 42);
+        assert_eq!(metrics.get_gauge("gauge").unwrap().get(), 100);
+        assert_eq!(
+            metrics.get_histogram("histogram").unwrap().sample_count(),
+            2
+        );
+        assert_eq!(metrics.get_histogram("histogram").unwrap().sum(), 42f64);
+        assert_eq!(metrics.get_histogram("histogram").unwrap().mean(), 21f64);
+        assert_eq!(metrics.get_label("label").unwrap().get(), "another");
+
+        // Export to a Prometheus string.
+        let string = metrics.prometheus().unwrap();
+        // Make sure the output makes sense.
+        let lines = string.lines().collect::<Vec<_>>();
+        assert!(lines.contains(&"counter 42"));
+        assert!(lines.contains(&"gauge 100"));
+        assert!(lines.contains(&"histogram_sum 42"));
+        assert!(lines.contains(&"histogram_count 2"));
+    }
+
+    #[test]
+    fn test_namespace() {
+        let metrics = PrometheusMetrics::default();
+        let subgroup1 = metrics.subgroup("subgroup1".into());
+        let subgroup2 = subgroup1.subgroup("subgroup2".into());
+        let counter = subgroup2.create_counter("counter".into(), None);
+        counter.add(42);
+
+        // Check namespacing.
+        assert_eq!(
+            metrics.get_subgroup(["subgroup1"]).unwrap().namespace,
+            ["subgroup1"]
+        );
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1", "subgroup2"])
+                .unwrap()
+                .namespace,
+            ["subgroup1", "subgroup2"]
+        );
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1"])
+                .unwrap()
+                .get_subgroup(["subgroup2"])
+                .unwrap()
+                .namespace,
+            ["subgroup1", "subgroup2"]
+        );
+
+        // Check different ways of accessing the counter.
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1", "subgroup2"])
+                .unwrap()
+                .get_counter("counter")
+                .unwrap()
+                .get(),
+            42
+        );
+        assert_eq!(
+            metrics
+                .get_subgroup(["subgroup1"])
+                .unwrap()
+                .get_subgroup(["subgroup2"])
+                .unwrap()
+                .get_counter("counter")
+                .unwrap()
+                .get(),
+            42
+        );
+
+        // Check fully-qualified metric name in export.
+        println!("{}", metrics.prometheus().unwrap());
+        assert!(metrics
+            .prometheus()
+            .unwrap()
+            .lines()
+            .contains(&"subgroup1_subgroup2_counter 42"));
     }
 }
