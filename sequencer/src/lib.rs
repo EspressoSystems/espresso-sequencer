@@ -4,7 +4,7 @@ use hotshot::{
     traits::{
         election::{
             static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
-            vrf::JfPubKey,
+            vrf::BlsPubKey,
         },
         implementations::{CentralizedServerNetwork, MemoryStorage},
         Block as HotShotBlock, NodeImplementation, State as HotShotState,
@@ -16,7 +16,6 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
 };
-use jf_primitives::signatures::BLSSignatureScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
@@ -67,7 +66,7 @@ impl NodeImplementation<SeqTypes> for Node {
 )]
 struct SeqTypes;
 
-type SignatureKey = JfPubKey<BLSSignatureScheme<ark_bls12_381::Parameters>>;
+type SignatureKey = BlsPubKey;
 
 impl NodeTypes for SeqTypes {
     type Time = ViewNumber;
@@ -172,5 +171,57 @@ impl HotShotState for State {
 impl Committable for State {
     fn commit(&self) -> Commitment<Self> {
         todo!()
+    }
+}
+
+mod test {
+    use std::{net::SocketAddr, time::Duration};
+
+    use hotshot::HotShot;
+    use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
+    use jf_primitives::signatures::{BLSSignatureScheme, SignatureScheme};
+    use rand::thread_rng;
+
+    use super::*;
+
+    fn test_skeleton() {
+        type SignatureScheme = BLSSignatureScheme<ark_bls12_381::Parameters>;
+        let (private_key, public_key) = SignatureScheme::key_gen(&(), &mut thread_rng()).unwrap();
+        let node_id = 0u64;
+        let total_nodes = 3usize.try_into().unwrap();
+        let config: HotShotConfig<SignatureKey, _> = HotShotConfig {
+            execution_type: ExecutionType::Incremental,
+            total_nodes,
+            min_transactions: 0,
+            max_transactions: 5usize.try_into().unwrap(),
+            known_nodes: vec![],
+            next_view_timeout: Duration::from_secs(60).as_millis() as u64,
+            timeout_ratio: (10, 11),
+            round_start_delay: Duration::from_millis(1).as_millis() as u64,
+            start_delay: Duration::from_millis(1).as_millis() as u64,
+            num_bootstrap: 1usize,
+            propose_min_round_time: Duration::from_secs(1),
+            propose_max_round_time: Duration::from_secs(30),
+            election_config: Some(StaticElectionConfig {}),
+        };
+
+        let centralized_server_address: SocketAddr = "127.0.0.1:11223".parse().unwrap();
+        // TODO: start server
+        let networking = CentralizedServerNetwork::<SeqTypes>::connect_with_server_config(
+            NoMetrics::new(),
+            centralized_server_address,
+        );
+
+        // let hotshot = HotShot::init(
+        //     public_key,
+        //     private_key,
+        //     node_id,
+        //     config,
+        //     networking,
+        //     storage,
+        //     election,
+        //     initializer,
+        //     metrics,
+        // )
     }
 }

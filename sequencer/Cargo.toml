@@ -14,5 +14,6 @@ derive_more = "0.99.17"
 hotshot = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 hotshot-types = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2" }
+rand = "0.8.5"
 serde = { version = "1.0.147", features = ["derive"] }
 snafu = "0.7.3"
