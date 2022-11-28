@@ -15,15 +15,14 @@ use crate::{
         data_source::{AvailabilityDataSource, UpdateAvailabilityData},
         query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
     },
+    ledger_log::LedgerLog,
     metrics::{MetricsError, PrometheusMetrics},
     status::{
         data_source::{StatusDataSource, UpdateStatusData},
         query_data::MempoolQueryData,
     },
 };
-use atomic_store::{
-    load_store::BincodeLoadStore, AppendLog, AtomicStore, AtomicStoreLoader, PersistenceError,
-};
+use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use hotshot_types::traits::{
     metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey, Block,
 };
@@ -63,18 +62,14 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// [QueryData::skip_version].
 #[derive(custom_debug::Debug)]
 pub struct QueryData<Types: NodeTypes, UserData> {
-    cached_leaves_start: usize,
-    cached_leaves: Vec<Option<LeafQueryData<Types>>>,
-    cached_blocks_start: usize,
-    cached_blocks: Vec<Option<BlockQueryData<Types>>>,
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
-    leaf_storage: AppendLog<BincodeLoadStore<Option<LeafQueryData<Types>>>>,
-    block_storage: AppendLog<BincodeLoadStore<Option<BlockQueryData<Types>>>>,
+    leaf_storage: LedgerLog<LeafQueryData<Types>>,
+    block_storage: LedgerLog<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
     user_data: UserData,
     _marker: std::marker::PhantomData<Types>,
@@ -118,27 +113,13 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
         user_data: UserData,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
-            cached_leaves_start: 0,
-            cached_leaves: vec![],
-            cached_blocks_start: 0,
-            cached_blocks: vec![],
             index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
             index_by_txn_hash: Default::default(),
             index_by_proposer_id: Default::default(),
             top_storage: None,
-            leaf_storage: AppendLog::create(
-                loader,
-                Default::default(),
-                "leaves",
-                1u64 << 21, // 10 MB
-            )?,
-            block_storage: AppendLog::create(
-                loader,
-                Default::default(),
-                "blocks",
-                1u64 << 21, // 10 MB
-            )?,
+            leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
+            block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
             metrics: Default::default(),
             user_data,
             _marker: Default::default(),
@@ -157,105 +138,39 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
         loader: &mut AtomicStoreLoader,
         user_data: UserData,
     ) -> Result<Self, PersistenceError> {
-        let leaf_storage = AppendLog::<BincodeLoadStore<Option<LeafQueryData<Types>>>>::load(
-            loader,
-            Default::default(),
-            "leaves",
-            1u64 << 21, // 10 MB
-        )?;
-        let block_storage = AppendLog::<BincodeLoadStore<Option<BlockQueryData<Types>>>>::load(
-            loader,
-            Default::default(),
-            "blocks",
-            1u64 << 21, // 10 MB
-        )?;
+        let leaf_storage =
+            LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
+        let block_storage =
+            LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
 
-        let stored_leaves_len = leaf_storage.iter().len();
-        let cached_leaves_start = if stored_leaves_len > CACHED_LEAVES_COUNT {
-            stored_leaves_len - CACHED_LEAVES_COUNT
-        } else {
-            0
-        };
-        let cached_leaves = leaf_storage
-            .iter()
-            .skip(cached_leaves_start)
-            .map(|r| {
-                if let Err(e) = &r {
-                    warn!("failed to load leaf. Error: {}", e);
-                }
-                // We treat missing leaves and failed-to-load leaves the same:
-                // if we failed to load a leaf, it is now missing!
-                r.ok().flatten()
-            })
-            .collect::<Vec<_>>();
-
-        let stored_blocks_len = block_storage.iter().len();
-        let cached_blocks_start = if stored_blocks_len > CACHED_BLOCKS_COUNT {
-            stored_blocks_len - CACHED_BLOCKS_COUNT
-        } else {
-            0
-        };
-        let cached_blocks = block_storage
-            .iter()
-            .skip(cached_blocks_start)
-            .map(|r| {
-                if let Err(e) = &r {
-                    warn!("failed to load block. Error: {}", e);
-                }
-                // We treat missing block and failed-to-load blocks the same:
-                // if we failed to load a block, it is now missing!
-                r.ok().flatten()
-            })
-            .collect::<Vec<_>>();
         let mut index_by_proposer_id = HashMap::new();
         let mut index_by_block_hash = HashMap::new();
         let index_by_leaf_hash = leaf_storage
             .iter()
-            .filter_map(|res| match res {
-                Err(e) => {
-                    warn!("failed to load leaf. Error: {}", e);
-                    None
-                }
-                Ok(None) => {
-                    // If a leaf is missing, we can't add it to the index.
-                    None
-                }
-                Ok(Some(leaf)) => {
-                    index_by_proposer_id
-                        .entry(leaf.leaf.proposer_id)
-                        .or_insert_with(Vec::new)
-                        .push(leaf.height);
-                    index_by_block_hash.insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
-                    Some((leaf.hash, leaf.height))
-                }
+            .flatten()
+            .map(|leaf| {
+                index_by_proposer_id
+                    .entry(leaf.leaf.proposer_id)
+                    .or_insert_with(Vec::new)
+                    .push(leaf.height);
+                index_by_block_hash.insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+                (leaf.hash, leaf.height)
             })
             .collect();
         let index_by_txn_hash = block_storage
             .iter()
-            .flat_map(|res| match res {
-                Err(e) => {
-                    warn!("failed to load block. Error: {}", e);
-                    vec![]
-                }
-                Ok(None) => {
-                    // If a block is missing, we can't add it to the index.
-                    vec![]
-                }
-                Ok(Some(block)) => block
+            .flatten()
+            .flat_map(|block| {
+                block
                     .block
                     .contained_transactions()
                     .into_iter()
                     .enumerate()
-                    .map(|(txn_id, txn_hash)| (txn_hash, (block.height, txn_id as u64)))
-                    .collect(),
+                    .map(move |(txn_id, txn_hash)| (txn_hash, (block.height, txn_id as u64)))
             })
             .collect();
 
         Ok(QueryData {
-            cached_leaves_start,
-            cached_leaves,
-            cached_blocks_start,
-            cached_blocks,
             index_by_leaf_hash,
             index_by_block_hash,
             index_by_txn_hash,
@@ -355,16 +270,44 @@ impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Typ
 
     fn append_leaves(
         &mut self,
-        _leaves: Vec<Option<LeafQueryData<Types>>>,
+        leaves: Vec<Option<LeafQueryData<Types>>>,
     ) -> Result<(), Self::Error> {
-        todo!()
+        for leaf in leaves {
+            if let Err(err) = self.leaf_storage.store_resource(leaf.clone()) {
+                warn!("Failed to store leaf {:?}: {}", leaf, err);
+                return Err(err);
+            }
+            if let Some(leaf) = leaf {
+                self.index_by_block_hash
+                    .insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+                self.index_by_proposer_id
+                    .entry(leaf.leaf.proposer_id)
+                    .or_insert_with(Vec::new)
+                    .push(leaf.height);
+            }
+        }
+        Ok(())
     }
 
     fn append_blocks(
         &mut self,
-        _blocks: Vec<Option<BlockQueryData<Types>>>,
+        blocks: Vec<Option<BlockQueryData<Types>>>,
     ) -> Result<(), Self::Error> {
-        todo!()
+        for block in blocks {
+            if let Err(err) = self.block_storage.store_resource(block.clone()) {
+                warn!("Failed to store block {:?}: {}", block, err);
+                return Err(err);
+            }
+            if let Some(block) = block {
+                for (txn_id, txn_hash) in
+                    block.block.contained_transactions().into_iter().enumerate()
+                {
+                    self.index_by_txn_hash
+                        .insert(txn_hash, (block.height, txn_id as u64));
+                }
+            }
+        }
+        Ok(())
     }
 }
 

@@ -356,6 +356,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
+mod ledger_log;
 mod metrics;
 pub mod status;
 pub mod testing;
