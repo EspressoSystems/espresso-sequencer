@@ -6,7 +6,7 @@ use hotshot::{
             static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
             vrf::JfPubKey,
         },
-        implementations::{CentralizedServerNetwork, MemoryStorage},
+        implementations::{MemoryNetwork, MemoryStorage},
         Block as HotShotBlock, NodeImplementation, State as HotShotState,
     },
     types::{EventType, HotShotHandle},
@@ -57,7 +57,7 @@ where
 impl NodeImplementation<SeqTypes> for Node {
     type Storage = MemoryStorage<SeqTypes>;
 
-    type Networking = CentralizedServerNetwork<SeqTypes>;
+    type Networking = MemoryNetwork<SeqTypes>;
 
     type Election = StaticCommittee<SeqTypes>;
 }
@@ -109,7 +109,14 @@ impl HotShotBlock for Block {
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        todo!()
+        // TODO: implement
+        //     commit::RawCommitmentBuilder::new("Block Comm")
+        //         .array_field(
+        //             "txns",
+        //             &self.0.iter().map(|x| x.commit()).collect::<Vec<_>>(),
+        //         )
+        //         .finalize()
+        commit::RawCommitmentBuilder::new("Block Comm").finalize()
     }
 }
 
@@ -127,16 +134,30 @@ struct Transaction {
     payload: Vec<u8>,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+struct ApplicationTransaction(Vec<u8>);
+
 trait Vm {
     type Transaction: DeserializeOwned + Serialize + Sync + Send;
     fn id() -> VmId;
+}
+
+#[derive(Clone, Debug)]
+struct TestVm;
+
+impl Vm for TestVm {
+    type Transaction = ApplicationTransaction;
+    fn id() -> VmId {
+        VmId(0)
+    }
 }
 
 impl HotShotTransaction for Transaction {}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
-        todo!()
+        // TODO: implement
+        commit::RawCommitmentBuilder::new("Txn").finalize()
     }
 }
 
@@ -163,7 +184,7 @@ impl HotShotState for State {
         _block: &Self::BlockType,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        todo!()
+        Ok(self.clone()) // TODO: implement
     }
 
     fn on_commit(&self) {
@@ -173,20 +194,24 @@ impl HotShotState for State {
 
 impl Committable for State {
     fn commit(&self) -> Commitment<Self> {
-        todo!()
+        // TODO: implement
+        commit::RawCommitmentBuilder::new("State comm").finalize()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use hotshot::{HotShot, HotShotInitializer};
+    use hotshot::{
+        traits::implementations::{MasterMap, MemoryNetwork},
+        HotShot, HotShotInitializer,
+    };
     use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-    use std::{net::SocketAddr, time::Duration};
+    use std::time::Duration;
 
-    #[ignore] // Currently hangs, probably waiting for centralized server that isn't running.
+    #[ignore]
     #[async_std::test]
     async fn test_skeleton_instatiation() -> Result<(), ()> {
         let num_nodes = 3usize;
@@ -202,55 +227,73 @@ mod test {
             .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
             .collect::<Vec<_>>();
 
-        // Create public and private keys for the first node.
-        let (sign_key, ver_key) = nodes_key_pairs[0].clone();
-        let public_key = JfPubKey::from_native(ver_key.clone());
+        let mut handles = vec![];
 
-        let node_id = 0u64;
+        // Create N=3 HotShot instances.
+        for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
+            // Create public and private keys for the node.
+            let public_key = JfPubKey::from_native(ver_key.clone());
 
-        let config: HotShotConfig<_, _> = HotShotConfig {
-            execution_type: ExecutionType::Incremental,
-            total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 0,
-            max_transactions: 5usize.try_into().unwrap(),
-            known_nodes: nodes_pub_keys.clone(),
-            next_view_timeout: Duration::from_secs(60).as_millis() as u64,
-            timeout_ratio: (10, 11),
-            round_start_delay: Duration::from_millis(1).as_millis() as u64,
-            start_delay: Duration::from_millis(1).as_millis() as u64,
-            num_bootstrap: 1usize,
-            propose_min_round_time: Duration::from_secs(1),
-            propose_max_round_time: Duration::from_secs(30),
-            election_config: Some(StaticElectionConfig {}),
-        };
+            let config: HotShotConfig<_, _> = HotShotConfig {
+                execution_type: ExecutionType::Incremental,
+                total_nodes: num_nodes.try_into().unwrap(),
+                min_transactions: 0,
+                max_transactions: 1usize.try_into().unwrap(),
+                known_nodes: nodes_pub_keys.clone(),
+                next_view_timeout: Duration::from_secs(60).as_millis() as u64,
+                timeout_ratio: (10, 11),
+                round_start_delay: Duration::from_millis(1).as_millis() as u64,
+                start_delay: Duration::from_millis(1).as_millis() as u64,
+                num_bootstrap: 1usize,
+                propose_min_round_time: Duration::from_secs(1),
+                propose_max_round_time: Duration::from_secs(30),
+                election_config: Some(StaticElectionConfig {}),
+            };
 
-        let centralized_server_address: SocketAddr = "127.0.0.1:11223".parse().unwrap();
-        // TODO: run the centralized server
-        let (_network_config, _run, network) =
-            CentralizedServerNetwork::<SeqTypes>::connect_with_server_config(
+            let network = MemoryNetwork::<SeqTypes>::new(
+                public_key.clone(),
                 NoMetrics::new(),
-                centralized_server_address,
-            )
-            .await;
-        let storage = MemoryStorage::<SeqTypes>::new();
-        let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys);
-        let genesis_block = Block {};
-        let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block).unwrap();
-        let metrics = NoMetrics::new();
+                MasterMap::new(),
+                None,
+            );
+            let storage = MemoryStorage::<SeqTypes>::new();
+            let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
+            let genesis_block = Block {};
+            let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block).unwrap();
+            let metrics = NoMetrics::new();
 
-        let _hotshot: HotShotHandle<SeqTypes, Node> = HotShot::init(
-            public_key,
-            (sign_key, ver_key),
-            node_id,
-            config,
-            network,
-            storage,
-            election,
-            initializer,
-            metrics,
-        )
-        .await
-        .unwrap();
+            let handle: HotShotHandle<SeqTypes, Node> = HotShot::init(
+                public_key,
+                (sign_key.clone(), ver_key.clone()),
+                node_id as u64,
+                config,
+                network,
+                storage,
+                election,
+                initializer,
+                metrics,
+            )
+            .await
+            .unwrap();
+
+            handles.push(handle);
+        }
+
+        for handle in handles.iter() {
+            handle.start().await;
+        }
+        println!("Started");
+
+        let event = handles[0].next_event().await;
+        println!("Event: {:?}", event);
+
+        let txn = ApplicationTransaction(vec![1, 2, 3]);
+        handles[0].submit::<TestVm>(txn.clone()).await.unwrap();
+        println!("Submitted: {:?}", txn);
+
+        // Currently does not receive any event here and hangs.
+        let event = handles[0].next_event().await;
+        println!("Event: {:?}", event);
 
         Ok(())
     }
