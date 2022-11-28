@@ -37,6 +37,7 @@ serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }
 toml = "0.5"
+tracing = "0.1"
 
 [dev-dependencies]
 portpicker = "0.1"

@@ -25,12 +25,16 @@ use atomic_store::{
     load_store::BincodeLoadStore, AppendLog, AtomicStore, AtomicStoreLoader, PersistenceError,
 };
 use hotshot_types::traits::{
-    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey,
+    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey, Block,
 };
 use std::collections::HashMap;
 use std::path::Path;
+use tracing::warn;
 
 pub use crate::update::UpdateDataSource;
+
+const CACHED_LEAVES_COUNT: usize = 100;
+const CACHED_BLOCKS_COUNT: usize = 100;
 
 /// Data used by the APIs provided in this crate, including persistent storage.
 ///
@@ -61,12 +65,16 @@ pub use crate::update::UpdateDataSource;
 pub struct QueryData<Types: NodeTypes, UserData> {
     cached_leaves_start: usize,
     cached_leaves: Vec<Option<LeafQueryData<Types>>>,
+    cached_blocks_start: usize,
+    cached_blocks: Vec<Option<BlockQueryData<Types>>>,
+    index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
     leaf_storage: AppendLog<BincodeLoadStore<Option<LeafQueryData<Types>>>>,
+    block_storage: AppendLog<BincodeLoadStore<Option<BlockQueryData<Types>>>>,
     metrics: PrometheusMetrics,
     user_data: UserData,
     _marker: std::marker::PhantomData<Types>,
@@ -112,6 +120,9 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
         Ok(Self {
             cached_leaves_start: 0,
             cached_leaves: vec![],
+            cached_blocks_start: 0,
+            cached_blocks: vec![],
+            index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
             index_by_txn_hash: Default::default(),
             index_by_proposer_id: Default::default(),
@@ -120,6 +131,12 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
                 loader,
                 Default::default(),
                 "leaves",
+                1u64 << 21, // 10 MB
+            )?,
+            block_storage: AppendLog::create(
+                loader,
+                Default::default(),
+                "blocks",
                 1u64 << 21, // 10 MB
             )?,
             metrics: Default::default(),
@@ -137,10 +154,119 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
     /// store.
     pub fn open_with_store(
-        _loader: &mut AtomicStoreLoader,
-        _user_data: UserData,
+        loader: &mut AtomicStoreLoader,
+        user_data: UserData,
     ) -> Result<Self, PersistenceError> {
-        todo!()
+        let leaf_storage = AppendLog::<BincodeLoadStore<Option<LeafQueryData<Types>>>>::load(
+            loader,
+            Default::default(),
+            "leaves",
+            1u64 << 21, // 10 MB
+        )?;
+        let block_storage = AppendLog::<BincodeLoadStore<Option<BlockQueryData<Types>>>>::load(
+            loader,
+            Default::default(),
+            "blocks",
+            1u64 << 21, // 10 MB
+        )?;
+
+        let stored_leaves_len = leaf_storage.iter().len();
+        let cached_leaves_start = if stored_leaves_len > CACHED_LEAVES_COUNT {
+            stored_leaves_len - CACHED_LEAVES_COUNT
+        } else {
+            0
+        };
+        let cached_leaves = leaf_storage
+            .iter()
+            .skip(cached_leaves_start)
+            .map(|r| {
+                if let Err(e) = &r {
+                    warn!("failed to load leaf. Error: {}", e);
+                }
+                // We treat missing leaves and failed-to-load leaves the same:
+                // if we failed to load a leaf, it is now missing!
+                r.ok().flatten()
+            })
+            .collect::<Vec<_>>();
+
+        let stored_blocks_len = block_storage.iter().len();
+        let cached_blocks_start = if stored_blocks_len > CACHED_BLOCKS_COUNT {
+            stored_blocks_len - CACHED_BLOCKS_COUNT
+        } else {
+            0
+        };
+        let cached_blocks = block_storage
+            .iter()
+            .skip(cached_blocks_start)
+            .map(|r| {
+                if let Err(e) = &r {
+                    warn!("failed to load block. Error: {}", e);
+                }
+                // We treat missing block and failed-to-load blocks the same:
+                // if we failed to load a block, it is now missing!
+                r.ok().flatten()
+            })
+            .collect::<Vec<_>>();
+        let mut index_by_proposer_id = HashMap::new();
+        let mut index_by_block_hash = HashMap::new();
+        let index_by_leaf_hash = leaf_storage
+            .iter()
+            .filter_map(|res| match res {
+                Err(e) => {
+                    warn!("failed to load leaf. Error: {}", e);
+                    None
+                }
+                Ok(None) => {
+                    // If a leaf is missing, we can't add it to the index.
+                    None
+                }
+                Ok(Some(leaf)) => {
+                    index_by_proposer_id
+                        .entry(leaf.leaf.proposer_id)
+                        .or_insert_with(Vec::new)
+                        .push(leaf.height);
+                    index_by_block_hash.insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+                    Some((leaf.hash, leaf.height))
+                }
+            })
+            .collect();
+        let index_by_txn_hash = block_storage
+            .iter()
+            .flat_map(|res| match res {
+                Err(e) => {
+                    warn!("failed to load block. Error: {}", e);
+                    vec![]
+                }
+                Ok(None) => {
+                    // If a block is missing, we can't add it to the index.
+                    vec![]
+                }
+                Ok(Some(block)) => block
+                    .block
+                    .contained_transactions()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(txn_id, txn_hash)| (txn_hash, (block.height, txn_id as u64)))
+                    .collect(),
+            })
+            .collect();
+
+        Ok(QueryData {
+            cached_leaves_start,
+            cached_leaves,
+            cached_blocks_start,
+            cached_blocks,
+            index_by_leaf_hash,
+            index_by_block_hash,
+            index_by_txn_hash,
+            index_by_proposer_id,
+            leaf_storage,
+            block_storage,
+            top_storage: None,
+            metrics: Default::default(),
+            user_data,
+            _marker: Default::default(),
+        })
     }
 
     /// Commit the current state to persistent storage.
@@ -151,6 +277,7 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// this function.
     pub fn commit_version(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.commit_version()?;
+        self.block_storage.commit_version()?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
         }
@@ -167,6 +294,7 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// [skip_version](Self::skip_version).
     pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.skip_version()?;
+        self.block_storage.skip_version()?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
         }
@@ -175,7 +303,9 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
 
     /// Revert changes made to persistent storage since the last call to [commit_version](Self::commit_version).
     pub fn revert_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.revert_version()
+        self.leaf_storage.revert_version()?;
+        self.block_storage.revert_version()?;
+        Ok(())
     }
 }
 
