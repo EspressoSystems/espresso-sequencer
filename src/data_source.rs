@@ -78,8 +78,11 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// If there is already data at `path`, it will be archived.
     ///
     /// The [QueryData] will manage its own persistence synchronization.
-    pub fn create(_path: &Path, _user_data: UserData) -> Result<Self, PersistenceError> {
-        todo!()
+    pub fn create(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
+        let mut loader = AtomicStoreLoader::create(path, "hotshot_query_data")?;
+        let mut query_data = Self::create_with_store(&mut loader, user_data)?;
+        query_data.top_storage = Some(AtomicStore::open(loader)?);
+        Ok(query_data)
     }
 
     /// Open an existing [QueryData] from storage at `path`.
@@ -87,8 +90,11 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [QueryData] will manage its own persistence synchronization.
-    pub fn open(_path: &Path, _user_data: UserData) -> Result<Self, PersistenceError> {
-        todo!()
+    pub fn open(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
+        let mut loader = AtomicStoreLoader::load(path, "hotshot_query_data")?;
+        let mut query_data = Self::open_with_store(&mut loader, user_data)?;
+        query_data.top_storage = Some(AtomicStore::open(loader)?);
+        Ok(query_data)
     }
 
     /// Create a new [QueryData] using a persistent storage loader.
@@ -100,10 +106,26 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
     /// store.
     pub fn create_with_store(
-        _loader: &mut AtomicStoreLoader,
-        _user_data: UserData,
+        loader: &mut AtomicStoreLoader,
+        user_data: UserData,
     ) -> Result<Self, PersistenceError> {
-        todo!()
+        Ok(Self {
+            cached_leaves_start: 0,
+            cached_leaves: vec![],
+            index_by_block_hash: Default::default(),
+            index_by_txn_hash: Default::default(),
+            index_by_proposer_id: Default::default(),
+            top_storage: None,
+            leaf_storage: AppendLog::create(
+                loader,
+                Default::default(),
+                "leaves",
+                1u64 << 21, // 10 MB
+            )?,
+            metrics: Default::default(),
+            user_data,
+            _marker: Default::default(),
+        })
     }
 
     /// Open an existing [QueryData] using a persistent storage loader.

@@ -35,5 +35,10 @@ itertools = "0.10"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
-tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", rev = "a4ae3bf7feba517c305f03e21db4f1192dc45248" }
+tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }
 toml = "0.5"
+
+[dev-dependencies]
+portpicker = "0.1"
+surf-disco = { git = "ssh://git@github.com/EspressoSystems/surf-disco.git", tag = "0.1.0" }
+tempdir = "0.3"

@@ -384,3 +384,138 @@ pub fn run_standalone_service<Types: NodeTypes, NodeImpl: NodeImplementation<Typ
 ) -> impl Future<Output = ()> + Send + Sync + 'static {
     async move { unimplemented!() }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        availability::{AvailabilityDataSource, BlockHash, LeafHash, TransactionHash},
+        status::{MempoolQueryData, StatusDataSource},
+        testing::mocks::MockTypes,
+    };
+    use async_std::{sync::RwLock, task::spawn};
+    use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
+    use futures::FutureExt;
+    use hotshot_types::traits::signature_key::EncodedPublicKey;
+    use portpicker::pick_unused_port;
+    use std::time::Duration;
+    use surf_disco::Client;
+    use tempdir::TempDir;
+    use tide_disco::App;
+    use toml::toml;
+
+    struct CompositeState {
+        store: AtomicStore,
+        hotshot_qs: QueryData<MockTypes, ()>,
+        module_state: RollingLog<BincodeLoadStore<u64>>,
+    }
+
+    impl AvailabilityDataSource<MockTypes> for CompositeState {
+        type LeafIterType<'a> =
+            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::LeafIterType<'a>;
+        type BlockIterType<'a> =
+            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::BlockIterType<'a>;
+
+        fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
+            self.hotshot_qs.get_nth_leaf_iter(n)
+        }
+        fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
+            self.hotshot_qs.get_nth_block_iter(n)
+        }
+        fn get_leaf_index_by_hash(&self, hash: LeafHash<MockTypes>) -> Option<u64> {
+            self.hotshot_qs.get_leaf_index_by_hash(hash)
+        }
+        fn get_block_index_by_hash(&self, hash: BlockHash<MockTypes>) -> Option<u64> {
+            self.hotshot_qs.get_block_index_by_hash(hash)
+        }
+        fn get_txn_index_by_hash(&self, hash: TransactionHash<MockTypes>) -> Option<(u64, u64)> {
+            self.hotshot_qs.get_txn_index_by_hash(hash)
+        }
+        fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> {
+            self.hotshot_qs.get_block_ids_by_proposer_id(id)
+        }
+    }
+
+    // Implement data source trait for status API.
+    impl StatusDataSource for CompositeState {
+        type Error = <QueryData<MockTypes, ()> as StatusDataSource>::Error;
+
+        fn block_height(&self) -> Result<usize, Self::Error> {
+            self.hotshot_qs.block_height()
+        }
+        fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
+            self.hotshot_qs.mempool_info()
+        }
+        fn success_rate(&self) -> Result<f64, Self::Error> {
+            self.hotshot_qs.success_rate()
+        }
+        fn export_metrics(&self) -> Result<String, Self::Error> {
+            self.hotshot_qs.export_metrics()
+        }
+    }
+
+    #[async_std::test]
+    async fn test_composition() {
+        let dir = TempDir::new("test_composition").unwrap();
+        let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
+        let hotshot_qs = QueryData::create_with_store(&mut loader, ()).unwrap();
+        let module_state =
+            RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();
+        let state = CompositeState {
+            hotshot_qs,
+            module_state,
+            store: AtomicStore::open(loader).unwrap(),
+        };
+
+        let module_spec = toml! {
+            [route.post_ext]
+            PATH = ["/ext/:val"]
+            METHOD = "POST"
+            ":val" = "Integer"
+
+            [route.get_ext]
+            PATH = ["/ext"]
+            METHOD = "GET"
+        };
+
+        let mut app = App::<_, Error>::with_state(RwLock::new(state));
+        app.register_module(
+            "availability",
+            availability::define_api(&Default::default()).unwrap(),
+        )
+        .unwrap()
+        .register_module("status", status::define_api(&Default::default()).unwrap())
+        .unwrap()
+        .module::<Error>("mod", module_spec)
+        .unwrap()
+        .get("get_ext", |_, state| {
+            async move { state.module_state.load_latest().map_err(Error::internal) }.boxed()
+        })
+        .unwrap()
+        .post("post_ext", |req, state| {
+            async move {
+                state
+                    .module_state
+                    .store_resource(&req.integer_param("val").map_err(Error::internal)?)
+                    .map_err(Error::internal)?;
+                state
+                    .module_state
+                    .commit_version()
+                    .map_err(Error::internal)?;
+                state.hotshot_qs.skip_version().map_err(Error::internal)?;
+                state.store.commit_version().map_err(Error::internal)
+            }
+            .boxed()
+        })
+        .unwrap();
+
+        let port = pick_unused_port().unwrap();
+        spawn(app.serve(format!("0.0.0.0:{}", port)));
+
+        let client = Client::<Error>::new(format!("http://localhost:{}", port).parse().unwrap());
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        client.post::<()>("mod/ext/42").send().await.unwrap();
+        assert_eq!(client.get::<u64>("mod/ext").send().await.unwrap(), 42);
+    }
+}
