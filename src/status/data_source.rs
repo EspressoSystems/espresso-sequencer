@@ -25,6 +25,6 @@ pub trait StatusDataSource {
     fn export_metrics(&self) -> Result<String, Self::Error>;
 }
 
-pub(crate) trait UpdateStatusData {
+pub trait UpdateStatusData {
     fn metrics(&self) -> Box<dyn Metrics>;
 }

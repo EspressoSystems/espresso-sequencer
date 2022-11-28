@@ -30,7 +30,7 @@ pub trait AvailabilityDataSource<Types: NodeTypes> {
     fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64>;
 }
 
-pub(crate) trait UpdateAvailabilityData<Types: NodeTypes> {
+pub trait UpdateAvailabilityData<Types: NodeTypes> {
     type Error: Error + Debug;
     fn append_leaves(
         &mut self,

@@ -10,6 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,17 @@ pub use query_data::*;
 pub struct Options {
     #[arg(long = "status-api-path", env = "HOTSHOT_STATUS_API_PATH")]
     pub api_path: Option<PathBuf>,
+
+    /// Additional API specification files to merge with `status-api-path`.
+    ///
+    /// These optional files may contain route definitions for application-specific routes that have
+    /// been added as extensions to the basic status API.
+    #[arg(
+        long = "status-extension",
+        env = "HOTSHOT_STATUS_EXTENSIONS",
+        value_delimiter = ','
+    )]
+    pub extensions: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
@@ -46,17 +58,11 @@ where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + StatusDataSource,
 {
-    let mut api = match &options.api_path {
-        Some(path) => Api::<State, Error>::from_file(path)?,
-        None => {
-            let toml = toml::from_str(include_str!("../api/status.toml")).map_err(|err| {
-                ApiError::CannotReadToml {
-                    reason: err.to_string(),
-                }
-            })?;
-            Api::<State, Error>::new(toml)?
-        }
-    };
+    let mut api = load_api(
+        options.api_path.as_ref(),
+        include_str!("../api/status.toml"),
+        &options.extensions,
+    )?;
     api.with_version("0.0.1".parse().unwrap());
     Ok(api)
 }

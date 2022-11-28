@@ -12,35 +12,159 @@
 
 use crate::{
     availability::{
-        data_source::AvailabilityDataSource,
+        data_source::{AvailabilityDataSource, UpdateAvailabilityData},
         query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
     },
     metrics::{MetricsError, PrometheusMetrics},
-    status::{data_source::StatusDataSource, query_data::MempoolQueryData},
+    status::{
+        data_source::{StatusDataSource, UpdateStatusData},
+        query_data::MempoolQueryData,
+    },
 };
-use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
+use atomic_store::{
+    load_store::BincodeLoadStore, AppendLog, AtomicStore, AtomicStoreLoader, PersistenceError,
+};
+use hotshot_types::traits::{
+    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey,
+};
+use std::collections::HashMap;
+use std::path::Path;
 
-pub trait ExtensibleDataSource {
-    type UserData;
-    fn user_data(&self) -> &Self::UserData;
-    fn user_data_mut(&mut self) -> &mut Self::UserData;
-}
+pub use crate::update::UpdateDataSource;
 
-#[derive(Debug)]
+/// Data used by the APIs provided in this crate, including persistent storage.
+///
+/// [QueryData] is designed to be both extensible (so you can add additional state to the API
+/// modules defined in this crate) and composable (so you can use [QueryData] as one component of a
+/// larger state type for an application with additional modules). Extending [QueryData] is possible
+/// through the `UserData` type parameter -- [QueryData] implements `AsRef<UserData>` and
+/// `AsMut<UserData>`, so your API extensions can always access `UserData` from [QueryData].
+///
+/// Composing [QueryData] with other module states is in principle simple -- just create an
+/// aggregate struct containing both [QueryData] and your additional module states. A complication
+/// arises from how persistent storage is managed: if other modules have their own persistent state,
+/// should the storage of [QueryData] and the other modules be completely independent, or
+/// synchronized under the control of a single [AtomicStore]? [QueryData] supports both patterns:
+/// when you create it with [create](QueryData::create) or [open](QueryData::open), it will open its
+/// own [AtomicStore] and manage the synchronization of its own storage, independent of any other
+/// persistent data it might be composed with. But when you create it with
+/// [create_with_store](QueryData::create_with_store) or
+/// [open_with_store](QueryData::open_with_store), you may ask it to register its persistent data
+/// structures with an existing [AtomicStoreLoader]. If you register other modules' persistent data
+/// structures with the same loader, you can create one [AtomicStore] that synchronizes all the
+/// persistent data. Note, though, that when you choose to use
+/// [create_with_store](QueryData::create_with_store) or
+/// [open_with_store](QueryData::open_with_store), you become responsible for ensuring that calls to
+/// [AtomicStore::commit_version] alternate with calls to [QueryData::commit_version] or
+/// [QueryData::skip_version].
+#[derive(custom_debug::Debug)]
 pub struct QueryData<Types: NodeTypes, UserData> {
+    cached_leaves_start: usize,
+    cached_leaves: Vec<Option<LeafQueryData<Types>>>,
+    index_by_block_hash: HashMap<BlockHash<Types>, u64>,
+    index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
+    index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
+    #[debug(skip)]
+    top_storage: Option<AtomicStore>,
+    leaf_storage: AppendLog<BincodeLoadStore<Option<LeafQueryData<Types>>>>,
     metrics: PrometheusMetrics,
     user_data: UserData,
     _marker: std::marker::PhantomData<Types>,
 }
 
-impl<Types: NodeTypes, UserData> ExtensibleDataSource for QueryData<Types, UserData> {
-    type UserData = UserData;
-
-    fn user_data(&self) -> &Self::UserData {
-        &self.user_data
+impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
+    /// Create a new [QueryData] with storage at `path`.
+    ///
+    /// If there is already data at `path`, it will be archived.
+    ///
+    /// The [QueryData] will manage its own persistence synchronization.
+    pub fn create(_path: &Path, _user_data: UserData) -> Result<Self, PersistenceError> {
+        todo!()
     }
 
-    fn user_data_mut(&mut self) -> &mut Self::UserData {
+    /// Open an existing [QueryData] from storage at `path`.
+    ///
+    /// If there is no data at `path`, a new store will be created.
+    ///
+    /// The [QueryData] will manage its own persistence synchronization.
+    pub fn open(_path: &Path, _user_data: UserData) -> Result<Self, PersistenceError> {
+        todo!()
+    }
+
+    /// Create a new [QueryData] using a persistent storage loader.
+    ///
+    /// If there is existing data corresponding to the [QueryData] data structures, it will be
+    /// archived.
+    ///
+    /// The [QueryData] will register its persistent data structures with `loader`. The caller is
+    /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
+    /// store.
+    pub fn create_with_store(
+        _loader: &mut AtomicStoreLoader,
+        _user_data: UserData,
+    ) -> Result<Self, PersistenceError> {
+        todo!()
+    }
+
+    /// Open an existing [QueryData] using a persistent storage loader.
+    ///
+    /// If there is no existing data corresponding to the [QueryData] data structures, a new store
+    /// will be created.
+    ///
+    /// The [QueryData] will register its persistent data structures with `loader`. The caller is
+    /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
+    /// store.
+    pub fn open_with_store(
+        _loader: &mut AtomicStoreLoader,
+        _user_data: UserData,
+    ) -> Result<Self, PersistenceError> {
+        todo!()
+    }
+
+    /// Commit the current state to persistent storage.
+    ///
+    /// If the [QueryData] is managing its own [AtomicStore] (i.e. it was created with
+    /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
+    /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
+    /// this function.
+    pub fn commit_version(&mut self) -> Result<(), PersistenceError> {
+        self.leaf_storage.commit_version()?;
+        if let Some(store) = &mut self.top_storage {
+            store.commit_version()?;
+        }
+        Ok(())
+    }
+
+    /// Advance the version of the persistent store without committing changes to persistent state.
+    ///
+    /// This function is useful when the [AtomicStore] synchronizing storage for this [QueryData] is
+    /// being managed by the caller. The caller may want to persist some changes to other modules
+    /// whose state is managed by the same [AtomicStore]. In order to call
+    /// [AtomicStore::commit_version], the version of this [QueryData] must be advanced, either by
+    /// [commit_version](Self::commit_version) or, if there are no outstanding changes,
+    /// [skip_version](Self::skip_version).
+    pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
+        self.leaf_storage.skip_version()?;
+        if let Some(store) = &mut self.top_storage {
+            store.commit_version()?;
+        }
+        Ok(())
+    }
+
+    /// Revert changes made to persistent storage since the last call to [commit_version](Self::commit_version).
+    pub fn revert_version(&mut self) -> Result<(), PersistenceError> {
+        self.leaf_storage.revert_version()
+    }
+}
+
+impl<Types: NodeTypes, UserData> AsRef<UserData> for QueryData<Types, UserData> {
+    fn as_ref(&self) -> &UserData {
+        &self.user_data
+    }
+}
+
+impl<Types: NodeTypes, UserData> AsMut<UserData> for QueryData<Types, UserData> {
+    fn as_mut(&mut self) -> &mut UserData {
         &mut self.user_data
     }
 }
@@ -74,6 +198,24 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
     }
 }
 
+impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Types, UserData> {
+    type Error = PersistenceError;
+
+    fn append_leaves(
+        &mut self,
+        _leaves: Vec<Option<LeafQueryData<Types>>>,
+    ) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn append_blocks(
+        &mut self,
+        _blocks: Vec<Option<BlockQueryData<Types>>>,
+    ) -> Result<(), Self::Error> {
+        todo!()
+    }
+}
+
 impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData> {
     type Error = MetricsError;
 
@@ -95,5 +237,11 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
 
     fn export_metrics(&self) -> Result<String, Self::Error> {
         self.metrics.prometheus()
+    }
+}
+
+impl<Types: NodeTypes, UserData> UpdateStatusData for QueryData<Types, UserData> {
+    fn metrics(&self) -> Box<dyn Metrics> {
+        Box::new(self.metrics.clone())
     }
 }

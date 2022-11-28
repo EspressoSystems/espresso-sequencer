@@ -13,8 +13,9 @@
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Index, IndexMut};
 use hotshot::traits::{
-    election::static_committee::{StaticElectionConfig, StaticVoteToken},
-    Block,
+    election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
+    implementations::{CentralizedServerNetwork, MemoryStorage},
+    Block, NodeImplementation,
 };
 use hotshot_types::{
     data::ViewNumber,
@@ -197,4 +198,15 @@ impl NodeTypes for MockTypes {
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
+}
+
+#[derive(
+    Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
+pub struct MockNodeImpl;
+
+impl NodeImplementation<MockTypes> for MockNodeImpl {
+    type Storage = MemoryStorage<MockTypes>;
+    type Networking = CentralizedServerNetwork<MockTypes>;
+    type Election = StaticCommittee<MockTypes>;
 }

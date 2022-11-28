@@ -10,8 +10,377 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! The HotShot Query Service is a minimal, generic query service that can be integrated into any
+//! decentralized application running on the [hotshot] consensus layer. It provides all the features
+//! that HotShot itself expects of a query service (such as providing consensus-related data for
+//! catchup and synchronization) as well as some application-level features that deal only with
+//! consensus-related or application-agnostic data. In addition, the query service is provided as an
+//! extensible library, which makes it easy to add additional, application-specific features.
+//!
+//! # Basic usage
+//!
+//! ```
+//! # use hotshot::types::HotShotHandle;
+//! # use hotshot_query_service::testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes};
+//! # use std::path::Path;
+//! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
+//! use hotshot_query_service::{
+//!     availability,
+//!     data_source::{UpdateDataSource, QueryData},
+//!     status, Error
+//! };
+//!
+//! use async_std::{sync::{Arc, RwLock}, task::spawn};
+//! use hotshot::HotShot;
+//! use tide_disco::App;
+//!
+//! // Create or open query data.
+//! let query_data = QueryData::create(storage_path, ()).map_err(Error::internal)?;
+//!
+//! // Create hotshot, giving it a handle to the status metrics.
+//! let mut hotshot = HotShot::<AppTypes, AppNodeImpl>::init(
+//! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
+//!     query_data.metrics(),
+//!     // Other fields omitted
+//! ).await.map_err(Error::internal)?;
+//!
+//! // Create API modules.
+//! let availability_api = availability::define_api(&Default::default())
+//!     .map_err(Error::internal)?;
+//! let status_api = status::define_api(&Default::default())
+//!     .map_err(Error::internal)?;
+//!
+//! // Create app.
+//! let query_data = Arc::new(RwLock::new(query_data));
+//! let mut app = App::<_, Error>::with_state(query_data.clone());
+//! app
+//!     .register_module("availability", availability_api)
+//!     .map_err(Error::internal)?
+//!     .register_module("status", status_api)
+//!     .map_err(Error::internal)?;
+//!
+//! // Serve app.
+//! spawn(app.serve("0.0.0.0:8080"));
+//!
+//! // Update query data using HotShot events.
+//! while let Ok(event) = hotshot.next_event().await {
+//!     query_data.write().await.update(&event);
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Shortcut for starting an out-of-the-box service with no extensions (does exactly the above and
+//! nothing more):
+//!
+//! ```
+//! # use async_std::task::spawn;
+//! # use hotshot::types::HotShotHandle;
+//! # use hotshot_query_service::{data_source::QueryData, Error, Options};
+//! # use hotshot_query_service::testing::mocks::{MockTypes, MockNodeImpl};
+//! # use std::path::Path;
+//! # fn doc(storage_path: &Path, options: &Options, hotshot: HotShotHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! use hotshot_query_service::run_standalone_service;
+//!
+//! let query_data = QueryData::create(storage_path, ()).map_err(Error::internal)?;
+//! spawn(run_standalone_service(options, query_data, hotshot));
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Interaction with other components
+//!
+//! While the HotShot Query Service [can be used as a standalone service](run_standalone_service),
+//! it is designed to be used as a single component of a larger service consisting of several other
+//! interacting components. This interaction has two dimensions:
+//! * _extension_, adding new functionality to the API modules provided by this crate
+//! * _composition_, combining the API modules from this crate with other, application-specific API
+//!   modules to create a single [tide_disco] API
+//!
+//! ## Extension
+//!
+//! It is possible to add new functionality directly to the modules provided by this create. This
+//! allows you to keep semantically related functionality grouped together in a single API module,
+//! for interface purposes, even while some of the functionality of that module is provided by this
+//! crate and some of it is an application-specific extension.
+//!
+//! For example, consider an application which is a UTXO-based blockchain. Each transaction consists
+//! of a handful of new _output records_, and you want your query service to provide an API for
+//! looking up a specific output by its index. Semantically, this functionality belongs in the
+//! _data availability_ API, however it is application-specific -- HotShot itself makes no
+//! assumptions and provides no guarantees about the internal structure of a transaction. In order
+//! to expose this UTXO-specific functionality as well as the generic data availability
+//! functionality provided by this crate as part of the same public API, you can extend the
+//! [availability] module of this crate with additional data structures and endpoints that know
+//! about the internal structure of your transactions.
+//!
+//! There are two parts to adding additional functionality to a module in this crate: adding the
+//! required additional data structures to the module state, and creating a new API endpoint to
+//! expose the functionality. For the former, you can take advantage of the `UserData` type
+//! parameter of the [QueryData] state to inject whatever additional data you need. In the case of
+//! adding a UTXO index, it might look like this:
+//!
+//! ```
+//! # use hotshot_query_service::availability;
+//! # use hotshot_query_service::data_source::QueryData;
+//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use std::collections::HashMap;
+//! #[derive(Default)]
+//! struct AppQueryData {
+//!     // Index mapping UTXO index to (block index, transaction index, output index)
+//!     utxo_index: HashMap<u64, (u64, u64, u64)>,
+//! }
+//!
+//! type AvailabilityState = QueryData<AppTypes, AppQueryData>;
+//! ```
+//!
+//! `QueryData<Types, UserData>` implements `AsRef<UserData>` and `AsMut<UserData>`, so you can now
+//! modify the default availablity API with the addition of a new endpoint that accesses
+//! `AppQueryData` like so:
+//!
+//! ```
+//! # use async_std::sync::RwLock;
+//! # use futures::FutureExt;
+//! # use hotshot_query_service::availability::{self, AvailabilityDataSource};
+//! # use hotshot_query_service::data_source::QueryData;
+//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use hotshot_query_service::Error;
+//! # use std::collections::HashMap;
+//! # use std::path::Path;
+//! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
+//! #[derive(Default)]
+//! # struct AppQueryData {
+//! #     utxo_index: HashMap<u64, (usize, usize, usize)>,
+//! # }
+//! # type AvailabilityState = QueryData<AppTypes, AppQueryData>;
+//! fn define_app_specific_availability_api<State>(
+//!     options: &availability::Options,
+//! ) -> Result<Api<State, availability::Error>, ApiError>
+//! where
+//!     State: 'static + Send + Sync + ReadState,
+//!     <State as ReadState>::State:
+//!         Send +
+//!         Sync +
+//!         AvailabilityDataSource<AppTypes> +
+//!         AsRef<AppQueryData>,
+//! {
+//!     let mut api = availability::define_api(options)?;
+//!     api.get("get_utxo", |req, state: &<State as ReadState>::State| async move {
+//!         let utxo_index = req.integer_param("index")?;
+//!         let app_query_data = state.as_ref();
+//!         let (block_index, txn_index, output_index) = *app_query_data
+//!             .utxo_index
+//!             .get(&utxo_index)
+//!             .ok_or_else(|| availability::Error::Custom {
+//!                 message: format!("no such UTXO {}", utxo_index),
+//!                 status: StatusCode::NotFound,
+//!             })?;
+//!         let block = state.get_nth_block_iter(block_index).next().unwrap().unwrap();
+//!         let txn = block.transaction(txn_index).unwrap();
+//!         let utxo = // Application-specific logic to extract a UTXO from a transaction.
+//! #           todo!();
+//!         Ok(utxo)
+//!     }.boxed())?;
+//!     Ok(api)
+//! }
+//!
+//! fn init_server(
+//!     options: &availability::Options,
+//!     storage_path: &Path,
+//! ) -> Result<App<RwLock<AvailabilityState>, Error>, availability::Error> {
+//!     let api = define_app_specific_availability_api(options)
+//!         .map_err(availability::Error::internal)?;
+//!     let state = AvailabilityState::create(storage_path, AppQueryData::default())
+//!         .map_err(availability::Error::internal)?;
+//!     let mut app = App::with_state(RwLock::new(state));
+//!     app.register_module("availability", api).map_err(availability::Error::internal)?;
+//!     Ok(app)
+//! }
+//! ```
+//!
+//! Now you need to define the new route, `get_utxo`, in your API specification. Create a file
+//! `app_specific_availability.toml`:
+//!
+//! ```toml
+//! [route.get_utxo]
+//! PATH = ["utxo/:index"]
+//! ":index" = "Integer"
+//! DOC = "Get a UTXO by its index"
+//! ```
+//!
+//! and make sure `options.extensions` includes `"app_specific_availability.toml"`.
+//!
+//! ## Composition
+//!
+//! Composing the modules provided by this crate with other, unrelated modules to create a unified
+//! service is fairly simple, as most of the complexity is handled by [tide_disco], which already
+//! provides a mechanism for composing several modules into a single application. In principle, all
+//! you need to do is registe the [availability] and [status] APIs provided by this crate with a
+//! [tide_disco::App], and then register your own API modules with the same app.
+//!
+//! The one wrinkle is that all modules within a [tide_disco] app must share the state type. It is
+//! for this reason that the modules provided by this crate are generic on the state type -- both
+//! [availability::define_api] and [status::define_api] can work with any state type, provided that
+//! type implements the corresponding data source traits. The application state provided by this
+//! crate ([data_source::QueryData]) implements both of these traits, but if you want to use a
+//! custom state type that includes state for other modules, you will need to implement these traits
+//! for your custom type. The basic pattern looks like:
+//!
+//! ```
+//! # use hotshot_types::traits::signature_key::EncodedPublicKey;
+//! # use hotshot_query_service::availability::{AvailabilityDataSource, BlockHash, LeafHash, TransactionHash};
+//! # use hotshot_query_service::data_source::QueryData;
+//! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
+//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # type AppQueryData = ();
+//! struct AppState {
+//!     hotshot_qs: QueryData<AppTypes, AppQueryData>,
+//!     // additional state for other modules
+//! }
+//!
+//! // Implement data source trait for availability API.
+//! impl AvailabilityDataSource<AppTypes> for AppState {
+//!     type LeafIterType<'a> =
+//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::LeafIterType<'a>;
+//!     type BlockIterType<'a> =
+//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::BlockIterType<'a>;
+//!
+//!     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
+//!         self.hotshot_qs.get_nth_leaf_iter(n)
+//!     }
+//!
+//!     // etc
+//! #   fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> { todo!() }
+//! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes>) -> Option<u64> { todo!() }
+//! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
+//! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
+//! #   fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> { todo!() }
+//! }
+//!
+//! // Implement data source trait for status API.
+//! impl StatusDataSource for AppState {
+//!     type Error = <QueryData<AppTypes, AppQueryData> as StatusDataSource>::Error;
+//!
+//!     fn block_height(&self) -> Result<usize, Self::Error> {
+//!         self.hotshot_qs.block_height()
+//!     }
+//!
+//!     // etc
+//! #   fn mempool_info(&self) -> Result<MempoolQueryData, <Self as StatusDataSource>::Error> { todo!() }
+//! #   fn success_rate(&self) -> Result<f64, <Self as StatusDataSource>::Error> { todo!() }
+//! #   fn export_metrics(&self) -> Result<String, <Self as StatusDataSource>::Error> { todo!() }
+//! }
+//!
+//! // Implement data source traits for other modules, using additional state from AppState.
+//! ```
+//!
+//! In the future, we may provide derive macros for
+//! [AvailabilityDataSource](availability::AvailabilityDataSource) and
+//! [StatusDataSource](status::StatusDataSource) to eliminate the boilerplate of implementing them
+//! for a custom type that has an existing implementation as one of its fields.
+//!
+//! Once you have created your `AppState` type aggregating the state for each API module, you can
+//! instantiate the state as normal, using [create](QueryData::create) or [open](QueryData::open) to
+//! initialize the [QueryData] part of the `AppState`. _However_, this only works if you want the
+//! persistent storage for the availability and status modules (managed by [QueryData]) to be
+//! independent of the persistent storage for other modules. You may well want to synchronize the
+//! storage for all modules together, so that updates to the entire application state can be done
+//! atomically. This is particularly relevant if one of your application-specific modules updates
+//! its storage based on a stream of HotShot leaves. Since the availability module also updates with
+//! each new leaf, you probably want these two modules to stay in sync.
+//!
+//! To achieve this, add a top level [AtomicStore](atomic_store::AtomicStore) to `AppState` to
+//! synchronize all persistent storage, and use [create_with_store](QueryData::create_with_store) or
+//! [open_with_store](QueryData::open_with_store) when initializeing the [QueryData] to associate
+//! its persistent storage with the top-level atomic store. In this case, [QueryData] will not
+//! manage the [AtomicStore](atomic_store::AtomicStore) for you, so you must be sure to call
+//! [AtomicStore::commit_version](atomic_store::AtomicStore::commit_version) after each call to
+//! [QueryData::commit_version], and you must call either [QueryData::commit_version] or
+//! [QueryData::skip_version] before each call to
+//! [AtomicStore::commit_version](atomic_store::AtomicStore::commit_version).
+//!
+//! ```
+//! # use async_std::{sync::{Arc, RwLock}, task::spawn};
+//! # use atomic_store::{AtomicStore, AtomicStoreLoader};
+//! # use hotshot::types::HotShotHandle;
+//! # use hotshot_query_service::Error;
+//! # use hotshot_query_service::data_source::{UpdateDataSource, QueryData};
+//! # use hotshot_query_service::testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes};
+//! # use std::path::Path;
+//! # use tide_disco::App;
+//! # type AppQueryData = ();
+//! struct AppState {
+//!     // Top-level storage coordinator
+//!     store: AtomicStore,
+//!     hotshot_qs: QueryData<AppTypes, AppQueryData>,
+//!     // additional state for other modules
+//! }
+//!
+//! fn init_server(
+//!     storage_path: &Path,
+//!     mut hotshot: HotShotHandle<AppTypes, AppNodeImpl>,
+//! ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
+//!     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
+//!         .map_err(Error::internal)?;
+//!     let hotshot_qs = QueryData::create_with_store(&mut loader, AppQueryData::default())
+//!         .map_err(Error::internal)?;
+//!     // Initialize storage for other modules using the same loader.
+//!
+//!     let store = AtomicStore::open(loader).map_err(Error::internal)?;
+//!     let state = Arc::new(RwLock::new(AppState {
+//!         store,
+//!         hotshot_qs,
+//!         // additional state for other modules
+//!     }));
+//!     let mut app = App::with_state(state.clone());
+//!     // Register API modules.
+//!
+//!     spawn(async move {
+//!         while let Ok(event) = hotshot.next_event().await {
+//!             let mut state = state.write().await;
+//!             state.hotshot_qs.update(&event).await;
+//!             // Update other modules' states based on `event`.
+//!
+//!             state.hotshot_qs.commit_version().unwrap();
+//!             // Commit or skip versions for other modules' storage.
+//!             state.store.commit_version().unwrap();
+//!         }
+//!     });
+//!
+//!     Ok(app)
+//! }
+//! ```
+//!
+
+mod api;
 pub mod availability;
-mod data_source;
+pub mod data_source;
+mod error;
 mod metrics;
 pub mod status;
 pub mod testing;
+mod update;
+
+pub use error::Error;
+
+use data_source::QueryData;
+use futures::Future;
+use hotshot::types::HotShotHandle;
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeTypes};
+
+#[derive(clap::Args, Default)]
+pub struct Options {
+    #[clap(flatten)]
+    pub availability: availability::Options,
+    #[clap(flatten)]
+    pub status: status::Options,
+}
+
+/// Run an instance of the HotShot Query service with no customization.
+pub fn run_standalone_service<Types: NodeTypes, NodeImpl: NodeImplementation<Types>>(
+    _options: &Options,
+    _data_source: QueryData<Types, ()>,
+    _hotshot: HotShotHandle<Types, NodeImpl>,
+) -> impl Future<Output = ()> + Send + Sync + 'static {
+    async move { unimplemented!() }
+}
