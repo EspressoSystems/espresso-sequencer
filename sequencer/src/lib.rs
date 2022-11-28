@@ -204,7 +204,6 @@ mod test {
 
         // Create public and private keys for the first node.
         let (sign_key, ver_key) = nodes_key_pairs[0].clone();
-        // let private_key = sign_key;
         let public_key = JfPubKey::from_native(ver_key.clone());
 
         let node_id = 0u64;
