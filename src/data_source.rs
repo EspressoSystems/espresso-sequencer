@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use tracing::warn;
 
+pub use crate::ledger_log::Iter;
 pub use crate::update::UpdateDataSource;
 
 const CACHED_LEAVES_COUNT: usize = 100;
@@ -237,31 +238,42 @@ impl<Types: NodeTypes, UserData> AsMut<UserData> for QueryData<Types, UserData> 
 }
 
 impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Types, UserData> {
-    type LeafIterType<'a> = std::vec::IntoIter<Option<LeafQueryData<Types>>> where UserData: 'a;
-    type BlockIterType<'a> = std::vec::IntoIter<Option<BlockQueryData<Types>>> where UserData: 'a;
+    type LeafIterType<'a> = Iter<'a, LeafQueryData<Types>> where UserData: 'a;
+    type BlockIterType<'a> = Iter<'a, BlockQueryData<Types>> where UserData: 'a;
 
-    fn get_nth_leaf_iter(&self, _n: usize) -> Self::LeafIterType<'_> {
-        unimplemented!()
+    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
+        let mut iter = self.leaf_storage.iter();
+        if n > 0 {
+            iter.nth(n - 1);
+        }
+        iter
     }
 
-    fn get_nth_block_iter(&self, _n: usize) -> Self::BlockIterType<'_> {
-        unimplemented!()
+    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
+        let mut iter = self.block_storage.iter();
+        if n > 0 {
+            iter.nth(n - 1);
+        }
+        iter
     }
 
-    fn get_leaf_index_by_hash(&self, _hash: LeafHash<Types>) -> Option<u64> {
-        unimplemented!()
+    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64> {
+        self.index_by_leaf_hash.get(&hash).cloned()
     }
 
-    fn get_block_index_by_hash(&self, _hash: BlockHash<Types>) -> Option<u64> {
-        unimplemented!()
+    fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64> {
+        self.index_by_block_hash.get(&hash).cloned()
     }
 
-    fn get_txn_index_by_hash(&self, _hash: TransactionHash<Types>) -> Option<(u64, u64)> {
-        unimplemented!()
+    fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)> {
+        self.index_by_txn_hash.get(&hash).cloned()
     }
 
-    fn get_block_ids_by_proposer_id(&self, _id: EncodedPublicKey) -> Vec<u64> {
-        unimplemented!()
+    fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> {
+        self.index_by_proposer_id
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
@@ -315,7 +327,7 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
     type Error = MetricsError;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
-        unimplemented!()
+        Ok(self.leaf_storage.iter().len())
     }
 
     fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {

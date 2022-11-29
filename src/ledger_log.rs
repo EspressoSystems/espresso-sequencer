@@ -118,7 +118,7 @@ impl<T: Serialize + DeserializeOwned> LedgerLog<T> {
     }
 }
 
-pub(crate) struct Iter<'a, T: Serialize + DeserializeOwned> {
+pub struct Iter<'a, T: Serialize + DeserializeOwned> {
     index: usize,
     cache_start: usize,
     cache: &'a VecDeque<Option<T>>,
