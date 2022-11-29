@@ -17,6 +17,8 @@ use hotshot_types::{
     traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
 };
 use jf_primitives::signatures::BLSSignatureScheme;
+#[allow(deprecated)]
+use nll::nll_todo::nll_todo;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
@@ -99,24 +101,26 @@ impl HotShotBlock for Block {
         &self,
         _tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
-        todo!()
+        #[allow(deprecated)]
+        nll_todo()
     }
 
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        todo!()
+        #[allow(deprecated)]
+        nll_todo()
     }
 }
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: implement
         //     commit::RawCommitmentBuilder::new("Block Comm")
         //         .array_field(
         //             "txns",
         //             &self.0.iter().map(|x| x.commit()).collect::<Vec<_>>(),
         //         )
         //         .finalize()
-        commit::RawCommitmentBuilder::new("Block Comm").finalize()
+        #[allow(deprecated)]
+        nll_todo()
     }
 }
 
@@ -156,8 +160,8 @@ impl HotShotTransaction for Transaction {}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: implement
-        commit::RawCommitmentBuilder::new("Txn").finalize()
+        #[allow(deprecated)]
+        nll_todo()
     }
 }
 
@@ -172,11 +176,13 @@ impl HotShotState for State {
     type Time = ViewNumber;
 
     fn next_block(&self) -> Self::BlockType {
-        todo!()
+        #[allow(deprecated)]
+        nll_todo()
     }
 
     fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        todo!()
+        #[allow(deprecated)]
+        nll_todo()
     }
 
     fn append(
@@ -184,18 +190,20 @@ impl HotShotState for State {
         _block: &Self::BlockType,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        Ok(self.clone()) // TODO: implement
+        #[allow(deprecated)]
+        nll_todo()
     }
 
     fn on_commit(&self) {
-        todo!()
+        #[allow(deprecated)]
+        nll_todo()
     }
 }
 
 impl Committable for State {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: implement
-        commit::RawCommitmentBuilder::new("State comm").finalize()
+        #[allow(deprecated)]
+        nll_todo()
     }
 }
 
@@ -214,7 +222,8 @@ mod test {
     #[ignore]
     #[async_std::test]
     async fn test_skeleton_instatiation() -> Result<(), ()> {
-        let num_nodes = 3usize;
+        // The minimal number of nodes is 4
+        let num_nodes = 4usize;
 
         // Generate keys for the nodes.
         let nodes_key_pairs = (0..num_nodes)
@@ -235,7 +244,7 @@ mod test {
             let public_key = JfPubKey::from_native(ver_key.clone());
 
             let config: HotShotConfig<_, _> = HotShotConfig {
-                execution_type: ExecutionType::Incremental,
+                execution_type: ExecutionType::Continuous,
                 total_nodes: num_nodes.try_into().unwrap(),
                 min_transactions: 0,
                 max_transactions: 1usize.try_into().unwrap(),
@@ -291,7 +300,6 @@ mod test {
         handles[0].submit::<TestVm>(txn.clone()).await.unwrap();
         println!("Submitted: {:?}", txn);
 
-        // Currently does not receive any event here and hangs.
         let event = handles[0].next_event().await;
         println!("Event: {:?}", event);
 

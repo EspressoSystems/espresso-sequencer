@@ -2926,6 +2926,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "nll"
+version = "1.0.0"
+source = "git+ssh://git@github.com/EspressoSystems/nll#3eb027c7a1892a93cdfc7fca9b6ecd0257bb5b43"
+
+[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3747,6 +3752,7 @@ dependencies = [
  "hotshot-centralized-server",
  "hotshot-types",
  "jf-primitives",
+ "nll",
  "rand 0.8.5",
  "serde",
  "snafu",
