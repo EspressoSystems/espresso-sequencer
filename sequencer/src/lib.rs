@@ -98,7 +98,7 @@ pub enum Error {
 struct VmId(u64);
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-struct Transaction {
+pub struct Transaction {
     vm: VmId,
     payload: Vec<u8>,
 }
@@ -125,8 +125,58 @@ impl HotShotTransaction for Transaction {}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
-        #[allow(deprecated)]
-        nll_todo()
+        commit::RawCommitmentBuilder::new("Transaction")
+            .u64_field("vm", self.vm.0)
+            .var_size_bytes(&self.payload) // TODO how can we specify a field name like "payload"
+            .finalize()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GenesisTransaction {
+    pub chain: ChainVariables,
+}
+
+impl Committable for GenesisTransaction {
+    fn commit(&self) -> Commitment<Self> {
+        commit::RawCommitmentBuilder::new("GenesisTransaction")
+            .u64_field("chain_id", self.chain.chain_id as u64)
+            .u64_field("committee_size", self.chain.committee_size as u64)
+            .finalize()
+    }
+}
+
+/// Global variables for an Espresso blockchain.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ChainVariables {
+    /// The version of the protocol this chain is currently using.
+    ///
+    /// The protocol version can be changed by committing an update transaction.
+    // TODO
+    // pub protocol_version: (u16, u16, u16),
+
+    /// A unique identifier for this chain, to prevent cross-chain replay attacks.
+    ///
+    /// The chain ID is set at genesis and never changes.
+    pub chain_id: u16,
+
+    /// Committee size
+    pub committee_size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// A transaction tht can be either a CAP transaction or a collect reward transaction
+pub enum SequencerTransaction {
+    Genesis(GenesisTransaction),
+    Wrapped(Transaction),
+}
+
+impl Committable for SequencerTransaction {
+    fn commit(&self) -> Commitment<Self> {
+        let bytes = bincode::serialize(self).unwrap(); // TODO not safe unwrap?
+        commit::RawCommitmentBuilder::new("SequencerTransaction")
+            .var_size_bytes(&bytes)
+            .finalize()
     }
 }
 
@@ -187,7 +237,7 @@ mod test {
 
     #[ignore]
     #[async_std::test]
-    async fn test_skeleton_instatiation() -> Result<(), ()> {
+    async fn test_skeleton_instantiation() -> Result<(), ()> {
         // The minimal number of nodes is 4
         let num_nodes = 4usize;
 
