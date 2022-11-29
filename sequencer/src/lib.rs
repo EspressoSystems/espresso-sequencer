@@ -1,16 +1,11 @@
-use async_trait::async_trait;
 use commit::{Commitment, Committable};
-use hotshot::{
-    traits::{
-        election::{
-            static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
-            vrf::JfPubKey,
-        },
-        implementations::{MemoryNetwork, MemoryStorage},
-        Block as HotShotBlock, NodeImplementation, State as HotShotState,
+use hotshot::traits::{
+    election::{
+        static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
+        vrf::JfPubKey,
     },
-    types::{EventType, HotShotHandle},
-    HotShotError,
+    implementations::{MemoryNetwork, MemoryStorage},
+    Block as HotShotBlock, NodeImplementation, State as HotShotState,
 };
 use hotshot_types::{
     data::ViewNumber,
@@ -23,38 +18,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
 
-type ConsensusEvent = EventType<SeqTypes>;
-
 #[derive(Debug, Clone)]
 struct Node;
-
-// Name to be decided. Adapted from Espresso Validator.
-#[async_trait]
-trait ValidatorDataSource {
-    type Error: std::error::Error + Debug;
-    async fn submit<V: Vm>(&mut self, txn: V::Transaction) -> Result<(), Self::Error>;
-    async fn next_event(&mut self) -> Result<ConsensusEvent, Self::Error>;
-}
-
-#[async_trait]
-impl<N> ValidatorDataSource for HotShotHandle<SeqTypes, N>
-where
-    N: NodeImplementation<SeqTypes>,
-{
-    type Error = HotShotError<SeqTypes>;
-
-    async fn submit<V: Vm>(&mut self, txn: V::Transaction) -> Result<(), Self::Error> {
-        self.submit_transaction(Transaction {
-            vm: V::id(),
-            payload: bincode::serialize(&txn).unwrap(),
-        })
-        .await
-    }
-
-    async fn next_event(&mut self) -> Result<ConsensusEvent, Self::Error> {
-        self.next_event().await.map(|e| e.event)
-    }
-}
 
 impl NodeImplementation<SeqTypes> for Node {
     type Storage = MemoryStorage<SeqTypes>;
@@ -212,6 +177,7 @@ mod test {
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
+        types::HotShotHandle,
         HotShot, HotShotInitializer,
     };
     use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
@@ -297,7 +263,15 @@ mod test {
         println!("Event: {:?}", event);
 
         let txn = ApplicationTransaction(vec![1, 2, 3]);
-        handles[0].submit::<TestVm>(txn.clone()).await.unwrap();
+
+        handles[0]
+            .submit_transaction(Transaction {
+                vm: TestVm::id(),
+                payload: bincode::serialize(&txn).unwrap(),
+            })
+            .await
+            .expect("Failed to submit transaction");
+
         println!("Submitted: {:?}", txn);
 
         let event = handles[0].next_event().await;
