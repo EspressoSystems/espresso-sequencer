@@ -15,6 +15,7 @@ use atomic_store::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::VecDeque;
+use std::fmt::Debug;
 use tracing::warn;
 
 /// A caching append log for ledger objects.
@@ -102,6 +103,39 @@ impl<T: Serialize + DeserializeOwned> LedgerLog<T> {
             self.cache_start += 1;
         }
         self.cache.push_back(resource);
+        Ok(())
+    }
+
+    pub(crate) fn insert(&mut self, index: usize, object: T) -> Result<(), PersistenceError>
+    where
+        T: Debug,
+    {
+        // If there are missing objects between what we currently have and `object`, pad with
+        // placeholders.
+        while self.store.iter().len() < index {
+            if let Err(err) = self.store_resource(None) {
+                warn!("Failed to store placeholder: {}", err);
+                return Err(err);
+            }
+        }
+        let len = self.store.iter().len();
+        assert!(len >= index);
+        if len == index {
+            // This is the next object in the chain, append it to the log.
+            if let Err(err) = self.store_resource(Some(object)) {
+                warn!("Failed to store object at index {}: {}", index, err);
+                return Err(err);
+            }
+        } else {
+            // This is an object earlier in the chain that we are now receiving asynchronously.
+            // Update the placeholder with the actual contents of the object.
+            // TODO update persistent storage once AppendLog supports updates.
+
+            // Update the object in cache if necessary.
+            if index >= self.cache_start {
+                self.cache[index - self.cache_start] = Some(object);
+            }
+        }
         Ok(())
     }
 

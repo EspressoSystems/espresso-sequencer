@@ -2150,6 +2150,7 @@ dependencies = [
 name = "hotshot-query-service"
 version = "0.0.1"
 dependencies = [
+ "ark-serialize",
  "async-std",
  "async-trait",
  "atomic_store",

@@ -32,12 +32,6 @@ pub trait AvailabilityDataSource<Types: NodeTypes> {
 
 pub trait UpdateAvailabilityData<Types: NodeTypes> {
     type Error: Error + Debug;
-    fn append_leaves(
-        &mut self,
-        leaves: Vec<Option<LeafQueryData<Types>>>,
-    ) -> Result<(), Self::Error>;
-    fn append_blocks(
-        &mut self,
-        blocks: Vec<Option<BlockQueryData<Types>>>,
-    ) -> Result<(), Self::Error>;
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
+    fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
 }

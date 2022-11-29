@@ -24,11 +24,10 @@ use crate::{
 };
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use hotshot_types::traits::{
-    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey, Block,
+    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey,
 };
 use std::collections::HashMap;
 use std::path::Path;
-use tracing::warn;
 
 pub use crate::ledger_log::Iter;
 pub use crate::update::UpdateDataSource;
@@ -163,8 +162,7 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
             .flatten()
             .flat_map(|block| {
                 block
-                    .block
-                    .contained_transactions()
+                    .txn_hashes
                     .into_iter()
                     .enumerate()
                     .map(move |(txn_id, txn_hash)| (txn_hash, (block.height, txn_id as u64)))
@@ -280,44 +278,24 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
 impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Types, UserData> {
     type Error = PersistenceError;
 
-    fn append_leaves(
-        &mut self,
-        leaves: Vec<Option<LeafQueryData<Types>>>,
-    ) -> Result<(), Self::Error> {
-        for leaf in leaves {
-            if let Err(err) = self.leaf_storage.store_resource(leaf.clone()) {
-                warn!("Failed to store leaf {:?}: {}", leaf, err);
-                return Err(err);
-            }
-            if let Some(leaf) = leaf {
-                self.index_by_block_hash
-                    .insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
-                self.index_by_proposer_id
-                    .entry(leaf.leaf.proposer_id)
-                    .or_insert_with(Vec::new)
-                    .push(leaf.height);
-            }
-        }
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+        self.leaf_storage
+            .insert(leaf.height as usize, leaf.clone())?;
+        self.index_by_block_hash
+            .insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+        self.index_by_proposer_id
+            .entry(leaf.leaf.proposer_id)
+            .or_insert_with(Vec::new)
+            .push(leaf.height);
         Ok(())
     }
 
-    fn append_blocks(
-        &mut self,
-        blocks: Vec<Option<BlockQueryData<Types>>>,
-    ) -> Result<(), Self::Error> {
-        for block in blocks {
-            if let Err(err) = self.block_storage.store_resource(block.clone()) {
-                warn!("Failed to store block {:?}: {}", block, err);
-                return Err(err);
-            }
-            if let Some(block) = block {
-                for (txn_id, txn_hash) in
-                    block.block.contained_transactions().into_iter().enumerate()
-                {
-                    self.index_by_txn_hash
-                        .insert(txn_hash, (block.height, txn_id as u64));
-                }
-            }
+    fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+        self.block_storage
+            .insert(block.height as usize, block.clone())?;
+        for (txn_id, txn_hash) in block.txn_hashes.into_iter().enumerate() {
+            self.index_by_txn_hash
+                .insert(txn_hash, (block.height, txn_id as u64));
         }
         Ok(())
     }

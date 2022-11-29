@@ -11,11 +11,15 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
-use crate::availability::UpdateAvailabilityData;
+use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
+use ark_serialize::CanonicalSerialize;
 use async_trait::async_trait;
-use hotshot::types::Event;
-use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
+use commit::Committable;
+use hotshot::types::{Event, EventType};
+use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes, Block};
+use std::error::Error;
+use std::fmt::Debug;
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
@@ -27,6 +31,8 @@ use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
 ///   emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeTypes> {
+    type Error: Error + Debug;
+
     /// Get a handle for populating status metrics.
     ///
     /// This function should be called before creating a
@@ -35,18 +41,38 @@ pub trait UpdateDataSource<Types: NodeTypes> {
     fn metrics(&self) -> Box<dyn Metrics>;
 
     /// Update query state based on a new consensus event.
-    async fn update(&mut self, event: &Event<Types>);
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
 impl<Types: NodeTypes, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
     UpdateDataSource<Types> for T
+where
+    Types::BlockType: CanonicalSerialize,
 {
+    type Error = <Self as UpdateAvailabilityData<Types>>::Error;
+
     fn metrics(&self) -> Box<dyn Metrics> {
         UpdateStatusData::metrics(self)
     }
 
-    async fn update(&mut self, _event: &Event<Types>) {
-        todo!()
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
+        if let EventType::Decide { leaf_chain } = &event.event {
+            for leaf in leaf_chain.iter().rev() {
+                self.insert_leaf(LeafQueryData {
+                    height: 0, // TODO get height from leaf once HotShot supports it
+                    hash: leaf.commit(),
+                    leaf: leaf.clone(),
+                })?;
+                self.insert_block(BlockQueryData {
+                    height: 0, // TODO get height from leaf once HotShot supports it
+                    hash: leaf.deltas.commit(),
+                    block: leaf.deltas.clone(),
+                    size: leaf.deltas.serialized_size() as u64,
+                    txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),
+                })?;
+            }
+        }
+        Ok(())
     }
 }

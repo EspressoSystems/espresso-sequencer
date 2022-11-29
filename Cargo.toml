@@ -21,6 +21,7 @@ default = []
 testing = []
 
 [dependencies]
+ark-serialize = "0.3"
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-trait = "0.1"
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.3" }
