@@ -5,5 +5,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot", version = "0.3.3", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot", version = "0.1.0", features = ["async-std-executor", "channel-async-std"] }
+ark-bls12-381 = "0.3.0"
+ark-serialize = { version = "0.3.0", features = ["derive"] }
+async-std = "1.12.0"
+async-trait = "0.1.58"
+bincode = "1.3.3"
+commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+derive_more = "0.99.17"
+hotshot = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot-centralized-server = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2" }
+nll = { git = "ssh://git@github.com/EspressoSystems/nll" }
+rand = "0.8.5"
+serde = { version = "1.0.147", features = ["derive"] }
+snafu = "0.7.3"

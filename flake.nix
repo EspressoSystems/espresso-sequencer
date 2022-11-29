@@ -93,7 +93,7 @@
                 graphviz
                 plantuml
                 coreutils
-              ];
+              ] ++ lib.optionals stdenv.isDarwin[darwin.apple_sdk.frameworks.SystemConfiguration];
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.
