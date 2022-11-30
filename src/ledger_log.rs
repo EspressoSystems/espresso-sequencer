@@ -112,15 +112,16 @@ impl<T: Serialize + DeserializeOwned> LedgerLog<T> {
     {
         // If there are missing objects between what we currently have and `object`, pad with
         // placeholders.
-        while self.store.iter().len() < index {
+        let len = self.store.iter().len();
+        let target_len = std::cmp::max(index, len);
+        for _ in len..target_len {
             if let Err(err) = self.store_resource(None) {
                 warn!("Failed to store placeholder: {}", err);
                 return Err(err);
             }
         }
-        let len = self.store.iter().len();
-        assert!(len >= index);
-        if len == index {
+        assert!(target_len >= index);
+        if target_len == index {
             // This is the next object in the chain, append it to the log.
             if let Err(err) = self.store_resource(Some(object)) {
                 warn!("Failed to store object at index {}: {}", index, err);
@@ -235,6 +236,45 @@ mod test {
                 (0..5).into_iter().map(Some).collect::<Vec<_>>()
             );
         }
+    }
+
+    #[test]
+    fn test_ledger_log_insert() {
+        let dir = TempDir::new("test_ledger_log").unwrap();
+        let mut loader = AtomicStoreLoader::create(dir.path(), "test_ledger_log").unwrap();
+        let mut log = LedgerLog::<u64>::create(&mut loader, "ledger", 3).unwrap();
+        let mut store = AtomicStore::open(loader).unwrap();
+        assert_eq!(log.iter().collect::<Vec<_>>(), vec![]);
+
+        // Insert at end.
+        log.insert(0, 1).unwrap();
+        log.commit_version().unwrap();
+        store.commit_version().unwrap();
+        assert_eq!(log.iter().collect::<Vec<_>>(), vec![Some(1)]);
+
+        // Insert past end.
+        log.insert(4, 2).unwrap();
+        log.commit_version().unwrap();
+        store.commit_version().unwrap();
+        assert_eq!(
+            log.iter().collect::<Vec<_>>(),
+            vec![Some(1), None, None, None, Some(2)]
+        );
+
+        // Insert in middle (in cache).
+        log.insert(2, 3).unwrap();
+        log.commit_version().unwrap();
+        store.commit_version().unwrap();
+        assert_eq!(
+            log.iter().collect::<Vec<_>>(),
+            vec![Some(1), None, Some(3), None, Some(2)]
+        );
+
+        // Insert in middle (out of cache).
+        log.insert(1, 4).unwrap();
+        log.commit_version().unwrap();
+        store.commit_version().unwrap();
+        // TODO check results once AppendLog supports random access updates.
     }
 
     #[test]
