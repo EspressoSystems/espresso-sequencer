@@ -18,5 +18,5 @@ hotshot-types = { git = "ssh://git@github.com/EspressoSystems/hotshot", features
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2" }
 nll = { git = "ssh://git@github.com/EspressoSystems/nll" }
 rand = "0.8.5"
-serde = { version = "1.0.147", features = ["derive"] }
+serde = { version = "1.0.148", features = ["derive"] }
 snafu = "0.7.3"
