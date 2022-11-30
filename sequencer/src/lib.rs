@@ -47,7 +47,7 @@ impl NodeTypes for SeqTypes {
 
     type VoteTokenType = StaticVoteToken<SignatureKeyType>;
 
-    type Transaction = Transaction;
+    type Transaction = SequencerTransaction;
 
     type ElectionConfigType = StaticElectionConfig;
 
@@ -55,37 +55,61 @@ impl NodeTypes for SeqTypes {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-struct Block;
+struct Block {
+    parent_state: Commitment<State>,
+    transactions: Vec<SequencerTransaction>,
+}
 
 impl HotShotBlock for Block {
     type Error = Error;
 
-    type Transaction = Transaction;
+    type Transaction = SequencerTransaction;
 
     fn add_transaction_raw(
         &self,
-        _tx: &Self::Transaction,
+        tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
-        #[allow(deprecated)]
-        nll_todo()
+        let mut new = self.clone();
+        new.transactions.push(tx.clone());
+        Ok(new)
     }
 
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        #[allow(deprecated)]
-        nll_todo()
+        self.transactions.iter().map(|tx| tx.commit()).collect()
     }
 }
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        //     commit::RawCommitmentBuilder::new("Block Comm")
-        //         .array_field(
-        //             "txns",
-        //             &self.0.iter().map(|x| x.commit()).collect::<Vec<_>>(),
-        //         )
-        //         .finalize()
-        #[allow(deprecated)]
-        nll_todo()
+        commit::RawCommitmentBuilder::new("Block Comm")
+            .field("Block parent", self.parent_state)
+            .array_field(
+                "txns",
+                &self
+                    .transactions
+                    .iter()
+                    .map(|x| x.commit())
+                    .collect::<Vec<_>>(),
+            )
+            .finalize()
+    }
+}
+
+impl Block {
+    #[allow(unused)]
+    pub fn new(parent_state: Commitment<State>) -> Self {
+        Self {
+            parent_state,
+            transactions: Default::default(),
+        }
+    }
+
+    #[allow(unused)]
+    fn genesis(txn: GenesisTransaction) -> Self {
+        Self {
+            parent_state: State::default().commit(),
+            transactions: vec![SequencerTransaction::Genesis(txn)],
+        }
     }
 }
 
@@ -121,7 +145,7 @@ impl Vm for TestVm {
     }
 }
 
-impl HotShotTransaction for Transaction {}
+impl HotShotTransaction for SequencerTransaction {}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
@@ -132,7 +156,7 @@ impl Committable for Transaction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GenesisTransaction {
     pub chain: ChainVariables,
 }
@@ -160,8 +184,27 @@ pub struct ChainVariables {
     /// The chain ID is set at genesis and never changes.
     pub chain_id: u16,
 
+    // TODO: MA: this is currently not used anywhere.
     /// Committee size
     pub committee_size: u64,
+}
+
+impl Default for ChainVariables {
+    fn default() -> Self {
+        Self::new(
+            35353, // Arbitrarily chosen.
+            3,     // Arbitrarily chosen.
+        )
+    }
+}
+
+impl ChainVariables {
+    pub fn new(chain_id: u16, committee_size: u64) -> Self {
+        Self {
+            chain_id,
+            committee_size,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -283,7 +326,7 @@ mod test {
             );
             let storage = MemoryStorage::<SeqTypes>::new();
             let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
-            let genesis_block = Block {};
+            let genesis_block = Block::genesis(Default::default());
             let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block).unwrap();
             let metrics = NoMetrics::new();
 
@@ -315,10 +358,10 @@ mod test {
         let txn = ApplicationTransaction(vec![1, 2, 3]);
 
         handles[0]
-            .submit_transaction(Transaction {
+            .submit_transaction(SequencerTransaction::Wrapped(Transaction {
                 vm: TestVm::id(),
                 payload: bincode::serialize(&txn).unwrap(),
-            })
+            }))
             .await
             .expect("Failed to submit transaction");
 
