@@ -254,7 +254,7 @@ mod test {
 
         let mut handles = vec![];
 
-        // Create N=3 HotShot instances.
+        // Create HotShot instances.
         for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
             // Create public and private keys for the node.
             let public_key = JfPubKey::from_native(ver_key.clone());
