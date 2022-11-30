@@ -118,7 +118,7 @@ impl Block {
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 pub enum Error {
-    Error,
+    ValidationError,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
@@ -290,17 +290,24 @@ impl HotShotState for State {
 
     fn append(
         &self,
-        _block: &Self::BlockType,
-        _view_number: &Self::Time,
+        block: &Self::BlockType,
+        view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)]
-        nll_todo()
+        // Have to save state committment here if any changes are made
+
+        if !self.validate_block(block, view_number) {
+            return Err(Error::ValidationError);
+        }
+
+        Ok(State {
+            chain_variables: self.chain_variables.clone(),
+            block_height: self.block_height + 1,
+            view_number: *view_number,
+            prev_state_committment: Some(self.commit()),
+        })
     }
 
-    fn on_commit(&self) {
-        #[allow(deprecated)]
-        nll_todo()
-    }
+    fn on_commit(&self) {}
 }
 
 impl Committable for State {
