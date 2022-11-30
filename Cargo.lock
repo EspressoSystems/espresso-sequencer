@@ -347,6 +347,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-compatibility-layer"
+version = "1.0.0"
+source = "git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.0.1#cada95d5cf9457f6191f38957c712b72d7913598"
+dependencies = [
+ "async-channel",
+ "async-lock",
+ "async-std",
+ "async-trait",
+ "color-eyre",
+ "futures",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "async-executor"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -610,9 +626,9 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.3.2"
+version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "895adc16c8b3273fbbc32685a7d55227705eda08c01e77704020f3491924b44b"
+checksum = "42ae2468a89544a466886840aa467a25b766499f4f04bf7d9fcd10ecee9fccef"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -1145,18 +1161,18 @@ dependencies = [
 
 [[package]]
 name = "derive_builder"
-version = "0.11.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d07adf7be193b71cc36b193d0f5fe60b918a3a9db4dad0449f57bcfd519704a3"
+checksum = "8d67778784b508018359cbc8696edb3db78160bab2c2a28ba7f56ef6932997f8"
 dependencies = [
  "derive_builder_macro",
 ]
 
 [[package]]
 name = "derive_builder_core"
-version = "0.11.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f91d4cfa921f1c05904dc3c57b4a32c38aed3340cce209f3a6fd1478babafc4"
+checksum = "c11bdc11a0c47bc7d37d582b5285da6849c96681023680b906673c5707af7b0f"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1166,9 +1182,9 @@ dependencies = [
 
 [[package]]
 name = "derive_builder_macro"
-version = "0.11.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f0314b72bed045f3a68671b3c86328386762c93f82d98c65c3cb5e5f573dd68"
+checksum = "ebcda35c7a396850a55ffeac740804b40ffec779b98fffbb1738f4033f0ee79e"
 dependencies = [
  "derive_builder_core",
  "syn",
@@ -1660,12 +1676,13 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-serialize",
  "ark-std",
+ "async-compatibility-layer",
  "async-lock",
  "async-std",
  "async-trait",
@@ -1690,6 +1707,7 @@ dependencies = [
  "jf-primitives",
  "libp2p",
  "libp2p-networking",
+ "libp2p-swarm-derive",
  "num",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -1704,8 +1722,9 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
+ "async-compatibility-layer",
  "async-std",
  "async-trait",
  "bincode",
@@ -1724,8 +1743,9 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
+ "async-compatibility-layer",
  "async-lock",
  "async-std",
  "async-trait",
@@ -1743,10 +1763,11 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
  "arbitrary",
  "ark-serialize",
+ "async-compatibility-layer",
  "async-std",
  "async-trait",
  "async-tungstenite",
@@ -1773,18 +1794,9 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
- "async-channel",
- "async-lock",
- "async-std",
- "async-trait",
  "bincode",
- "color-eyre",
- "futures",
- "tracing",
- "tracing-error",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2356,8 +2368,9 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#f8559cfddb4a4370cef3cb1cc86855582a373f4b"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
 dependencies = [
+ "async-compatibility-layer",
  "async-lock",
  "async-std",
  "async-trait",
@@ -2371,6 +2384,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "libp2p",
+ "libp2p-swarm-derive",
  "parking_lot 0.12.1",
  "rand 0.8.5",
  "serde",
@@ -2928,7 +2942,7 @@ dependencies = [
 [[package]]
 name = "nll"
 version = "1.0.0"
-source = "git+ssh://git@github.com/EspressoSystems/nll#3eb027c7a1892a93cdfc7fca9b6ecd0257bb5b43"
+source = "git+ssh://git@github.com/EspressoSystems/nll#26720a657a79aff8aef00b4e1fbedb744ac676a7"
 
 [[package]]
 name = "nohash-hasher"
@@ -3760,9 +3774,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.147"
+version = "1.0.148"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d193d69bae983fc11a79df82342761dfbf28a99fc8d203dca4c3c1b590948965"
+checksum = "e53f64bb4ba0191d6d0676e1b141ca55047d83b74f5607e6d8eb88126c52c2dc"
 dependencies = [
  "serde_derive",
 ]
@@ -3787,9 +3801,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.147"
+version = "1.0.148"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f1d362ca8fc9c3e3a7484440752472d68a6caa98f1ab81d99b5dfe517cec852"
+checksum = "a55492425aa53521babf6137309e7d34c20bbfbbfcfe2c7f3a047fd1f6b92c0c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4037,9 +4051,9 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
 name = "syn"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a864042229133ada95abf3b54fdc62ef5ccabe9515b64717bcb9a1919e59445d"
+checksum = "4ae548ec36cf198c0ef7710d3c230987c2d6d7bd98ad6edc0274462724c585ce"
 dependencies = [
  "proc-macro2",
  "quote",
