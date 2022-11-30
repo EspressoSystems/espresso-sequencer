@@ -9,7 +9,10 @@ use hotshot::traits::{
 };
 use hotshot_types::{
     data::ViewNumber,
-    traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
+    traits::{
+        block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes,
+        state::ConsensusTime,
+    },
 };
 use jf_primitives::signatures::BLSSignatureScheme;
 #[allow(deprecated)]
@@ -223,8 +226,24 @@ impl Committable for SequencerTransaction {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, Hash, PartialEq, Eq)]
-struct State;
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
+struct State {
+    chain_variables: ChainVariables,
+    block_height: u64,
+    view_number: ViewNumber,
+    prev_state_committment: Option<Commitment<Self>>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            chain_variables: Default::default(),
+            block_height: Default::default(),
+            view_number: ViewNumber::genesis(),
+            prev_state_committment: Default::default(),
+        }
+    }
+}
 
 impl HotShotState for State {
     type Error = Error;
@@ -238,9 +257,35 @@ impl HotShotState for State {
         nll_todo()
     }
 
-    fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        #[allow(deprecated)]
-        nll_todo()
+    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
+        // Parent state commitment of block must match current state commitment
+        if block.parent_state != self.commit() {
+            return false;
+        }
+
+        // New view number must be greater than current
+        if *view_number <= self.view_number {
+            return false;
+        }
+
+        if self.block_height == 0 {
+            // Must contain only a genesis transaction
+            if block.transactions.len() != 1
+                || !matches!(block.transactions[0], SequencerTransaction::Genesis(_))
+            {
+                return false;
+            }
+        } else {
+            // If any txn is Genesis, fail
+            if block
+                .transactions
+                .iter()
+                .any(|txn| matches!(txn, SequencerTransaction::Genesis(_)))
+            {
+                return false;
+            }
+        }
+        true
     }
 
     fn append(
