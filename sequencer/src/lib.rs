@@ -141,7 +141,7 @@ impl Committable for GenesisTransaction {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("GenesisTransaction")
             .u64_field("chain_id", self.chain.chain_id as u64)
-            .u64_field("committee_size", self.chain.committee_size as u64)
+            .u64_field("committee_size", self.chain.committee_size)
             .finalize()
     }
 }
