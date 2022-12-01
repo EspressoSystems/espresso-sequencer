@@ -19,7 +19,7 @@ use jf_primitives::signatures::BLSSignatureScheme;
 use nll::nll_todo::nll_todo;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 
 #[derive(Debug, Clone)]
 struct Node;
@@ -301,7 +301,7 @@ impl HotShotState for State {
         block: &Self::BlockType,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        // Have to save state committment here if any changes are made
+        // Have to save state commitment here if any changes are made
 
         if !self.validate_block(block, view_number) {
             return Err(Error::ValidationError);
@@ -320,8 +320,19 @@ impl HotShotState for State {
 
 impl Committable for State {
     fn commit(&self) -> Commitment<Self> {
-        #[allow(deprecated)]
-        nll_todo()
+        commit::RawCommitmentBuilder::new("State")
+            .field("chain_variables", self.chain_variables.commit())
+            .u64_field("block_height", self.block_height)
+            .u64_field("view_number", *self.view_number.deref())
+            .array_field(
+                "prev_state_commitment",
+                &self
+                    .prev_state_commitment
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+            .finalize()
     }
 }
 
