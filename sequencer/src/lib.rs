@@ -9,14 +9,17 @@ use hotshot::traits::{
 };
 use hotshot_types::{
     data::ViewNumber,
-    traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
+    traits::{
+        block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes,
+        state::ConsensusTime,
+    },
 };
 use jf_primitives::signatures::BLSSignatureScheme;
 #[allow(deprecated)]
 use nll::nll_todo::nll_todo;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 
 #[derive(Debug, Clone)]
 struct Node;
@@ -115,7 +118,7 @@ impl Block {
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 pub enum Error {
-    Error,
+    ValidationError,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
@@ -158,14 +161,13 @@ impl Committable for Transaction {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GenesisTransaction {
-    pub chain: ChainVariables,
+    pub chain_variables: ChainVariables,
 }
 
 impl Committable for GenesisTransaction {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("GenesisTransaction")
-            .u64_field("chain_id", self.chain.chain_id as u64)
-            .u64_field("committee_size", self.chain.committee_size)
+            .field("chain_variables", self.chain_variables.commit())
             .finalize()
     }
 }
@@ -207,6 +209,15 @@ impl ChainVariables {
     }
 }
 
+impl Committable for ChainVariables {
+    fn commit(&self) -> Commitment<Self> {
+        commit::RawCommitmentBuilder::new("ChainVariables")
+            .u64_field("chain_id", self.chain_id as u64)
+            .u64_field("committee_size", self.committee_size)
+            .finalize()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// A transaction tht can be either a CAP transaction or a collect reward transaction
 pub enum SequencerTransaction {
@@ -223,8 +234,24 @@ impl Committable for SequencerTransaction {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, Hash, PartialEq, Eq)]
-struct State;
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
+struct State {
+    chain_variables: ChainVariables,
+    block_height: u64,
+    view_number: ViewNumber,
+    prev_state_commitment: Option<Commitment<Self>>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            chain_variables: Default::default(),
+            block_height: Default::default(),
+            view_number: ViewNumber::genesis(),
+            prev_state_commitment: Default::default(),
+        }
+    }
+}
 
 impl HotShotState for State {
     type Error = Error;
@@ -238,30 +265,74 @@ impl HotShotState for State {
         nll_todo()
     }
 
-    fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        #[allow(deprecated)]
-        nll_todo()
+    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
+        // Parent state commitment of block must match current state commitment
+        if block.parent_state != self.commit() {
+            return false;
+        }
+
+        // New view number must be greater than current
+        if *view_number <= self.view_number {
+            return false;
+        }
+
+        if self.block_height == 0 {
+            // Must contain only a genesis transaction
+            if block.transactions.len() != 1
+                || !matches!(block.transactions[0], SequencerTransaction::Genesis(_))
+            {
+                return false;
+            }
+        } else {
+            // If any txn is Genesis, fail
+            if block
+                .transactions
+                .iter()
+                .any(|txn| matches!(txn, SequencerTransaction::Genesis(_)))
+            {
+                return false;
+            }
+        }
+        true
     }
 
     fn append(
         &self,
-        _block: &Self::BlockType,
-        _view_number: &Self::Time,
+        block: &Self::BlockType,
+        view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)]
-        nll_todo()
+        // Have to save state commitment here if any changes are made
+
+        if !self.validate_block(block, view_number) {
+            return Err(Error::ValidationError);
+        }
+
+        Ok(State {
+            chain_variables: self.chain_variables.clone(),
+            block_height: self.block_height + 1,
+            view_number: *view_number,
+            prev_state_commitment: Some(self.commit()),
+        })
     }
 
-    fn on_commit(&self) {
-        #[allow(deprecated)]
-        nll_todo()
-    }
+    fn on_commit(&self) {}
 }
 
 impl Committable for State {
     fn commit(&self) -> Commitment<Self> {
-        #[allow(deprecated)]
-        nll_todo()
+        commit::RawCommitmentBuilder::new("State")
+            .field("chain_variables", self.chain_variables.commit())
+            .u64_field("block_height", self.block_height)
+            .u64_field("view_number", *self.view_number.deref())
+            .array_field(
+                "prev_state_commitment",
+                &self
+                    .prev_state_commitment
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+            .finalize()
     }
 }
 
