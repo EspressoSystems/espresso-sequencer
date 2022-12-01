@@ -161,14 +161,13 @@ impl Committable for Transaction {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GenesisTransaction {
-    pub chain: ChainVariables,
+    pub chain_variables: ChainVariables,
 }
 
 impl Committable for GenesisTransaction {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("GenesisTransaction")
-            .u64_field("chain_id", self.chain.chain_id as u64)
-            .u64_field("committee_size", self.chain.committee_size)
+            .field("chain_variables", self.chain_variables.commit())
             .finalize()
     }
 }
@@ -210,6 +209,15 @@ impl ChainVariables {
     }
 }
 
+impl Committable for ChainVariables {
+    fn commit(&self) -> Commitment<Self> {
+        commit::RawCommitmentBuilder::new("ChainVariables")
+            .u64_field("chain_id", self.chain_id as u64)
+            .u64_field("committee_size", self.committee_size)
+            .finalize()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// A transaction tht can be either a CAP transaction or a collect reward transaction
 pub enum SequencerTransaction {
@@ -231,7 +239,7 @@ struct State {
     chain_variables: ChainVariables,
     block_height: u64,
     view_number: ViewNumber,
-    prev_state_committment: Option<Commitment<Self>>,
+    prev_state_commitment: Option<Commitment<Self>>,
 }
 
 impl Default for State {
@@ -240,7 +248,7 @@ impl Default for State {
             chain_variables: Default::default(),
             block_height: Default::default(),
             view_number: ViewNumber::genesis(),
-            prev_state_committment: Default::default(),
+            prev_state_commitment: Default::default(),
         }
     }
 }
@@ -303,7 +311,7 @@ impl HotShotState for State {
             chain_variables: self.chain_variables.clone(),
             block_height: self.block_height + 1,
             view_number: *view_number,
-            prev_state_committment: Some(self.commit()),
+            prev_state_commitment: Some(self.commit()),
         })
     }
 
