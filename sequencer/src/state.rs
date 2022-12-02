@@ -1,4 +1,6 @@
-use crate::{Block, ChainVariables, Error, SequencerTransaction};
+use crate::{
+    block::Block, chain_variables::ChainVariables, transaction::SequencerTransaction, Error,
+};
 use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
 use hotshot_types::{data::ViewNumber, traits::state::ConsensusTime};
@@ -8,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct State {
+pub(crate) struct State {
     chain_variables: ChainVariables,
     block_height: u64,
     view_number: ViewNumber,
