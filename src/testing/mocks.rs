@@ -10,6 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use async_std::sync::Arc;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Index, IndexMut};
 use hotshot::traits::{
@@ -25,12 +26,18 @@ use hotshot_types::{
     },
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
-use std::collections::HashSet;
+use snafu::{ensure, Snafu};
+use std::collections::{BTreeSet, HashSet};
 
 #[derive(Clone, Debug, Snafu)]
 pub enum MockError {
-    InvalidBlockParent,
+    InvalidBlockParent {
+        last_block: Commitment<MockBlock>,
+        parent: Commitment<MockBlock>,
+    },
+    DoubleSpend {
+        nonce: u64,
+    },
 }
 
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -55,23 +62,44 @@ impl Transaction for MockTransaction {}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct MockState {
     pub last_block: Commitment<MockBlock>,
+    pub spent: Arc<BTreeSet<u64>>,
 }
 
 impl Default for MockState {
     fn default() -> Self {
         Self {
             last_block: MockBlock::genesis().parent,
+            spent: Default::default(),
         }
     }
 }
 
 impl Committable for MockState {
     fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new("MockState").finalize()
+        RawCommitmentBuilder::new("MockState")
+            .field("last_block", self.last_block)
+            .var_size_bytes(&bincode::serialize(&self.spent).unwrap())
+            .finalize()
     }
 
     fn tag() -> String {
         "MOCKSTATE".to_string()
+    }
+}
+
+impl MockState {
+    fn validate(&self, block: &MockBlock) -> Result<(), MockError> {
+        ensure!(
+            block.parent == self.last_block,
+            InvalidBlockParentSnafu {
+                last_block: self.last_block,
+                parent: block.parent,
+            }
+        );
+        if let Some(txn) = block.iter().find(|txn| self.spent.contains(&txn.nonce)) {
+            return Err(DoubleSpendSnafu { nonce: txn.nonce }.build());
+        }
+        Ok(())
     }
 }
 
@@ -85,7 +113,7 @@ impl State for MockState {
     }
 
     fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        block.parent == self.last_block
+        self.validate(block).is_ok()
     }
 
     fn append(
@@ -93,13 +121,16 @@ impl State for MockState {
         block: &Self::BlockType,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if block.parent == self.last_block {
-            Ok(Self {
-                last_block: block.commit(),
-            })
-        } else {
-            Err(MockError::InvalidBlockParent)
+        self.validate(block)?;
+
+        let mut spent = (*self.spent).clone();
+        for txn in block.iter() {
+            spent.insert(txn.nonce);
         }
+        Ok(Self {
+            last_block: block.commit(),
+            spent: Arc::new(spent),
+        })
     }
 
     fn on_commit(&self) {}

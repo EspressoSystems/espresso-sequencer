@@ -108,10 +108,6 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
         )
         .await;
 
-        for node in &nodes {
-            node.hotshot.start().await;
-        }
-
         Self { nodes, _dir: dir }
     }
 }
@@ -123,6 +119,10 @@ impl<UserData> MockNetwork<UserData> {
 
     pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, UserData>>> {
         self.nodes[0].query_data.clone()
+    }
+
+    pub async fn start(&self) {
+        join_all(self.nodes.iter().map(|node| node.hotshot.start())).await;
     }
 
     pub async fn shut_down(mut self) {

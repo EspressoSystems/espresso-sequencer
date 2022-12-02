@@ -2082,7 +2082,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -2128,7 +2128,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -2149,7 +2149,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2197,7 +2197,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2228,7 +2228,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "bincode",
 ]
@@ -2925,7 +2925,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=6563aebdcdd71dd504ccf428a4a01937160df08d#6563aebdcdd71dd504ccf428a4a01937160df08d"
+source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=9fb1579a67e94b3357810fd713a17b49f80207ed#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",

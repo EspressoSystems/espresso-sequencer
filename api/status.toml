@@ -30,6 +30,7 @@ Returns
 ```
 {
     "transaction_count": "integer",
+    "memory_footprint": "integer",
 }
 ```
 """

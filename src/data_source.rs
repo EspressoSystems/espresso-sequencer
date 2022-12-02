@@ -302,6 +302,13 @@ impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Typ
     }
 }
 
+/// Metric-related functions.
+impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
+    fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
+        self.metrics.get_subgroup(["consensus"])
+    }
+}
+
 impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData> {
     type Error = MetricsError;
 
@@ -311,12 +318,19 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
 
     fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
         Ok(MempoolQueryData {
-            transaction_count: self.metrics.get_gauge("outstanding_transactions")?.get() as u64,
+            transaction_count: self
+                .consensus_metrics()?
+                .get_gauge("outstanding_transactions")?
+                .get() as u64,
+            memory_footprint: self
+                .consensus_metrics()?
+                .get_gauge("outstanding_transactions_memory_size")?
+                .get() as u64,
         })
     }
 
     fn success_rate(&self) -> Result<f64, Self::Error> {
-        let total_views = self.metrics.get_counter("currenv_view")?.get() as f64;
+        let total_views = self.consensus_metrics()?.get_gauge("current_view")?.get() as f64;
         // By definition, a successful view is any which committed a block.
         Ok(self.block_height()? as f64 / total_views)
     }
@@ -423,6 +437,8 @@ mod test {
         let hotshot = network.handle();
         let qd = network.query_data();
 
+        network.start().await;
+
         // Spawn the update task.
         {
             let mut hotshot = hotshot.clone();
@@ -459,5 +475,82 @@ mod test {
         }
 
         network.shut_down().await;
+    }
+
+    #[async_std::test]
+    async fn test_metrics() {
+        setup_logging();
+        setup_backtrace();
+
+        let network = MockNetwork::init(()).await;
+        let hotshot = network.handle();
+        let qd = network.query_data();
+
+        // With consensus paused, check that the success rate returns NaN (since the block height,
+        // the numerator, and view number, the denominator, are both 0).
+        assert!(qd.read().await.success_rate().unwrap().is_nan());
+        // Check that block height is initially zero.
+        assert_eq!(qd.read().await.block_height().unwrap(), 0);
+
+        // Submit a transaction, and check that it is reflected in the mempool.
+        let txn = MockTransaction { nonce: 0 };
+        hotshot.submit_transaction(txn.clone()).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        assert_eq!(
+            qd.read().await.mempool_info().unwrap(),
+            MempoolQueryData {
+                transaction_count: 1,
+                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+            }
+        );
+
+        // Submitting the same transaction should not affect the mempool.
+        hotshot.submit_transaction(txn.clone()).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        assert_eq!(
+            qd.read().await.mempool_info().unwrap(),
+            MempoolQueryData {
+                transaction_count: 1,
+                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+            }
+        );
+
+        // Spawn the update task.
+        {
+            let mut hotshot = hotshot.clone();
+            let qd = qd.clone();
+            spawn(async move {
+                while let Ok(event) = hotshot.next_event().await {
+                    tracing::info!("EVENT {:?}", event.event);
+                    let mut qd = qd.write().await;
+                    qd.update(&event).unwrap();
+                    qd.commit_version().unwrap();
+                }
+            });
+        }
+
+        // Start consensus and wait for the transaction to be finalized.
+        network.start().await;
+        while get_non_empty_blocks(&qd).await.is_empty() {
+            tracing::info!("waiting for block to be finalized");
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Check that block height and success rate have been updated. Note that we can only check
+        // if success rate is positive. We don't know exactly what it is because we can't know how
+        // many views have elapsed without race conditions. Similarly, we can only check that block
+        // height is at least 2, because we know that the genesis block and our transaction's block
+        // have both been committed, but we can't know how many empty blocks were committed.
+        assert!(qd.read().await.success_rate().unwrap() > 0.0);
+        assert!(qd.read().await.block_height().unwrap() >= 2);
+
+        // Check that the transaction is no longer reflected in the mempool.
+        assert_eq!(
+            qd.read().await.mempool_info().unwrap(),
+            MempoolQueryData {
+                transaction_count: 0,
+                memory_footprint: 0,
+            }
+        );
     }
 }
