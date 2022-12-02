@@ -13,9 +13,9 @@
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
 use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
-use ark_serialize::CanonicalSerialize;
 use hotshot::types::{Event, EventType};
 use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
+use serde::Serialize;
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -55,7 +55,7 @@ pub trait UpdateDataSource<Types: NodeTypes> {
 impl<Types: NodeTypes, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
     UpdateDataSource<Types> for T
 where
-    Types::BlockType: CanonicalSerialize,
+    Types::BlockType: Serialize,
 {
     type Error = <Self as UpdateAvailabilityData<Types>>::Error;
 

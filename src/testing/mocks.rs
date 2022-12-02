@@ -10,7 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use ark_serialize::*;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Index, IndexMut};
 use hotshot::traits::{
@@ -34,17 +33,7 @@ pub enum MockError {
     InvalidBlockParent,
 }
 
-#[derive(
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    CanonicalSerialize,
-    CanonicalDeserialize,
-    Clone,
-    Debug,
-)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct MockTransaction {
     pub nonce: u64,
 }
@@ -116,19 +105,7 @@ impl State for MockState {
     fn on_commit(&self) {}
 }
 
-#[derive(
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    CanonicalSerialize,
-    CanonicalDeserialize,
-    Clone,
-    Debug,
-    Index,
-    IndexMut,
-)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Index, IndexMut)]
 pub struct MockBlock {
     pub parent: Commitment<MockBlock>,
     #[index]

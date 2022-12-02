@@ -339,13 +339,14 @@ mod test {
         consensus::MockNetwork,
         mocks::{MockTransaction, MockTypes},
     };
-    use ark_serialize::CanonicalSerialize;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::{
         sync::RwLock,
         task::{sleep, spawn},
     };
+    use bincode::Options;
     use commit::Committable;
+    use hotshot_utils::bincode::bincode_opts;
     use std::collections::HashSet;
     use std::time::Duration;
 
@@ -376,7 +377,10 @@ mod test {
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
             assert_eq!(block.hash(), block.block().commit());
-            assert_eq!(block.size(), block.block().serialized_size() as u64);
+            assert_eq!(
+                block.size(),
+                bincode_opts().serialized_size(block.block()).unwrap() as u64
+            );
             assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
             assert!(qd
                 .get_block_ids_by_proposer_id(leaf.proposer())

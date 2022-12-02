@@ -10,13 +10,14 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use ark_serialize::CanonicalSerialize;
+use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot::{
     data::{Leaf, QuorumCertificate},
     traits::Block,
 };
 use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
+use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
 
 pub type LeafHash<Types> = Commitment<Leaf<Types>>;
@@ -75,13 +76,15 @@ pub struct BlockQueryData<Types: NodeTypes> {
 impl<Types: NodeTypes> BlockQueryData<Types> {
     pub fn new(leaf: Leaf<Types>, qc: QuorumCertificate<Types>) -> Self
     where
-        Types::BlockType: CanonicalSerialize,
+        Types::BlockType: Serialize,
     {
         assert_eq!(qc.block_commitment, leaf.deltas.commit());
         Self {
             hash: qc.block_commitment,
             height: leaf.height,
-            size: leaf.deltas.serialized_size() as u64,
+            size: bincode_opts()
+                .serialized_size(&leaf.deltas)
+                .unwrap_or_default() as u64,
             txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),
             block: leaf.deltas,
         }

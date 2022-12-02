@@ -2170,10 +2170,10 @@ dependencies = [
 name = "hotshot-query-service"
 version = "0.0.1"
 dependencies = [
- "ark-serialize",
  "async-compatibility-layer",
  "async-std",
  "atomic_store",
+ "bincode",
  "clap 4.0.24",
  "commit",
  "custom_debug",
@@ -2181,6 +2181,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-types",
+ "hotshot-utils",
  "itertools 0.10.5",
  "portpicker",
  "prometheus",
