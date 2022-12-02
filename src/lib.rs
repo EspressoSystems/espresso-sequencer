@@ -254,7 +254,7 @@
 //! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
-//! #   fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> { todo!() }
+//! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
 //! }
 //!
 //! // Implement data source trait for status API.
@@ -338,7 +338,7 @@
 //!     spawn(async move {
 //!         while let Ok(event) = hotshot.next_event().await {
 //!             let mut state = state.write().await;
-//!             state.hotshot_qs.update(&event).await;
+//!             state.hotshot_qs.update(&event).unwrap();
 //!             // Update other modules' states based on `event`.
 //!
 //!             state.hotshot_qs.commit_version().unwrap();

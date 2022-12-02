@@ -14,9 +14,8 @@
 use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
 use ark_serialize::CanonicalSerialize;
-use commit::Committable;
 use hotshot::types::{Event, EventType};
-use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes, Block};
+use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -77,21 +76,8 @@ where
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
             for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
-                assert_eq!(qc.leaf_commitment, leaf.commit());
-                assert_eq!(qc.block_commitment, leaf.deltas.commit());
-                self.insert_leaf(LeafQueryData {
-                    height: leaf.height,
-                    hash: qc.leaf_commitment,
-                    block_hash: qc.block_commitment,
-                    leaf: leaf.clone(),
-                })?;
-                self.insert_block(BlockQueryData {
-                    height: leaf.height,
-                    hash: qc.block_commitment,
-                    block: leaf.deltas.clone(),
-                    size: leaf.deltas.serialized_size() as u64,
-                    txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),
-                })?;
+                self.insert_leaf(LeafQueryData::new(leaf.clone(), qc.clone()))?;
+                self.insert_block(BlockQueryData::new(leaf.clone(), qc.clone()))?;
             }
         }
         Ok(())
