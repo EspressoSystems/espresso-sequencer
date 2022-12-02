@@ -87,7 +87,7 @@ mod test {
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
-        types::HotShotHandle,
+        types::{EventType, HotShotHandle},
         HotShot, HotShotInitializer,
     };
     use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
@@ -95,7 +95,6 @@ mod test {
     use rand::thread_rng;
     use std::time::Duration;
 
-    #[ignore]
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         // The minimal number of nodes is 4
@@ -114,6 +113,8 @@ mod test {
 
         let mut handles = vec![];
 
+        let master_map = MasterMap::new();
+
         // Create HotShot instances.
         for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
             // Create public and private keys for the node.
@@ -123,7 +124,7 @@ mod test {
                 execution_type: ExecutionType::Continuous,
                 total_nodes: num_nodes.try_into().unwrap(),
                 min_transactions: 0,
-                max_transactions: 1usize.try_into().unwrap(),
+                max_transactions: 2usize.try_into().unwrap(),
                 known_nodes: nodes_pub_keys.clone(),
                 next_view_timeout: Duration::from_secs(60).as_millis() as u64,
                 timeout_ratio: (10, 11),
@@ -138,7 +139,7 @@ mod test {
             let network = MemoryNetwork::<SeqTypes>::new(
                 public_key.clone(),
                 NoMetrics::new(),
-                MasterMap::new(),
+                master_map.clone(),
                 None,
             );
             let storage = MemoryStorage::<SeqTypes>::new();
@@ -184,8 +185,11 @@ mod test {
 
         println!("Submitted: {:?}", txn);
 
-        let event = handles[0].next_event().await;
+        let event = handles[0].next_event().await.unwrap();
         println!("Event: {:?}", event);
+
+        assert_eq!(*event.view_number, 1u64);
+        assert!(matches!(event.event, EventType::ViewFinished { .. }));
 
         Ok(())
     }
