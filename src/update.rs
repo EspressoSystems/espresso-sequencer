@@ -14,12 +14,12 @@
 use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
 use ark_serialize::CanonicalSerialize;
-use async_trait::async_trait;
 use commit::Committable;
 use hotshot::types::{Event, EventType};
 use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes, Block};
 use std::error::Error;
 use std::fmt::Debug;
+use std::iter::once;
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
@@ -29,7 +29,6 @@ use std::fmt::Debug;
 ///   should be used when initializing a [HotShotHandle](hotshot::types::HotShotHandle)
 /// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
 ///   emitted
-#[async_trait]
 pub trait UpdateDataSource<Types: NodeTypes> {
     type Error: Error + Debug;
 
@@ -41,10 +40,19 @@ pub trait UpdateDataSource<Types: NodeTypes> {
     fn metrics(&self) -> Box<dyn Metrics>;
 
     /// Update query state based on a new consensus event.
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
+    ///
+    /// The caller is responsible for authenticating `event`. This function does not perform any
+    /// authentication, and if given an invalid `event` (one which does not follow from the latest
+    /// known state of the ledger) it may panic or silently accept the invalid `event`. This allows
+    /// the best possible performance in the case where the query service and the HotShot instance
+    /// are running in the same process (and thus the event stream, directly from HotShot) is
+    /// trusted.
+    ///
+    /// If you want to update the data source with an untrusted event, for example one received from
+    /// a peer over the network, you must authenticate it first.
+    fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
 }
 
-#[async_trait]
 impl<Types: NodeTypes, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
     UpdateDataSource<Types> for T
 where
@@ -56,17 +64,30 @@ where
         UpdateStatusData::metrics(self)
     }
 
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
-        if let EventType::Decide { leaf_chain } = &event.event {
-            for leaf in leaf_chain.iter().rev() {
+    fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
+        if let EventType::Decide { leaf_chain, qc } = &event.event {
+            // `qc` justifies the first (most recent) leaf...
+            let qcs = once(&**qc)
+                // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
+                // `leaf.justify_qc`.
+                .chain(leaf_chain.iter().map(|leaf| &leaf.justify_qc))
+                // Put the QCs in chronological order.
+                .rev()
+                // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
+                // leaf in the new chain, so we don't need it.
+                .skip(1);
+            for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
+                assert_eq!(qc.leaf_commitment, leaf.commit());
+                assert_eq!(qc.block_commitment, leaf.deltas.commit());
                 self.insert_leaf(LeafQueryData {
-                    height: 0, // TODO get height from leaf once HotShot supports it
-                    hash: leaf.commit(),
+                    height: leaf.height,
+                    hash: qc.leaf_commitment,
+                    block_hash: qc.block_commitment,
                     leaf: leaf.clone(),
                 })?;
                 self.insert_block(BlockQueryData {
-                    height: 0, // TODO get height from leaf once HotShot supports it
-                    hash: leaf.deltas.commit(),
+                    height: leaf.height,
+                    hash: qc.block_commitment,
                     block: leaf.deltas.clone(),
                     size: leaf.deltas.serialized_size() as u64,
                     txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),

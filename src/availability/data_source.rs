@@ -27,7 +27,7 @@ pub trait AvailabilityDataSource<Types: NodeTypes> {
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64>;
     fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64>;
     fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)>;
-    fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64>;
+    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64>;
 }
 
 pub trait UpdateAvailabilityData<Types: NodeTypes> {

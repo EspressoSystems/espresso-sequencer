@@ -14,8 +14,8 @@ use ark_serialize::*;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Index, IndexMut};
 use hotshot::traits::{
-    election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
-    implementations::{CentralizedServerNetwork, MemoryStorage},
+    election::static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
+    implementations::{MemoryNetwork, MemoryStorage},
     Block, NodeImplementation,
 };
 use hotshot_types::{
@@ -217,7 +217,7 @@ impl NodeTypes for MockTypes {
     type Time = ViewNumber;
     type BlockType = MockBlock;
     type SignatureKey = Ed25519Pub;
-    type VoteTokenType = StaticVoteToken;
+    type VoteTokenType = StaticVoteToken<Ed25519Pub>;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
@@ -230,6 +230,6 @@ pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes>;
-    type Networking = CentralizedServerNetwork<MockTypes>;
-    type Election = StaticCommittee<MockTypes>;
+    type Networking = MemoryNetwork<MockTypes>;
+    type Election = GeneralStaticCommittee<MockTypes, Ed25519Pub>;
 }

@@ -150,10 +150,10 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
             .flatten()
             .map(|leaf| {
                 index_by_proposer_id
-                    .entry(leaf.leaf.proposer_id)
+                    .entry(leaf.proposer().clone())
                     .or_insert_with(Vec::new)
                     .push(leaf.height);
-                index_by_block_hash.insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+                index_by_block_hash.insert(leaf.block_hash(), leaf.height);
                 (leaf.hash, leaf.height)
             })
             .collect();
@@ -267,9 +267,9 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
         self.index_by_txn_hash.get(&hash).cloned()
     }
 
-    fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> {
+    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
         self.index_by_proposer_id
-            .get(&id)
+            .get(id)
             .cloned()
             .unwrap_or_default()
     }
@@ -281,10 +281,11 @@ impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Typ
     fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         self.leaf_storage
             .insert(leaf.height as usize, leaf.clone())?;
+        self.index_by_leaf_hash.insert(leaf.hash, leaf.height);
         self.index_by_block_hash
-            .insert(leaf.leaf.justify_qc.block_commitment, leaf.height);
+            .insert(leaf.block_hash(), leaf.height);
         self.index_by_proposer_id
-            .entry(leaf.leaf.proposer_id)
+            .entry(leaf.proposer().clone())
             .or_insert_with(Vec::new)
             .push(leaf.height);
         Ok(())
@@ -328,5 +329,128 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
 impl<Types: NodeTypes, UserData> UpdateStatusData for QueryData<Types, UserData> {
     fn metrics(&self) -> Box<dyn Metrics> {
         Box::new(self.metrics.clone())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::testing::{
+        consensus::MockNetwork,
+        mocks::{MockTransaction, MockTypes},
+    };
+    use ark_serialize::CanonicalSerialize;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::{
+        sync::RwLock,
+        task::{sleep, spawn},
+    };
+    use commit::Committable;
+    use std::collections::HashSet;
+    use std::time::Duration;
+
+    async fn get_non_empty_blocks<UserData>(
+        qd: &RwLock<QueryData<MockTypes, UserData>>,
+    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
+        let qd = qd.read().await;
+        qd.get_nth_leaf_iter(0)
+            .zip(qd.get_nth_block_iter(0))
+            .filter_map(|entry| match entry {
+                (Some(leaf), Some(block)) if !block.txn_hashes.is_empty() => Some((leaf, block)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    async fn validate<UserData>(qd: &RwLock<QueryData<MockTypes, UserData>>) {
+        let qd = qd.read().await;
+
+        // Check the consistency of every block/leaf pair.
+        for (i, leaf) in qd.get_nth_leaf_iter(0).enumerate() {
+            let Some(leaf) = leaf else { continue; };
+            assert_eq!(leaf.height, i as u64);
+            assert_eq!(leaf.hash, leaf.leaf.commit());
+            assert_eq!(qd.get_leaf_index_by_hash(leaf.hash).unwrap(), i as u64);
+
+            let Some(Some(block)) = qd.get_nth_block_iter(i).next() else { continue; };
+            assert_eq!(leaf.block_hash(), block.hash);
+            assert_eq!(block.height, i as u64);
+            assert_eq!(block.hash, block.block.commit());
+            assert_eq!(block.size, block.block.serialized_size() as u64);
+            assert_eq!(qd.get_block_index_by_hash(block.hash).unwrap(), i as u64);
+            assert!(qd
+                .get_block_ids_by_proposer_id(leaf.proposer())
+                .contains(&(i as u64)));
+
+            for (j, txn_hash) in block.txn_hashes.iter().enumerate() {
+                assert_eq!(
+                    qd.get_txn_index_by_hash(*txn_hash).unwrap(),
+                    (i as u64, j as u64),
+                );
+            }
+        }
+
+        // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
+        // ID.
+        for proposer in qd
+            .get_nth_leaf_iter(0)
+            .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer().clone()))
+            .collect::<HashSet<_>>()
+        {
+            for block_id in qd.get_block_ids_by_proposer_id(&proposer) {
+                assert_eq!(
+                    proposer,
+                    *qd.get_nth_leaf_iter(block_id as usize)
+                        .next()
+                        .unwrap()
+                        .unwrap()
+                        .proposer()
+                );
+            }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_update() {
+        setup_logging();
+        setup_backtrace();
+
+        let network = MockNetwork::init(()).await;
+        let hotshot = network.handle();
+        let qd = network.query_data();
+
+        // Spawn the update task.
+        {
+            let mut hotshot = hotshot.clone();
+            let qd = qd.clone();
+            spawn(async move {
+                while let Ok(event) = hotshot.next_event().await {
+                    tracing::info!("EVENT {:?}", event.event);
+                    let mut qd = qd.write().await;
+                    qd.update(&event).unwrap();
+                    qd.commit_version().unwrap();
+                }
+            });
+        }
+        assert_eq!(get_non_empty_blocks(&qd).await, vec![]);
+
+        // Submit a few blocks and make sure each one gets reflected in the query service and
+        // preserves the consistency of the data and indices.
+        for nonce in 0..3 {
+            let txn = MockTransaction { nonce };
+            let txn_hash = txn.commit();
+            hotshot.submit_transaction(txn).await.unwrap();
+            while get_non_empty_blocks(&qd).await.len() < nonce as usize + 1 {
+                tracing::info!("waiting for block {} to be finalized", nonce);
+                sleep(Duration::from_secs(1)).await;
+            }
+            assert_eq!(
+                get_non_empty_blocks(&qd).await[nonce as usize].1.txn_hashes,
+                vec![txn_hash]
+            );
+            validate(&qd).await;
+        }
+
+        network.shut_down().await;
     }
 }

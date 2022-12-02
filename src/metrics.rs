@@ -263,6 +263,14 @@ impl metrics::Gauge for Gauge {
     fn set(&self, amount: usize) {
         self.0.set(amount as u64);
     }
+
+    fn update(&self, delta: i64) {
+        if delta >= 0 {
+            self.0.add(delta as u64);
+        } else {
+            self.0.sub(-delta as u64);
+        }
+    }
 }
 
 /// A [Histogram](metrics::Histogram) metric.

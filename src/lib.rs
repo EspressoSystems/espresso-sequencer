@@ -432,7 +432,7 @@ mod test {
         fn get_txn_index_by_hash(&self, hash: TransactionHash<MockTypes>) -> Option<(u64, u64)> {
             self.hotshot_qs.get_txn_index_by_hash(hash)
         }
-        fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64> {
+        fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
             self.hotshot_qs.get_block_ids_by_proposer_id(id)
         }
     }

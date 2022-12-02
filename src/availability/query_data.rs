@@ -12,7 +12,7 @@
 
 use commit::Commitment;
 use hotshot::{data::Leaf, traits::Block};
-use hotshot_types::traits::node_implementation::NodeTypes;
+use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
 
 pub type LeafHash<Types> = Commitment<Leaf<Types>>;
@@ -25,7 +25,18 @@ pub type TransactionHash<Types> =
 pub struct LeafQueryData<Types: NodeTypes> {
     pub leaf: Leaf<Types>,
     pub hash: LeafHash<Types>,
+    pub block_hash: BlockHash<Types>,
     pub height: u64,
+}
+
+impl<Types: NodeTypes> LeafQueryData<Types> {
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.block_hash
+    }
+
+    pub fn proposer(&self) -> &EncodedPublicKey {
+        &self.leaf.proposer_id
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
