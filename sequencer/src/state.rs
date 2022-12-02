@@ -40,11 +40,7 @@ impl State {
             return Err(Error::IncorrectParent);
         }
 
-        // New view number must be greater than current
-        if *view_number <= self.view_number {
-            return Err(Error::IncorrectView);
-        }
-
+        // Is this is a genesis block?
         if self.block_height == 0 {
             // Must contain only a genesis transaction
             if block.transactions.len() != 1 {
@@ -54,6 +50,11 @@ impl State {
                 return Err(Error::MissingGenesis);
             }
         } else {
+            // New view number must be greater than current
+            if *view_number <= self.view_number {
+                return Err(Error::IncorrectView);
+            }
+
             // If any txn is Genesis, fail
             if block
                 .transactions
