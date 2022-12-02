@@ -1,3 +1,4 @@
+use crate::{block::Block, state::State};
 use commit::{Commitment, Committable};
 use hotshot::traits::{
     election::{
@@ -5,21 +6,19 @@ use hotshot::traits::{
         vrf::JfPubKey,
     },
     implementations::{MemoryNetwork, MemoryStorage},
-    Block as HotShotBlock, NodeImplementation, State as HotShotState,
+    NodeImplementation,
 };
 use hotshot_types::{
     data::ViewNumber,
-    traits::{
-        block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes,
-        state::ConsensusTime,
-    },
+    traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
 };
 use jf_primitives::signatures::BLSSignatureScheme;
-#[allow(deprecated)]
-use nll::nll_todo::nll_todo;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::Snafu;
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
+
+mod block;
+mod state;
 
 #[derive(Debug, Clone)]
 struct Node;
@@ -55,65 +54,6 @@ impl NodeTypes for SeqTypes {
     type ElectionConfigType = StaticElectionConfig;
 
     type StateType = State;
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-struct Block {
-    parent_state: Commitment<State>,
-    transactions: Vec<SequencerTransaction>,
-}
-
-impl HotShotBlock for Block {
-    type Error = Error;
-
-    type Transaction = SequencerTransaction;
-
-    fn add_transaction_raw(
-        &self,
-        tx: &Self::Transaction,
-    ) -> std::result::Result<Self, Self::Error> {
-        let mut new = self.clone();
-        new.transactions.push(tx.clone());
-        Ok(new)
-    }
-
-    fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        self.transactions.iter().map(|tx| tx.commit()).collect()
-    }
-}
-
-impl Committable for Block {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Block Comm")
-            .field("Block parent", self.parent_state)
-            .array_field(
-                "txns",
-                &self
-                    .transactions
-                    .iter()
-                    .map(|x| x.commit())
-                    .collect::<Vec<_>>(),
-            )
-            .finalize()
-    }
-}
-
-impl Block {
-    #[allow(unused)]
-    pub fn new(parent_state: Commitment<State>) -> Self {
-        Self {
-            parent_state,
-            transactions: Default::default(),
-        }
-    }
-
-    #[allow(unused)]
-    fn genesis(txn: GenesisTransaction) -> Self {
-        Self {
-            parent_state: State::default().commit(),
-            transactions: vec![SequencerTransaction::Genesis(txn)],
-        }
-    }
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -230,108 +170,6 @@ impl Committable for SequencerTransaction {
         let bytes = bincode::serialize(self).unwrap(); // TODO not safe unwrap?
         commit::RawCommitmentBuilder::new("SequencerTransaction")
             .var_size_bytes(&bytes)
-            .finalize()
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-struct State {
-    chain_variables: ChainVariables,
-    block_height: u64,
-    view_number: ViewNumber,
-    prev_state_commitment: Option<Commitment<Self>>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        State {
-            chain_variables: Default::default(),
-            block_height: Default::default(),
-            view_number: ViewNumber::genesis(),
-            prev_state_commitment: Default::default(),
-        }
-    }
-}
-
-impl HotShotState for State {
-    type Error = Error;
-
-    type BlockType = Block;
-
-    type Time = ViewNumber;
-
-    fn next_block(&self) -> Self::BlockType {
-        #[allow(deprecated)]
-        nll_todo()
-    }
-
-    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
-        // Parent state commitment of block must match current state commitment
-        if block.parent_state != self.commit() {
-            return false;
-        }
-
-        // New view number must be greater than current
-        if *view_number <= self.view_number {
-            return false;
-        }
-
-        if self.block_height == 0 {
-            // Must contain only a genesis transaction
-            if block.transactions.len() != 1
-                || !matches!(block.transactions[0], SequencerTransaction::Genesis(_))
-            {
-                return false;
-            }
-        } else {
-            // If any txn is Genesis, fail
-            if block
-                .transactions
-                .iter()
-                .any(|txn| matches!(txn, SequencerTransaction::Genesis(_)))
-            {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn append(
-        &self,
-        block: &Self::BlockType,
-        view_number: &Self::Time,
-    ) -> Result<Self, Self::Error> {
-        // Have to save state commitment here if any changes are made
-
-        if !self.validate_block(block, view_number) {
-            return Err(Error::ValidationError);
-        }
-
-        Ok(State {
-            chain_variables: self.chain_variables.clone(),
-            block_height: self.block_height + 1,
-            view_number: *view_number,
-            prev_state_commitment: Some(self.commit()),
-        })
-    }
-
-    fn on_commit(&self) {}
-}
-
-impl Committable for State {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("State")
-            .field("chain_variables", self.chain_variables.commit())
-            .u64_field("block_height", self.block_height)
-            .u64_field("view_number", *self.view_number.deref())
-            .array_field(
-                "prev_state_commitment",
-                &self
-                    .prev_state_commitment
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            )
             .finalize()
     }
 }
