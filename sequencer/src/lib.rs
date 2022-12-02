@@ -95,6 +95,7 @@ mod test {
     use rand::thread_rng;
     use std::time::Duration;
 
+    #[ignore]
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         // The minimal number of nodes is 4
