@@ -28,6 +28,45 @@ impl Default for State {
     }
 }
 
+impl State {
+    // TODO: Is there a better name for this?
+    fn validate_block_helper(
+        &self,
+        block: &<State as HotShotState>::BlockType,
+        view_number: &<State as HotShotState>::Time,
+    ) -> Result<(), Error> {
+        // Parent state commitment of block must match current state commitment
+        if block.parent_state != self.commit() {
+            return Err(Error::IncorrectParent);
+        }
+
+        // New view number must be greater than current
+        if *view_number <= self.view_number {
+            return Err(Error::IncorrectView);
+        }
+
+        if self.block_height == 0 {
+            // Must contain only a genesis transaction
+            if block.transactions.len() != 1 {
+                return Err(Error::GenesisWrongSize);
+            }
+            if !matches!(block.transactions[0], SequencerTransaction::Genesis(_)) {
+                return Err(Error::MissingGenesis);
+            }
+        } else {
+            // If any txn is Genesis, fail
+            if block
+                .transactions
+                .iter()
+                .any(|txn| matches!(txn, SequencerTransaction::Genesis(_)))
+            {
+                return Err(Error::UnexpectedGenesis);
+            }
+        }
+        Ok(())
+    }
+}
+
 impl HotShotState for State {
     type Error = Error;
 
@@ -41,34 +80,7 @@ impl HotShotState for State {
     }
 
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
-        // Parent state commitment of block must match current state commitment
-        if block.parent_state != self.commit() {
-            return false;
-        }
-
-        // New view number must be greater than current
-        if *view_number <= self.view_number {
-            return false;
-        }
-
-        if self.block_height == 0 {
-            // Must contain only a genesis transaction
-            if block.transactions.len() != 1
-                || !matches!(block.transactions[0], SequencerTransaction::Genesis(_))
-            {
-                return false;
-            }
-        } else {
-            // If any txn is Genesis, fail
-            if block
-                .transactions
-                .iter()
-                .any(|txn| matches!(txn, SequencerTransaction::Genesis(_)))
-            {
-                return false;
-            }
-        }
-        true
+        self.validate_block_helper(block, view_number).is_ok()
     }
 
     fn append(
@@ -78,9 +90,8 @@ impl HotShotState for State {
     ) -> Result<Self, Self::Error> {
         // Have to save state commitment here if any changes are made
 
-        if !self.validate_block(block, view_number) {
-            return Err(Error::ValidationError);
-        }
+        // If there's a validation error, return it here
+        self.validate_block_helper(block, view_number)?;
 
         Ok(State {
             chain_variables: self.chain_variables.clone(),
