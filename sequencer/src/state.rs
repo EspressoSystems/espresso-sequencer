@@ -3,7 +3,6 @@ use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
 use hotshot_types::{data::ViewNumber, traits::state::ConsensusTime};
 #[allow(deprecated)]
-use nll::nll_todo::nll_todo;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 
@@ -73,8 +72,7 @@ impl HotShotState for State {
     type Time = ViewNumber;
 
     fn next_block(&self) -> Self::BlockType {
-        #[allow(deprecated)]
-        nll_todo()
+        Block::new(self.commit())
     }
 
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
