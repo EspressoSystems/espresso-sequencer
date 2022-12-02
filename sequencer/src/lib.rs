@@ -1,5 +1,10 @@
+mod block;
+mod chain_variables;
+mod state;
+mod transaction;
+mod vm;
+
 use crate::{block::Block, state::State};
-use commit::{Commitment, Committable};
 use hotshot::traits::{
     election::{
         static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
@@ -8,17 +13,12 @@ use hotshot::traits::{
     implementations::{MemoryNetwork, MemoryStorage},
     NodeImplementation,
 };
-use hotshot_types::{
-    data::ViewNumber,
-    traits::{block_contents::Transaction as HotShotTransaction, node_implementation::NodeTypes},
-};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
 use jf_primitives::signatures::BLSSignatureScheme;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
-
-mod block;
-mod state;
+use transaction::SequencerTransaction;
 
 #[derive(Debug, Clone)]
 struct Node;
@@ -76,121 +76,14 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-struct VmId(u64);
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-pub struct Transaction {
-    vm: VmId,
-    payload: Vec<u8>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-struct ApplicationTransaction(Vec<u8>);
-
-trait Vm {
-    type Transaction: DeserializeOwned + Serialize + Sync + Send;
-    fn id() -> VmId;
-}
-
-#[derive(Clone, Debug)]
-struct TestVm;
-
-impl Vm for TestVm {
-    type Transaction = ApplicationTransaction;
-    fn id() -> VmId {
-        VmId(0)
-    }
-}
-
-impl HotShotTransaction for SequencerTransaction {}
-
-impl Committable for Transaction {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Transaction")
-            .u64_field("vm", self.vm.0)
-            .var_size_bytes(&self.payload) // TODO how can we specify a field name like "payload"
-            .finalize()
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct GenesisTransaction {
-    pub chain_variables: ChainVariables,
-}
-
-impl Committable for GenesisTransaction {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("GenesisTransaction")
-            .field("chain_variables", self.chain_variables.commit())
-            .finalize()
-    }
-}
-
-/// Global variables for an Espresso blockchain.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ChainVariables {
-    /// The version of the protocol this chain is currently using.
-    ///
-    /// The protocol version can be changed by committing an update transaction.
-    // TODO
-    // pub protocol_version: (u16, u16, u16),
-
-    /// A unique identifier for this chain, to prevent cross-chain replay attacks.
-    ///
-    /// The chain ID is set at genesis and never changes.
-    pub chain_id: u16,
-
-    // TODO: MA: this is currently not used anywhere.
-    /// Committee size
-    pub committee_size: u64,
-}
-
-impl Default for ChainVariables {
-    fn default() -> Self {
-        Self::new(
-            35353, // Arbitrarily chosen.
-            3,     // Arbitrarily chosen.
-        )
-    }
-}
-
-impl ChainVariables {
-    pub fn new(chain_id: u16, committee_size: u64) -> Self {
-        Self {
-            chain_id,
-            committee_size,
-        }
-    }
-}
-
-impl Committable for ChainVariables {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("ChainVariables")
-            .u64_field("chain_id", self.chain_id as u64)
-            .u64_field("committee_size", self.committee_size)
-            .finalize()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-/// A transaction tht can be either a CAP transaction or a collect reward transaction
-pub enum SequencerTransaction {
-    Genesis(GenesisTransaction),
-    Wrapped(Transaction),
-}
-
-impl Committable for SequencerTransaction {
-    fn commit(&self) -> Commitment<Self> {
-        let bytes = bincode::serialize(self).unwrap(); // TODO not safe unwrap?
-        commit::RawCommitmentBuilder::new("SequencerTransaction")
-            .var_size_bytes(&bytes)
-            .finalize()
-    }
-}
-
 #[cfg(test)]
 mod test {
+
+    use crate::{
+        transaction::{ApplicationTransaction, Transaction},
+        vm::{TestVm, Vm},
+    };
+
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
@@ -279,13 +172,13 @@ mod test {
         let event = handles[0].next_event().await;
         println!("Event: {:?}", event);
 
-        let txn = ApplicationTransaction(vec![1, 2, 3]);
+        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
 
         handles[0]
-            .submit_transaction(SequencerTransaction::Wrapped(Transaction {
-                vm: TestVm::id(),
-                payload: bincode::serialize(&txn).unwrap(),
-            }))
+            .submit_transaction(SequencerTransaction::Wrapped(Transaction::new(
+                TestVm::id(),
+                bincode::serialize(&txn).unwrap(),
+            )))
             .await
             .expect("Failed to submit transaction");
 

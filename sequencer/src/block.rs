@@ -1,4 +1,8 @@
-use crate::{Error, GenesisTransaction, SequencerTransaction, State};
+use crate::{
+    state::State,
+    transaction::{GenesisTransaction, SequencerTransaction},
+    Error,
+};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use serde::{Deserialize, Serialize};
@@ -6,8 +10,8 @@ use std::fmt::Debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub(crate) struct Block {
-    pub parent_state: Commitment<State>,
-    pub transactions: Vec<SequencerTransaction>,
+    pub(crate) parent_state: Commitment<State>,
+    pub(crate) transactions: Vec<SequencerTransaction>,
 }
 
 impl HotShotBlock for Block {
