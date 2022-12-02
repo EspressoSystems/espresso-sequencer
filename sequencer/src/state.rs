@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct State {
+pub(crate) struct State {
     chain_variables: ChainVariables,
     block_height: u64,
     view_number: ViewNumber,
@@ -27,6 +27,7 @@ impl Default for State {
 }
 
 impl State {
+    // TODO: Is there a better name for this?
     fn validate_block_helper(
         &self,
         block: &<State as HotShotState>::BlockType,
