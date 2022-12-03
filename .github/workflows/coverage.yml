@@ -16,7 +16,7 @@ jobs:
       image: ghcr.io/espressosystems/nix:main
       volumes:
         - github_nix:/nix
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - name: Configure Git
         run: |
