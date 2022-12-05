@@ -490,9 +490,9 @@ checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
 name = "async-trait"
-version = "0.1.58"
+version = "0.1.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e805d94e6b5001b651426cf4cd446b1ab5f319d27bab5c644f61de0a804360c"
+checksum = "31e6e93155431f3931513b243d371981bb2770112b370c82745a1d19d2f99364"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1676,7 +1676,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -1707,7 +1707,7 @@ dependencies = [
  "jf-primitives",
  "libp2p",
  "libp2p-networking",
- "libp2p-swarm-derive",
+ "libp2p-swarm-derive 0.31.0",
  "num",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -1722,7 +1722,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -1743,7 +1743,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -1763,7 +1763,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -1794,7 +1794,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "bincode",
 ]
@@ -2121,7 +2121,7 @@ dependencies = [
  "libp2p-rendezvous",
  "libp2p-request-response",
  "libp2p-swarm",
- "libp2p-swarm-derive",
+ "libp2p-swarm-derive 0.30.1",
  "libp2p-tcp",
  "libp2p-uds",
  "libp2p-wasm-ext",
@@ -2368,7 +2368,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ceee225dd3e1c3351a323ea566017e3e7131b895"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9fb1579a67e94b3357810fd713a17b49f80207ed"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2384,7 +2384,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "libp2p",
- "libp2p-swarm-derive",
+ "libp2p-swarm-derive 0.31.0",
  "parking_lot 0.12.1",
  "rand 0.8.5",
  "serde",
@@ -2555,6 +2555,17 @@ name = "libp2p-swarm-derive"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0eddc4497a8b5a506013c40e8189864f9c3a00db2b25671f428ae9007f3ba32"
+dependencies = [
+ "heck 0.4.0",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "libp2p-swarm-derive"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d527d5827582abd44a6d80c07ff8b50b4ee238a8979e05998474179e79dc400"
 dependencies = [
  "heck 0.4.0",
  "quote",
