@@ -354,10 +354,7 @@ mod test {
         mocks::{MockTransaction, MockTypes},
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::{
-        sync::RwLock,
-        task::{sleep, spawn},
-    };
+    use async_std::{sync::RwLock, task::sleep};
     use bincode::Options;
     use commit::Committable;
     use hotshot_utils::bincode::bincode_opts;
@@ -438,20 +435,6 @@ mod test {
         let qd = network.query_data();
 
         network.start().await;
-
-        // Spawn the update task.
-        {
-            let mut hotshot = hotshot.clone();
-            let qd = qd.clone();
-            spawn(async move {
-                while let Ok(event) = hotshot.next_event().await {
-                    tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).unwrap();
-                    qd.commit_version().unwrap();
-                }
-            });
-        }
         assert_eq!(get_non_empty_blocks(&qd).await, vec![]);
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
@@ -514,20 +497,6 @@ mod test {
                 memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
             }
         );
-
-        // Spawn the update task.
-        {
-            let mut hotshot = hotshot.clone();
-            let qd = qd.clone();
-            spawn(async move {
-                while let Ok(event) = hotshot.next_event().await {
-                    tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).unwrap();
-                    qd.commit_version().unwrap();
-                }
-            });
-        }
 
         // Start consensus and wait for the transaction to be finalized.
         network.start().await;

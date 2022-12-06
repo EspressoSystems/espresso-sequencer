@@ -518,5 +518,15 @@ mod test {
 
         client.post::<()>("mod/ext/42").send().await.unwrap();
         assert_eq!(client.get::<u64>("mod/ext").send().await.unwrap(), 42);
+
+        // Check that we can still access the built-in modules.
+        assert_eq!(
+            client
+                .get::<u64>("status/latest_block_height")
+                .send()
+                .await
+                .unwrap(),
+            0
+        );
     }
 }
