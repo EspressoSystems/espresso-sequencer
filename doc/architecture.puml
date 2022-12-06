@@ -25,14 +25,11 @@ package "Decentralized Sequencer" {
         component "Events" as HotShotEvents
       }
     }
+    component "HotShot-Hermez Adapter" as Adapter
+    component "RPC dispatch" as Dispatch
   }
 }
 
-
-package "Espresso L2 Connector" as Connector {
-  component "HotShot-Hermez Adapter" as Adapter
-  component "RPC dispatch" as Dispatch
-}
 
 package "Ethereum L1" as L1 {
   component "Rollup Contract" as Rollup #LightPink
