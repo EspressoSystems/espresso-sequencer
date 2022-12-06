@@ -87,10 +87,12 @@ mod test {
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
-        types::{EventType, HotShotHandle},
+        types::{Event, EventType, HotShotHandle},
         HotShot, HotShotInitializer,
     };
-    use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
+    use hotshot_types::{
+        event::EventType::Decide, traits::metrics::NoMetrics, ExecutionType, HotShotConfig,
+    };
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
     use std::time::Duration;
@@ -172,6 +174,23 @@ mod test {
 
         let event = handles[0].next_event().await;
         println!("Event: {:?}", event);
+
+        // Should immediately get genesis block decide event
+        match event {
+            Ok(Event {
+                event: Decide {
+                    leaf_chain: leaf, ..
+                },
+                ..
+            }) => {
+                // Leaf chain is non-empty and at least one leaf holds genesis block
+                // TODO: Is this constraint correct? What if leaves have non-genesis blocks? Does it matter which leaf?
+                assert!(leaf
+                    .iter()
+                    .any(|x| x.deltas == Block::genesis(Default::default())))
+            }
+            _ => panic!(),
+        }
 
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
 
