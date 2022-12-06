@@ -1676,7 +1676,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -1722,7 +1722,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -1743,7 +1743,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -1763,7 +1763,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -1794,7 +1794,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "bincode",
 ]
@@ -2368,7 +2368,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot#ff4c50a0da869e891614de75df71ac979b440dff"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot#9ed64d6c86d9a8cc19605d621b1d445a894b744c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
