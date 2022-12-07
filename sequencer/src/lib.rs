@@ -87,9 +87,12 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-async fn _init_hotshot_nodes(_num_nodes: usize) -> Vec<HotShotHandle<SeqTypes, Node>> {
+async fn _init_hotshot_nodes(
+    num_nodes: usize,
+    genesis_block: Block,
+) -> Vec<HotShotHandle<SeqTypes, Node>> {
     // The minimal number of nodes is 4
-    let num_nodes = 4usize;
+    assert!(num_nodes >= 4);
 
     // Generate keys for the nodes.
     let nodes_key_pairs = (0..num_nodes)
@@ -135,8 +138,8 @@ async fn _init_hotshot_nodes(_num_nodes: usize) -> Vec<HotShotHandle<SeqTypes, N
         );
         let storage = MemoryStorage::<SeqTypes>::new();
         let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
-        let genesis_block = Block::genesis(Default::default());
-        let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block).unwrap();
+        let initializer =
+            HotShotInitializer::<SeqTypes>::from_genesis(genesis_block.clone()).unwrap();
         let metrics = NoMetrics::new();
 
         let handle: HotShotHandle<SeqTypes, Node> = HotShot::init(
@@ -171,8 +174,10 @@ mod test {
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
+        let genesis_block = Block::genesis(Default::default());
+
         // Initialize 4 HotShot nodes
-        let mut handles = _init_hotshot_nodes(4).await;
+        let mut handles = _init_hotshot_nodes(4, genesis_block).await;
 
         for handle in handles.iter() {
             handle.start().await;
