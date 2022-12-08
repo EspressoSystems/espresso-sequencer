@@ -13,9 +13,10 @@
 use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
+use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeTypes;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{OptionExt, Snafu};
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
@@ -44,8 +45,54 @@ pub struct Options {
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 pub enum Error {
-    Request { source: RequestError },
-    Custom { message: String, status: StatusCode },
+    Request {
+        source: RequestError,
+    },
+    /// The requested leaf hash is not in the database.
+    #[from(ignore)]
+    UnknownLeafHash {
+        hash: String,
+    },
+    /// The requested leaf height is out of range for the current ledger.
+    #[from(ignore)]
+    InvalidLeafHeight {
+        height: u64,
+    },
+    /// The requested leaf exists but this query service instance does not have its data.
+    #[from(ignore)]
+    MissingLeaf {
+        height: u64,
+    },
+    /// The requested block hash is not in the database.
+    #[from(ignore)]
+    UnknownBlockHash {
+        hash: String,
+    },
+    /// The requested block height is out of range for the current ledger.
+    #[from(ignore)]
+    InvalidBlockHeight {
+        height: u64,
+    },
+    /// The requested block exists but this query service instance does not have its data.
+    #[from(ignore)]
+    MissingBlock {
+        height: u64,
+    },
+    /// The requested transaction hash is not in the database.
+    #[from(ignore)]
+    UnknownTransactionHash {
+        hash: String,
+    },
+    /// The requested transaction index is out of range for its block.
+    #[from(ignore)]
+    InvalidTransactionIndex {
+        height: u64,
+        index: u64,
+    },
+    Custom {
+        message: String,
+        status: StatusCode,
+    },
 }
 
 impl Error {
@@ -59,6 +106,14 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } => StatusCode::BadRequest,
+            Self::UnknownLeafHash { .. }
+            | Self::InvalidLeafHeight { .. }
+            | Self::MissingLeaf { .. }
+            | Self::UnknownBlockHash { .. }
+            | Self::InvalidBlockHeight { .. }
+            | Self::MissingBlock { .. }
+            | Self::UnknownTransactionHash { .. }
+            | Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
             Self::Custom { status, .. } => *status,
         }
     }
@@ -69,21 +124,124 @@ where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
 {
-    let mut api = load_api(
+    let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
         include_str!("../api/availability.toml"),
         &options.extensions,
     )?;
-    api.with_version("0.0.1".parse().unwrap());
+    api.with_version("0.0.1".parse().unwrap())
+        .get("getleaf", |req, state| {
+            async move {
+                let height = match req.opt_integer_param("height")? {
+                    Some(height) => height,
+                    None => {
+                        let hash = req.blob_param("hash")?;
+                        state
+                            .get_leaf_index_by_hash(hash)
+                            .context(UnknownLeafHashSnafu {
+                                hash: hash.to_string(),
+                            })?
+                    }
+                };
+                state
+                    .get_nth_leaf_iter(height as usize)
+                    .next()
+                    .context(InvalidLeafHeightSnafu { height })?
+                    .context(MissingLeafSnafu { height })
+            }
+            .boxed()
+        })?
+        .get("getblock", |req, state| {
+            async move {
+                let height = match req.opt_integer_param("height")? {
+                    Some(height) => height,
+                    None => {
+                        let hash = req.blob_param("hash")?;
+                        state
+                            .get_block_index_by_hash(hash)
+                            .context(UnknownBlockHashSnafu {
+                                hash: hash.to_string(),
+                            })?
+                    }
+                };
+                state
+                    .get_nth_block_iter(height as usize)
+                    .next()
+                    .context(InvalidBlockHeightSnafu { height })?
+                    .context(MissingBlockSnafu { height })
+            }
+            .boxed()
+        })?
+        .get("gettransaction", |req, state| {
+            async move {
+                let (height, index) =
+                    match req.opt_blob_param("hash")? {
+                        Some(hash) => state.get_txn_index_by_hash(hash).context(
+                            UnknownTransactionHashSnafu {
+                                hash: hash.to_string(),
+                            },
+                        )?,
+                        None => (req.integer_param("height")?, req.integer_param("index")?),
+                    };
+                state
+                    .get_nth_block_iter(height as usize)
+                    .next()
+                    .context(InvalidBlockHeightSnafu { height })?
+                    .context(MissingBlockSnafu { height })?
+                    .transaction(index as usize)
+                    .context(InvalidTransactionIndexSnafu { height, index })
+            }
+            .boxed()
+        })?
+        .get("countproposals", |req, state| {
+            async move {
+                let proposer = req.blob_param("proposer_id")?;
+                Ok(state.get_block_ids_by_proposer_id(&proposer).len())
+            }
+            .boxed()
+        })?
+        .get("getproposals", |req, state| {
+            async move {
+                let proposer = req.blob_param("proposer_id")?;
+                let all_ids = state.get_block_ids_by_proposer_id(&proposer);
+                let start_from = match req.opt_integer_param("count")? {
+                    Some(count) => all_ids.len().saturating_sub(count),
+                    None => 0,
+                };
+                all_ids
+                    .into_iter()
+                    .skip(start_from)
+                    .map(|height| {
+                        state
+                            .get_nth_block_iter(height as usize)
+                            .next()
+                            .context(InvalidBlockHeightSnafu { height })?
+                            .context(MissingBlockSnafu { height })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            }
+            .boxed()
+        })?;
     Ok(api)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{data_source::QueryData, testing::mocks::MockTypes, Error};
+    use crate::{
+        data_source::QueryData,
+        testing::{
+            consensus::MockNetwork,
+            mocks::{MockTransaction, MockTypes},
+            sleep,
+        },
+        Error,
+    };
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::{sync::RwLock, task::spawn};
+    use commit::Committable;
     use futures::FutureExt;
+    use hotshot::types::{ed25519::Ed25519Pub, SignatureKey};
     use portpicker::pick_unused_port;
     use std::fs;
     use std::time::Duration;
@@ -92,9 +250,190 @@ mod test {
     use tide_disco::App;
     use toml::toml;
 
-    #[test]
-    fn instantiate_api() {
-        define_api::<RwLock<QueryData<MockTypes, ()>>, MockTypes>(&Default::default()).unwrap();
+    /// Get the current ledger height and a list of non-empty leaf/block pairs.
+    async fn get_non_empty_blocks(
+        client: &Client<Error>,
+    ) -> (
+        u64,
+        Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
+    ) {
+        let mut blocks = vec![];
+        for i in 0.. {
+            match client
+                .get::<BlockQueryData<MockTypes>>(&format!("block/{}", i))
+                .send()
+                .await
+            {
+                Ok(block) => {
+                    if !block.is_empty() {
+                        let leaf = client.get(&format!("leaf/{}", i)).send().await.unwrap();
+                        blocks.push((leaf, block));
+                    }
+                }
+                Err(Error::Availability {
+                    source: super::Error::InvalidBlockHeight { height },
+                }) if height == i => {
+                    tracing::info!(
+                        "found end of ledger at height {}, non-empty blocks are {:?}",
+                        i,
+                        blocks
+                    );
+                    return (i, blocks);
+                }
+                Err(err) => panic!("unexpected error {}", err),
+            }
+        }
+        unreachable!()
+    }
+
+    async fn validate(client: &Client<Error>, height: u64) {
+        // Check the consistency of every block/leaf pair.
+        for i in 0..height {
+            // Check that looking up the leaf various ways returns the correct leaf.
+            let leaf: LeafQueryData<MockTypes> =
+                client.get(&format!("leaf/{}", i)).send().await.unwrap();
+            assert_eq!(leaf.height(), i);
+            assert_eq!(
+                leaf,
+                client
+                    .get(&format!("leaf/hash/{}", leaf.hash()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+
+            // Check that looking up the block various ways returns the correct block.
+            let block: BlockQueryData<MockTypes> =
+                client.get(&format!("block/{}", i)).send().await.unwrap();
+            assert_eq!(leaf.block_hash(), block.hash());
+            assert_eq!(block.height(), i);
+            assert_eq!(
+                block,
+                client
+                    .get(&format!("block/hash/{}", block.hash()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+
+            // Check that this block is included as a proposal by the proposer listed in the leaf.
+            let proposals: Vec<BlockQueryData<MockTypes>> = client
+                .get(&format!("proposals/{}", leaf.proposer()))
+                .send()
+                .await
+                .unwrap();
+            assert!(proposals.contains(&block));
+            // Check the `proposals/limit` and `proposals/count` features.
+            assert_eq!(
+                proposals.len() as u64,
+                client
+                    .get::<u64>(&format!("proposals/{}/count", leaf.proposer()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                proposals,
+                client
+                    .get::<Vec<_>>(&format!(
+                        "proposals/{}/limit/{}",
+                        leaf.proposer(),
+                        proposals.len()
+                    ))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                &proposals[proposals.len() - 1..],
+                client
+                    .get::<Vec<_>>(&format!("proposals/{}/limit/1", leaf.proposer()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                Vec::<BlockQueryData<MockTypes>>::new(),
+                client
+                    .get::<Vec<_>>(&format!("proposals/{}/limit/0", leaf.proposer()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+
+            // Check that looking up each transaction in the block various ways returns the correct
+            // transaction.
+            // TODO enable this test when HotShot supports getting transaction data from blocks.
+            // for (j, txn_hash) in block.iter().enumerate() {
+            //     let txn: TransactionQueryData<MockTypes> = client
+            //         .get(&format!("transaction/{}/{}", i, j))
+            //         .send()
+            //         .await
+            //         .unwrap();
+            //     assert_eq!(txn.height(), i);
+            //     assert_eq!(txn.index(), j as u64);
+            //     assert_eq!(txn.hash(), txn_hash);
+            //     assert_eq!(
+            //         txn,
+            //         client
+            //             .get(&format!("transaction/hash/{}", txn_hash))
+            //             .send()
+            //             .await
+            //             .unwrap()
+            //     );
+            // }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_api() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create the consensus network.
+        let network = MockNetwork::init(()).await;
+        let hotshot = network.handle();
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.query_data());
+        app.register_module("availability", define_api(&Default::default()).unwrap())
+            .unwrap();
+        spawn(app.serve(format!("0.0.0.0:{}", port)));
+
+        // Start a client.
+        let client = Client::<Error>::new(
+            format!("http://localhost:{}/availability", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        assert_eq!(get_non_empty_blocks(&client).await.1, vec![]);
+
+        // Submit a few blocks and make sure each one gets reflected in the query service and
+        // preserves the consistency of the data and indices.
+        for nonce in 0..3 {
+            let txn = MockTransaction { nonce };
+            let txn_hash = txn.commit();
+            hotshot.submit_transaction(txn).await.unwrap();
+            let (height, blocks) = loop {
+                let (height, blocks) = get_non_empty_blocks(&client).await;
+                if blocks.len() < nonce as usize + 1 {
+                    tracing::info!("waiting for block {} to be finalized", nonce);
+                    sleep(Duration::from_secs(1)).await;
+                } else {
+                    break (height, blocks);
+                }
+            };
+            assert_eq!(
+                blocks[nonce as usize].1.iter().collect::<Vec<_>>(),
+                vec![txn_hash]
+            );
+            validate(&client, height).await;
+        }
+
+        network.shut_down().await;
     }
 
     #[async_std::test]
@@ -150,5 +489,16 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 0);
         client.post::<()>("ext/42").send().await.unwrap();
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
+
+        // Ensure we can still access the built-in functionality.
+        let (key, _) = Ed25519Pub::generated_from_seed_indexed([0; 32], 0);
+        assert_eq!(
+            client
+                .get::<u64>(&format!("proposals/{}/count", key.to_bytes()))
+                .send()
+                .await
+                .unwrap(),
+            0
+        );
     }
 }

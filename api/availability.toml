@@ -16,7 +16,7 @@ DESCRIPTION = "Historical HotShot ledger state"
 FORMAT_VERSION = "0.1.0"
 
 [route.getleaf]
-PATH = ["getleaf/:height", "getleaf/hash/:hash"]
+PATH = ["leaf/:height", "leaf/hash/:hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
 DOC = """
@@ -52,16 +52,16 @@ the quorum certificate signing this leaf. Both QCs have the schema
 """
 
 [route.getblock]
-PATH = ["getblock/:height", "getblock/hash/:hash"]
+PATH = ["block/:height", "block/hash/:hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
 DOC = """
 Get a block by its position in the ledger (0 is the genesis block) or its hash.
 
 Note that block data in HotShot disseminates asynchronously. That means that the full data for a
-block may not be available immediately after that block is committed. In this situation, `getleaf/i`
-may succeed but `getblock/i` may fail. However, once `getleaf/i` succeeds, it is guaranteed that
-`getblock/i` will _eventually_ succeed, and return a block whose `hash` is the same as the
+block may not be available immediately after that block is committed. In this situation, `block/i`
+may succeed but `block/i` may fail. However, once `block/i` succeeds, it is guaranteed that
+`block/i` will _eventually_ succeed, and return a block whose `hash` is the same as the
 `block_hash` from the corresponding leaf.
 
 Returns
@@ -77,7 +77,7 @@ Returns
 """
 
 [route.gettransaction]
-PATH = ["gettransaction/:height/:index", "gettransaction/hash/:hash"]
+PATH = ["transaction/:height/:index", "transaction/hash/:hash"]
 ":height" = "Integer"
 ":index" = "Integer"
 ":hash" = "TaggedBase64"
@@ -100,7 +100,7 @@ Returns
 """
 
 [route.countproposals]
-PATH = ["countproposals/:proposer_id"]
+PATH = ["proposals/:proposer_id/count"]
 ":proposer_id" = "TaggedBase64"
 DOC = """
 Get the number of committed blocks proposed by `proposer_id`
@@ -115,7 +115,7 @@ Returns
 """
 
 [route.getproposals]
-PATH = ["getproposals/:proposer_id", "getproposals/:proposer_id/:count"]
+PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
 ":proposer_id" = "TaggedBase64"
 ":count" = "Integer"
 DOC = """

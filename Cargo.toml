@@ -29,15 +29,15 @@ commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" 
 custom_debug = "0.5"
 derive_more = "0.99"
 futures = "0.3"
-hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed" }
-hotshot-utils = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed" }
+hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
+hotshot-utils = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
 itertools = "0.10"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 spin_sleep = "1.1"
-tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.0" }
 toml = "0.5"
 tracing = "0.1"
 
@@ -47,5 +47,5 @@ tempdir = { version = "0.3", optional = true }
 [dev-dependencies]
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.0.1" }
 portpicker = "0.1"
-surf-disco = { git = "ssh://git@github.com/EspressoSystems/surf-disco.git", tag = "0.1.0" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.0" }
 tempdir = "0.3"
