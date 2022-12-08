@@ -15,6 +15,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+
       - uses: styfle/cancel-workflow-action@0.9.1
         name: Cancel Outdated Builds
         with:
