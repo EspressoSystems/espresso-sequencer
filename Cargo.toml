@@ -18,18 +18,33 @@ edition = "2021"
 
 [features]
 default = []
-testing = []
+testing = ["tempdir"]
 
 [dependencies]
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
+atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.3" }
+bincode = "1.3"
 clap = { version = "4.0", features = ["derive", "env"] }
 commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" }
+custom_debug = "0.5"
 derive_more = "0.99"
-hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "835b55489f22ae9a16f4f4e41d4549b76a10f8ae", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "835b55489f22ae9a16f4f4e41d4549b76a10f8ae" }
+futures = "0.3"
+hotshot = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed" }
+hotshot-utils = { git = "ssh://git@github.com/EspressoSystems/HotShot.git", rev = "9fb1579a67e94b3357810fd713a17b49f80207ed" }
 itertools = "0.10"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
-tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", rev = "a4ae3bf7feba517c305f03e21db4f1192dc45248" }
+tide-disco = { git = "ssh://git@github.com/EspressoSystems/tide-disco.git", tag = "v0.3.1" }
 toml = "0.5"
+tracing = "0.1"
+
+# Dependencies enabled by feature "testing".
+tempdir = { version = "0.3", optional = true }
+
+[dev-dependencies]
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.0.1" }
+portpicker = "0.1"
+surf-disco = { git = "ssh://git@github.com/EspressoSystems/surf-disco.git", tag = "0.1.0" }
+tempdir = "0.3"

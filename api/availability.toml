@@ -27,21 +27,26 @@ Returns
 {
     "leaf": {
         "view_number": integer,
-        "justify_qc": {
-            "block_commitment": TaggedBase64,
-            "leaf_commitment": TaggedBase64,
-            "view_number": integer,
-            // Map from signing keys to (signature, vote) pairs
-            "signatures": {TaggedBase64 -> (TaggedBase64, TaggedBase64)},
-            genesis: boolean,
-        },
+        "justify_qc": QC,
         "parent_commitment": TaggedBase64,
         "block_hash": TaggedBase64,
         "timestamp": integer,
         "proposer_id": TaggedBase64,
     },
-    "hash": TaggedBase64,
-    "height": integer,
+    "qc": QC,
+}
+```
+
+Note that `leaf.justify_qc` is the quorum certificate linking this leaf to its parent, while `qc` is
+the quorum certificate signing this leaf. Both QCs have the schema
+```
+{
+    "block_commitment": TaggedBase64,
+    "leaf_commitment": TaggedBase64,
+    "view_number": integer,
+    // Map from signing keys to (signature, vote) pairs
+    "signatures": {TaggedBase64: [TaggedBase64, TaggedBase64]},
+    genesis: boolean,
 }
 ```
 """

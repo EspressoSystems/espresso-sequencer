@@ -52,14 +52,14 @@ jobs:
 
       - name: Test
         run: |
-          cargo test --workspace --release --no-run
-          cargo test --workspace --release --verbose -- -Zunstable-options --report-time --test-threads 2
-        timeout-minutes: 30
+          cargo test --workspace --release --all-features --no-run
+          cargo test --workspace --release --all-features --verbose -- -Zunstable-options --report-time --test-threads 2
+        timeout-minutes: 60
 
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release
-          echo '<meta http-equiv="refresh" content="0; url=tide_disco">' > target/doc/index.html
+          echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
 
       - name: Deploy Documentation
         uses: peaceiris/actions-gh-pages@v3

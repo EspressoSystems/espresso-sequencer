@@ -27,17 +27,11 @@ pub trait AvailabilityDataSource<Types: NodeTypes> {
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64>;
     fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64>;
     fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)>;
-    fn get_block_ids_by_proposer_id(&self, id: EncodedPublicKey) -> Vec<u64>;
+    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64>;
 }
 
-pub(crate) trait UpdateAvailabilityData<Types: NodeTypes> {
+pub trait UpdateAvailabilityData<Types: NodeTypes> {
     type Error: Error + Debug;
-    fn append_leaves(
-        &mut self,
-        leaves: Vec<Option<LeafQueryData<Types>>>,
-    ) -> Result<(), Self::Error>;
-    fn append_blocks(
-        &mut self,
-        blocks: Vec<Option<BlockQueryData<Types>>>,
-    ) -> Result<(), Self::Error>;
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
+    fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
 }
