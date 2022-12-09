@@ -97,14 +97,12 @@ mod test {
         testing::{
             consensus::MockNetwork,
             mocks::{MockTransaction, MockTypes},
+            sleep,
         },
         Error,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::{
-        sync::RwLock,
-        task::{sleep, spawn},
-    };
+    use async_std::{sync::RwLock, task::spawn};
     use bincode::Options as _;
     use futures::FutureExt;
     use hotshot_utils::bincode::bincode_opts;

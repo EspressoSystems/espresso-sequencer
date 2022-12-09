@@ -352,9 +352,10 @@ mod test {
     use crate::testing::{
         consensus::MockNetwork,
         mocks::{MockTransaction, MockTypes},
+        sleep,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::{sync::RwLock, task::sleep};
+    use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
     use hotshot_utils::bincode::bincode_opts;
