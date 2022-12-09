@@ -469,34 +469,40 @@ mod test {
         let hotshot = network.handle();
         let qd = network.query_data();
 
-        // With consensus paused, check that the success rate returns NaN (since the block height,
-        // the numerator, and view number, the denominator, are both 0).
-        assert!(qd.read().await.success_rate().unwrap().is_nan());
-        // Check that block height is initially zero.
-        assert_eq!(qd.read().await.block_height().unwrap(), 0);
+        {
+            // With consensus paused, check that the success rate returns NaN (since the block
+            // height, the numerator, and view number, the denominator, are both 0).
+            assert!(qd.read().await.success_rate().unwrap().is_nan());
+            // Check that block height is initially zero.
+            assert_eq!(qd.read().await.block_height().unwrap(), 0);
+        }
 
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         hotshot.submit_transaction(txn.clone()).await.unwrap();
         sleep(Duration::from_secs(1)).await;
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
-            }
-        );
+        {
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+                }
+            );
+        }
 
         // Submitting the same transaction should not affect the mempool.
         hotshot.submit_transaction(txn.clone()).await.unwrap();
         sleep(Duration::from_secs(1)).await;
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
-            }
-        );
+        {
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+                }
+            );
+        }
 
         // Start consensus and wait for the transaction to be finalized.
         network.start().await;
@@ -505,21 +511,26 @@ mod test {
             sleep(Duration::from_secs(1)).await;
         }
 
-        // Check that block height and success rate have been updated. Note that we can only check
-        // if success rate is positive. We don't know exactly what it is because we can't know how
-        // many views have elapsed without race conditions. Similarly, we can only check that block
-        // height is at least 2, because we know that the genesis block and our transaction's block
-        // have both been committed, but we can't know how many empty blocks were committed.
-        assert!(qd.read().await.success_rate().unwrap() > 0.0);
-        assert!(qd.read().await.block_height().unwrap() >= 2);
+        {
+            // Check that block height and success rate have been updated. Note that we can only
+            // check if success rate is positive. We don't know exactly what it is because we can't
+            // know how many views have elapsed without race conditions. Similarly, we can only
+            // check that block height is at least 2, because we know that the genesis block and our
+            // transaction's block have both been committed, but we can't know how many empty blocks
+            // were committed.
+            assert!(qd.read().await.success_rate().unwrap() > 0.0);
+            assert!(qd.read().await.block_height().unwrap() >= 2);
+        }
 
-        // Check that the transaction is no longer reflected in the mempool.
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 0,
-                memory_footprint: 0,
-            }
-        );
+        {
+            // Check that the transaction is no longer reflected in the mempool.
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 0,
+                    memory_footprint: 0,
+                }
+            );
+        }
     }
 }
