@@ -332,33 +332,32 @@ mod test {
                     .await
                     .unwrap()
             );
+            // For the limit queries, we just check the count. We don't know exactly which blocks to
+            // expect in the response, since it returns the most recent `count` blocks which may
+            // include new empty blocks committed since we started checking.
             assert_eq!(
-                proposals,
                 client
-                    .get::<Vec<_>>(&format!(
-                        "proposals/{}/limit/{}",
-                        leaf.proposer(),
-                        proposals.len()
+                    .get::<Vec<BlockQueryData<MockTypes>>>(&format!(
+                        "proposals/{}/limit/1",
+                        leaf.proposer()
                     ))
                     .send()
                     .await
                     .unwrap()
+                    .len(),
+                1
             );
             assert_eq!(
-                &proposals[proposals.len() - 1..],
                 client
-                    .get::<Vec<_>>(&format!("proposals/{}/limit/1", leaf.proposer()))
+                    .get::<Vec<BlockQueryData<MockTypes>>>(&format!(
+                        "proposals/{}/limit/0",
+                        leaf.proposer()
+                    ))
                     .send()
                     .await
                     .unwrap()
-            );
-            assert_eq!(
-                Vec::<BlockQueryData<MockTypes>>::new(),
-                client
-                    .get::<Vec<_>>(&format!("proposals/{}/limit/0", leaf.proposer()))
-                    .send()
-                    .await
-                    .unwrap()
+                    .len(),
+                0
             );
 
             // Check that looking up each transaction in the block various ways returns the correct
