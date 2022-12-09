@@ -26,6 +26,8 @@ on:
 jobs:
   windows:
     runs-on: windows-2022
+    env:
+        RUST_LOG: info
     steps:
       - name: Configure Git
         run: |
