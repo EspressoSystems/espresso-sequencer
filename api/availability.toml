@@ -119,19 +119,11 @@ PATH = ["proposals/:proposer_id", "proposals/:proposer_id/limit/:count"]
 ":proposer_id" = "TaggedBase64"
 ":count" = "Integer"
 DOC = """
-Get the block data of `:count` blocks from the proposer with `:proposer_id`, starting
-backwards from the most recent block from this proposer. If the proposer has proposed less
-blocks than `:count`, return all the blocks from the proposer.
+Get the leaf data of `:count` leaves from the proposer with `:proposer_id`, starting backwards from
+the most recent leaf from this proposer. If the proposer has proposed fewer leaves than `:count`,
+return all the leaves from the proposer.
 
-Returns a list of
-```
-{
-    "block": application-specific block type,
-    "hash": TaggedBase64,
-    "height": integer,
-    "txn_hashes": [TaggedBase64],
-}
-```
+Returns a list of the objects returned by `/leaf`.
 """
 
 [route.getstaketable]

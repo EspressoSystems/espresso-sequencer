@@ -49,41 +49,65 @@ pub enum Error {
         source: RequestError,
     },
     /// The requested leaf hash is not in the database.
+    #[snafu(display("the requested leaf hash {} is not in the database", hash))]
     #[from(ignore)]
     UnknownLeafHash {
         hash: String,
     },
     /// The requested leaf height is out of range for the current ledger.
+    #[snafu(display(
+        "the requested leaf height {} is out of range for the current ledger",
+        height
+    ))]
     #[from(ignore)]
     InvalidLeafHeight {
         height: u64,
     },
     /// The requested leaf exists but this query service instance does not have its data.
+    #[snafu(display(
+        "the requested leaf {} exists but this query service instance does not have its data",
+        height
+    ))]
     #[from(ignore)]
     MissingLeaf {
         height: u64,
     },
     /// The requested block hash is not in the database.
+    #[snafu(display("the requested block hash {} is not in the database", hash))]
     #[from(ignore)]
     UnknownBlockHash {
         hash: String,
     },
     /// The requested block height is out of range for the current ledger.
+    #[snafu(display(
+        "the requested block height {} is out of range for the current ledger",
+        height
+    ))]
     #[from(ignore)]
     InvalidBlockHeight {
         height: u64,
     },
     /// The requested block exists but this query service instance does not have its data.
+    #[snafu(display(
+        "the requested block {} exists but this query service instance does not have its data",
+        height
+    ))]
     #[from(ignore)]
     MissingBlock {
         height: u64,
     },
     /// The requested transaction hash is not in the database.
+    #[snafu(display("the requested transaction hash {} is not in the database", hash))]
     #[from(ignore)]
     UnknownTransactionHash {
         hash: String,
     },
     /// The requested transaction index is out of range for its block.
+    #[snafu(display(
+        "the requested transaction index {} is out of range for its block {}",
+        index,
+        height
+    ))]
     #[from(ignore)]
     InvalidTransactionIndex {
         height: u64,
@@ -196,14 +220,14 @@ where
         .get("countproposals", |req, state| {
             async move {
                 let proposer = req.blob_param("proposer_id")?;
-                Ok(state.get_block_ids_by_proposer_id(&proposer).len())
+                Ok(state.get_leaf_ids_by_proposer_id(&proposer).len())
             }
             .boxed()
         })?
         .get("getproposals", |req, state| {
             async move {
                 let proposer = req.blob_param("proposer_id")?;
-                let all_ids = state.get_block_ids_by_proposer_id(&proposer);
+                let all_ids = state.get_leaf_ids_by_proposer_id(&proposer);
                 let start_from = match req.opt_integer_param("count")? {
                     Some(count) => all_ids.len().saturating_sub(count),
                     None => 0,
@@ -213,10 +237,10 @@ where
                     .skip(start_from)
                     .map(|height| {
                         state
-                            .get_nth_block_iter(height as usize)
+                            .get_nth_leaf_iter(height as usize)
                             .next()
-                            .context(InvalidBlockHeightSnafu { height })?
-                            .context(MissingBlockSnafu { height })
+                            .context(InvalidLeafHeightSnafu { height })?
+                            .context(MissingLeafSnafu { height })
                     })
                     .collect::<Result<Vec<_>, _>>()
             }
@@ -317,12 +341,12 @@ mod test {
             );
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
-            let proposals: Vec<BlockQueryData<MockTypes>> = client
+            let proposals: Vec<LeafQueryData<MockTypes>> = client
                 .get(&format!("proposals/{}", leaf.proposer()))
                 .send()
                 .await
                 .unwrap();
-            assert!(proposals.contains(&block));
+            assert!(proposals.contains(&leaf));
             // Check the `proposals/limit` and `proposals/count` features.
             assert_eq!(
                 proposals.len() as u64,
@@ -337,7 +361,7 @@ mod test {
             // include new empty blocks committed since we started checking.
             assert_eq!(
                 client
-                    .get::<Vec<BlockQueryData<MockTypes>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/1",
                         leaf.proposer()
                     ))
@@ -349,7 +373,7 @@ mod test {
             );
             assert_eq!(
                 client
-                    .get::<Vec<BlockQueryData<MockTypes>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/0",
                         leaf.proposer()
                     ))

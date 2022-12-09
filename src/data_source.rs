@@ -267,7 +267,7 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
         self.index_by_txn_hash.get(&hash).cloned()
     }
 
-    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
+    fn get_leaf_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
         self.index_by_proposer_id
             .get(id)
             .cloned()
@@ -384,6 +384,9 @@ mod test {
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
             assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
+            assert!(qd
+                .get_leaf_ids_by_proposer_id(leaf.proposer())
+                .contains(&(i as u64)));
 
             let Some(Some(block)) = qd.get_nth_block_iter(i).next() else { continue; };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -394,9 +397,6 @@ mod test {
                 bincode_opts().serialized_size(block.block()).unwrap() as u64
             );
             assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
-            assert!(qd
-                .get_block_ids_by_proposer_id(leaf.proposer())
-                .contains(&(i as u64)));
 
             for (j, txn_hash) in block.iter().enumerate() {
                 assert_eq!(
@@ -413,10 +413,10 @@ mod test {
             .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer().clone()))
             .collect::<HashSet<_>>()
         {
-            for block_id in qd.get_block_ids_by_proposer_id(&proposer) {
+            for leaf_id in qd.get_leaf_ids_by_proposer_id(&proposer) {
                 assert_eq!(
                     proposer,
-                    *qd.get_nth_leaf_iter(block_id as usize)
+                    *qd.get_nth_leaf_iter(leaf_id as usize)
                         .next()
                         .unwrap()
                         .unwrap()
