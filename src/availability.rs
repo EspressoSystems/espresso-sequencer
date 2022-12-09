@@ -348,13 +348,13 @@ mod test {
                 .unwrap();
             assert!(proposals.contains(&leaf));
             // Check the `proposals/limit` and `proposals/count` features.
-            assert_eq!(
-                proposals.len() as u64,
+            assert!(
                 client
                     .get::<u64>(&format!("proposals/{}/count", leaf.proposer()))
                     .send()
                     .await
                     .unwrap()
+                    >= proposals.len() as u64
             );
             // For the limit queries, we just check the count. We don't know exactly which blocks to
             // expect in the response, since it returns the most recent `count` blocks which may
