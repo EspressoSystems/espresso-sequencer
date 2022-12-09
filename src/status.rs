@@ -133,6 +133,7 @@ mod test {
         // Start a client.
         let client =
             Client::<Error>::new(format!("http://localhost:{}/status", port).parse().unwrap());
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Submit a transaction. We have not yet started the validators, so this transaction will
         // stay in the mempool, allowing us to check the mempool endpoint.
