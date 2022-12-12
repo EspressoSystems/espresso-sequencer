@@ -352,12 +352,10 @@ mod test {
     use crate::testing::{
         consensus::MockNetwork,
         mocks::{MockTransaction, MockTypes},
+        sleep,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::{
-        sync::RwLock,
-        task::{sleep, spawn},
-    };
+    use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
     use hotshot_utils::bincode::bincode_opts;
@@ -386,6 +384,9 @@ mod test {
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
             assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
+            assert!(qd
+                .get_block_ids_by_proposer_id(leaf.proposer())
+                .contains(&(i as u64)));
 
             let Some(Some(block)) = qd.get_nth_block_iter(i).next() else { continue; };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -396,9 +397,6 @@ mod test {
                 bincode_opts().serialized_size(block.block()).unwrap() as u64
             );
             assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
-            assert!(qd
-                .get_block_ids_by_proposer_id(leaf.proposer())
-                .contains(&(i as u64)));
 
             for (j, txn_hash) in block.iter().enumerate() {
                 assert_eq!(
@@ -415,10 +413,10 @@ mod test {
             .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer().clone()))
             .collect::<HashSet<_>>()
         {
-            for block_id in qd.get_block_ids_by_proposer_id(&proposer) {
+            for leaf_id in qd.get_block_ids_by_proposer_id(&proposer) {
                 assert_eq!(
                     proposer,
-                    *qd.get_nth_leaf_iter(block_id as usize)
+                    *qd.get_nth_leaf_iter(leaf_id as usize)
                         .next()
                         .unwrap()
                         .unwrap()
@@ -438,20 +436,6 @@ mod test {
         let qd = network.query_data();
 
         network.start().await;
-
-        // Spawn the update task.
-        {
-            let mut hotshot = hotshot.clone();
-            let qd = qd.clone();
-            spawn(async move {
-                while let Ok(event) = hotshot.next_event().await {
-                    tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).unwrap();
-                    qd.commit_version().unwrap();
-                }
-            });
-        }
         assert_eq!(get_non_empty_blocks(&qd).await, vec![]);
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
@@ -486,47 +470,39 @@ mod test {
         let hotshot = network.handle();
         let qd = network.query_data();
 
-        // With consensus paused, check that the success rate returns NaN (since the block height,
-        // the numerator, and view number, the denominator, are both 0).
-        assert!(qd.read().await.success_rate().unwrap().is_nan());
-        // Check that block height is initially zero.
-        assert_eq!(qd.read().await.block_height().unwrap(), 0);
+        {
+            // With consensus paused, check that the success rate returns NaN (since the block
+            // height, the numerator, and view number, the denominator, are both 0).
+            assert!(qd.read().await.success_rate().unwrap().is_nan());
+            // Check that block height is initially zero.
+            assert_eq!(qd.read().await.block_height().unwrap(), 0);
+        }
 
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         hotshot.submit_transaction(txn.clone()).await.unwrap();
         sleep(Duration::from_secs(1)).await;
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
-            }
-        );
+        {
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+                }
+            );
+        }
 
         // Submitting the same transaction should not affect the mempool.
         hotshot.submit_transaction(txn.clone()).await.unwrap();
         sleep(Duration::from_secs(1)).await;
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
-            }
-        );
-
-        // Spawn the update task.
         {
-            let mut hotshot = hotshot.clone();
-            let qd = qd.clone();
-            spawn(async move {
-                while let Ok(event) = hotshot.next_event().await {
-                    tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).unwrap();
-                    qd.commit_version().unwrap();
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
                 }
-            });
+            );
         }
 
         // Start consensus and wait for the transaction to be finalized.
@@ -536,21 +512,26 @@ mod test {
             sleep(Duration::from_secs(1)).await;
         }
 
-        // Check that block height and success rate have been updated. Note that we can only check
-        // if success rate is positive. We don't know exactly what it is because we can't know how
-        // many views have elapsed without race conditions. Similarly, we can only check that block
-        // height is at least 2, because we know that the genesis block and our transaction's block
-        // have both been committed, but we can't know how many empty blocks were committed.
-        assert!(qd.read().await.success_rate().unwrap() > 0.0);
-        assert!(qd.read().await.block_height().unwrap() >= 2);
+        {
+            // Check that block height and success rate have been updated. Note that we can only
+            // check if success rate is positive. We don't know exactly what it is because we can't
+            // know how many views have elapsed without race conditions. Similarly, we can only
+            // check that block height is at least 2, because we know that the genesis block and our
+            // transaction's block have both been committed, but we can't know how many empty blocks
+            // were committed.
+            assert!(qd.read().await.success_rate().unwrap() > 0.0);
+            assert!(qd.read().await.block_height().unwrap() >= 2);
+        }
 
-        // Check that the transaction is no longer reflected in the mempool.
-        assert_eq!(
-            qd.read().await.mempool_info().unwrap(),
-            MempoolQueryData {
-                transaction_count: 0,
-                memory_footprint: 0,
-            }
-        );
+        {
+            // Check that the transaction is no longer reflected in the mempool.
+            assert_eq!(
+                qd.read().await.mempool_info().unwrap(),
+                MempoolQueryData {
+                    transaction_count: 0,
+                    memory_footprint: 0,
+                }
+            );
+        }
     }
 }

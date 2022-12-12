@@ -14,9 +14,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/espressosystems/devops-rust:1.65
+    env:
+        RUST_LOG: info
     steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+
       - uses: styfle/cancel-workflow-action@0.9.1
         name: Cancel Outdated Builds
         with:

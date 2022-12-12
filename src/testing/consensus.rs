@@ -12,7 +12,10 @@
 
 use super::mocks::{MockBlock, MockNodeImpl, MockTypes};
 use crate::{data_source::QueryData, update::UpdateDataSource};
-use async_std::sync::{Arc, RwLock};
+use async_std::{
+    sync::{Arc, RwLock},
+    task::spawn,
+};
 use futures::future::join_all;
 use hotshot::{
     traits::{
@@ -121,10 +124,6 @@ impl<UserData> MockNetwork<UserData> {
         self.nodes[0].query_data.clone()
     }
 
-    pub async fn start(&self) {
-        join_all(self.nodes.iter().map(|node| node.hotshot.start())).await;
-    }
-
     pub async fn shut_down(mut self) {
         self.shut_down_impl().await
     }
@@ -133,6 +132,26 @@ impl<UserData> MockNetwork<UserData> {
         for node in std::mem::take(&mut self.nodes) {
             node.hotshot.shut_down().await;
         }
+    }
+}
+
+impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
+    pub async fn start(&self) {
+        // Spawn the update tasks.
+        for node in &self.nodes {
+            let mut hotshot = node.hotshot.clone();
+            let qd = node.query_data.clone();
+            spawn(async move {
+                while let Ok(event) = hotshot.next_event().await {
+                    tracing::info!("EVENT {:?}", event.event);
+                    let mut qd = qd.write().await;
+                    qd.update(&event).unwrap();
+                    qd.commit_version().unwrap();
+                }
+            });
+        }
+
+        join_all(self.nodes.iter().map(|node| node.hotshot.start())).await;
     }
 }
 
