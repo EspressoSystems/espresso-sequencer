@@ -5,10 +5,9 @@ mod transaction;
 mod vm;
 
 use crate::{block::Block, state::State};
-use hotshot::{
-    traits::implementations::{MasterMap, MemoryNetwork},
-    HotShot, HotShotInitializer,
-};
+use ark_bls12_381::Parameters;
+use hotshot::traits::implementations::CentralizedServerNetwork;
+use hotshot::traits::NetworkingImplementation;
 use hotshot::{
     traits::{
         election::{
@@ -20,24 +19,30 @@ use hotshot::{
     },
     types::HotShotHandle,
 };
+use hotshot::{HotShot, HotShotInitializer};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
 use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
-use jf_primitives::signatures::BLSSignatureScheme;
-use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
-use rand::thread_rng;
+
+use jf_primitives::signatures::{
+    bls::{BLSSignKey, BLSVerKey},
+    BLSSignatureScheme,
+};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
+use std::net::SocketAddr;
 use std::time::Duration;
 use transaction::SequencerTransaction;
 
 #[derive(Debug, Clone)]
-struct Node;
+struct Node<N>(std::marker::PhantomData<fn(&N)>);
 
-impl NodeImplementation<SeqTypes> for Node {
+impl<N: Clone + Debug + NetworkingImplementation<SeqTypes>> NodeImplementation<SeqTypes>
+    for Node<N>
+{
     type Storage = MemoryStorage<SeqTypes>;
 
-    type Networking = MemoryNetwork<SeqTypes>;
+    type Networking = N;
 
     type Election = StaticCommittee<SeqTypes>;
 }
@@ -87,82 +92,90 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-async fn _init_hotshot_nodes(
+async fn _init_hotshot<
+    I: NodeImplementation<
+        SeqTypes,
+        Storage = MemoryStorage<SeqTypes>,
+        Election = StaticCommittee<SeqTypes>,
+    >,
+>(
     num_nodes: usize,
+    nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>>,
     genesis_block: Block,
-) -> Vec<HotShotHandle<SeqTypes, Node>> {
-    // The minimal number of nodes is 4
-    assert!(num_nodes >= 4);
+    node_id: usize,
+    sign_key: &BLSSignKey<Parameters>,
+    ver_key: &BLSVerKey<Parameters>,
+    network: I::Networking,
+) -> HotShotHandle<SeqTypes, I> {
+    // Create public and private keys for the node.
+    let public_key = JfPubKey::from_native(ver_key.clone());
 
-    // Generate keys for the nodes.
-    let nodes_key_pairs = (0..num_nodes)
-        .map(|_| SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap())
-        .collect::<Vec<_>>();
+    let config: HotShotConfig<_, _> = HotShotConfig {
+        execution_type: ExecutionType::Continuous,
+        total_nodes: num_nodes.try_into().unwrap(),
+        min_transactions: 0,
+        max_transactions: 2usize.try_into().unwrap(),
+        known_nodes: nodes_pub_keys.clone(),
+        next_view_timeout: Duration::from_secs(60).as_millis() as u64,
+        timeout_ratio: (10, 11),
+        round_start_delay: Duration::from_millis(1).as_millis() as u64,
+        start_delay: Duration::from_millis(1).as_millis() as u64,
+        num_bootstrap: 1usize,
+        propose_min_round_time: Duration::from_secs(1),
+        propose_max_round_time: Duration::from_secs(30),
+        election_config: Some(StaticElectionConfig {}),
+    };
 
-    // Convert public keys to JfPubKey
-    let nodes_pub_keys = nodes_key_pairs
-        .iter()
-        .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
-        .collect::<Vec<_>>();
+    let storage = MemoryStorage::<SeqTypes>::new();
+    let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
+    let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block.clone()).unwrap();
+    let metrics = NoMetrics::new();
 
-    let mut handles = vec![];
+    let handle: HotShotHandle<SeqTypes, I> = HotShot::init(
+        public_key,
+        (sign_key.clone(), ver_key.clone()),
+        node_id as u64,
+        config,
+        network,
+        storage,
+        election,
+        initializer,
+        metrics,
+    )
+    .await
+    .unwrap();
 
-    let master_map = MasterMap::new();
+    handle
+}
 
-    // Create HotShot instances.
-    for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
-        // Create public and private keys for the node.
-        let public_key = JfPubKey::from_native(ver_key.clone());
+async fn _init_node(
+    addr: SocketAddr,
+    num_nodes: usize,
+    nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>>,
+    genesis_block: Block,
+    node_id: usize,
+    sign_key: &BLSSignKey<Parameters>,
+    ver_key: &BLSVerKey<Parameters>,
+) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
+    let (_config, _, network) =
+        CentralizedServerNetwork::connect_with_server_config(NoMetrics::new(), addr).await;
 
-        let config: HotShotConfig<_, _> = HotShotConfig {
-            execution_type: ExecutionType::Continuous,
-            total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 0,
-            max_transactions: 2usize.try_into().unwrap(),
-            known_nodes: nodes_pub_keys.clone(),
-            next_view_timeout: Duration::from_secs(60).as_millis() as u64,
-            timeout_ratio: (10, 11),
-            round_start_delay: Duration::from_millis(1).as_millis() as u64,
-            start_delay: Duration::from_millis(1).as_millis() as u64,
-            num_bootstrap: 1usize,
-            propose_min_round_time: Duration::from_secs(1),
-            propose_max_round_time: Duration::from_secs(30),
-            election_config: Some(StaticElectionConfig {}),
-        };
-
-        let network = MemoryNetwork::<SeqTypes>::new(
-            public_key.clone(),
-            NoMetrics::new(),
-            master_map.clone(),
-            None,
-        );
-        let storage = MemoryStorage::<SeqTypes>::new();
-        let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
-        let initializer =
-            HotShotInitializer::<SeqTypes>::from_genesis(genesis_block.clone()).unwrap();
-        let metrics = NoMetrics::new();
-
-        let handle: HotShotHandle<SeqTypes, Node> = HotShot::init(
-            public_key,
-            (sign_key.clone(), ver_key.clone()),
-            node_id as u64,
-            config,
-            network,
-            storage,
-            election,
-            initializer,
-            metrics,
-        )
-        .await
-        .unwrap();
-
-        handles.push(handle);
-    }
-    handles
+    _init_hotshot(
+        num_nodes,
+        nodes_pub_keys,
+        genesis_block,
+        node_id,
+        sign_key,
+        ver_key,
+        network,
+    )
+    .await
 }
 
 #[cfg(test)]
 mod test {
+
+    use std::sync::Arc;
 
     use crate::{
         transaction::{ApplicationTransaction, Transaction},
@@ -170,14 +183,59 @@ mod test {
     };
 
     use super::*;
-    use hotshot::types::EventType;
+    use hotshot::{
+        traits::implementations::{MasterMap, MemoryNetwork},
+        types::EventType,
+    };
+    use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
+    use rand::thread_rng;
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         let genesis_block = Block::genesis(Default::default());
 
-        // Initialize 4 HotShot nodes
-        let mut handles = _init_hotshot_nodes(4, genesis_block).await;
+        let num_nodes = 4;
+
+        // Generate keys for the nodes.
+        let nodes_key_pairs = (0..num_nodes)
+            .map(|_| SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap())
+            .collect::<Vec<_>>();
+
+        // Convert public keys to JfPubKey
+        let nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>> = nodes_key_pairs
+            .iter()
+            .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
+            .collect::<Vec<_>>();
+
+        let mut handles: Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> = vec![];
+
+        let master_map: Arc<MasterMap<SeqTypes>> = MasterMap::new();
+
+        // Create HotShot instances.
+        for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
+            // Create public and private keys for the node.
+            let public_key = JfPubKey::from_native(ver_key.clone());
+
+            let network = MemoryNetwork::<SeqTypes>::new(
+                public_key.clone(),
+                NoMetrics::new(),
+                master_map.clone(),
+                None,
+            );
+
+            let handle = _init_hotshot(
+                num_nodes,
+                nodes_pub_keys.clone(),
+                genesis_block.clone(),
+                node_id,
+                sign_key,
+                ver_key,
+                network,
+            )
+            .await;
+
+            handles.push(handle);
+        }
 
         for handle in handles.iter() {
             handle.start().await;
