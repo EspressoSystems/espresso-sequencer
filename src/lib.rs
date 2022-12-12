@@ -254,7 +254,7 @@
 //! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
-//! #   fn get_leaf_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
+//! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
 //! }
 //!
 //! // Implement data source trait for status API.
@@ -433,8 +433,8 @@ mod test {
         fn get_txn_index_by_hash(&self, hash: TransactionHash<MockTypes>) -> Option<(u64, u64)> {
             self.hotshot_qs.get_txn_index_by_hash(hash)
         }
-        fn get_leaf_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
-            self.hotshot_qs.get_leaf_ids_by_proposer_id(id)
+        fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
+            self.hotshot_qs.get_block_ids_by_proposer_id(id)
         }
     }
 

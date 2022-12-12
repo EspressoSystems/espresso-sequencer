@@ -220,14 +220,14 @@ where
         .get("countproposals", |req, state| {
             async move {
                 let proposer = req.blob_param("proposer_id")?;
-                Ok(state.get_leaf_ids_by_proposer_id(&proposer).len())
+                Ok(state.get_block_ids_by_proposer_id(&proposer).len())
             }
             .boxed()
         })?
         .get("getproposals", |req, state| {
             async move {
                 let proposer = req.blob_param("proposer_id")?;
-                let all_ids = state.get_leaf_ids_by_proposer_id(&proposer);
+                let all_ids = state.get_block_ids_by_proposer_id(&proposer);
                 let start_from = match req.opt_integer_param("count")? {
                     Some(count) => all_ids.len().saturating_sub(count),
                     None => 0,
