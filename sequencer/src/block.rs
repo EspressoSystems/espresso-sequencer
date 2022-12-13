@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-pub(crate) struct Block {
+pub struct Block {
     pub(crate) parent_state: Commitment<State>,
     pub(crate) transactions: Vec<SequencerTransaction>,
 }

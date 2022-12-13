@@ -4,7 +4,6 @@ mod state;
 mod transaction;
 mod vm;
 
-use crate::{block::Block, state::State};
 use ark_bls12_381::Parameters;
 use hotshot::traits::implementations::CentralizedServerNetwork;
 use hotshot::traits::NetworkingImplementation;
@@ -31,8 +30,13 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use transaction::SequencerTransaction;
 
+pub use block::Block;
+pub use chain_variables::ChainVariables;
+pub use state::State;
+pub use transaction::{GenesisTransaction, Transaction};
+
 #[derive(Debug, Clone)]
-struct Node<N>(std::marker::PhantomData<fn(&N)>);
+pub struct Node<N>(std::marker::PhantomData<fn(&N)>);
 
 impl<N: Clone + Debug + NetworkingImplementation<SeqTypes>> NodeImplementation<SeqTypes>
     for Node<N>
@@ -47,11 +51,11 @@ impl<N: Clone + Debug + NetworkingImplementation<SeqTypes>> NodeImplementation<S
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
 )]
-struct SeqTypes;
+pub struct SeqTypes;
 
 type Param381 = ark_bls12_381::Parameters;
-type SignatureSchemeType = BLSSignatureScheme<Param381>;
-type SignatureKeyType = JfPubKey<SignatureSchemeType>;
+pub type SignatureSchemeType = BLSSignatureScheme<Param381>;
+pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
 
 impl NodeTypes for SeqTypes {
     type Time = ViewNumber;
@@ -131,21 +135,25 @@ async fn init_hotshot<
     handle
 }
 
-#[allow(dead_code)]
-async fn init_node(
+pub async fn init_node(
     addr: SocketAddr,
-    nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
-    private_key: PrivKey,
 ) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(NoMetrics::new(), addr).await;
 
+    // Generate public keys and this node's private key.
+    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
+        .into_iter()
+        .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
+        .unzip();
+    let sk = priv_keys[config.node_index as usize].clone();
+
     init_hotshot(
-        nodes_pub_keys,
+        pub_keys,
         genesis_block,
-        config.node_index.try_into().unwrap(),
-        private_key,
+        config.node_index as usize,
+        sk,
         networking,
         config.config,
     )
