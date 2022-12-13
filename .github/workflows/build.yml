@@ -18,7 +18,7 @@ env:
 jobs:
   build:
     # runs-on: [self-hosted, X64]
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     # container:
     #  image: ghcr.io/espressosystems/devops-rust:stable
     steps:
