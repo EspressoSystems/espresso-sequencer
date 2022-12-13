@@ -1,3 +1,4 @@
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use sequencer::{init_node, Block, ChainVariables, GenesisTransaction};
 use std::net::ToSocketAddrs;
@@ -16,6 +17,9 @@ struct Args {
 
 #[async_std::main]
 async fn main() {
+    setup_logging();
+    setup_backtrace();
+
     let args = Args::parse();
 
     // Create genesis block.
@@ -35,11 +39,7 @@ async fn main() {
         .unwrap()
         .next()
         .unwrap();
-    let mut handle = init_node(
-        cdn_addr,
-        genesis,
-    )
-    .await;
+    let mut handle = init_node(cdn_addr, genesis).await;
 
     // Run consensus.
     handle.start().await;

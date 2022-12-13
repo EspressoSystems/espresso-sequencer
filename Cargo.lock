@@ -398,7 +398,7 @@ dependencies = [
 [[package]]
 name = "async-compatibility-layer"
 version = "1.0.0"
-source = "git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.0.1#cada95d5cf9457f6191f38957c712b72d7913598"
+source = "git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.0.1#cada95d5cf9457f6191f38957c712b72d7913598"
 dependencies = [
  "async-channel",
  "async-lock",
@@ -920,6 +920,12 @@ checksum = "0d4198f73e42b4936b35b5bb248d81d2b595ecb170da0bac7655c54eedfa8da8"
 dependencies = [
  "os_str_bytes",
 ]
+
+[[package]]
+name = "cld"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a78c5223c7966b3f7c4ecacae340d1ef303e2d4e4466063002c68e0d7a4cdde"
 
 [[package]]
 name = "color-eyre"
@@ -4196,10 +4202,12 @@ version = "0.1.0"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
+ "async-compatibility-layer",
  "async-std",
  "async-trait",
  "bincode",
  "clap 4.0.29",
+ "cld",
  "commit",
  "derive_more",
  "hotshot",
