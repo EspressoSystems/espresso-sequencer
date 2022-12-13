@@ -8,6 +8,7 @@ use crate::{block::Block, state::State};
 use ark_bls12_381::Parameters;
 use hotshot::traits::implementations::CentralizedServerNetwork;
 use hotshot::traits::NetworkingImplementation;
+use hotshot::types::SignatureKey;
 use hotshot::{
     traits::{
         election::{
@@ -21,17 +22,13 @@ use hotshot::{
 };
 use hotshot::{HotShot, HotShotInitializer};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
-use hotshot_types::{traits::metrics::NoMetrics, ExecutionType, HotShotConfig};
+use hotshot_types::{traits::metrics::NoMetrics, HotShotConfig};
 
-use jf_primitives::signatures::{
-    bls::{BLSSignKey, BLSVerKey},
-    BLSSignatureScheme,
-};
+use jf_primitives::signatures::BLSSignatureScheme;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::time::Duration;
 use transaction::SequencerTransaction;
 
 #[derive(Debug, Clone)]
@@ -93,8 +90,7 @@ pub enum Error {
 }
 
 type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
-type SignKey = BLSSignKey<Parameters>;
-type VerKey = BLSVerKey<Parameters>;
+type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 async fn init_hotshot<
     I: NodeImplementation<
@@ -103,32 +99,15 @@ async fn init_hotshot<
         Election = StaticCommittee<SeqTypes>,
     >,
 >(
-    num_nodes: usize,
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
-    sign_key: &SignKey,
-    ver_key: &VerKey,
-    network: I::Networking,
+    private_key: PrivKey,
+    networking: I::Networking,
+    config: HotShotConfig<PubKey, StaticElectionConfig>,
 ) -> HotShotHandle<SeqTypes, I> {
     // Create public and private keys for the node.
-    let public_key = JfPubKey::from_native(ver_key.clone());
-
-    let config: HotShotConfig<_, _> = HotShotConfig {
-        execution_type: ExecutionType::Continuous,
-        total_nodes: num_nodes.try_into().unwrap(),
-        min_transactions: 0,
-        max_transactions: 2usize.try_into().unwrap(),
-        known_nodes: nodes_pub_keys.clone(),
-        next_view_timeout: Duration::from_secs(60).as_millis() as u64,
-        timeout_ratio: (10, 11),
-        round_start_delay: Duration::from_millis(1).as_millis() as u64,
-        start_delay: Duration::from_millis(1).as_millis() as u64,
-        num_bootstrap: 1usize,
-        propose_min_round_time: Duration::from_secs(1),
-        propose_max_round_time: Duration::from_secs(30),
-        election_config: Some(StaticElectionConfig {}),
-    };
+    let public_key = PubKey::from_private(&private_key);
 
     let storage = MemoryStorage::<SeqTypes>::new();
     let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
@@ -137,10 +116,10 @@ async fn init_hotshot<
 
     let handle: HotShotHandle<SeqTypes, I> = HotShot::init(
         public_key,
-        (sign_key.clone(), ver_key.clone()),
+        private_key,
         node_id as u64,
         config,
-        network,
+        networking,
         storage,
         election,
         initializer,
@@ -155,24 +134,20 @@ async fn init_hotshot<
 #[allow(dead_code)]
 async fn init_node(
     addr: SocketAddr,
-    num_nodes: usize,
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
-    node_id: usize,
-    sign_key: &SignKey,
-    ver_key: &VerKey,
+    private_key: PrivKey,
 ) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
-    let (_config, _, network) =
+    let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(NoMetrics::new(), addr).await;
 
     init_hotshot(
-        num_nodes,
         nodes_pub_keys,
         genesis_block,
-        node_id,
-        sign_key,
-        ver_key,
-        network,
+        config.node_index.try_into().unwrap(),
+        private_key,
+        networking,
+        config.config,
     )
     .await
 }
@@ -192,6 +167,11 @@ mod test {
         traits::implementations::{MasterMap, MemoryNetwork},
         types::EventType,
     };
+
+    use hotshot_types::ExecutionType;
+
+    use std::time::Duration;
+
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
 
@@ -216,6 +196,22 @@ mod test {
 
         let master_map: Arc<MasterMap<SeqTypes>> = MasterMap::new();
 
+        let config: HotShotConfig<_, _> = HotShotConfig {
+            execution_type: ExecutionType::Continuous,
+            total_nodes: num_nodes.try_into().unwrap(),
+            min_transactions: 0,
+            max_transactions: 2usize.try_into().unwrap(),
+            known_nodes: nodes_pub_keys.clone(),
+            next_view_timeout: Duration::from_secs(60).as_millis() as u64,
+            timeout_ratio: (10, 11),
+            round_start_delay: Duration::from_millis(1).as_millis() as u64,
+            start_delay: Duration::from_millis(1).as_millis() as u64,
+            num_bootstrap: 1usize,
+            propose_min_round_time: Duration::from_secs(1),
+            propose_max_round_time: Duration::from_secs(30),
+            election_config: Some(StaticElectionConfig {}),
+        };
+
         // Create HotShot instances.
         for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
             // Create public and private keys for the node.
@@ -228,14 +224,15 @@ mod test {
                 None,
             );
 
+            let private_key = (sign_key.clone(), ver_key.clone());
+
             let handle = init_hotshot(
-                num_nodes,
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
-                sign_key,
-                ver_key,
+                private_key,
                 network,
+                config.clone(),
             )
             .await;
 
