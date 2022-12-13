@@ -17,10 +17,9 @@ env:
 
 jobs:
   build:
-    # runs-on: [self-hosted, X64]
-    runs-on: ubuntu-latest
-    # container:
-    #  image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: [self-hosted, X64]
+    container:
+      image: ghcr.io/espressosystems/devops-rust:stable
     steps:
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
