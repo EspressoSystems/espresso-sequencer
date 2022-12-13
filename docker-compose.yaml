@@ -1,0 +1,37 @@
+version: '2'
+services:
+  cdn-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/cdn-server:main
+    ports:
+      - "$ESPRESSO_CDN_SERVER_PORT:$ESPRESSO_CDN_SERVER_PORT"
+    environment:
+      - ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_CDN_SERVER_NUM_NODES=5
+      - ESPRESSO_CDN_SERVER_START_DELAY=5s
+      - RUST_LOG
+
+  sequencer0:
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    environment:
+      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - RUST_LOG
+  sequencer1:
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    environment:
+      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - RUST_LOG
+  sequencer2:
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    environment:
+      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - RUST_LOG
+  sequencer3:
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    environment:
+      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - RUST_LOG
+  sequencer4:
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    environment:
+      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - RUST_LOG

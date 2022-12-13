@@ -1,6 +1,3 @@
-// Copyright (c) 2022 Espresso Systems (espressosys.com)
-// This file is part of the Espresso library.
-
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
