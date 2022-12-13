@@ -5,6 +5,7 @@ mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
+use async_std::task::sleep;
 use hotshot::traits::implementations::CentralizedServerNetwork;
 use hotshot::traits::NetworkingImplementation;
 use hotshot::types::SignatureKey;
@@ -28,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::time::Duration;
 use transaction::SequencerTransaction;
 
 pub use block::Block;
@@ -148,6 +150,17 @@ pub async fn init_node(
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
     let sk = priv_keys[config.node_index as usize].clone();
+
+    // Wait for other nodes to connect.
+    while !networking.run_ready() {
+        let connected = networking.get_connected_client_count().await;
+        tracing::info!(
+            "waiting for start signal ({}/{} connected)",
+            connected,
+            config.config.total_nodes,
+        );
+        sleep(Duration::from_secs(1)).await;
+    }
 
     init_hotshot(
         pub_keys,
