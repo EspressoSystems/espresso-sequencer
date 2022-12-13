@@ -92,7 +92,11 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-async fn _init_hotshot<
+type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
+type SignKey = BLSSignKey<Parameters>;
+type VerKey = BLSVerKey<Parameters>;
+
+async fn init_hotshot<
     I: NodeImplementation<
         SeqTypes,
         Storage = MemoryStorage<SeqTypes>,
@@ -100,11 +104,11 @@ async fn _init_hotshot<
     >,
 >(
     num_nodes: usize,
-    nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>>,
+    nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
-    sign_key: &BLSSignKey<Parameters>,
-    ver_key: &BLSVerKey<Parameters>,
+    sign_key: &SignKey,
+    ver_key: &VerKey,
     network: I::Networking,
 ) -> HotShotHandle<SeqTypes, I> {
     // Create public and private keys for the node.
@@ -148,19 +152,20 @@ async fn _init_hotshot<
     handle
 }
 
-async fn _init_node(
+#[allow(dead_code)]
+async fn init_node(
     addr: SocketAddr,
     num_nodes: usize,
-    nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>>,
+    nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
-    sign_key: &BLSSignKey<Parameters>,
-    ver_key: &BLSVerKey<Parameters>,
+    sign_key: &SignKey,
+    ver_key: &VerKey,
 ) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
     let (_config, _, network) =
         CentralizedServerNetwork::connect_with_server_config(NoMetrics::new(), addr).await;
 
-    _init_hotshot(
+    init_hotshot(
         num_nodes,
         nodes_pub_keys,
         genesis_block,
@@ -202,7 +207,7 @@ mod test {
             .collect::<Vec<_>>();
 
         // Convert public keys to JfPubKey
-        let nodes_pub_keys: Vec<JfPubKey<BLSSignatureScheme<Parameters>>> = nodes_key_pairs
+        let nodes_pub_keys: Vec<PubKey> = nodes_key_pairs
             .iter()
             .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
             .collect::<Vec<_>>();
@@ -223,7 +228,7 @@ mod test {
                 None,
             );
 
-            let handle = _init_hotshot(
+            let handle = init_hotshot(
                 num_nodes,
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
