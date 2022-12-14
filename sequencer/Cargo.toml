@@ -15,11 +15,11 @@ clap = { version = "4.0", features = ["derive", "env"] }
 cld = "0.5"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 derive_more = "0.99.17"
-hotshot = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
-hotshot-centralized-server = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "ssh://git@github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
-nll = { git = "ssh://git@github.com/EspressoSystems/nll" }
+nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 serde = { version = "1.0.149", features = ["derive"] }
 snafu = "0.7.3"
