@@ -21,6 +21,9 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@v18
+        with:
+          name: espresso-systems-private
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Cache cargo
         uses: actions/cache@v3.0.11
