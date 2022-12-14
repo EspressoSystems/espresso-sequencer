@@ -7,7 +7,6 @@ RUN apt-get update \
 COPY target/x86_64-unknown-linux-musl/release-lto/cdn-server /bin/cdn-server
 RUN chmod +x /bin/cdn-server
 
-ENV ESPRESSO_CDN_SERVER_NUM_NODES
 ENV ESPRESSO_CDN_SERVER_PORT=50000
 
 # Set up view timing for optimal performance in high volume conditions. We set a fairly long minimum

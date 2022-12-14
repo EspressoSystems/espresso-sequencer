@@ -87,7 +87,7 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/cdn-server
 
-      - name: Build and push sequencer book docker
+      - name: Build and push sequencer docker
         uses: docker/build-push-action@v3
         with:
           context: ./
@@ -97,7 +97,7 @@ jobs:
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
 
-      - name: Build and push cdn-server book docker
+      - name: Build and push cdn-server docker
         uses: docker/build-push-action@v3
         with:
           context: ./
