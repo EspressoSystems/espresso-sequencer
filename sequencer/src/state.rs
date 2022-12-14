@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-pub(crate) struct State {
+pub struct State {
     chain_variables: ChainVariables,
     block_height: u64,
     view_number: ViewNumber,
