@@ -106,14 +106,14 @@
               RUST_BACKTRACE = 1;
               RUST_LOG = "info,libp2p=off";
             };
-        devShells.staticShell = 
+        devShells.staticShell =
           let
             muslPkgs = import nixpkgs {
               localSystem = system;
               crossSystem = { config = "${arch}-unknown-${os}-musl"; };
             };
             stableMuslRustToolchain =
-              pkgs.rust-bin.stable.${rust_version}.minimal.override {
+              pkgs.rust-bin.stable.latest.minimal.override {
                 extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
                 targets = [ "${arch}-unknown-${os}-musl" ];
             };
