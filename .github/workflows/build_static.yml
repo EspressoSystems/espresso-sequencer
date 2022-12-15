@@ -79,7 +79,7 @@ jobs:
         uses: docker/metadata-action@v3
         id: sequencer
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/sequener
+          images: ghcr.io/espressosystems/espresso-sequencer/sequencer
 
       - name: Generate cdn-server docker metadata
         uses: docker/metadata-action@v3
