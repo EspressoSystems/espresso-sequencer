@@ -76,13 +76,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate sequencer docker metadata
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         id: sequencer
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
 
       - name: Generate cdn-server docker metadata
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         id: cdn-server
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/cdn-server
