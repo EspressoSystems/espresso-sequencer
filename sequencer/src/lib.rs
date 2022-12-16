@@ -318,9 +318,17 @@ mod test {
                         },
                     ..
                 }) => {
-                    // When we find a Decide, make sure the transaction is what we expect
-                    assert!(leaf[0].deltas.transactions[0] == submitted_txn);
-                    return Ok(());
+                    if let Some(non_empty_leaf) = leaf
+                        .iter()
+                        .find(|leaf| !leaf.deltas.transactions.is_empty())
+                    {
+                        // When we find a non-empty Decide, check that it only contains the target transaction
+                        assert!(non_empty_leaf.deltas.transactions == vec![submitted_txn]);
+                        return Ok(());
+                    } else {
+                        // Empty Decide event
+                        continue;
+                    }
                 }
                 Ok(Event {
                     view_number: vn, ..
