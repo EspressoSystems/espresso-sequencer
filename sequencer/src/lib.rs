@@ -186,7 +186,7 @@ mod test {
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
-        types::EventType,
+        types::{Event, EventType::Decide},
     };
 
     use hotshot_types::ExecutionType;
@@ -195,6 +195,24 @@ mod test {
 
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
+
+    // Submit transaction to given handle, return clone of transaction
+    async fn submit_txn_to_handle(
+        handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+        txn: &ApplicationTransaction,
+    ) -> SequencerTransaction {
+        let tx = SequencerTransaction::Wrapped(Transaction::new(
+            TestVm::id(),
+            bincode::serialize(txn).unwrap(),
+        ));
+
+        handle
+            .submit_transaction(tx.clone())
+            .await
+            .expect("Failed to submit transaction");
+
+        tx
+    }
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
@@ -266,26 +284,62 @@ mod test {
         println!("Started");
 
         let event = handles[0].next_event().await;
-        println!("Event: {:?}", event);
+        println!("Event: {:?}\n", event);
 
+        // Should immediately get genesis block decide event
+        match event {
+            Ok(Event {
+                event: Decide {
+                    leaf_chain: leaf, ..
+                },
+                ..
+            }) => {
+                // Exactly one leaf, and it contains the genesis block
+                assert!(leaf.len() == 1 && leaf[0].deltas == Block::genesis(Default::default()))
+            }
+            _ => panic!(),
+        }
+
+        // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-
-        handles[0]
-            .submit_transaction(SequencerTransaction::Wrapped(Transaction::new(
-                TestVm::id(),
-                bincode::serialize(&txn).unwrap(),
-            )))
-            .await
-            .expect("Failed to submit transaction");
-
+        let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
         println!("Submitted: {:?}", txn);
 
-        let event = handles[0].next_event().await.unwrap();
-        println!("Event: {:?}", event);
+        // Keep getting events until we see a Decide event
+        loop {
+            let event = handles[0].next_event().await;
+            println!("Event: {:?}\n", event);
 
-        assert_eq!(*event.view_number, 1u64);
-        assert!(matches!(event.event, EventType::ViewFinished { .. }));
-
-        Ok(())
+            match event {
+                Ok(Event {
+                    event:
+                        Decide {
+                            leaf_chain: leaf, ..
+                        },
+                    ..
+                }) => {
+                    if let Some(non_empty_leaf) = leaf
+                        .iter()
+                        .find(|leaf| !leaf.deltas.transactions.is_empty())
+                    {
+                        // When we find a non-empty Decide, check that it only contains the target transaction
+                        assert!(non_empty_leaf.deltas.transactions == vec![submitted_txn]);
+                        return Ok(());
+                    } else {
+                        // Empty Decide event
+                        continue;
+                    }
+                }
+                Ok(Event {
+                    view_number: vn, ..
+                }) => {
+                    // Don't wait too long; 10 views should more more than enough
+                    if *vn > 10u64 {
+                        panic!()
+                    }
+                } // Keep waiting
+                _ => panic!(), // Error
+            }
+        }
     }
 }
