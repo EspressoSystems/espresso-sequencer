@@ -186,13 +186,13 @@ mod test {
     use super::*;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
-        types::EventType,
+        types::{Event, EventType, EventType::Decide},
     };
 
     use hotshot_types::ExecutionType;
 
     use std::time::Duration;
-    
+
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
 
