@@ -1891,7 +1891,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -1937,7 +1937,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -1958,7 +1958,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -1978,7 +1978,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2010,7 +2010,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "bincode",
 ]
@@ -2610,7 +2610,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#3da4ff7e363c7daf7344d58a7a7ee6f635ba9725"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -4750,9 +4750,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.5.9"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
+checksum = "1333c76748e868a4d9d1017b5ab53171dfd095f70c712fdb4653a406547f598f"
 dependencies = [
  "serde",
 ]
