@@ -50,3 +50,8 @@ for i in `seq $N`; do
     target/release/sequencer --cdn-url tcp://localhost:$PORT &
 done
 ```
+
+Note: if the sequencer shows a `"Connection refused"` error you may need to use
+`127.0.0.1` instead of `localhost` when connecting to the CDN. This is because
+`localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking is
+enabled.
