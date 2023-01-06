@@ -91,6 +91,6 @@ State <-- Synchronizer
 ' Prover ..> BridgeL2
 ' User --> BridgeL1
 Submit -up-> App: wrap in HotShot txn
-HotShotEvents -down-> Events
+HotShotEvents -down-> QueryService
 
 @enduml
