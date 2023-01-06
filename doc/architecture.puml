@@ -1,6 +1,11 @@
 @startuml
 skinparam componentStyle rectangle
 
+legend right
+  <b>Notes:</b>
+  Assume the order commit is contained in the Quorum Certificate (QC).
+endlegend
+
 frame Legend {
   component "zkevm-node "as is"" as Original #PaleGreen
   component "zkevm-node modified" as Modified #LightPink
@@ -38,8 +43,9 @@ package "Ethereum L1" as L1 {
 package "L2 (zkevm-node)" as L2 {
   component JsonRPC #PaleGreen
   note left of JsonRPC
-    Configured to forward transactions to
-    the Submit API of the decentralized sequencer.
+    Configured to forward transactions
+    to the Submit API of the decentralized
+    sequencer.
   end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
@@ -54,13 +60,18 @@ package "L2 (zkevm-node)" as L2 {
   }
   'component "Bridge L2" as BridgeL2 #PaleGreen
   component Etherman #LightPink
+  note left of Etherman
+    Alternatively a separate
+    service for posting of QC
+    to rollup.
+  end note
   component Aggregator #PaleGreen
   component "State\nLibrary" as State #PaleGreen
-  component "HotShot-Hermez\nBroadcast Service" as Broadcast #LightPink
+  component "HotShot-Hermez\nBroadcast Service" as Broadcast
   component Synchronizer #PaleGreen
 }
 
-User -> JsonRPC: EVM txn\nEVM queries
+User -> JsonRPC: EVM txn\nEVM query
 'User -[hidden]> Submit
 'positions the User box in a better place
 'User -[hidden]> L2
@@ -69,24 +80,26 @@ JsonRPC -up-> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
 
-QueryService --> Broadcast: stream:\norder commit\nQC\nbatch
+QueryService --> Broadcast: batch
+QueryService -> Etherman: QC
 
 'Adapter -> Rollup: order commit\nQC
 
-JsonRPC --> State: EVM queries
+JsonRPC --> State: EVM query
 
 State -> L2DB: read
 State --> Tree: accounts
 State --> Executor: call, etc.
 
-Aggregator -> State: fetch\nprover\ninput
+Aggregator --> State: fetch\nprover\ninput
 Aggregator --> Etherman: proof
-Aggregator -> Prover: generate\nproof
-Etherman --> Rollup: proof
+Aggregator --> Prover: generate\nproof
+Etherman --> Rollup: QC, proof
 'Synchronizer <-- Rollup: contract events
-Synchronizer <-- Rollup: contract events
+Synchronizer <-- Rollup: contract event
+Synchronizer <-- L1: block
 Synchronizer <-- Broadcast: batch
-State <-- Synchronizer
+State <-- Synchronizer: batch\nblock\ncontract event
 
 ' Prover ..> BridgeL2
 ' User --> BridgeL1
