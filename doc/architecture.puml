@@ -17,7 +17,7 @@ package "HotShot\n(other instances)" as HotShotExternal {
 
 package "Decentralized Sequencer" {
   package "zkEVM app" as zkApp {
-    component Events
+    component "Query Service" as QueryService
     component "Submit API" as Submit
     package "Txn-ordering HotShot app" as App {
       package HotShot {
@@ -29,11 +29,6 @@ package "Decentralized Sequencer" {
 }
 
 
-package "Espresso L2 Connector" as Connector {
-  component "HotShot-Hermez Adapter" as Adapter
-  component "RPC dispatch" as Dispatch
-}
-
 package "Ethereum L1" as L1 {
   component "Rollup Contract" as Rollup #LightPink
   ' component "Bridge L1" as BridgeL1 #PaleGreen
@@ -43,10 +38,8 @@ package "Ethereum L1" as L1 {
 package "L2 (zkevm-node)" as L2 {
   component JsonRPC #PaleGreen
   note left of JsonRPC
-    Optionally dispatch copy of EVM
-    txns to JsonRPC and attach a
-    fake local mempool for queries
-    with pending txns.
+    Configured to forward transactions to
+    the Submit API of the decentralized sequencer.
   end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
@@ -63,21 +56,22 @@ package "L2 (zkevm-node)" as L2 {
   component Etherman #LightPink
   component Aggregator #PaleGreen
   component "State\nLibrary" as State #PaleGreen
+  component "HotShot-Hermez\nBroadcast Service" as Broadcast #LightPink
+  component Synchronizer #PaleGreen
 }
 
-User -> Dispatch: EVM txn\nEVM queries
+User -> JsonRPC: EVM txn\nEVM queries
+'User -[hidden]> Submit
 'positions the User box in a better place
-User -[hidden]> L2
+'User -[hidden]> L2
 
-Dispatch --> JsonRPC: EVM queries
-Dispatch -up-> Submit: EVM txn
+JsonRPC -up-> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
 
-Events --> Adapter: stream:\norder commit\nQC\nbatch
+QueryService --> Broadcast: stream:\norder commit\nQC\nbatch
 
-Adapter -> L2DB: batch
-Adapter -> Rollup: order commit\nQC
+'Adapter -> Rollup: order commit\nQC
 
 JsonRPC --> State: EVM queries
 
@@ -89,6 +83,10 @@ Aggregator -> State: fetch\nprover\ninput
 Aggregator --> Etherman: proof
 Aggregator -> Prover: generate\nproof
 Etherman --> Rollup: proof
+'Synchronizer <-- Rollup: contract events
+Synchronizer <-- Rollup: contract events
+Synchronizer <-- Broadcast: batch
+State <-- Synchronizer
 
 ' Prover ..> BridgeL2
 ' User --> BridgeL1
