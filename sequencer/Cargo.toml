@@ -22,6 +22,6 @@ jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
-snafu = "0.7.3"
+snafu = "0.7.4"
 tracing = "0.1"
 url = "2.3"
