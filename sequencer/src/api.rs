@@ -92,10 +92,8 @@ mod test {
             .await
             .unwrap();
 
-        let submitted_txn =
-            SequencerTransaction::Wrapped(Transaction::new(VmId(0), vec![1, 2, 3, 4]));
-
-        wait_for_decide_on_handle(handles[0].clone(), submitted_txn)
+        // Wait for a Decide event containing transaction matching the one we sent
+        wait_for_decide_on_handle(handles[0].clone(), SequencerTransaction::Wrapped(txn))
             .await
             .unwrap()
     }
