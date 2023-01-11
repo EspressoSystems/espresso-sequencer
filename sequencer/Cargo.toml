@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dev-dependencies]
+portpicker = "0.1.1"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" } 
+
 [dependencies]
 ark-bls12-381 = "0.3.0"
 ark-serialize = { version = "0.3.0", features = ["derive"] }
@@ -24,7 +28,6 @@ nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
 snafu = "0.7.3"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" } 
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 toml = "0.5"
 tracing = "0.1"

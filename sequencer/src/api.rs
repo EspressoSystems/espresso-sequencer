@@ -11,7 +11,7 @@ use hotshot::types::HotShotHandle;
 use std::io;
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
-pub async fn serve<
+pub fn serve<
     I: NodeImplementation<
         SeqTypes,
         Storage = MemoryStorage<SeqTypes>,
@@ -65,43 +65,35 @@ mod test {
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
     };
-    use std::io;
+    use portpicker::pick_unused_port;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-
-    #[async_std::test]
-    async fn init_test() -> io::Result<()> {
-        let handles = init_hotshot_handles().await;
-        serve(handles[0].clone(), 8080).await
-    }
 
     #[async_std::test]
     async fn submit_test() {
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
-        let url = "http://localhost:8080".parse().unwrap();
+        let port = pick_unused_port().expect("No ports free");
+
+        let url = format!("http://localhost:{}", port).parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
 
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
-        serve(handles[0].clone(), 8080).await.unwrap();
+        serve(handles[0].clone(), port).unwrap();
 
         client.connect(None).await;
 
         client
             .post::<()>("api/submit")
-            .body_binary(&txn)
+            .body_json(&txn)
             .unwrap()
             .send()
             .await
             .unwrap();
 
-        // TODO: This doesn't seem to match even after changing the encoding from json to binary
-        // There seems to be *some* sort of transaction getting in there, but what exactly does it look like?
-        let submitted_txn = SequencerTransaction::Wrapped(Transaction::new(
-            VmId(0),
-            bincode::serialize(&txn).unwrap(),
-        ));
+        let submitted_txn =
+            SequencerTransaction::Wrapped(Transaction::new(VmId(0), vec![1, 2, 3, 4]));
 
         wait_for_decide_on_handle(handles[0].clone(), submitted_txn)
             .await
