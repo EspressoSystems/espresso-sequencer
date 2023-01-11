@@ -1,6 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use sequencer::{init_node, Block, ChainVariables, GenesisTransaction};
+use sequencer::{api::serve, init_node, Block, ChainVariables, GenesisTransaction};
 use std::net::ToSocketAddrs;
 use url::Url;
 
@@ -9,6 +9,10 @@ struct Args {
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     chain_id: u16,
+
+    /// Port that the sequencer API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    port: u16,
 
     /// URL of the HotShot CDN.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
@@ -47,4 +51,6 @@ async fn main() {
         tracing::info!("EVENT {:?}", event);
     }
     tracing::warn!("shutting down");
+
+    serve(handle, args.port).expect("Failed to start serving API");
 }
