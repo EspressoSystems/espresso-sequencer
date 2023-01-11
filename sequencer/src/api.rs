@@ -59,7 +59,12 @@ pub async fn serve<
 
 #[cfg(test)]
 mod test {
-    use crate::{api::serve, test::init_hotshot_handles, transaction::Transaction, vm::VmId};
+    use crate::{
+        api::serve,
+        test::{init_hotshot_handles, wait_for_decide_on_handle},
+        transaction::{SequencerTransaction, Transaction},
+        vm::VmId,
+    };
     use std::io;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
@@ -85,10 +90,21 @@ mod test {
 
         client
             .post::<()>("api/submit")
-            .body_json(&txn)
+            .body_binary(&txn)
             .unwrap()
             .send()
             .await
             .unwrap();
+
+        // TODO: This doesn't seem to match even after changing the encoding from json to binary
+        // There seems to be *some* sort of transaction getting in there, but what exactly does it look like?
+        let submitted_txn = SequencerTransaction::Wrapped(Transaction::new(
+            VmId(0),
+            bincode::serialize(&txn).unwrap(),
+        ));
+
+        wait_for_decide_on_handle(handles[0].clone(), submitted_txn)
+            .await
+            .unwrap()
     }
 }
