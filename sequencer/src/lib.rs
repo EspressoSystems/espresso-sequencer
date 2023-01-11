@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 mod block;
 mod chain_variables;
 mod state;
@@ -215,8 +215,8 @@ mod test {
         tx
     }
 
-    #[async_std::test]
-    async fn test_skeleton_instantiation() -> Result<(), ()> {
+    pub async fn init_hotshot_handles(
+    ) -> Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> {
         let genesis_block = Block::genesis(Default::default());
 
         let num_nodes = 4;
@@ -278,6 +278,12 @@ mod test {
 
             handles.push(handle);
         }
+        handles
+    }
+
+    #[async_std::test]
+    async fn test_skeleton_instantiation() -> Result<(), ()> {
+        let mut handles = init_hotshot_handles().await;
 
         for handle in handles.iter() {
             handle.start().await;

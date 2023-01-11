@@ -15,6 +15,7 @@ clap = { version = "4.0", features = ["derive", "env"] }
 cld = "0.5"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 derive_more = "0.99.17"
+futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
@@ -23,6 +24,7 @@ nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
 snafu = "0.7.3"
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" } 
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 tracing = "0.1"
 url = "2.3"
