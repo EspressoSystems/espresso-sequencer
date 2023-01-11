@@ -28,6 +28,10 @@ package "Decentralized Sequencer" {
   }
 }
 
+package "L2 Adaptor" as Adaptor {
+  interface "JSON-RPC (submit only)" as AdaptorSubmit
+}
+
 package "Ethereum L1" as L1 {
   component "Rollup Contract" as Rollup #LightPink
   note left of Rollup
@@ -41,10 +45,10 @@ package "Ethereum L1" as L1 {
 
 
 package "L2 (zkevm-node)" as L2 {
-  component JsonRPC #LightPink
+  component JsonRPC #PaleGreen
   note left of JsonRPC
-    Modified to forward transactions
-    to the HotShot submit API.
+    Configured to forward transactions
+    to the Submit API of the L2 adaptor.
   end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
@@ -67,24 +71,20 @@ package "L2 (zkevm-node)" as L2 {
   component Aggregator #PaleGreen
   component "State\nLibrary" as State #PaleGreen
   component Synchronizer #PaleGreen
-  component "Batch Writer" as BatchWriter
-  note bottom of BatchWriter
-    New component which scans blocks from
-    HotShot and writes them to the contract.
-  end note
 }
 
-User -down-> JsonRPC: EVM txn\nEVM query
+User -> JsonRPC: EVM txn\nEVM query
 'User -[hidden]> Submit
 'positions the User box in a better place
 'User -[hidden]> L2
 
-JsonRPC -> Submit: EVM txn
+JsonRPC -> AdaptorSubmit: EVM txn
+AdaptorSubmit -> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
 
-QueryService -> BatchWriter: batch_commit, QC
-BatchWriter -> Rollup: Sequence(batch_commit, QC)
+QueryService -> Adaptor: batch_commit
+Adaptor -> Rollup: Sequence(batch_commit, QC)
 
 JsonRPC --> State: EVM query
 
