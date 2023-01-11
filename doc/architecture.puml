@@ -1,6 +1,11 @@
 @startuml
 skinparam componentStyle rectangle
 
+legend right
+  <b>Notes:</b>
+  Assume the order commit is contained in the Quorum Certificate (QC).
+endlegend
+
 frame Legend {
   component "zkevm-node "as is"" as Original #PaleGreen
   component "zkevm-node modified" as Modified #LightPink
@@ -17,7 +22,7 @@ package "HotShot\n(other instances)" as HotShotExternal {
 
 package "Decentralized Sequencer" {
   package "zkEVM app" as zkApp {
-    component Events
+    component "Query Service" as QueryService
     component "Submit API" as Submit
     package "Txn-ordering HotShot app" as App {
       package HotShot {
@@ -29,11 +34,6 @@ package "Decentralized Sequencer" {
 }
 
 
-package "Espresso L2 Connector" as Connector {
-  component "HotShot-Hermez Adapter" as Adapter
-  component "RPC dispatch" as Dispatch
-}
-
 package "Ethereum L1" as L1 {
   component "Rollup Contract" as Rollup #LightPink
   ' component "Bridge L1" as BridgeL1 #PaleGreen
@@ -43,10 +43,9 @@ package "Ethereum L1" as L1 {
 package "L2 (zkevm-node)" as L2 {
   component JsonRPC #PaleGreen
   note left of JsonRPC
-    Optionally dispatch copy of EVM
-    txns to JsonRPC and attach a
-    fake local mempool for queries
-    with pending txns.
+    Configured to forward transactions
+    to the Submit API of the decentralized
+    sequencer.
   end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
@@ -61,38 +60,50 @@ package "L2 (zkevm-node)" as L2 {
   }
   'component "Bridge L2" as BridgeL2 #PaleGreen
   component Etherman #LightPink
+  note left of Etherman
+    Alternatively a separate
+    service for posting of QC
+    to rollup.
+  end note
   component Aggregator #PaleGreen
   component "State\nLibrary" as State #PaleGreen
+  component "HotShot-Hermez\nBroadcast Service" as Broadcast
+  component Synchronizer #PaleGreen
 }
 
-User -> Dispatch: EVM txn\nEVM queries
+User -> JsonRPC: EVM txn\nEVM query
+'User -[hidden]> Submit
 'positions the User box in a better place
-User -[hidden]> L2
+'User -[hidden]> L2
 
-Dispatch --> JsonRPC: EVM queries
-Dispatch -up-> Submit: EVM txn
+JsonRPC -up-> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
 
-Events --> Adapter: stream:\norder commit\nQC\nbatch
+QueryService --> Broadcast: batch
+QueryService -> Etherman: QC
 
-Adapter -> L2DB: batch
-Adapter -> Rollup: order commit\nQC
+'Adapter -> Rollup: order commit\nQC
 
-JsonRPC --> State: EVM queries
+JsonRPC --> State: EVM query
 
 State -> L2DB: read
 State --> Tree: accounts
 State --> Executor: call, etc.
 
-Aggregator -> State: fetch\nprover\ninput
+Aggregator --> State: fetch\nprover\ninput
 Aggregator --> Etherman: proof
-Aggregator -> Prover: generate\nproof
-Etherman --> Rollup: proof
+Aggregator --> Prover: generate\nproof
+Etherman --> Rollup: QC, proof
+'Synchronizer <-- Rollup: contract events
+Synchronizer <-- Rollup: contract event
+Synchronizer <-- L1: block
+Synchronizer <-- Broadcast: batch
+State <-- Synchronizer: batch\nblock\ncontract event
 
 ' Prover ..> BridgeL2
 ' User --> BridgeL1
 Submit -up-> App: wrap in HotShot txn
-HotShotEvents -down-> Events
+HotShotEvents -down-> QueryService
 
 @enduml
