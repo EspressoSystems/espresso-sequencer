@@ -24,7 +24,13 @@ pub async fn serve<
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
     let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(init_handle));
-    let mut api = Api::<StateType<I>, ServerError>::from_file("src/api.toml").unwrap();
+
+    // Include API specification in binary
+    let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    let mut api = Api::<StateType<I>, ServerError>::new(toml)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Pass transaction from request body into HotShot handle
     api.post("submit", |req, state| {

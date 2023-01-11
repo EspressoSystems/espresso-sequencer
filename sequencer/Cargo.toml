@@ -26,5 +26,6 @@ serde = { version = "1.0.152", features = ["derive"] }
 snafu = "0.7.3"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" } 
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
+toml = "0.5"
 tracing = "0.1"
 url = "2.3"
