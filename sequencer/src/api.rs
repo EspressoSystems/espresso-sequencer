@@ -11,9 +11,11 @@ use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
+use hotshot_types::traits::metrics::Metrics;
 use std::io;
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
+#[allow(unused_variables)]
 pub fn serve<
     I: NodeImplementation<
         SeqTypes,
@@ -23,6 +25,7 @@ pub fn serve<
 >(
     init_handle: HotShotHandle<SeqTypes, I>,
     port: u16,
+    metrics: Box<dyn Metrics>,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
@@ -66,6 +69,7 @@ mod test {
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
     };
+    use hotshot_types::traits::metrics::NoMetrics;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
@@ -81,7 +85,7 @@ mod test {
 
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
-        serve(handles[0].clone(), port).unwrap();
+        serve(handles[0].clone(), port, NoMetrics::new()).unwrap();
 
         client.connect(None).await;
 
