@@ -52,5 +52,9 @@ async fn main() {
     }
     tracing::warn!("shutting down");
 
-    serve(handle, args.port).unwrap().await.unwrap()
+    // Inner error comes from spawn, outer error comes from anything before that
+    serve(handle, args.port)
+        .expect("Failed to serve API")
+        .await
+        .expect("Failed to initialize app")
 }
