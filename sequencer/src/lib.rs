@@ -1,3 +1,4 @@
+pub mod api;
 mod block;
 mod chain_variables;
 mod state;
@@ -176,6 +177,7 @@ pub async fn init_node(
 #[cfg(test)]
 mod test {
 
+    use core::panic;
     use std::sync::Arc;
 
     use crate::{
@@ -214,8 +216,8 @@ mod test {
         tx
     }
 
-    #[async_std::test]
-    async fn test_skeleton_instantiation() -> Result<(), ()> {
+    pub async fn init_hotshot_handles(
+    ) -> Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> {
         let genesis_block = Block::genesis(Default::default());
 
         let num_nodes = 4;
@@ -276,38 +278,23 @@ mod test {
             .await;
 
             handles.push(handle);
-        }
 
-        for handle in handles.iter() {
-            handle.start().await;
-        }
-        println!("Started");
-
-        let event = handles[0].next_event().await;
-        println!("Event: {:?}\n", event);
-
-        // Should immediately get genesis block decide event
-        match event {
-            Ok(Event {
-                event: Decide {
-                    leaf_chain: leaf, ..
-                },
-                ..
-            }) => {
-                // Exactly one leaf, and it contains the genesis block
-                assert!(leaf.len() == 1 && leaf[0].deltas == Block::genesis(Default::default()))
+            for handle in handles.iter() {
+                handle.start().await;
             }
-            _ => panic!(),
+            println!("Started");
         }
+        handles
+    }
 
-        // Submit target transaction to handle
-        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
-        println!("Submitted: {:?}", txn);
-
+    // Wait for decide event, make sure it matches submitted transaction
+    pub async fn wait_for_decide_on_handle(
+        mut handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+        submitted_txn: SequencerTransaction,
+    ) -> Result<(), ()> {
         // Keep getting events until we see a Decide event
         loop {
-            let event = handles[0].next_event().await;
+            let event = handle.next_event().await;
             println!("Event: {:?}\n", event);
 
             match event {
@@ -335,11 +322,40 @@ mod test {
                 }) => {
                     // Don't wait too long; 10 views should more more than enough
                     if *vn > 10u64 {
-                        panic!()
+                        panic!();
                     }
                 } // Keep waiting
                 _ => panic!(), // Error
             }
         }
+    }
+
+    #[async_std::test]
+    async fn test_skeleton_instantiation() -> Result<(), ()> {
+        let mut handles = init_hotshot_handles().await;
+
+        let event = handles[0].next_event().await;
+        println!("Event: {:?}\n", event);
+
+        // Should immediately get genesis block decide event
+        match event {
+            Ok(Event {
+                event: Decide {
+                    leaf_chain: leaf, ..
+                },
+                ..
+            }) => {
+                // Exactly one leaf, and it contains the genesis block
+                assert!(leaf.len() == 1 && leaf[0].deltas == Block::genesis(Default::default()))
+            }
+            _ => panic!(),
+        }
+
+        // Submit target transaction to handle
+        let txn = ApplicationTransaction::new(vec![1, 2, 3]);
+        let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
+        println!("Submitted: {:?}", txn);
+
+        wait_for_decide_on_handle(handles[0].clone(), submitted_txn).await
     }
 }
