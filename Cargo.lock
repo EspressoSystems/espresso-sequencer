@@ -5778,7 +5778,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bincode",
- "clap 4.0.29",
+ "clap 4.0.32",
  "config",
  "derive_more",
  "dirs",

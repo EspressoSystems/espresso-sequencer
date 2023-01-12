@@ -52,5 +52,5 @@ async fn main() {
     }
     tracing::warn!("shutting down");
 
-    serve(handle, args.port).expect("Failed to start serving API");
+    serve(handle, args.port).unwrap().await.unwrap()
 }

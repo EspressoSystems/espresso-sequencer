@@ -2,7 +2,10 @@ use crate::{
     transaction::{SequencerTransaction, Transaction},
     SeqTypes,
 };
-use async_std::{sync::Mutex, task::spawn};
+use async_std::{
+    sync::Mutex,
+    task::{spawn, JoinHandle},
+};
 use futures::FutureExt;
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot::traits::implementations::MemoryStorage;
@@ -20,7 +23,7 @@ pub fn serve<
 >(
     init_handle: HotShotHandle<SeqTypes, I>,
     port: u16,
-) -> io::Result<()> {
+) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
     let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(init_handle));
@@ -52,9 +55,7 @@ pub fn serve<
     app.register_module("api", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    spawn(app.serve(format!("0.0.0.0:{}", port)));
-
-    Ok(())
+    Ok(spawn(app.serve(format!("0.0.0.0:{}", port))))
 }
 
 #[cfg(test)]
