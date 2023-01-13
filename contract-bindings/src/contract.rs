@@ -1,15 +1,20 @@
 #[cfg(test)]
 mod tests {
-    use crate::bindings::proof_of_efficiency::ProofOfEfficiency;
+    use crate::bindings::{matic::Matic, proof_of_efficiency::ProofOfEfficiency};
     use ethers::{
         prelude::{
             coins_bip39::English, Address, Http, Middleware, MnemonicBuilder, Provider, Signer,
-            SignerMiddleware, U256,
+            SignerMiddleware,
         },
         types::Bytes,
     };
     use std::sync::Arc;
 
+    /// To run this test the zkevm-node needs to be running
+    /// ```bash
+    /// cd zkevm-node/test
+    /// make run
+    /// ```
     #[async_std::test]
     async fn test_bindings() -> Result<(), ()> {
         let provider = Provider::<Http>::try_from("http://localhost:8545").unwrap();
@@ -21,19 +26,40 @@ mod tests {
             .build()
             .unwrap()
             .with_chain_id(chain_id);
-        let signer = Arc::new(SignerMiddleware::new(provider, deployer_wallet));
+        let signer = Arc::new(SignerMiddleware::new(provider.clone(), deployer_wallet));
 
-        // See https://github.com/0xPolygonHermez/zkevm-node/blob/develop/docs/running_local.md#l1-addresses
-        let rollup_address = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+        // See config file
+        // https://github.com/EspressoSystems/zkevm-node/blob/add-nix-shell/test/config/test.node.config.toml#L30
+        // because the documentation may be out of date.
+        let rollup_address = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
             .parse::<Address>()
             .unwrap();
+        let rollup = ProofOfEfficiency::new(rollup_address, signer.clone());
 
-        let contract = ProofOfEfficiency::new(rollup_address, signer);
+        let matic_address = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+            .parse::<Address>()
+            .unwrap();
+        let matic = Matic::new(matic_address, signer.clone());
 
-        contract
-            .force_batch(Bytes::default(), U256::from("1000000000000000000"))
+        let fee = rollup.get_current_batch_fee().await.unwrap();
+
+        matic
+            .approve(rollup.address(), fee)
+            .send()
+            .await
+            .unwrap()
             .await
             .unwrap();
+
+        rollup
+            .set_force_batch_allowed(true)
+            .send()
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
+        rollup.force_batch(Bytes::default(), fee).await.unwrap();
 
         Ok(())
     }
