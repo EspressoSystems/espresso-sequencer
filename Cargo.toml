@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
+  "contract-bindings",
+  "gen-bindings",
   "sequencer",
   "zkevm",
 ]
