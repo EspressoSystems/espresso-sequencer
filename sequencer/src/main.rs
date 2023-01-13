@@ -20,7 +20,6 @@ struct Args {
 }
 
 #[async_std::main]
-#[allow(clippy::diverging_sub_expression, unreachable_code, unused_variables)]
 async fn main() {
     setup_logging();
     setup_backtrace();
@@ -48,17 +47,11 @@ async fn main() {
     // Query data metrics go here
     let metrics = todo!();
 
-    let mut handle = init_node(cdn_addr, genesis, metrics).await;
-
-    // Run consensus.
-    handle.start().await;
-    while let Ok(event) = handle.next_event().await {
-        tracing::info!("EVENT {:?}", event);
-    }
-    tracing::warn!("shutting down");
+    let init_handle = |metrics| init_node(cdn_addr, genesis, metrics);
 
     // Inner error comes from spawn, outer error comes from anything before that
-    serve(handle, args.port, metrics)
+    serve(&init_handle, args.port)
+        .await
         .expect("Failed to serve API")
         .await
         .expect("Failed to initialize app")

@@ -6,7 +6,7 @@ use async_std::{
     sync::Mutex,
     task::{spawn, JoinHandle},
 };
-use futures::FutureExt;
+use futures::{Future, FutureExt};
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
@@ -15,21 +15,34 @@ use hotshot_types::traits::metrics::Metrics;
 use std::io;
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
-#[allow(unused_variables)]
-pub fn serve<
+type HandleFromMetrics<I> =
+    dyn Fn(Box<dyn Metrics>) -> dyn Future<Output = HotShotHandle<SeqTypes, I>>;
+
+pub async fn serve<
     I: NodeImplementation<
         SeqTypes,
         Storage = MemoryStorage<SeqTypes>,
         Election = StaticCommittee<SeqTypes>,
     >,
 >(
-    init_handle: HotShotHandle<SeqTypes, I>,
+    init_handle: &HandleFromMetrics<I>,
     port: u16,
-    metrics: Box<dyn Metrics>,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
-    let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(init_handle));
+    // Will get these metrics from QueryData eventually
+    let metrics: Box<dyn Metrics> = todo!();
+
+    let handle = init_handle(metrics).await.clone();
+
+    // Run consensus.
+    handle.start().await;
+    while let Ok(event) = handle.next_event().await {
+        tracing::info!("EVENT {:?}", event);
+    }
+    tracing::warn!("shutting down");
+
+    let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(handle));
 
     // Include API specification in binary
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
@@ -85,7 +98,12 @@ mod test {
 
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
-        serve(handles[0].clone(), port, NoMetrics::new()).unwrap();
+
+        let watch_handle = handles[0].clone();
+
+        serve(&{ move |metrics| handles[0].clone() }, port)
+            .await
+            .unwrap();
 
         client.connect(None).await;
 
@@ -98,7 +116,7 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(handles[0].clone(), SequencerTransaction::Wrapped(txn))
+        wait_for_decide_on_handle(watch_handle.clone(), SequencerTransaction::Wrapped(txn))
             .await
             .unwrap()
     }
