@@ -14,7 +14,9 @@ mod tests {
     /// ```bash
     /// cd zkevm-node/test
     /// make run
+    /// docker-compose logs zkevm-mock-l1-network -f # to see some logs
     /// ```
+    #[ignore]
     #[async_std::test]
     async fn test_bindings() -> Result<(), ()> {
         let provider = Provider::<Http>::try_from("http://localhost:8545").unwrap();
