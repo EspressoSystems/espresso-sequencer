@@ -1,2 +1,2 @@
-mod bindings;
+pub mod bindings;
 mod contract;
