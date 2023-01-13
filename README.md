@@ -55,3 +55,26 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use
 `127.0.0.1` instead of `localhost` when connecting to the CDN. This is because
 `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking is
 enabled.
+
+## Implementation Plan
+
+We will work towards the architecture illustrated above in three phases.
+
+### Phase I: Basic Sequencing
+
+Replace the Hermez trusted sequencer with a HotShot-based permissionless sequencer.
+
+![Architecture Diagram Phase I](./doc/architecture_phase1.svg)
+
+### Phase II: Off-Chain Data Availability
+
+Only store batch commitments, not full batches, in the rollup contract. Use HotShot for data
+availability.
+
+![Architecture Diagram Phase II](./doc/architecture_phase2.svg)
+
+### Phase III: Final Integration
+
+Move adaptor service into zkEVM node for a smoother integration.
+
+![Architecture Diagram Phase III](./doc/architecture.svg)

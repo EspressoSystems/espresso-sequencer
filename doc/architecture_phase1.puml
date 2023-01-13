@@ -28,23 +28,21 @@ package "Decentralized Sequencer" {
   }
 }
 
+package "L2 Adaptor" as Adaptor {
+  interface "JSON-RPC (submit only)" as AdaptorSubmit
+}
+
 package "Ethereum L1" as L1 {
-  component "Rollup Contract" as Rollup #LightPink
-  note left of Rollup
-    Contract modified to store batch commitments
-    instead of batches. ForceBatches replaced by
-    Sequence, which validates a QC and stores a
-    batch commitment (associated with a GER).
-  end note
+  component "Rollup Contract" as Rollup #PaleGreen
   ' component "Bridge L1" as BridgeL1 #PaleGreen
 }
 
 
 package "L2 (zkevm-node)" as L2 {
-  component JsonRPC #LightPink
+  component JsonRPC #PaleGreen
   note left of JsonRPC
-    Modified to forward transactions
-    to the HotShot submit API.
+    Configured to forward transactions
+    to the Submit API of the L2 adaptor.
   end note
   database L2DB #PaleGreen [
     L2 Blockchain DB
@@ -58,33 +56,24 @@ package "L2 (zkevm-node)" as L2 {
     ]
   }
   'component "Bridge L2" as BridgeL2 #PaleGreen
-  component Etherman #LightPink
-  note left of Etherman
-    Etherman modified to fetch batch commits,
-    not batches, from contract, and to fetch
-    the full batches from the HotShot Query Service.
-  end note
+  component Etherman #PaleGreen
   component Aggregator #PaleGreen
   component "State\nLibrary" as State #PaleGreen
   component Synchronizer #PaleGreen
-  component "Batch Writer" as BatchWriter
-  note bottom of BatchWriter
-    New component which scans blocks from
-    HotShot and writes them to the contract.
-  end note
 }
 
-User -down-> JsonRPC: EVM txn\nEVM query
+User -> JsonRPC: EVM txn\nEVM query
 'User -[hidden]> Submit
 'positions the User box in a better place
 'User -[hidden]> L2
 
-JsonRPC -> Submit: EVM txn
+JsonRPC -up-> AdaptorSubmit: EVM txn
+AdaptorSubmit -up-> Submit: EVM txn
 
 GossipInternal <-> GossipExternal
 
-QueryService -> BatchWriter: batch_commit, QC
-BatchWriter -> Rollup: Sequence(batch_commit, QC)
+QueryService -> Adaptor: batch
+Adaptor -> Rollup: ForceBatches(batch)
 
 JsonRPC --> State: EVM query
 
@@ -96,8 +85,7 @@ Aggregator --> State: fetch\nprover\ninput
 Aggregator --> Etherman: proof
 Aggregator --> Prover: generate\nproof
 Etherman --> Rollup: proof
-Etherman <- Rollup: batch commit\nglobal exit root
-Etherman <- QueryService: batch
+Etherman <-- Rollup: batch\nglobal exit root
 Synchronizer <-- Etherman: batch\nglobal exit root
 State <-- Synchronizer: batch\nglobal exit root\nstate
 
