@@ -1,6 +1,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use sequencer::{api::serve, init_node, Block, ChainVariables, GenesisTransaction};
+use sequencer::{
+    api::{serve, HandleFromMetrics},
+    init_node, Block, ChainVariables, GenesisTransaction,
+};
 use std::net::ToSocketAddrs;
 use url::Url;
 
@@ -34,7 +37,6 @@ async fn main() {
         ),
     });
 
-    // Initialize HotShot.
     let cdn_addr = (
         args.cdn_url.host_str().unwrap(),
         args.cdn_url.port_or_known_default().unwrap(),
@@ -44,13 +46,11 @@ async fn main() {
         .next()
         .unwrap();
 
-    // Query data metrics go here
-    let metrics = todo!();
-
-    let init_handle = |metrics| init_node(cdn_addr, genesis, metrics);
+    let init_handle: HandleFromMetrics<_> =
+        Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
 
     // Inner error comes from spawn, outer error comes from anything before that
-    serve(&init_handle, args.port)
+    serve(init_handle, args.port)
         .await
         .expect("Failed to serve API")
         .await

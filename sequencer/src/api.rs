@@ -6,7 +6,7 @@ use async_std::{
     sync::Mutex,
     task::{spawn, JoinHandle},
 };
-use futures::{Future, FutureExt};
+use futures::{future::BoxFuture, FutureExt};
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
@@ -15,8 +15,8 @@ use hotshot_types::traits::metrics::Metrics;
 use std::io;
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
-type HandleFromMetrics<I> =
-    dyn Fn(Box<dyn Metrics>) -> dyn Future<Output = HotShotHandle<SeqTypes, I>>;
+pub type HandleFromMetrics<I> =
+    Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
 
 pub async fn serve<
     I: NodeImplementation<
@@ -25,7 +25,7 @@ pub async fn serve<
         Election = StaticCommittee<SeqTypes>,
     >,
 >(
-    init_handle: &HandleFromMetrics<I>,
+    init_handle: HandleFromMetrics<I>,
     port: u16,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
@@ -81,11 +81,15 @@ mod test {
         test::{init_hotshot_handles, wait_for_decide_on_handle},
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
+        Node, SeqTypes,
     };
-    use hotshot_types::traits::metrics::NoMetrics;
+    use hotshot::traits::implementations::MemoryNetwork;
+    use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    use super::HandleFromMetrics;
 
     #[async_std::test]
     async fn submit_test() {
@@ -101,9 +105,10 @@ mod test {
 
         let watch_handle = handles[0].clone();
 
-        serve(&{ move |metrics| handles[0].clone() }, port)
-            .await
-            .unwrap();
+        let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
+            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
+
+        serve(init_handle, port).await.unwrap();
 
         client.connect(None).await;
 
