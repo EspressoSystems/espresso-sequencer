@@ -138,7 +138,7 @@ mod test {
         // Submit a transaction. We have not yet started the validators, so this transaction will
         // stay in the mempool, allowing us to check the mempool endpoint.
         let txn = MockTransaction { nonce: 0 };
-        let txn_size = bincode_opts().serialized_size(&txn).unwrap() as u64;
+        let txn_size = bincode_opts().serialized_size(&txn).unwrap();
         hotshot.submit_transaction(txn.clone()).await.unwrap();
         sleep(Duration::from_secs(1)).await;
         assert_eq!(
