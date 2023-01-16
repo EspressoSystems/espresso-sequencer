@@ -84,7 +84,7 @@ impl<Types: NodeTypes> BlockQueryData<Types> {
             height: leaf.height,
             size: bincode_opts()
                 .serialized_size(&leaf.deltas)
-                .unwrap_or_default() as u64,
+                .unwrap_or_default(),
             txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),
             block: leaf.deltas,
         }

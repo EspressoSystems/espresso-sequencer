@@ -394,7 +394,7 @@ mod test {
             assert_eq!(block.hash(), block.block().commit());
             assert_eq!(
                 block.size(),
-                bincode_opts().serialized_size(block.block()).unwrap() as u64
+                bincode_opts().serialized_size(block.block()).unwrap()
             );
             assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
 
@@ -487,7 +487,7 @@ mod test {
                 qd.read().await.mempool_info().unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
                 }
             );
         }
@@ -500,7 +500,7 @@ mod test {
                 qd.read().await.mempool_info().unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap() as u64,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
                 }
             );
         }
