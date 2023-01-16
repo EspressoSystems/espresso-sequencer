@@ -12,7 +12,7 @@ use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
 use hotshot_types::traits::metrics::Metrics;
-use std::io;
+use std::{io, path::Path};
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
 pub type HandleFromMetrics<I> =
@@ -27,10 +27,10 @@ pub async fn serve<
 >(
     init_handle: HandleFromMetrics<I>,
     port: u16,
+    storage_path: &Path,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
-    // Will get these metrics from QueryData eventually
     let metrics: Box<dyn Metrics> = todo!();
 
     let handle = init_handle(metrics).await.clone();
@@ -86,6 +86,7 @@ mod test {
     use hotshot::traits::implementations::MemoryNetwork;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
+    use std::path::Path;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
@@ -108,7 +109,9 @@ mod test {
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
 
-        serve(init_handle, port).await.unwrap();
+        let storage_path = Path::new("obvious placeholder");
+
+        serve(init_handle, port, storage_path).await.unwrap();
 
         client.connect(None).await;
 

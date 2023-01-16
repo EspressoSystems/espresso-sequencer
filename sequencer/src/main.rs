@@ -4,7 +4,7 @@ use sequencer::{
     api::{serve, HandleFromMetrics},
     init_node, Block, ChainVariables, GenesisTransaction,
 };
-use std::net::ToSocketAddrs;
+use std::{net::ToSocketAddrs, path::Path};
 use url::Url;
 
 #[derive(Parser)]
@@ -49,8 +49,10 @@ async fn main() {
     let init_handle: HandleFromMetrics<_> =
         Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
 
+    let storage_path = Path::new("obvious placeholder");
+
     // Inner error comes from spawn, outer error comes from anything before that
-    serve(init_handle, args.port)
+    serve(init_handle, args.port, storage_path)
         .await
         .expect("Failed to serve API")
         .await
