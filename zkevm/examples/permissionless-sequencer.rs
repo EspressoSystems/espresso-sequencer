@@ -9,7 +9,7 @@
 //!
 //! Run a local Hermez deployment. The easiest way to do this it to run the
 //! [docker-compose test](https://github.com/EspressoSystems/zkevm-node/blob/hotshot-integration/docs/running_local.md)
-//! from the zkEVM repo.
+//! from the Espresso fork of the zkEVM repo.
 //!
 //! If connecting to the zkEVM docker-compose demo, the default configuration of this program works,
 //! and you can simply run
@@ -34,17 +34,14 @@ use contract_bindings::{
     proof_of_efficiency::{ForceBatchFilter, ForcedBatchData, SequenceForceBatchesFilter},
     Matic, ProofOfEfficiency,
 };
-use derive_more::From;
 use ethers::{
     abi::RawLog,
     contract::EthEvent,
-    core::k256::ecdsa::SigningKey,
     prelude::*,
+    signers::coins_bip39::English,
     types::transaction::eip2718::TypedTransaction,
     utils::{format_ether, format_units},
 };
-use hex::FromHexError;
-use snafu::Snafu;
 use std::time::Duration;
 use url::Url;
 
@@ -53,6 +50,7 @@ const TRANSFER_AMOUNT: U256 = U256([1, 0, 0, 0]);
 
 #[derive(Parser)]
 struct Options {
+    /// JSON-RPC endpoint for layer 1 (Ethereum).
     #[clap(
         long,
         env = "ESPRESSO_ZKEVM_L1_PROVIDER",
@@ -60,6 +58,7 @@ struct Options {
     )]
     l1_provider: Url,
 
+    /// JSON-RPC endpoint for layer 2 (Hermez).
     #[clap(
         long,
         env = "ESPRESSO_ZKEVM_L2_PROVIDER",
@@ -67,6 +66,7 @@ struct Options {
     )]
     l2_provider: Url,
 
+    /// Address of Hermez rollup contract on layer 1.
     #[clap(
         long,
         env = "ESPRESSO_ZKEVM_ROLLUP_ADDRESS",
@@ -74,6 +74,7 @@ struct Options {
     )]
     rollup_address: Address,
 
+    /// Address of Matic token contract on layer 1.
     #[clap(
         long,
         env = "ESPRESSO_ZKEVM_MATIC_ADDRESS",
@@ -81,34 +82,16 @@ struct Options {
     )]
     matic_address: Address,
 
+    /// Mnemonic phrase for the deployer of the rollup contract.
+    ///
+    /// The first account in this wallet must be the admin of the rollup contract, and must also be
+    /// funded with ETH on layers 1 and 2 and MATIC on layer 1.
     #[clap(
         long,
-        env = "ESPRESSO_ZKEVM_DEPLOYER_PRIVATE_KEY",
-        value_parser = parse_signing_key,
-        default_value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+        env = "ESPRESSO_ZKEVM_DEPLOYER_MNEMONIC",
+        default_value = "test test test test test test test test test test test junk"
     )]
-    deployer_private_key: SigningKey,
-}
-
-#[derive(Debug, Snafu, From)]
-enum ParseSigningKeyError {
-    Hex {
-        source: FromHexError,
-    },
-    #[snafu(display("invalid private key: {}", reason))]
-    Key {
-        reason: String,
-    },
-}
-
-fn parse_signing_key(mut s: &str) -> Result<SigningKey, ParseSigningKeyError> {
-    if s.starts_with("0x") {
-        s = &s[2..];
-    }
-    let bytes = hex::decode(s)?;
-    SigningKey::from_bytes(&bytes).map_err(|err| ParseSigningKeyError::Key {
-        reason: err.to_string(),
-    })
+    deployer_mnemonic: String,
 }
 
 async fn force_batch<M: Middleware>(
@@ -234,10 +217,16 @@ async fn main() {
         l2_chain_id
     );
 
-    let l1_wallet = Wallet::from(opt.deployer_private_key.clone())
+    let l1_wallet = MnemonicBuilder::<English>::default()
+        .phrase(opt.deployer_mnemonic.as_str())
+        .build()
+        .unwrap()
         .with_chain_id(u64::try_from(l1_chain_id).unwrap());
-    let l2_wallet =
-        Wallet::from(opt.deployer_private_key).with_chain_id(u64::try_from(l2_chain_id).unwrap());
+    let l2_wallet = MnemonicBuilder::<English>::default()
+        .phrase(opt.deployer_mnemonic.as_str())
+        .build()
+        .unwrap()
+        .with_chain_id(u64::try_from(l2_chain_id).unwrap());
     let l1_client = Arc::new(SignerMiddleware::new(l1, l1_wallet.clone()));
     let l2_client = Arc::new(SignerMiddleware::new(l2, l2_wallet.clone()));
 

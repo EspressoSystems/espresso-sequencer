@@ -7943,11 +7943,9 @@ dependencies = [
  "async-std",
  "clap 4.0.32",
  "contract-bindings",
- "derive_more",
  "ethers",
  "hex",
  "sequencer",
- "snafu",
  "tracing",
  "url",
 ]
