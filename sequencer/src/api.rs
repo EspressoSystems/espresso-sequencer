@@ -11,12 +11,114 @@ use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
+use hotshot_query_service::{
+    availability::AvailabilityDataSource,
+    data_source::{QueryData, UpdateDataSource},
+    status::StatusDataSource,
+};
 use hotshot_types::traits::metrics::Metrics;
 use std::{io, path::Path};
 use tide_disco::{error::ServerError, Api, App, StatusCode};
 
 pub type HandleFromMetrics<I> =
     Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
+
+struct AppState<
+    I: NodeImplementation<
+        SeqTypes,
+        Storage = MemoryStorage<SeqTypes>,
+        Election = StaticCommittee<SeqTypes>,
+    >,
+> {
+    submit_state: Mutex<HotShotHandle<SeqTypes, I>>,
+    query_state: QueryData<SeqTypes, ()>,
+}
+
+impl<
+        I: NodeImplementation<
+            SeqTypes,
+            Storage = MemoryStorage<SeqTypes>,
+            Election = StaticCommittee<SeqTypes>,
+        >,
+    > AvailabilityDataSource<SeqTypes> for AppState<I>
+{
+    type LeafIterType<'a> =
+        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafIterType<'a>;
+
+    type BlockIterType<'a> =
+        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::BlockIterType<'a>;
+
+    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
+        self.query_state.get_nth_leaf_iter(n)
+    }
+
+    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
+        self.query_state.get_nth_block_iter(n)
+    }
+
+    fn get_leaf_index_by_hash(
+        &self,
+        hash: hotshot_query_service::availability::LeafHash<SeqTypes>,
+    ) -> Option<u64> {
+        self.query_state.get_leaf_index_by_hash(hash)
+    }
+
+    fn get_block_index_by_hash(
+        &self,
+        hash: hotshot_query_service::availability::BlockHash<SeqTypes>,
+    ) -> Option<u64> {
+        self.query_state.get_block_index_by_hash(hash)
+    }
+
+    fn get_txn_index_by_hash(
+        &self,
+        hash: hotshot_query_service::availability::TransactionHash<SeqTypes>,
+    ) -> Option<(u64, u64)> {
+        self.query_state.get_txn_index_by_hash(hash)
+    }
+
+    fn get_block_ids_by_proposer_id(
+        &self,
+        id: &hotshot_types::traits::signature_key::EncodedPublicKey,
+    ) -> Vec<u64> {
+        self.query_state.get_block_ids_by_proposer_id(id)
+    }
+}
+
+impl<
+        I: NodeImplementation<
+            SeqTypes,
+            Storage = MemoryStorage<SeqTypes>,
+            Election = StaticCommittee<SeqTypes>,
+        >,
+    > StatusDataSource for AppState<I>
+{
+    type Error = io::Error;
+
+    fn block_height(&self) -> Result<usize, Self::Error> {
+        self.query_state
+            .block_height()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+    }
+
+    fn mempool_info(&self) -> Result<hotshot_query_service::status::MempoolQueryData, Self::Error> {
+        self.query_state
+            .mempool_info()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+    }
+
+    fn success_rate(&self) -> Result<f64, Self::Error> {
+        self.query_state
+            .success_rate()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+    }
+
+    fn export_metrics(&self) -> Result<String, Self::Error> {
+        self.query_state
+            .export_metrics()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+    }
+}
 
 pub async fn serve<
     I: NodeImplementation<
@@ -31,9 +133,12 @@ pub async fn serve<
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
 
-    let metrics: Box<dyn Metrics> = todo!();
+    let query_data = QueryData::<SeqTypes, ()>::create(storage_path, ())
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let handle = init_handle(metrics).await.clone();
+    let metrics: Box<dyn Metrics> = query_data.metrics();
+
+    let mut handle = init_handle(metrics).await.clone();
 
     // Run consensus.
     handle.start().await;

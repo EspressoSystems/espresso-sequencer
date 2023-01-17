@@ -717,20 +717,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-tungstenite"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6acf7e4a267eecbb127ed696bb2d50572c22ba7f586a646321e1798d8336a1"
-dependencies = [
- "async-std",
- "futures-io",
- "futures-util",
- "log",
- "pin-project-lite 0.2.9",
- "tungstenite 0.18.0",
-]
-
-[[package]]
 name = "asynchronous-codec"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2303,7 +2289,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -2326,60 +2312,14 @@ dependencies = [
  "embed-doc-image",
  "espresso-systems-common 0.4.1",
  "futures",
- "hotshot-centralized-server 0.1.1 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-consensus 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-types 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
+ "hotshot-centralized-server",
+ "hotshot-consensus",
+ "hotshot-types",
+ "hotshot-utils",
  "itertools 0.10.5",
  "jf-primitives",
  "libp2p",
- "libp2p-networking 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "libp2p-swarm-derive",
- "num",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "snafu",
- "tempfile",
- "time 0.3.17",
- "tracing",
- "tracing-unwrap",
-]
-
-[[package]]
-name = "hotshot"
-version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
-dependencies = [
- "ark-bls12-381",
- "ark-ec",
- "ark-serialize",
- "ark-std",
- "async-compatibility-layer",
- "async-lock",
- "async-std",
- "async-trait",
- "async-tungstenite 0.19.0",
- "atomic_store",
- "bimap",
- "bincode",
- "blake3",
- "commit",
- "custom_debug",
- "dashmap",
- "derivative",
- "digest 0.10.6",
- "embed-doc-image",
- "espresso-systems-common 0.4.1",
- "futures",
- "hotshot-centralized-server 0.1.1 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-consensus 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "itertools 0.10.5",
- "jf-primitives",
- "libp2p",
- "libp2p-networking 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "libp2p-networking",
  "libp2p-swarm-derive",
  "num",
  "rand 0.8.5",
@@ -2395,7 +2335,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -2403,29 +2343,8 @@ dependencies = [
  "bincode",
  "commit",
  "futures",
- "hotshot-types 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "libp2p-core",
- "serde",
- "serde_json",
- "snafu",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "hotshot-centralized-server"
-version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
-dependencies = [
- "async-compatibility-layer",
- "async-std",
- "async-trait",
- "bincode",
- "commit",
- "futures",
- "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-types",
+ "hotshot-utils",
  "libp2p-core",
  "serde",
  "serde_json",
@@ -2437,7 +2356,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2447,28 +2366,8 @@ dependencies = [
  "commit",
  "custom_debug",
  "futures",
- "hotshot-types 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "snafu",
- "time 0.3.17",
- "tracing",
-]
-
-[[package]]
-name = "hotshot-consensus"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
-dependencies = [
- "async-compatibility-layer",
- "async-lock",
- "async-std",
- "async-trait",
- "bincode",
- "commit",
- "custom_debug",
- "futures",
- "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-types",
+ "hotshot-utils",
  "snafu",
  "time 0.3.17",
  "tracing",
@@ -2477,7 +2376,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git#831ce7d54f0de295575fafc34d3796d48a17f503"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git?tag=0.0.1#77ced1fe209b4675f189a6d5cacf26a563862560"
 dependencies = [
  "async-std",
  "atomic_store",
@@ -2487,9 +2386,9 @@ dependencies = [
  "custom_debug",
  "derive_more",
  "futures",
- "hotshot 0.3.3 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-types 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
+ "hotshot",
+ "hotshot-types",
+ "hotshot-utils",
  "itertools 0.10.5",
  "prometheus",
  "serde",
@@ -2503,7 +2402,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2522,39 +2421,7 @@ dependencies = [
  "espresso-systems-common 0.4.1",
  "futures",
  "hex_fmt",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
- "snafu",
- "tagged-base64 0.2.4",
- "time 0.3.17",
- "tracing",
-]
-
-[[package]]
-name = "hotshot-types"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
-dependencies = [
- "arbitrary",
- "ark-serialize",
- "ark-std",
- "async-compatibility-layer",
- "async-std",
- "async-trait",
- "async-tungstenite 0.19.0",
- "atomic_store",
- "bincode",
- "blake3",
- "commit",
- "custom_debug",
- "derivative",
- "ed25519-compact",
- "espresso-systems-common 0.4.1",
- "futures",
- "hex_fmt",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-utils",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
@@ -2567,15 +2434,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
-dependencies = [
- "bincode",
-]
-
-[[package]]
-name = "hotshot-utils"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "bincode",
 ]
@@ -3329,7 +3188,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3342,37 +3201,8 @@ dependencies = [
  "derive_builder",
  "either",
  "futures",
- "hotshot-types 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "hotshot-utils 0.1.0 (git+ssh://git@github.com/EspressoSystems/HotShot.git?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a)",
- "libp2p",
- "libp2p-swarm-derive",
- "parking_lot 0.12.1",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snafu",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
-name = "libp2p-networking"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
-dependencies = [
- "async-compatibility-layer",
- "async-lock",
- "async-std",
- "async-trait",
- "bincode",
- "blake3",
- "color-eyre",
- "custom_debug",
- "derive_builder",
- "either",
- "futures",
- "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-types",
+ "hotshot-utils",
  "libp2p",
  "libp2p-swarm-derive",
  "parking_lot 0.12.1",
@@ -5236,10 +5066,10 @@ dependencies = [
  "commit",
  "derive_more",
  "futures",
- "hotshot 0.3.3 (git+https://github.com/EspressoSystems/hotshot)",
- "hotshot-centralized-server 0.1.1 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot",
+ "hotshot-centralized-server",
  "hotshot-query-service",
- "hotshot-types 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-types",
  "jf-primitives",
  "nll",
  "portpicker",
@@ -6405,25 +6235,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "sha-1 0.10.1",
- "thiserror",
- "url",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
-dependencies = [
- "base64",
- "byteorder",
- "bytes 1.3.0",
- "http",
- "httparse",
- "log",
- "rand 0.8.5",
- "sha1 0.10.5",
  "thiserror",
  "url",
  "utf-8",
