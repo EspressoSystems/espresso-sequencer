@@ -2900,6 +2900,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 
 [[package]]
+name = "hermez-adaptor"
+version = "0.1.0"
+dependencies = [
+ "async-compatibility-layer",
+ "async-std",
+ "clap 4.1.1",
+ "ethers",
+ "futures",
+ "surf-disco",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7941,7 +7953,7 @@ version = "0.1.0"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
- "clap 4.0.32",
+ "clap 4.1.1",
  "contract-bindings",
  "ethers",
  "hex",
