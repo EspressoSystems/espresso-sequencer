@@ -30,7 +30,7 @@ struct AppState<
         Election = StaticCommittee<SeqTypes>,
     >,
 > {
-    submit_state: Mutex<HotShotHandle<SeqTypes, I>>,
+    _submit_state: Mutex<HotShotHandle<SeqTypes, I>>,
     query_state: QueryData<SeqTypes, ()>,
 }
 
@@ -138,14 +138,9 @@ pub async fn serve<
 
     let metrics: Box<dyn Metrics> = query_data.metrics();
 
-    let mut handle = init_handle(metrics).await.clone();
-
-    // Run consensus.
+    // Start up handle
+    let handle = init_handle(metrics).await.clone();
     handle.start().await;
-    while let Ok(event) = handle.next_event().await {
-        tracing::info!("EVENT {:?}", event);
-    }
-    tracing::warn!("shutting down");
 
     let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(handle));
 
@@ -153,27 +148,30 @@ pub async fn serve<
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<StateType<I>, ServerError>::new(toml)
+    // Set up submit API
+    let mut submit_api = Api::<StateType<I>, ServerError>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Pass transaction from request body into HotShot handle
-    api.post("submit", |req, state| {
-        async move {
-            state
-                .submit_transaction(SequencerTransaction::Wrapped(
-                    req.body_auto::<Transaction>()?,
-                ))
-                .await
-                .map_err(|err| ServerError {
-                    status: StatusCode::InternalServerError,
-                    message: err.to_string(),
-                })
-        }
-        .boxed()
-    })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    submit_api
+        .post("submit", |req, state| {
+            async move {
+                state
+                    .submit_transaction(SequencerTransaction::Wrapped(
+                        req.body_auto::<Transaction>()?,
+                    ))
+                    .await
+                    .map_err(|err| ServerError {
+                        status: StatusCode::InternalServerError,
+                        message: err.to_string(),
+                    })
+            }
+            .boxed()
+        })
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    app.register_module("api", api)
+    // Register modules in app
+    app.register_module("api", submit_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     Ok(spawn(app.serve(format!("0.0.0.0:{}", port))))
