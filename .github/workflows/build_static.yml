@@ -50,6 +50,7 @@ jobs:
           path: |
             target/x86_64-unknown-linux-musl/release/cdn-server
             target/x86_64-unknown-linux-musl/release/sequencer
+            target/x86_64-unknown-linux-musl/release/hermez-adaptor
 
   static-dockers:
     runs-on: ubuntu-latest
