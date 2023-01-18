@@ -87,6 +87,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/cdn-server
 
+      - name: Generate hermez-adaptor docker metadata
+        uses: docker/metadata-action@v4
+        id: hermez-adaptor
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor
+
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v3
         with:
@@ -106,3 +112,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-server.outputs.tags }}
           labels: ${{ steps.cdn-server.outputs.labels }}
+
+      - name: Build and push hermez-adaptor docker
+        uses: docker/build-push-action@v3
+        with:
+          context: ./
+          file: ./docker/hermez-adaptor.Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.hermez-adaptor.outputs.tags }}
+          labels: ${{ steps.hermez-adaptor.outputs.labels }}
