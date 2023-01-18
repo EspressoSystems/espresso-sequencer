@@ -23,9 +23,11 @@ use crate::{
     },
 };
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
+use futures::stream::BoxStream;
 use hotshot_types::traits::{
     metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey,
 };
+use snafu::Snafu;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -189,9 +191,9 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
     /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
     /// this function.
-    pub fn commit_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.commit_version()?;
-        self.block_storage.commit_version()?;
+    pub async fn commit_version(&mut self) -> Result<(), PersistenceError> {
+        self.leaf_storage.commit_version().await?;
+        self.block_storage.commit_version().await?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
         }
@@ -235,24 +237,25 @@ impl<Types: NodeTypes, UserData> AsMut<UserData> for QueryData<Types, UserData> 
     }
 }
 
+#[derive(Clone, Copy, Debug, Snafu)]
+#[snafu(display("unable to open stream"))]
+pub struct StreamError;
+
 impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Types, UserData> {
+    type Error = StreamError;
+
     type LeafIterType<'a> = Iter<'a, LeafQueryData<Types>> where UserData: 'a;
     type BlockIterType<'a> = Iter<'a, BlockQueryData<Types>> where UserData: 'a;
 
+    type LeafStreamType = BoxStream<'static, LeafQueryData<Types>>;
+    type BlockStreamType = BoxStream<'static, BlockQueryData<Types>>;
+
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-        let mut iter = self.leaf_storage.iter();
-        if n > 0 {
-            iter.nth(n - 1);
-        }
-        iter
+        self.leaf_storage.iter_from(n)
     }
 
     fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-        let mut iter = self.block_storage.iter();
-        if n > 0 {
-            iter.nth(n - 1);
-        }
-        iter
+        self.block_storage.iter_from(n)
     }
 
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64> {
@@ -272,6 +275,14 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
             .get(id)
             .cloned()
             .unwrap_or_default()
+    }
+
+    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
+        self.leaf_storage.subscribe(height).ok_or(StreamError)
+    }
+
+    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
+        self.block_storage.subscribe(height).ok_or(StreamError)
     }
 }
 
@@ -358,6 +369,7 @@ mod test {
     use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
+    use futures::StreamExt;
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::HashSet;
     use std::time::Duration;
@@ -440,20 +452,29 @@ mod test {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
+        let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap().enumerate() };
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
             let txn_hash = txn.commit();
             hotshot.submit_transaction(txn).await.unwrap();
-            while get_non_empty_blocks(&qd).await.len() < nonce as usize + 1 {
-                tracing::info!("waiting for block {} to be finalized", nonce);
-                sleep(Duration::from_secs(1)).await;
-            }
+
+            // Wait for the transaction to be finalized.
+            let (i, block) = loop {
+                let (i, block) = blocks.next().await.unwrap();
+                if !block.is_empty() {
+                    break (i, block);
+                }
+            };
+
+            assert_eq!(block.iter().collect::<Vec<_>>(), vec![txn_hash]);
             assert_eq!(
-                get_non_empty_blocks(&qd).await[nonce as usize]
-                    .1
-                    .iter()
-                    .collect::<Vec<_>>(),
-                vec![txn_hash]
+                qd.read()
+                    .await
+                    .get_nth_block_iter(i)
+                    .next()
+                    .unwrap()
+                    .unwrap(),
+                block
             );
             validate(&qd).await;
         }
@@ -481,7 +502,7 @@ mod test {
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         hotshot.submit_transaction(txn.clone()).await.unwrap();
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(2)).await;
         {
             assert_eq!(
                 qd.read().await.mempool_info().unwrap(),
@@ -494,7 +515,7 @@ mod test {
 
         // Submitting the same transaction should not affect the mempool.
         hotshot.submit_transaction(txn.clone()).await.unwrap();
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(2)).await;
         {
             assert_eq!(
                 qd.read().await.mempool_info().unwrap(),
@@ -506,10 +527,12 @@ mod test {
         }
 
         // Start consensus and wait for the transaction to be finalized.
+        let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap() };
         network.start().await;
-        while get_non_empty_blocks(&qd).await.is_empty() {
-            tracing::info!("waiting for block to be finalized");
-            sleep(Duration::from_secs(1)).await;
+        loop {
+            if !blocks.next().await.unwrap().is_empty() {
+                break;
+            }
         }
 
         {

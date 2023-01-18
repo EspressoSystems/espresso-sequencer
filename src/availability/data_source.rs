@@ -11,23 +11,33 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash};
+use futures::stream::Stream;
 use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
 use std::error::Error;
 use std::fmt::Debug;
 
 pub trait AvailabilityDataSource<Types: NodeTypes> {
+    type Error: Error + Debug;
+
     type LeafIterType<'a>: 'a + Iterator<Item = Option<LeafQueryData<Types>>>
     where
         Self: 'a;
     type BlockIterType<'a>: 'a + Iterator<Item = Option<BlockQueryData<Types>>>
     where
         Self: 'a;
+
+    type LeafStreamType: Stream<Item = LeafQueryData<Types>> + Send;
+    type BlockStreamType: Stream<Item = BlockQueryData<Types>> + Send;
+
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_>;
     fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_>;
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64>;
     fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64>;
     fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)>;
     fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64>;
+
+    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error>;
+    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error>;
 }
 
 pub trait UpdateAvailabilityData<Types: NodeTypes> {
