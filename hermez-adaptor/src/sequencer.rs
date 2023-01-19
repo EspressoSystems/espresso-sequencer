@@ -282,6 +282,10 @@ async fn send<T: Detokenize>(
             return None;
         }
     };
+    if receipt.status != Some(1.into()) {
+        tracing::error!("transaction reverted");
+        return None;
+    }
 
     // If a transaction is mined and we get a receipt for it, the block number should _always_ be
     // set. If it is not, something has gone horribly wrong with the RPC.
