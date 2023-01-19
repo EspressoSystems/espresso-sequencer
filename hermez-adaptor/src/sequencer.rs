@@ -17,14 +17,14 @@ use futures::{
 };
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::{Block, SeqTypes};
-use tide_disco::error::ServerError;
 use zkevm::{hermez, ZkEvm};
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
+type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 pub async fn run(opt: &Options) {
     // Connect to the HotShot query service to stream sequenced blocks.
-    let hotshot = surf_disco::Client::<ServerError>::new(opt.sequencer_url.clone());
+    let hotshot = HotShotClient::new(opt.sequencer_url.clone());
     hotshot.connect(None).await;
 
     // Connect to the layer one rollup and matic contracts.
@@ -92,7 +92,7 @@ async fn sequence(
     zkevm: &ZkEvm,
     from: u64,
     max_batches: u64,
-    hotshot: surf_disco::Client<ServerError>,
+    hotshot: HotShotClient,
     rollup: ProofOfEfficiency<Middleware>,
 ) {
     let mut blocks = match hotshot

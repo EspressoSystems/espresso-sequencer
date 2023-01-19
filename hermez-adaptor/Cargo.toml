@@ -13,6 +13,5 @@ futures = "0.3"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service", tag = "0.0.1" }
 sequencer = { path = "../sequencer" }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 tracing = "0.1"
 zkevm = { path = "../zkevm" }

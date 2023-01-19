@@ -2912,7 +2912,6 @@ dependencies = [
  "hotshot-query-service",
  "sequencer",
  "surf-disco",
- "tide-disco",
  "tracing",
  "zkevm",
 ]
