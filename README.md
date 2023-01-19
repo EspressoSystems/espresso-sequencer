@@ -4,6 +4,7 @@
 
 ## Development
 
+- Obtain code: `git clone --recursive git@github.com:EspressoSystems/espresso-sequencer`.
 - Make sure [nix](https://nixos.org/download.html) is installed.
 - Activate the enviorment with `nix-shell`, or `nix develop`, or `direnv allow`
   if using [direnv](https://direnv.net/).
@@ -25,9 +26,13 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 ### Running with Docker
 
-To get the latest images: `docker-compose pull`
+To get the latest images: `just pull`
 
-To start the demo: `docker-compose up`
+To start the demo: `just demo`
+
+To start the demo in the background: `just demo-background`. This can be useful because the command should exit sucessfully only once the demo is running.
+
+To stop the demo: `just down`
 
 ### Running natively
 

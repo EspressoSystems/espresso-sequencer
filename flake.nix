@@ -87,6 +87,7 @@
                 cargo-edit
                 cargo-watch
                 cargo-sort
+                just
 
                 # Tools
                 nixWithFlakes
