@@ -72,30 +72,22 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppSt
 }
 
 impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
-    type Error = io::Error;
+    type Error = <QueryData<SeqTypes, ()> as StatusDataSource>::Error;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
-        self.query_state
-            .block_height()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        self.query_state.block_height()
     }
 
     fn mempool_info(&self) -> Result<hotshot_query_service::status::MempoolQueryData, Self::Error> {
-        self.query_state
-            .mempool_info()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        self.query_state.mempool_info()
     }
 
     fn success_rate(&self) -> Result<f64, Self::Error> {
-        self.query_state
-            .success_rate()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        self.query_state.success_rate()
     }
 
     fn export_metrics(&self) -> Result<String, Self::Error> {
-        self.query_state
-            .export_metrics()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+        self.query_state.export_metrics()
     }
 }
 
