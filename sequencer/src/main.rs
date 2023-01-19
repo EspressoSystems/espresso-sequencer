@@ -21,6 +21,14 @@ struct Args {
     /// URL of the HotShot CDN.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
     cdn_url: Url,
+
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    storage_path: String,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    reset_store: bool,
 }
 
 #[async_std::main]
@@ -50,10 +58,16 @@ async fn main() {
     let init_handle: HandleFromMetrics<_> =
         Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
 
-    // TODO: obvious placeholder
-    let storage_path = Path::new("obvious placeholder");
+    let storage_path = Path::new(&args.storage_path);
 
-    let query_data = QueryData::create(storage_path, ()).expect("Failed to create query data");
+    let query_data = {
+        if args.reset_store {
+            QueryData::create(storage_path, ())
+        } else {
+            QueryData::open(storage_path, ())
+        }
+    }
+    .expect("Failed to initialize query data storage");
 
     // Inner error comes from spawn, outer error comes from anything before that
     serve(query_data, init_handle, args.port)
