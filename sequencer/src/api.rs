@@ -151,7 +151,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Register modules in app
-    app.register_module("api", submit_api)
+    app.register_module("submit", submit_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
         .register_module("availability", availability_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
@@ -207,7 +207,7 @@ mod test {
         client.connect(None).await;
 
         client
-            .post::<()>("api/submit")
+            .post::<()>("submit/submit")
             .body_json(&txn)
             .unwrap()
             .send()
