@@ -49,6 +49,7 @@ async fn main() {
     let init_handle: HandleFromMetrics<_> =
         Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
 
+    // TODO: obvious placeholder
     let storage_path = Path::new("obvious placeholder");
 
     // Inner error comes from spawn, outer error comes from anything before that

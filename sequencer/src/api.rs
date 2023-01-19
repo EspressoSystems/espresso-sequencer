@@ -12,9 +12,10 @@ use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
 use hotshot_query_service::{
-    availability::AvailabilityDataSource,
+    availability::{self, AvailabilityDataSource},
     data_source::{QueryData, UpdateDataSource},
-    status::StatusDataSource,
+    status::{self, StatusDataSource},
+    Error,
 };
 use hotshot_types::traits::metrics::Metrics;
 use std::{io, path::Path};
@@ -30,8 +31,8 @@ struct AppState<
         Election = StaticCommittee<SeqTypes>,
     >,
 > {
-    _submit_state: Mutex<HotShotHandle<SeqTypes, I>>,
-    query_state: QueryData<SeqTypes, ()>,
+    pub submit_state: HotShotHandle<SeqTypes, I>,
+    pub query_state: QueryData<SeqTypes, ()>,
 }
 
 impl<
@@ -131,32 +132,38 @@ pub async fn serve<
     port: u16,
     storage_path: &Path,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
-    type StateType<I> = Mutex<HotShotHandle<SeqTypes, I>>;
+    type StateType<I> = Mutex<AppState<I>>;
 
-    let query_data = QueryData::<SeqTypes, ()>::create(storage_path, ())
+    let query_state = QueryData::<SeqTypes, ()>::create(storage_path, ())
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let metrics: Box<dyn Metrics> = query_data.metrics();
+    let metrics: Box<dyn Metrics> = query_state.metrics();
 
     // Start up handle
     let handle = init_handle(metrics).await.clone();
     handle.start().await;
 
-    let mut app = App::<StateType<I>, ServerError>::with_state(Mutex::new(handle));
+    let state = Mutex::new(AppState::<I> {
+        submit_state: handle,
+        query_state,
+    });
+
+    let mut app = App::<StateType<I>, ServerError>::with_state(state);
 
     // Include API specification in binary
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    // Set up submit API
+    // Initialize submit API
     let mut submit_api = Api::<StateType<I>, ServerError>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    // Pass transaction from request body into HotShot handle
+    // Define submit route for submit API
     submit_api
         .post("submit", |req, state| {
             async move {
                 state
+                    .submit_state
                     .submit_transaction(SequencerTransaction::Wrapped(
                         req.body_auto::<Transaction>()?,
                     ))
@@ -170,9 +177,20 @@ pub async fn serve<
         })
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
+    // Initialize availability and status APIs
+    let mut availability_api =
+        availability::define_api::<StateType<I>, SeqTypes>(&Default::default())
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let mut status_api = status::define_api::<StateType<I>>(&Default::default())
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
     // Register modules in app
     app.register_module("api", submit_api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+        .register_module("availability", availability_api)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+        .register_module("status", status_api)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
     Ok(spawn(app.serve(format!("0.0.0.0:{}", port))))
 }
@@ -212,6 +230,7 @@ mod test {
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
 
+        // TODO: obvious placeholder
         let storage_path = Path::new("obvious placeholder");
 
         serve(init_handle, port, storage_path).await.unwrap();
