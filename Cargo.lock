@@ -726,16 +726,16 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.19.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6acf7e4a267eecbb127ed696bb2d50572c22ba7f586a646321e1798d8336a1"
+checksum = "4b750efd83b7e716a015eed5ebb583cda83c52d9b24a8f0125e5c48c3313c9f8"
 dependencies = [
  "async-std",
  "futures-io",
  "futures-util",
  "log",
  "pin-project-lite 0.2.9",
- "tungstenite 0.18.0",
+ "tungstenite 0.17.3",
 ]
 
 [[package]]
@@ -2906,9 +2906,15 @@ dependencies = [
  "async-compatibility-layer",
  "async-std",
  "clap 4.1.1",
+ "contract-bindings",
  "ethers",
  "futures",
+ "hotshot-query-service",
+ "sequencer",
  "surf-disco",
+ "tide-disco",
+ "tracing",
+ "zkevm",
 ]
 
 [[package]]
@@ -3005,7 +3011,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3015,7 +3021,7 @@ dependencies = [
  "async-lock",
  "async-std",
  "async-trait",
- "async-tungstenite 0.19.0",
+ "async-tungstenite 0.18.0",
  "atomic_store",
  "bimap",
  "bincode",
@@ -3051,7 +3057,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3072,7 +3078,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3090,9 +3096,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-query-service"
+version = "0.0.1"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service?tag=0.0.1#77ced1fe209b4675f189a6d5cacf26a563862560"
+dependencies = [
+ "async-std",
+ "atomic_store",
+ "bincode",
+ "clap 4.1.1",
+ "commit",
+ "custom_debug",
+ "derive_more",
+ "futures",
+ "hotshot",
+ "hotshot-types",
+ "hotshot-utils",
+ "itertools 0.10.5",
+ "prometheus",
+ "serde",
+ "snafu",
+ "spin_sleep",
+ "tide-disco",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -3100,7 +3132,7 @@ dependencies = [
  "async-compatibility-layer",
  "async-std",
  "async-trait",
- "async-tungstenite 0.19.0",
+ "async-tungstenite 0.18.0",
  "atomic_store",
  "bincode",
  "blake3",
@@ -3124,7 +3156,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "bincode",
 ]
@@ -3986,7 +4018,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=a154ee55a97ec9522fc043e9b7f6e47557f7956a#a154ee55a97ec9522fc043e9b7f6e47557f7956a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -5364,6 +5396,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "prometheus"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "449811d15fbdf5ceb5c1144416066429cf82316e2ec8ce0c1f6f8a02e7bbcf8c"
+dependencies = [
+ "cfg-if",
+ "fnv",
+ "lazy_static",
+ "memchr",
+ "parking_lot 0.12.1",
+ "protobuf",
+ "thiserror",
+]
+
+[[package]]
 name = "prometheus-client"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5453,6 +5500,12 @@ dependencies = [
  "bytes 1.3.0",
  "prost",
 ]
+
+[[package]]
+name = "protobuf"
+version = "2.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "quick-error"
@@ -6242,23 +6295,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha-1"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.6",
+]
+
+[[package]]
 name = "sha1"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1da05c97445caa12d05e848c4a4fcbbea29e748ac28f7e80e9b010392063770"
 dependencies = [
  "sha1_smol",
-]
-
-[[package]]
-name = "sha1"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f04293dc80c3993519f2d7f6f511707ee7094fe0c6d3406feb330cdb3540eba3"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest 0.10.6",
 ]
 
 [[package]]
@@ -6507,7 +6560,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "sha-1",
+ "sha-1 0.9.8",
 ]
 
 [[package]]
@@ -6515,6 +6568,16 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+
+[[package]]
+name = "spin_sleep"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cafa7900db085f4354dbc7025e25d7a839a14360ea13b5fc4fd717f2d3b23134"
+dependencies = [
+ "once_cell",
+ "winapi",
+]
 
 [[package]]
 name = "spinning_top"
@@ -6589,7 +6652,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "sha1 0.6.1",
+ "sha1",
  "syn",
 ]
 
@@ -6942,7 +7005,7 @@ dependencies = [
  "pin-project",
  "serde",
  "serde_json",
- "sha-1",
+ "sha-1 0.9.8",
  "tide",
 ]
 
@@ -7285,7 +7348,7 @@ dependencies = [
  "input_buffer",
  "log",
  "rand 0.8.5",
- "sha-1",
+ "sha-1 0.9.8",
  "thiserror",
  "url",
  "utf-8",
@@ -7304,7 +7367,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "sha-1",
+ "sha-1 0.9.8",
  "thiserror",
  "url",
  "utf-8",
@@ -7312,9 +7375,9 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.18.0"
+version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
+checksum = "e27992fd6a8c29ee7eef28fc78349aa244134e10ad447ce3b9f0ac0ed0fa4ce0"
 dependencies = [
  "base64 0.13.1",
  "byteorder",
@@ -7323,7 +7386,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "sha1 0.10.5",
+ "sha-1 0.10.1",
  "thiserror",
  "url",
  "utf-8",
@@ -7956,7 +8019,6 @@ dependencies = [
  "clap 4.1.1",
  "contract-bindings",
  "ethers",
- "hex",
  "sequencer",
  "tracing",
  "url",

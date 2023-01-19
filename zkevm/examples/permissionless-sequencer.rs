@@ -39,11 +39,11 @@ use ethers::{
     contract::EthEvent,
     prelude::*,
     signers::coins_bip39::English,
-    types::transaction::eip2718::TypedTransaction,
     utils::{format_ether, format_units},
 };
 use std::time::Duration;
 use url::Url;
+use zkevm::{hermez::encode_transactions, EvmTransaction};
 
 /// Amount in WEI to transfer for the transfer demo.
 const TRANSFER_AMOUNT: U256 = U256([1, 0, 0, 0]);
@@ -175,31 +175,6 @@ async fn force_batch<M: Middleware>(
     event.num_batch
 }
 
-/// Encode transactions as expected by Hermez.
-///
-/// Hermez uses a non-standard EVM transaction encoding which mixes the legacy (for the base
-/// transaction) and EIP-1559 (for the signature) encodings. This implementation is a direct port
-/// from Go of the `state.helper.EncodeTransactions` function in the Hermez zkEVM node.
-fn encode_transactions(txs: &[(TypedTransaction, Signature)]) -> Bytes {
-    txs.iter()
-        .flat_map(|(tx, sig)| {
-            let Signature { v, r, s } = sig;
-            let sign = 1 - (v & 1);
-
-            let tx_coded_rlp = tx.rlp();
-
-            let new_v = 27 + sign;
-            let new_r_padded = format!("{:64x}", r);
-            let new_s_padded = format!("{:64x}", s);
-            let new_v_padded = format!("{:2x}", new_v);
-            let sig_bytes =
-                hex::decode(format!("{}{}{}", new_r_padded, new_s_padded, new_v_padded)).unwrap();
-            tx_coded_rlp.into_iter().chain(sig_bytes)
-        })
-        .collect::<Vec<_>>()
-        .into()
-}
-
 #[async_std::main]
 async fn main() {
     setup_logging();
@@ -273,10 +248,10 @@ async fn main() {
         .sign_transaction(&transfer)
         .await
         .unwrap();
-    let transfer_bytes = encode_transactions(&[(transfer.clone(), signature)]);
-    let transfer_hash = transfer.hash(&signature);
+    let transfer = EvmTransaction::new(transfer, signature);
+    let transfer_bytes = encode_transactions([&transfer]);
+    let transfer_hash = transfer.hash();
     tracing::info!("L2 transfer: {:?}", transfer);
-    tracing::info!("Signature: {}", signature);
     tracing::info!("Encoded: {}", transfer_bytes);
     tracing::info!("Hash: {:#x}", transfer_hash);
 

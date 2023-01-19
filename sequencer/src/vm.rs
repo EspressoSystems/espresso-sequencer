@@ -1,13 +1,19 @@
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use derive_more::From;
+use serde::{Deserialize, Serialize};
 
 use crate::transaction::ApplicationTransaction;
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct VmId(pub(crate) u64);
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, From)]
+pub struct VmId(pub(crate) u64);
 
-pub(crate) trait Vm {
-    type Transaction: DeserializeOwned + Serialize + Sync + Send;
+pub trait Vm {
+    type Transaction: VmTransaction;
     fn id() -> VmId;
+}
+
+pub trait VmTransaction: Sized + Send + Sync {
+    fn encode(&self) -> Vec<u8>;
+    fn decode(bytes: &[u8]) -> Option<Self>;
 }
 
 #[derive(Clone, Debug)]
