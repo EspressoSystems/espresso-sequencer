@@ -168,6 +168,7 @@ mod test {
     use portpicker::pick_unused_port;
     use std::path::Path;
     use surf_disco::Client;
+    use tempdir::TempDir;
     use tide_disco::error::ServerError;
 
     use super::HandleFromMetrics;
@@ -189,8 +190,8 @@ mod test {
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
 
-        // TODO: obvious placeholder
-        let storage_path = Path::new("obvious placeholder");
+        let tmp_dir = TempDir::new("query_storage").unwrap();
+        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
 
         let query_data = QueryData::create(storage_path, ()).unwrap();
 
