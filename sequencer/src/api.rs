@@ -19,7 +19,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::traits::metrics::Metrics;
 use std::{io, path::Path};
-use tide_disco::{error::ServerError, Api, App, StatusCode};
+use tide_disco::{Api, App};
 
 pub type HandleFromMetrics<I> =
     Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
@@ -148,14 +148,14 @@ pub async fn serve<
         query_state,
     });
 
-    let mut app = App::<StateType<I>, ServerError>::with_state(state);
+    let mut app = App::<StateType<I>, hotshot_query_service::Error>::with_state(state);
 
     // Include API specification in binary
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Initialize submit API
-    let mut submit_api = Api::<StateType<I>, ServerError>::new(toml)
+    let mut submit_api = Api::<StateType<I>, hotshot_query_service::Error>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Define submit route for submit API
@@ -165,23 +165,20 @@ pub async fn serve<
                 state
                     .submit_state
                     .submit_transaction(SequencerTransaction::Wrapped(
-                        req.body_auto::<Transaction>()?,
+                        req.body_auto::<Transaction>()
+                            .map_err(|err| Error::internal(err.to_string()))?,
                     ))
                     .await
-                    .map_err(|err| ServerError {
-                        status: StatusCode::InternalServerError,
-                        message: err.to_string(),
-                    })
+                    .map_err(|err| Error::internal(err.to_string()))
             }
             .boxed()
         })
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Initialize availability and status APIs
-    let mut availability_api =
-        availability::define_api::<StateType<I>, SeqTypes>(&Default::default())
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-    let mut status_api = status::define_api::<StateType<I>>(&Default::default())
+    let availability_api = availability::define_api::<StateType<I>, SeqTypes>(&Default::default())
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let status_api = status::define_api::<StateType<I>>(&Default::default())
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Register modules in app
