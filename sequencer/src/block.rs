@@ -71,7 +71,10 @@ impl Block {
     }
 
     /// Visit the valid transactions for `V` in this block.
-    pub fn vm_transactions<V: Vm>(&self) -> impl Iterator<Item = V::Transaction> + '_ {
-        self.transactions().filter_map(|txn| txn.as_vm::<V>())
+    pub fn vm_transactions<'a, V: Vm>(
+        &'a self,
+        vm: &'a V,
+    ) -> impl Iterator<Item = V::Transaction> + 'a {
+        self.transactions().filter_map(|txn| txn.as_vm(vm))
     }
 }

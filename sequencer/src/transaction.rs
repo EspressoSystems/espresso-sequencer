@@ -14,16 +14,8 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    #[cfg(test)]
-    pub(crate) fn new(vm: VmId, payload: Vec<u8>) -> Self {
+    pub fn new(vm: VmId, payload: Vec<u8>) -> Self {
         Self { vm, payload }
-    }
-
-    pub fn wrap<V: Vm>(vm_txn: &V::Transaction) -> Self {
-        Self {
-            vm: V::id(),
-            payload: vm_txn.encode(),
-        }
     }
 
     pub fn vm(&self) -> VmId {
@@ -34,8 +26,8 @@ impl Transaction {
         &self.payload
     }
 
-    pub fn as_vm<V: Vm>(&self) -> Option<V::Transaction> {
-        if self.vm() == V::id() {
+    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
+        if self.vm() == vm.id() {
             V::Transaction::decode(self.payload())
         } else {
             None
@@ -104,10 +96,10 @@ impl Committable for SequencerTransaction {
 }
 
 impl SequencerTransaction {
-    pub fn as_vm<V: Vm>(&self) -> Option<V::Transaction> {
+    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
         match self {
             Self::Genesis(_) => None,
-            Self::Wrapped(t) => t.as_vm::<V>(),
+            Self::Wrapped(t) => t.as_vm(vm),
         }
     }
 }

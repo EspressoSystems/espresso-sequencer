@@ -85,10 +85,11 @@ pub async fn run(opt: &Options) {
         }
     };
 
-    sequence(from, max, hotshot, rollup).await;
+    sequence(&opt.zkevm(), from, max, hotshot, rollup).await;
 }
 
 async fn sequence(
+    zkevm: &ZkEvm,
     from: u64,
     max_batches: u64,
     hotshot: surf_disco::Client<ServerError>,
@@ -145,18 +146,24 @@ async fn sequence(
         tracing::info!("sequencing {}/{} blocks", to_sequence.len(), max_batches);
 
         // Sequence the blocks.
-        sequence_batches(&rollup, to_sequence.iter().map(|block| block.block())).await;
+        sequence_batches(
+            zkevm,
+            &rollup,
+            to_sequence.iter().map(|block| block.block()),
+        )
+        .await;
     }
 }
 
 async fn sequence_batches(
+    zkevm: &ZkEvm,
     rollup: &ProofOfEfficiency<Middleware>,
     blocks: impl IntoIterator<Item = &Block>,
 ) {
     // Convert the blocks to byte-encoded EVM transactions.
     let blocks = blocks
         .into_iter()
-        .map(|block| hermez::encode_transactions(block.vm_transactions::<ZkEvm>()));
+        .map(|block| hermez::encode_transactions(block.vm_transactions(zkevm)));
 
     // Send the batches to L1. Collect the [ForcedBatchData] that we will need to later sequence
     // each batch that we send.

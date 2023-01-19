@@ -3,6 +3,7 @@ use clap::Parser;
 use ethers::prelude::*;
 use futures::join;
 use surf_disco::Url;
+use zkevm::ZkEvm;
 
 mod json_rpc;
 mod sequencer;
@@ -17,13 +18,19 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
     l1_provider: Url,
 
-    /// Chain ID for layer 1 Ethereum
+    /// Chain ID for layer 1 Ethereum.
     ///
     /// This can be specified explicitly as a sanity check. No transactions will be executed if the
     /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
     /// the RPC will be used.
     #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
     l1_chain_id: Option<u64>,
+
+    /// Chain ID for layer 2 EVM.
+    ///
+    /// This will be used as the VM ID for layer 2 EVM transactions within the HotShot sequencer.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L2_CHAIN_ID", default_value = "1001")]
+    l2_chain_id: u64,
 
     /// Address of Hermez rollup contract on layer 1.
     #[clap(long, env = "ESPRESSO_ZKEVM_ROLLUP_ADDRESS")]
@@ -48,6 +55,14 @@ pub struct Options {
         default_value = "8545"
     )]
     port: u16,
+}
+
+impl Options {
+    fn zkevm(&self) -> ZkEvm {
+        ZkEvm {
+            chain_id: self.l2_chain_id,
+        }
+    }
 }
 
 #[async_std::main]

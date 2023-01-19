@@ -43,12 +43,14 @@ impl EvmTransaction {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ZkEvm;
+pub struct ZkEvm {
+    pub chain_id: u64,
+}
 
 impl Vm for ZkEvm {
     type Transaction = EvmTransaction;
 
-    fn id() -> VmId {
-        1001.into()
+    fn id(&self) -> VmId {
+        self.chain_id.into()
     }
 }

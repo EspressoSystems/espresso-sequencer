@@ -205,7 +205,7 @@ mod test {
         txn: &ApplicationTransaction,
     ) -> SequencerTransaction {
         let tx = SequencerTransaction::Wrapped(Transaction::new(
-            TestVm::id(),
+            TestVm::default().id(),
             bincode::serialize(txn).unwrap(),
         ));
 
