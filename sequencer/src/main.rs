@@ -1,5 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use hotshot_query_service::data_source::QueryData;
 use sequencer::{
     api::{serve, HandleFromMetrics},
     init_node, Block, ChainVariables, GenesisTransaction,
@@ -52,8 +53,10 @@ async fn main() {
     // TODO: obvious placeholder
     let storage_path = Path::new("obvious placeholder");
 
+    let query_data = QueryData::create(storage_path, ()).expect("Failed to create query data");
+
     // Inner error comes from spawn, outer error comes from anything before that
-    serve(init_handle, args.port, storage_path)
+    serve(query_data, init_handle, args.port)
         .await
         .expect("Failed to serve API")
         .await

@@ -16,7 +16,7 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::traits::metrics::Metrics;
-use std::{io, path::Path};
+use std::io;
 use tide_disco::{Api, App};
 
 pub type HandleFromMetrics<I> =
@@ -100,14 +100,11 @@ impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
 }
 
 pub async fn serve<I: NodeImplementation<SeqTypes>>(
+    query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-    storage_path: &Path,
 ) -> io::Result<JoinHandle<io::Result<()>>> {
     type StateType<I> = Mutex<AppState<I>>;
-
-    let query_state = QueryData::<SeqTypes, ()>::create(storage_path, ())
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
 
@@ -174,6 +171,7 @@ mod test {
         Node, SeqTypes,
     };
     use hotshot::traits::implementations::MemoryNetwork;
+    use hotshot_query_service::data_source::QueryData;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
     use std::path::Path;
@@ -202,7 +200,9 @@ mod test {
         // TODO: obvious placeholder
         let storage_path = Path::new("obvious placeholder");
 
-        serve(init_handle, port, storage_path).await.unwrap();
+        let query_data = QueryData::create(storage_path, ()).unwrap();
+
+        serve(query_data, init_handle, port).await.unwrap();
 
         client.connect(None).await;
 
