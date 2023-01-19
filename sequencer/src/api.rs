@@ -7,8 +7,6 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use futures::{future::BoxFuture, FutureExt};
-use hotshot::traits::election::static_committee::StaticCommittee;
-use hotshot::traits::implementations::MemoryStorage;
 use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
 use hotshot_query_service::{
@@ -24,25 +22,12 @@ use tide_disco::{Api, App};
 pub type HandleFromMetrics<I> =
     Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
 
-struct AppState<
-    I: NodeImplementation<
-        SeqTypes,
-        Storage = MemoryStorage<SeqTypes>,
-        Election = StaticCommittee<SeqTypes>,
-    >,
-> {
+struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: HotShotHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, ()>,
 }
 
-impl<
-        I: NodeImplementation<
-            SeqTypes,
-            Storage = MemoryStorage<SeqTypes>,
-            Election = StaticCommittee<SeqTypes>,
-        >,
-    > AvailabilityDataSource<SeqTypes> for AppState<I>
-{
+impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppState<I> {
     type LeafIterType<'a> =
         <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafIterType<'a>;
 
@@ -86,14 +71,7 @@ impl<
     }
 }
 
-impl<
-        I: NodeImplementation<
-            SeqTypes,
-            Storage = MemoryStorage<SeqTypes>,
-            Election = StaticCommittee<SeqTypes>,
-        >,
-    > StatusDataSource for AppState<I>
-{
+impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
     type Error = io::Error;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
@@ -121,13 +99,7 @@ impl<
     }
 }
 
-pub async fn serve<
-    I: NodeImplementation<
-        SeqTypes,
-        Storage = MemoryStorage<SeqTypes>,
-        Election = StaticCommittee<SeqTypes>,
-    >,
->(
+pub async fn serve<I: NodeImplementation<SeqTypes>>(
     init_handle: HandleFromMetrics<I>,
     port: u16,
     storage_path: &Path,
