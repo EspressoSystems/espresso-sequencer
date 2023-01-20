@@ -5,7 +5,10 @@ use sequencer::{
     api::{serve, HandleFromMetrics},
     init_node, Block, ChainVariables, GenesisTransaction,
 };
-use std::{net::ToSocketAddrs, path::Path};
+use std::{
+    net::ToSocketAddrs,
+    path::{Path, PathBuf},
+};
 use url::Url;
 
 #[derive(Parser)]
@@ -24,7 +27,7 @@ struct Args {
 
     /// Storage path for HotShot query service data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    storage_path: String,
+    storage_path: PathBuf,
 
     /// Create new query storage instead of opening existing one.
     #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
