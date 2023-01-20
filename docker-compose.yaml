@@ -18,6 +18,8 @@ services:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -26,6 +28,8 @@ services:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -34,6 +38,8 @@ services:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -42,6 +48,8 @@ services:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -50,6 +58,8 @@ services:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
 
   # TODO: enable hermez adaptor once it's main function doesn't exit.
   # hermez-adaptor:
