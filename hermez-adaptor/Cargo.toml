@@ -15,3 +15,7 @@ sequencer = { path = "../sequencer" }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tracing = "0.1"
 zkevm = { path = "../zkevm" }
+
+[dev-dependencies]
+commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }

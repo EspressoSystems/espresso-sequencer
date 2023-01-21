@@ -17,6 +17,7 @@ use futures::{
 };
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::{Block, SeqTypes};
+use surf_disco::Url;
 use zkevm::{hermez, ZkEvm};
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
@@ -28,7 +29,7 @@ pub async fn run(opt: &Options) {
     hotshot.connect(None).await;
 
     // Connect to the layer one rollup and matic contracts.
-    let Some(l1) = connect_l1(opt) else {
+    let Some(l1) = connect_l1(opt).await else {
         tracing::error!("unable to connect to L1, sequencer task exiting");
         return;
     };
@@ -244,7 +245,7 @@ async fn sequence_batches(
             ForcedBatchData {
                 transactions,
                 global_exit_root: event.last_global_exit_root,
-                min_forced_timestamp: block.timestamp.try_into().unwrap(),
+                min_forced_timestamp: block.timestamp.as_u64(),
             }
         })
         .collect::<Vec<_>>()
@@ -295,27 +296,236 @@ async fn send<T: Detokenize>(
     Some((receipt, block_number.as_u64()))
 }
 
-fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
-    let provider = match Provider::try_from(opt.l1_provider.to_string()) {
+async fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
+    connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
+}
+
+async fn connect_rpc(
+    provider: &Url,
+    mnemonic: &str,
+    chain_id: Option<u64>,
+) -> Option<Arc<Middleware>> {
+    let provider = match Provider::try_from(provider.to_string()) {
         Ok(provider) => provider,
         Err(err) => {
-            tracing::error!("error connecting to L1 RPC: {}", err);
+            tracing::error!("error connecting to RPC {}: {}", provider, err);
             return None;
         }
     };
+    let chain_id = match chain_id {
+        Some(id) => id,
+        None => match provider.get_chainid().await {
+            Ok(id) => id.as_u64(),
+            Err(err) => {
+                tracing::error!("error getting chain ID: {}", err);
+                return None;
+            }
+        },
+    };
     let wallet = match MnemonicBuilder::<English>::default()
-        .phrase(opt.sequencer_mnemonic.as_str())
+        .phrase(mnemonic)
         .build()
     {
         Ok(wallet) => wallet,
         Err(err) => {
-            tracing::error!("error opening sequencer wallet: {}", err);
+            tracing::error!("error opening wallet: {}", err);
             return None;
         }
     };
+    let wallet = wallet.with_chain_id(chain_id);
     let address = wallet.address();
     Some(Arc::new(NonceManagerMiddleware::new(
         SignerMiddleware::new(provider, wallet),
         address,
     )))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
+    use commit::Committable;
+    use futures::future::join_all;
+    use hotshot_types::traits::block_contents::Block as _;
+    use sequencer::{State, Vm};
+    use std::env;
+    use std::time::Duration;
+    use zkevm::EvmTransaction;
+
+    // This test is ignored pending some better test infrastructure (e.g. mock L1 contracts). To run
+    // it anyways, use `--ignored`, as in `cargo test --release -p hermez-adaptor -- --ignored`.
+    // That will connect to the local demo of the zkEVM system, so you'll need to be running
+    // `just demo` while you run the test, and you should not simultaneously run any other tests
+    // which also use the same demo.
+    #[ignore]
+    #[async_std::test]
+    async fn test_sequencer_task() {
+        setup_logging();
+        setup_backtrace();
+
+        // Get test setup from environment.
+        let l1_chain_id = env::var("ESPRESSO_ZKEVM_L1_CHAIN_ID")
+            .ok()
+            .map(|s| s.parse().unwrap());
+        let l2_chain_id = env::var("ESPRESSO_ZKEVM_L2_CHAIN_ID")
+            .unwrap_or_else(|_| "1001".into())
+            .parse()
+            .unwrap();
+        let l1_provider = env::var("ESPRESSO_ZKEVM_L1_PROVIDER")
+            .unwrap_or_else(|_| "http://localhost:8545".into())
+            .parse()
+            .unwrap();
+        let l2_provider = env::var("ESPRESSO_ZKEVM_L2_PROVIDER")
+            .unwrap_or_else(|_| "http://localhost:8126".into())
+            .parse()
+            .unwrap();
+        let mnemonic = env::var("ESPRESSO_ZKEVM_DEPLOYER_MNEMONIC").unwrap_or_else(|_| {
+            "test test test test test test test test test test test junk".into()
+        });
+        let rollup_address: Address = env::var("ESPRESSO_ZKEVM_ROLLUP_ADDRESS")
+            .unwrap_or_else(|_| "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6".into())
+            .parse()
+            .unwrap();
+
+        let zkevm = ZkEvm {
+            chain_id: l2_chain_id,
+        };
+        let l1 = connect_rpc(&l1_provider, &mnemonic, l1_chain_id)
+            .await
+            .unwrap();
+        let l2 = &connect_rpc(&l2_provider, &mnemonic, Some(l2_chain_id))
+            .await
+            .unwrap();
+        let rollup = ProofOfEfficiency::new(rollup_address, l1.clone());
+        let l1_initial_block = l1.get_block_number().await.unwrap();
+        let initial_batch_num = rollup.last_batch_sequenced().call().await.unwrap();
+        let initial_force_batch_num = rollup.last_force_batch().call().await.unwrap();
+        let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
+        tracing::info!(
+            "L1 chain id: {:?}, L2 chain id: {}, address: {}, rollup address: {}, \
+             L1 initial block: {}, initial batch num: {}, L2 initial balance: {}",
+            l1_chain_id,
+            l2_chain_id,
+            l1.inner().address(),
+            rollup.address(),
+            l1_initial_block,
+            initial_batch_num,
+            l2_initial_balance,
+        );
+
+        // Put the contract in permissionless mode.
+        send(rollup.set_force_batch_allowed(true)).await.unwrap();
+
+        // Create a few test batches.
+        let transfer_amount = 1.into();
+        let num_batches = 2u64;
+        let nonce = l2
+            .get_transaction_count(l2.inner().address(), None)
+            .await
+            .unwrap();
+        let (batches, txn_hashes): (Vec<_>, Vec<_>) =
+            join_all((0..num_batches).into_iter().map(|i| async move {
+                let mut transfer = TransactionRequest {
+                    from: Some(l2.inner().address()),
+                    to: Some(Address::random().into()),
+                    value: Some(transfer_amount),
+                    nonce: Some(nonce + i),
+                    ..Default::default()
+                }
+                .into();
+                l2.fill_transaction(&mut transfer, None).await.unwrap();
+                tracing::info!("transfer {}: {:?}", i, transfer);
+                let signature = l2
+                    .inner()
+                    .signer()
+                    .sign_transaction(&transfer)
+                    .await
+                    .unwrap();
+                let txn = EvmTransaction::new(transfer, signature);
+                let hash = txn.hash();
+                tracing::info!("transfer hash: {}", hash);
+                (
+                    Block::new(State::default().commit())
+                        .add_transaction_raw(&zkevm.wrap(&txn).into())
+                        .unwrap(),
+                    hash,
+                )
+            }))
+            .await
+            .into_iter()
+            .unzip();
+        tracing::info!("sequencing batches: {:?}", batches);
+
+        // Sequence them in the rollup contract.
+        sequence_batches(&zkevm, &rollup, &batches).await;
+
+        // Check the forced batch events.
+        let force_batch_events = rollup
+            .force_batch_filter()
+            .from_block(l1_initial_block)
+            .query()
+            .await
+            .unwrap();
+        assert_eq!(force_batch_events.len(), num_batches as usize);
+        for (i, event) in force_batch_events.into_iter().enumerate() {
+            assert_eq!(event.sequencer, l1.inner().address());
+            assert_eq!(
+                event.force_batch_num,
+                initial_force_batch_num + 1 + i as u64
+            );
+        }
+
+        // Check the sequence event.
+        let sequence_force_batches_events = rollup
+            .sequence_force_batches_filter()
+            .from_block(l1_initial_block)
+            .query()
+            .await
+            .unwrap();
+        assert_eq!(sequence_force_batches_events.len(), 1);
+        assert_eq!(
+            sequence_force_batches_events[0].num_batch,
+            initial_batch_num + num_batches
+        );
+
+        // Wait for the transactions to complete on L2. Note that awaiting a [PendingTransaction]
+        // will not work here -- [PendingTransaction] returns [None] if the transaction is thrown
+        // out of the mempool, but since we bypassed the sequencer, our transactions were never in
+        // the mempool in the first place.
+        for (i, hash) in txn_hashes.into_iter().enumerate() {
+            loop {
+                if let Some(receipt) = l2.get_transaction_receipt(hash).await.unwrap() {
+                    tracing::info!("transfer {} completed: {:?}", i, receipt);
+                    break;
+                }
+                tracing::info!("Waiting for transfer {} to complete", i);
+                tracing::info!(
+                    "L2 balance {}/{}",
+                    l2.get_balance(l2.inner().address(), None).await.unwrap(),
+                    l2_initial_balance
+                );
+                sleep(Duration::from_secs(5)).await;
+            }
+        }
+
+        // Check the effects of the transfers.
+        assert_eq!(
+            l2.get_balance(l2.inner().address(), None).await.unwrap(),
+            l2_initial_balance - U256::from(num_batches) * transfer_amount
+        );
+
+        // Wait for the batches to be verified.
+        let event = rollup
+            .trusted_verify_batches_filter()
+            .from_block(l1_initial_block)
+            .stream()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.num_batch, initial_batch_num + num_batches);
+    }
 }

@@ -1,4 +1,5 @@
 use commit::{Commitment, Committable};
+use derive_more::From;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use serde::{Deserialize, Serialize};
 
@@ -79,7 +80,7 @@ impl Committable for GenesisTransaction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, From)]
 /// A transaction tht can be either a CAP transaction or a collect reward transaction
 pub enum SequencerTransaction {
     Genesis(GenesisTransaction),
