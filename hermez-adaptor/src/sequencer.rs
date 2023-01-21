@@ -1,5 +1,5 @@
 use crate::Options;
-use async_std::sync::Arc;
+use async_std::{sync::Arc, task::sleep};
 use contract_bindings::{
     proof_of_efficiency::{ForceBatchFilter, ForcedBatchData},
     Matic, ProofOfEfficiency,
@@ -17,8 +17,11 @@ use futures::{
 };
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::{Block, SeqTypes};
+use std::time::Duration;
 use surf_disco::Url;
 use zkevm::{hermez, ZkEvm};
+
+const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
@@ -188,6 +191,7 @@ async fn sequence_batches(
                     Ok(fee) => fee,
                     Err(err) => {
                         tracing::error!("unable to get current batch fee, retrying: {}", err);
+                        sleep(RETRY_DELAY).await;
                         continue;
                     }
                 };
@@ -195,6 +199,7 @@ async fn sequence_batches(
 
                 let Some(receipt) = send(rollup.force_batch(transactions.clone(), fee)).await else {
                     tracing::warn!("failed to force batch, retrying");
+                    sleep(RETRY_DELAY).await;
                     continue;
                 };
                 break receipt;
@@ -237,6 +242,7 @@ async fn sequence_batches(
                             block_number,
                             err
                         );
+                        sleep(RETRY_DELAY).await;
                         continue;
                     }
                 }
@@ -259,6 +265,7 @@ async fn sequence_batches(
         .is_none()
     {
         tracing::warn!("failed to sequence forced batches, retrying");
+        sleep(RETRY_DELAY).await;
     }
 }
 
@@ -344,13 +351,11 @@ async fn connect_rpc(
 mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
     use commit::Committable;
     use futures::future::join_all;
     use hotshot_types::traits::block_contents::Block as _;
     use sequencer::{State, Vm};
     use std::env;
-    use std::time::Duration;
     use zkevm::EvmTransaction;
 
     // This test is ignored pending some better test infrastructure (e.g. mock L1 contracts). To run
