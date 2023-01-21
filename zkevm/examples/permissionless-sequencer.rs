@@ -62,7 +62,7 @@ struct Options {
     #[clap(
         long,
         env = "ESPRESSO_ZKEVM_L2_PROVIDER",
-        default_value = "http://localhost:8123"
+        default_value = "http://localhost:8126"
     )]
     l2_provider: Url,
 

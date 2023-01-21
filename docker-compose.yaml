@@ -13,53 +13,64 @@ services:
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "$ESPRESSO_SEQUENCER_PORT:$ESPRESSO_SEQUENCER_PORT"
+      - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_SEQUENCER_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50002:$ESPRESSO_SEQUENCER_PORT"
+      - "50002:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_SEQUENCER_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50003:$ESPRESSO_SEQUENCER_PORT"
+      - "50003:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_SEQUENCER_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50004:$ESPRESSO_SEQUENCER_PORT"
+      - "50004:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_SEQUENCER_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50005:$ESPRESSO_SEQUENCER_PORT"
+      - "50005:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_SEQUENCER_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
       - RUST_LOG
+    depends_on:
+      - cdn-server
 
-  hermez-adaptor:
-    image: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor:main
-    ports:
-      - "$ESPRESSO_ZKEVM_ADAPTOR_PORT:$ESPRESSO_ZKEVM_ADAPTOR_PORT"
-    environment:
-      - ESPRESSO_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_PORT
-      - ESPRESSO_ZKEVM_L1_PROVIDER
-      - ESPRESSO_ZKEVM_ROLLUP_ADDRESS
-      - ESPRESSO_ZKEVM_MATIC_ADDRESS
-      - ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC
-      - ESPRESSO_ZKEVM_ADAPTOR_PORT
-      - RUST_LOG
+  # TODO: enable hermez adaptor once it's main function doesn't exit.
+  # hermez-adaptor:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor:main
+  #   ports:
+  #     - "$ESPRESSO_ZKEVM_ADAPTOR_PORT:$ESPRESSO_ZKEVM_ADAPTOR_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_ZKEVM_L1_PROVIDER
+  #     - ESPRESSO_ZKEVM_ROLLUP_ADDRESS
+  #     - ESPRESSO_ZKEVM_MATIC_ADDRESS
+  #     - ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC
+  #     - ESPRESSO_ZKEVM_ADAPTOR_PORT
+  #     - RUST_LOG
