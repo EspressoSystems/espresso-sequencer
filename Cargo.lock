@@ -197,7 +197,7 @@ source = "git+https://github.com/arkworks-rs/curves?rev=677b4ae751a274037880ede8
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -208,7 +208,7 @@ checksum = "65be532f9dd1e98ad0150b037276cde464c6f371059e6dd02c0222395761f6aa"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -219,7 +219,7 @@ checksum = "ea691771ebbb28aea556c044e2e5c5227398d840cee0c34d4d20fa8eb2689e8c"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -230,7 +230,7 @@ dependencies = [
  "ark-bls12-377",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -241,7 +241,7 @@ checksum = "dea978406c4b1ca13c2db2373b05cc55429c3575b8b21f1b9ee859aa5b03dd42"
 dependencies = [
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "num-traits",
  "rayon",
@@ -256,7 +256,7 @@ dependencies = [
  "ark-bls12-377",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -268,7 +268,7 @@ dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -280,7 +280,7 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -292,7 +292,7 @@ dependencies = [
  "ark-ff-asm",
  "ark-ff-macros",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "num-bigint",
  "num-traits",
@@ -332,7 +332,7 @@ checksum = "7b0f78f47537c2f15706db7e98fe64cc1711dbf9def81218194e17239e53e5aa"
 dependencies = [
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "hashbrown 0.11.2",
  "rayon",
@@ -348,7 +348,7 @@ dependencies = [
  "ark-poly",
  "ark-serialize",
  "ark-sponge",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "digest 0.9.0",
 ]
@@ -360,7 +360,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d6c2b318ee6e10f8c2853e73a83adc0ccb88995aa978d8a3408d492ab2ee671"
 dependencies = [
  "ark-serialize-derive",
- "ark-std",
+ "ark-std 0.3.0",
  "digest 0.9.0",
 ]
 
@@ -384,7 +384,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "digest 0.9.0",
  "rand_chacha 0.3.1",
@@ -399,6 +399,16 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
+]
+
+[[package]]
+name = "ark-std"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
+dependencies = [
+ "num-traits",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -2121,6 +2131,9 @@ name = "either"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "elliptic-curve"
@@ -3005,12 +3018,12 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-lock",
  "async-std",
@@ -3025,6 +3038,7 @@ dependencies = [
  "dashmap",
  "derivative",
  "digest 0.10.6",
+ "either",
  "embed-doc-image",
  "espresso-systems-common 0.4.1",
  "futures",
@@ -3037,6 +3051,7 @@ dependencies = [
  "libp2p",
  "libp2p-networking",
  "libp2p-swarm-derive",
+ "nll",
  "num",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -3051,7 +3066,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3072,7 +3087,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3081,6 +3096,7 @@ dependencies = [
  "bincode",
  "commit",
  "custom_debug",
+ "either",
  "futures",
  "hotshot-types",
  "hotshot-utils",
@@ -3092,11 +3108,11 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "arbitrary",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-std",
  "async-trait",
@@ -3108,10 +3124,13 @@ dependencies = [
  "custom_debug",
  "derivative",
  "ed25519-compact",
+ "either",
  "espresso-systems-common 0.4.1",
  "futures",
  "hex_fmt",
  "hotshot-utils",
+ "libp2p-networking",
+ "nll",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
@@ -3124,7 +3143,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "bincode",
 ]
@@ -3533,7 +3552,7 @@ dependencies = [
  "ark-poly",
  "ark-poly-commit",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "displaydoc",
  "downcast-rs",
@@ -3561,7 +3580,7 @@ dependencies = [
  "ark-ed-on-bls12-381",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "crypto_box",
  "derivative",
  "digest 0.10.6",
@@ -3594,7 +3613,7 @@ dependencies = [
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "displaydoc",
  "generic-array 0.14.6",
@@ -3613,7 +3632,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "digest 0.10.6",
  "jf-utils-derive",
  "serde",
@@ -3627,7 +3646,7 @@ name = "jf-utils-derive"
 version = "0.1.3"
 source = "git+https://github.com/EspressoSystems/jellyfish.git?tag=0.1.2-patch.1#06e5b4bb92723b934c4b3b6489a378651d7b7055"
 dependencies = [
- "ark-std",
+ "ark-std 0.3.0",
  "quote",
  "syn",
 ]
@@ -3986,7 +4005,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#959c18ca3a3139b5c40d70b7e989c0865b128c1e"
+source = "git+https://github.com/EspressoSystems/hotshot#33486c58b8539b8984428730ac849ba96e61a176"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3999,7 +4018,6 @@ dependencies = [
  "derive_builder",
  "either",
  "futures",
- "hotshot-types",
  "hotshot-utils",
  "libp2p",
  "libp2p-swarm-derive",
@@ -6148,9 +6166,9 @@ dependencies = [
 
 [[package]]
 name = "serde_bytes"
-version = "0.11.7"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfc50e8183eeeb6178dcb167ae34a8051d63535023ae38b5d8d12beae193d37b"
+checksum = "718dc5fff5b36f99093fc49b280cfc96ce6fc824317783bff5a1fed0c7a64819"
 dependencies = [
  "serde",
 ]
@@ -6168,9 +6186,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.89"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "020ff22c755c2ed3f8cf162dbb41a7268d934702f3ed3631656ea597e08fc3db"
+checksum = "877c235533714907a8c2464236f5c4b2a17262ef1bd71f38f35ea592c8da6883"
 dependencies = [
  "itoa 1.0.4",
  "ryu",
@@ -6789,7 +6807,7 @@ name = "tagged-base64-macros"
 version = "0.2.0"
 source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
 dependencies = [
- "ark-std",
+ "ark-std 0.3.0",
  "quote",
  "syn",
 ]
