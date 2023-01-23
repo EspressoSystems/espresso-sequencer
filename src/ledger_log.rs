@@ -124,15 +124,6 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
         }
     }
 
-    pub(crate) fn iter_from(&self, i: usize) -> Iter<T> {
-        let mut iter = self.iter();
-        // `iter` currently points at the 0th object. If `i > 0`, advance to the `i`th.
-        if i > 0 {
-            iter.nth(i - 1);
-        }
-        iter
-    }
-
     pub(crate) fn store_resource(&mut self, resource: Option<T>) -> Result<(), PersistenceError> {
         self.store.store_resource(&resource)?;
         if self.cache.len() >= self.cache_size {
@@ -183,7 +174,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
 
         // Broadcast any newly-appended objects which extend the in-order available prefix.
         let mut i = self.stream_pos;
-        let mut objects = self.iter_from(i);
+        let mut objects = self.iter().skip(i);
         while let Some(Some(obj)) = objects.next() {
             tracing::debug!("broadcasting new object {}", i);
             // Ignore errors on sending, it just means all listeners have dropped their handles.
@@ -216,7 +207,8 @@ impl<T: Serialize + DeserializeOwned + Clone + Send + 'static> LedgerLog<T> {
         // A prefix of items are already available, from `from` to `self.stream_pos`. We can yield
         // these immediately.
         let prefix = self
-            .iter_from(from)
+            .iter()
+            .skip(from)
             // `saturating_sub` handles the case where `from >= self.stream_pos`, in which case
             // `prefix` is empty.
             .take(self.stream_pos.saturating_sub(from))

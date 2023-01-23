@@ -29,6 +29,7 @@ use hotshot_types::traits::{
 };
 use snafu::Snafu;
 use std::collections::HashMap;
+use std::iter::Skip;
 use std::path::Path;
 
 pub use crate::ledger_log::Iter;
@@ -244,18 +245,18 @@ pub struct StreamError;
 impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Types, UserData> {
     type Error = StreamError;
 
-    type LeafIterType<'a> = Iter<'a, LeafQueryData<Types>> where UserData: 'a;
-    type BlockIterType<'a> = Iter<'a, BlockQueryData<Types>> where UserData: 'a;
+    type LeafIterType<'a> = Skip<Iter<'a, LeafQueryData<Types>>> where UserData: 'a;
+    type BlockIterType<'a> = Skip<Iter<'a, BlockQueryData<Types>>> where UserData: 'a;
 
     type LeafStreamType = BoxStream<'static, LeafQueryData<Types>>;
     type BlockStreamType = BoxStream<'static, BlockQueryData<Types>>;
 
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-        self.leaf_storage.iter_from(n)
+        self.leaf_storage.iter().skip(n)
     }
 
     fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-        self.block_storage.iter_from(n)
+        self.block_storage.iter().skip(n)
     }
 
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64> {
