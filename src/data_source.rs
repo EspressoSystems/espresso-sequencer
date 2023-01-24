@@ -364,9 +364,8 @@ mod test {
     use crate::testing::{
         consensus::MockNetwork,
         mocks::{MockTransaction, MockTypes},
-        sleep,
+        setup_test, sleep,
     };
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
@@ -441,8 +440,7 @@ mod test {
 
     #[async_std::test]
     async fn test_update() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let network = MockNetwork::init(()).await;
         let hotshot = network.handle();
@@ -485,8 +483,7 @@ mod test {
 
     #[async_std::test]
     async fn test_metrics() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let network = MockNetwork::init(()).await;
         let hotshot = network.handle();

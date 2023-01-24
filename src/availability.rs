@@ -312,10 +312,10 @@ mod test {
         testing::{
             consensus::MockNetwork,
             mocks::{MockTransaction, MockTypes},
+            setup_test,
         },
         Error,
     };
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
     use futures::FutureExt;
@@ -464,8 +464,7 @@ mod test {
 
     #[async_std::test]
     async fn test_api() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         // Create the consensus network.
         let network = MockNetwork::init(()).await;
@@ -528,6 +527,8 @@ mod test {
 
     #[async_std::test]
     async fn test_extensions() {
+        setup_test();
+
         let dir = TempDir::new("test_availability_extensions").unwrap();
         let query_data = QueryData::<MockTypes, u64>::create(dir.path(), 0).unwrap();
 
