@@ -13,7 +13,7 @@
 use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt, TryFutureExt};
 use hotshot_types::traits::node_implementation::NodeTypes;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
@@ -113,6 +113,18 @@ pub enum Error {
         height: u64,
         index: u64,
     },
+    #[snafu(display("unable to open leaf stream at {}: {}", height, reason))]
+    #[from(ignore)]
+    LeafStream {
+        height: u64,
+        reason: String,
+    },
+    #[snafu(display("unable to open block stream at {}: {}", height, reason))]
+    #[from(ignore)]
+    BlockStream {
+        height: u64,
+        reason: String,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -138,6 +150,7 @@ impl Error {
             | Self::MissingBlock { .. }
             | Self::UnknownTransactionHash { .. }
             | Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
+            Self::LeafStream { .. } | Self::BlockStream { .. } => StatusCode::InternalServerError,
             Self::Custom { status, .. } => *status,
         }
     }
@@ -175,6 +188,27 @@ where
             }
             .boxed()
         })?
+        .stream("streamleaves", |req, state| {
+            async move {
+                let height = req.integer_param("height")?;
+                state
+                    .read(|state| {
+                        async move {
+                            Ok(state
+                                .subscribe_leaves(height)
+                                .map_err(|err| Error::LeafStream {
+                                    height: height as u64,
+                                    reason: err.to_string(),
+                                })?
+                                .map(Ok))
+                        }
+                        .boxed()
+                    })
+                    .await
+            }
+            .try_flatten_stream()
+            .boxed()
+        })?
         .get("getblock", |req, state| {
             async move {
                 let height = match req.opt_integer_param("height")? {
@@ -194,6 +228,27 @@ where
                     .context(InvalidBlockHeightSnafu { height })?
                     .context(MissingBlockSnafu { height })
             }
+            .boxed()
+        })?
+        .stream("streamblocks", |req, state| {
+            async move {
+                let height = req.integer_param("height")?;
+                state
+                    .read(|state| {
+                        async move {
+                            Ok(state
+                                .subscribe_blocks(height)
+                                .map_err(|err| Error::BlockStream {
+                                    height: height as u64,
+                                    reason: err.to_string(),
+                                })?
+                                .map(Ok))
+                        }
+                        .boxed()
+                    })
+                    .await
+            }
+            .try_flatten_stream()
             .boxed()
         })?
         .get("gettransaction", |req, state| {
@@ -257,7 +312,6 @@ mod test {
         testing::{
             consensus::MockNetwork,
             mocks::{MockTransaction, MockTypes},
-            sleep,
         },
         Error,
     };
@@ -436,24 +490,37 @@ mod test {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
+        let leaves = client.socket("stream/leaves/0").subscribe().await.unwrap();
+        let blocks = client.socket("stream/blocks/0").subscribe().await.unwrap();
+        let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
             let txn_hash = txn.commit();
             hotshot.submit_transaction(txn).await.unwrap();
-            let (height, blocks) = loop {
-                let (height, blocks) = get_non_empty_blocks(&client).await;
-                if blocks.len() < nonce as usize + 1 {
-                    tracing::info!("waiting for block {} to be finalized", nonce);
-                    sleep(Duration::from_secs(1)).await;
-                } else {
-                    break (height, blocks);
+
+            // Wait for the transaction to be finalized.
+            let (i, leaf, block) = loop {
+                tracing::info!("waiting for block with transaction {}", nonce);
+                let (i, (leaf, block)) = leaf_blocks.next().await.unwrap();
+                tracing::info!("got block {}\nLeaf: {:?}\nBlock: {:?}", i, leaf, block);
+                let leaf: LeafQueryData<MockTypes> = leaf.unwrap();
+                let block: BlockQueryData<MockTypes> = block.unwrap();
+                assert_eq!(leaf.height() as usize, i);
+                assert_eq!(leaf.block_hash(), block.hash());
+                if !block.is_empty() {
+                    break (i, leaf, block);
                 }
             };
+            assert_eq!(block.iter().collect::<Vec<_>>(), vec![txn_hash]);
             assert_eq!(
-                blocks[nonce as usize].1.iter().collect::<Vec<_>>(),
-                vec![txn_hash]
+                leaf,
+                client.get(&format!("leaf/{}", i)).send().await.unwrap()
             );
-            validate(&client, height).await;
+            assert_eq!(
+                block,
+                client.get(&format!("block/{}", i)).send().await.unwrap()
+            );
+            validate(&client, (i + 1) as u64).await;
         }
 
         network.shut_down().await;

@@ -2360,7 +2360,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "async-compatibility-layer",
  "async-std",

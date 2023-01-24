@@ -240,10 +240,17 @@
 //!
 //! // Implement data source trait for availability API.
 //! impl AvailabilityDataSource<AppTypes> for AppState {
+//!     type Error = <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::Error;
+//!
 //!     type LeafIterType<'a> =
 //!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::LeafIterType<'a>;
 //!     type BlockIterType<'a> =
 //!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::BlockIterType<'a>;
+//!
+//!     type LeafStreamType =
+//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::LeafStreamType;
+//!     type BlockStreamType =
+//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::BlockStreamType;
 //!
 //!     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
 //!         self.hotshot_qs.get_nth_leaf_iter(n)
@@ -255,6 +262,8 @@
 //! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
 //! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
+//! #   fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> { todo!() }
+//! #   fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> { todo!() }
 //! }
 //!
 //! // Implement data source trait for status API.
@@ -341,7 +350,7 @@
 //!             state.hotshot_qs.update(&event).unwrap();
 //!             // Update other modules' states based on `event`.
 //!
-//!             state.hotshot_qs.commit_version().unwrap();
+//!             state.hotshot_qs.commit_version().await.unwrap();
 //!             // Commit or skip versions for other modules' storage.
 //!             state.store.commit_version().unwrap();
 //!         }
@@ -413,10 +422,17 @@ mod test {
     }
 
     impl AvailabilityDataSource<MockTypes> for CompositeState {
+        type Error = <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::Error;
+
         type LeafIterType<'a> =
             <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::LeafIterType<'a>;
         type BlockIterType<'a> =
             <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::BlockIterType<'a>;
+
+        type LeafStreamType =
+            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::LeafStreamType;
+        type BlockStreamType =
+            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::BlockStreamType;
 
         fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
             self.hotshot_qs.get_nth_leaf_iter(n)
@@ -435,6 +451,13 @@ mod test {
         }
         fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
             self.hotshot_qs.get_block_ids_by_proposer_id(id)
+        }
+
+        fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
+            self.hotshot_qs.subscribe_leaves(height)
+        }
+        fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
+            self.hotshot_qs.subscribe_blocks(height)
         }
     }
 

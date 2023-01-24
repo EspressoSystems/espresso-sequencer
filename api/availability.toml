@@ -51,6 +51,16 @@ the quorum certificate signing this leaf. Both QCs have the schema
 ```
 """
 
+[route.streamleaves]
+PATH = ["stream/leaves/:height"]
+METHOD = "SOCKET"
+":height" = "Integer"
+DOC = """
+Subscribe to a stream of leaves in the order they are sequenced, starting at `:height`.
+
+Opens a WebSockets connection and sends a stream of the same data type returned by `leaf/:height`.
+"""
+
 [route.getblock]
 PATH = ["block/:height", "block/hash/:hash"]
 ":height" = "Integer"
@@ -74,6 +84,16 @@ Returns
     "txn_hashes": [TaggedBase64],
 }
 ```
+"""
+
+[route.streamblocks]
+PATH = ["stream/blocks/:height"]
+METHOD = "SOCKET"
+":height" = "Integer"
+DOC = """
+Subscribe to a stream of blocks in the order they are sequenced, starting at `:height`.
+
+Opens a WebSockets connection and sends a stream of the same data type returned by `block/:height`.
 """
 
 [route.gettransaction]
