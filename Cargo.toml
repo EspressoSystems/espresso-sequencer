@@ -2,6 +2,7 @@
 
 members = [
   "contract-bindings",
+  # "contracts",
   "gen-bindings",
   "hermez-adaptor",
   "sequencer",

@@ -61,6 +61,20 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use
 `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking is
 enabled.
 
+### Developing contracts
+The development enviornment for contracts is a work in progress, for now we can
+compile contracts, deploy them and generate bindings but using modified
+contracts in the `zkevm-contracts` from rust requires manually executing the
+compiliation step. If the ABIs change the `gen-bindings` step, also need to be
+executed.
+
+- Ensure submodules are checkout out: `git submodule update --init`
+- Install dependencies `just npm i`
+- Compile the contracts `just hardhat compile`
+- Update the rust bindings: `cargo run --bin gen-bindings`
+- Run a hardhat dev node: `just hardhat node`
+- Run an example that deploys some contracts `cargo run --example deploy`
+
 ## Implementation Plan
 
 We will work towards the architecture illustrated above in three phases.
