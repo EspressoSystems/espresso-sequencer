@@ -27,7 +27,7 @@ pub fn setup_test() {
     setup_logging();
     setup_backtrace();
 
-    #[cfg(feature = "backtrace-on-stack-overflow")]
+    #[cfg(all(feature = "backtrace-on-stack-overflow", not(windows)))]
     unsafe {
         backtrace_on_stack_overflow::enable();
     }
