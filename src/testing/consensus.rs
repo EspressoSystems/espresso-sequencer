@@ -34,7 +34,7 @@ use std::time::Duration;
 use tempdir::TempDir;
 
 struct MockNode<UserData> {
-    query_data: Arc<RwLock<QueryData<MockTypes, UserData>>>,
+    query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
     hotshot: HotShotHandle<MockTypes, MockNodeImpl>,
 }
 
@@ -120,7 +120,7 @@ impl<UserData> MockNetwork<UserData> {
         self.nodes[0].hotshot.clone()
     }
 
-    pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, UserData>>> {
+    pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>> {
         self.nodes[0].query_data.clone()
     }
 

@@ -96,7 +96,7 @@ mod test {
         data_source::QueryData,
         testing::{
             consensus::MockNetwork,
-            mocks::{MockTransaction, MockTypes},
+            mocks::{MockNodeImpl, MockTransaction, MockTypes},
             setup_test, sleep,
         },
         Error,
@@ -138,18 +138,25 @@ mod test {
         let txn = MockTransaction { nonce: 0 };
         let txn_size = bincode_opts().serialized_size(&txn).unwrap();
         hotshot.submit_transaction(txn.clone()).await.unwrap();
-        sleep(Duration::from_secs(1)).await;
-        assert_eq!(
-            client
+        loop {
+            let mempool = client
                 .get::<MempoolQueryData>("mempool_info")
                 .send()
                 .await
-                .unwrap(),
-            MempoolQueryData {
+                .unwrap();
+            let expected = MempoolQueryData {
                 transaction_count: 1,
                 memory_footprint: txn_size,
+            };
+            if mempool == expected {
+                break;
             }
-        );
+            tracing::info!(
+                "waiting for mempool to reflect transaction (currently {:?})",
+                mempool
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
         assert_eq!(
             client
                 .get::<u64>("latest_block_height")
@@ -210,7 +217,7 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_status_extensions").unwrap();
-        let query_data = QueryData::<MockTypes, u64>::create(dir.path(), 0).unwrap();
+        let query_data = QueryData::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
         // Create the API extensions specification.
         let extensions_path = dir.path().join("extensions.toml");
@@ -226,7 +233,7 @@ mod test {
         };
         fs::write(&extensions_path, extensions.to_string().as_bytes()).unwrap();
 
-        let mut api = define_api::<RwLock<QueryData<MockTypes, u64>>>(&Options {
+        let mut api = define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>>(&Options {
             extensions: vec![extensions_path],
             ..Default::default()
         })

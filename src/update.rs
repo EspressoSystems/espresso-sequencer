@@ -11,10 +11,20 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
-use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
+use crate::{
+    availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+    Leaf,
+};
 use hotshot::types::{Event, EventType};
-use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
+use hotshot_types::{
+    data::LeafType,
+    traits::{
+        metrics::Metrics,
+        node_implementation::{NodeImplementation, NodeType},
+        state::{TestableBlock, TestableState},
+    },
+};
 use serde::Serialize;
 use std::error::Error;
 use std::fmt::Debug;
@@ -28,7 +38,11 @@ use std::iter::once;
 ///   should be used when initializing a [HotShotHandle](hotshot::types::HotShotHandle)
 /// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
 ///   emitted
-pub trait UpdateDataSource<Types: NodeTypes> {
+pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     type Error: Error + Debug;
 
     /// Get a handle for populating status metrics.
@@ -49,27 +63,31 @@ pub trait UpdateDataSource<Types: NodeTypes> {
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
+    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>;
 }
 
-impl<Types: NodeTypes, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
-    UpdateDataSource<Types> for T
+impl<
+        Types: NodeType,
+        I: NodeImplementation<Types>,
+        T: UpdateAvailabilityData<Types, I> + UpdateStatusData + Send,
+    > UpdateDataSource<Types, I> for T
 where
-    Types::BlockType: Serialize,
+    Types::BlockType: Serialize + TestableBlock,
+    Types::StateType: TestableState,
 {
-    type Error = <Self as UpdateAvailabilityData<Types>>::Error;
+    type Error = <Self as UpdateAvailabilityData<Types, I>>::Error;
 
     fn metrics(&self) -> Box<dyn Metrics> {
         UpdateStatusData::metrics(self)
     }
 
-    fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
+    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error> {
         if let EventType::Decide { leaf_chain, qc } = &event.event {
             // `qc` justifies the first (most recent) leaf...
-            let qcs = once(&**qc)
+            let qcs = once((**qc).clone())
                 // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
                 // `leaf.justify_qc`.
-                .chain(leaf_chain.iter().map(|leaf| &leaf.justify_qc))
+                .chain(leaf_chain.iter().map(|leaf| leaf.get_justify_qc()))
                 // Put the QCs in chronological order.
                 .rev()
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
@@ -77,7 +95,7 @@ where
                 .skip(1);
             for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
                 self.insert_leaf(LeafQueryData::new(leaf.clone(), qc.clone()))?;
-                self.insert_block(BlockQueryData::new(leaf.clone(), qc.clone()))?;
+                self.insert_block(BlockQueryData::new::<I>(leaf.clone(), qc.clone()))?;
             }
         }
         Ok(())

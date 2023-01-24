@@ -25,7 +25,10 @@ use crate::{
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use futures::stream::BoxStream;
 use hotshot_types::traits::{
-    metrics::Metrics, node_implementation::NodeTypes, signature_key::EncodedPublicKey,
+    metrics::Metrics,
+    node_implementation::{NodeImplementation, NodeType},
+    signature_key::EncodedPublicKey,
+    state::{TestableBlock, TestableState},
 };
 use snafu::Snafu;
 use std::collections::HashMap;
@@ -64,21 +67,28 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// [AtomicStore::commit_version] alternate with calls to [QueryData::commit_version] or
 /// [QueryData::skip_version].
 #[derive(custom_debug::Debug)]
-pub struct QueryData<Types: NodeTypes, UserData> {
-    index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
+pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
+    index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
-    leaf_storage: LedgerLog<LeafQueryData<Types>>,
+    leaf_storage: LedgerLog<LeafQueryData<Types, I>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
     user_data: UserData,
-    _marker: std::marker::PhantomData<Types>,
 }
 
-impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     /// Create a new [QueryData] with storage at `path`.
     ///
     /// If there is already data at `path`, it will be archived.
@@ -125,7 +135,6 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
             metrics: Default::default(),
             user_data,
-            _marker: Default::default(),
         })
     }
 
@@ -142,7 +151,7 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
         user_data: UserData,
     ) -> Result<Self, PersistenceError> {
         let leaf_storage =
-            LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
+            LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
             LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
 
@@ -153,7 +162,7 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
             .flatten()
             .map(|leaf| {
                 index_by_proposer_id
-                    .entry(leaf.proposer().clone())
+                    .entry(leaf.proposer())
                     .or_insert_with(Vec::new)
                     .push(leaf.height());
                 index_by_block_hash.insert(leaf.block_hash(), leaf.height());
@@ -182,7 +191,6 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
             top_storage: None,
             metrics: Default::default(),
             user_data,
-            _marker: Default::default(),
         })
     }
 
@@ -226,13 +234,23 @@ impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
     }
 }
 
-impl<Types: NodeTypes, UserData> AsRef<UserData> for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     fn as_ref(&self) -> &UserData {
         &self.user_data
     }
 }
 
-impl<Types: NodeTypes, UserData> AsMut<UserData> for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsMut<UserData>
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     fn as_mut(&mut self) -> &mut UserData {
         &mut self.user_data
     }
@@ -242,13 +260,18 @@ impl<Types: NodeTypes, UserData> AsMut<UserData> for QueryData<Types, UserData> 
 #[snafu(display("unable to open stream"))]
 pub struct StreamError;
 
-impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     type Error = StreamError;
 
-    type LeafIterType<'a> = Skip<Iter<'a, LeafQueryData<Types>>> where UserData: 'a;
+    type LeafIterType<'a> = Skip<Iter<'a, LeafQueryData<Types, I>>> where UserData: 'a;
     type BlockIterType<'a> = Skip<Iter<'a, BlockQueryData<Types>>> where UserData: 'a;
 
-    type LeafStreamType = BoxStream<'static, LeafQueryData<Types>>;
+    type LeafStreamType = BoxStream<'static, LeafQueryData<Types, I>>;
     type BlockStreamType = BoxStream<'static, BlockQueryData<Types>>;
 
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
@@ -259,7 +282,7 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
         self.block_storage.iter().skip(n)
     }
 
-    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types>) -> Option<u64> {
+    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types, I>) -> Option<u64> {
         self.index_by_leaf_hash.get(&hash).cloned()
     }
 
@@ -287,17 +310,22 @@ impl<Types: NodeTypes, UserData> AvailabilityDataSource<Types> for QueryData<Typ
     }
 }
 
-impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     type Error = PersistenceError;
 
-    fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
         self.index_by_block_hash
             .insert(leaf.block_hash(), leaf.height());
         self.index_by_proposer_id
-            .entry(leaf.proposer().clone())
+            .entry(leaf.proposer())
             .or_insert_with(Vec::new)
             .push(leaf.height());
         Ok(())
@@ -315,13 +343,22 @@ impl<Types: NodeTypes, UserData> UpdateAvailabilityData<Types> for QueryData<Typ
 }
 
 /// Metric-related functions.
-impl<Types: NodeTypes, UserData> QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
         self.metrics.get_subgroup(["consensus"])
     }
 }
 
-impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     type Error = MetricsError;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
@@ -352,7 +389,12 @@ impl<Types: NodeTypes, UserData> StatusDataSource for QueryData<Types, UserData>
     }
 }
 
-impl<Types: NodeTypes, UserData> UpdateStatusData for QueryData<Types, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateStatusData
+    for QueryData<Types, I, UserData>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     fn metrics(&self) -> Box<dyn Metrics> {
         Box::new(self.metrics.clone())
     }
@@ -363,7 +405,7 @@ mod test {
     use super::*;
     use crate::testing::{
         consensus::MockNetwork,
-        mocks::{MockTransaction, MockTypes},
+        mocks::{MockNodeImpl, MockTransaction, MockTypes},
         setup_test, sleep,
     };
     use async_std::sync::RwLock;
@@ -375,8 +417,11 @@ mod test {
     use std::time::Duration;
 
     async fn get_non_empty_blocks<UserData>(
-        qd: &RwLock<QueryData<MockTypes, UserData>>,
-    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
+        qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>,
+    ) -> Vec<(
+        LeafQueryData<MockTypes, MockNodeImpl>,
+        BlockQueryData<MockTypes>,
+    )> {
         let qd = qd.read().await;
         qd.get_nth_leaf_iter(0)
             .zip(qd.get_nth_block_iter(0))
@@ -387,7 +432,7 @@ mod test {
             .collect()
     }
 
-    async fn validate<UserData>(qd: &RwLock<QueryData<MockTypes, UserData>>) {
+    async fn validate<UserData>(qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>) {
         let qd = qd.read().await;
 
         // Check the consistency of every block/leaf pair.
@@ -397,7 +442,7 @@ mod test {
             assert_eq!(leaf.hash(), leaf.leaf().commit());
             assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
             assert!(qd
-                .get_block_ids_by_proposer_id(leaf.proposer())
+                .get_block_ids_by_proposer_id(&leaf.proposer())
                 .contains(&(i as u64)));
 
             let Some(Some(block)) = qd.get_nth_block_iter(i).next() else { continue; };
@@ -422,13 +467,13 @@ mod test {
         // ID.
         for proposer in qd
             .get_nth_leaf_iter(0)
-            .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer().clone()))
+            .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer()))
             .collect::<HashSet<_>>()
         {
             for leaf_id in qd.get_block_ids_by_proposer_id(&proposer) {
                 assert_eq!(
                     proposer,
-                    *qd.get_nth_leaf_iter(leaf_id as usize)
+                    qd.get_nth_leaf_iter(leaf_id as usize)
                         .next()
                         .unwrap()
                         .unwrap()
@@ -500,7 +545,21 @@ mod test {
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         hotshot.submit_transaction(txn.clone()).await.unwrap();
-        sleep(Duration::from_secs(2)).await;
+        loop {
+            let mempool = { qd.read().await.mempool_info().unwrap() };
+            let expected = MempoolQueryData {
+                transaction_count: 1,
+                memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+            };
+            if mempool == expected {
+                break;
+            }
+            tracing::info!(
+                "waiting for mempool to reflect transaction (currently {:?})",
+                mempool
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
         {
             assert_eq!(
                 qd.read().await.mempool_info().unwrap(),
@@ -513,7 +572,7 @@ mod test {
 
         // Submitting the same transaction should not affect the mempool.
         hotshot.submit_transaction(txn.clone()).await.unwrap();
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(3)).await;
         {
             assert_eq!(
                 qd.read().await.mempool_info().unwrap(),

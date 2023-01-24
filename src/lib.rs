@@ -21,7 +21,9 @@
 //!
 //! ```
 //! # use hotshot::types::HotShotHandle;
-//! # use hotshot_query_service::testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes};
+//! # use hotshot_query_service::testing::mocks::{
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! # };
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
 //! use hotshot_query_service::{
@@ -32,13 +34,15 @@
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use hotshot::HotShot;
+//! use hotshot_types::traits::state::ValidatingConsensus;
 //! use tide_disco::App;
 //!
 //! // Create or open query data.
-//! let query_data = QueryData::create(storage_path, ()).map_err(Error::internal)?;
+//! let query_data = QueryData::<AppTypes, AppNodeImpl, ()>::create(storage_path, ())
+//!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = HotShot::<AppTypes, AppNodeImpl>::init(
+//! let mut hotshot = HotShot::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
@@ -123,7 +127,9 @@
 //! ```
 //! # use hotshot_query_service::availability;
 //! # use hotshot_query_service::data_source::QueryData;
-//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use hotshot_query_service::testing::mocks::{
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! # };
 //! # use std::collections::HashMap;
 //! #[derive(Default)]
 //! struct AppQueryData {
@@ -131,19 +137,21 @@
 //!     utxo_index: HashMap<u64, (u64, u64, u64)>,
 //! }
 //!
-//! type AvailabilityState = QueryData<AppTypes, AppQueryData>;
+//! type AvailabilityState = QueryData<AppTypes, AppNodeImpl, AppQueryData>;
 //! ```
 //!
-//! `QueryData<Types, UserData>` implements `AsRef<UserData>` and `AsMut<UserData>`, so you can now
-//! modify the default availablity API with the addition of a new endpoint that accesses
-//! `AppQueryData` like so:
+//! `QueryData<AppTypes, AppNodeImpl, AppQueryData>` implements `AsRef<AppQueryData>` and
+//! `AsMut<AppQueryData>`, so you can now modify the default availablity API with the addition of a
+//! new endpoint that accesses `AppQueryData` like so:
 //!
 //! ```
 //! # use async_std::sync::RwLock;
 //! # use futures::FutureExt;
 //! # use hotshot_query_service::availability::{self, AvailabilityDataSource};
 //! # use hotshot_query_service::data_source::QueryData;
-//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use hotshot_query_service::testing::mocks::{
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! # };
 //! # use hotshot_query_service::Error;
 //! # use std::collections::HashMap;
 //! # use std::path::Path;
@@ -152,7 +160,7 @@
 //! # struct AppQueryData {
 //! #     utxo_index: HashMap<u64, (usize, usize, usize)>,
 //! # }
-//! # type AvailabilityState = QueryData<AppTypes, AppQueryData>;
+//! # type AvailabilityState = QueryData<AppTypes, AppNodeImpl, AppQueryData>;
 //! fn define_app_specific_availability_api<State>(
 //!     options: &availability::Options,
 //! ) -> Result<Api<State, availability::Error>, ApiError>
@@ -161,7 +169,7 @@
 //!     <State as ReadState>::State:
 //!         Send +
 //!         Sync +
-//!         AvailabilityDataSource<AppTypes> +
+//!         AvailabilityDataSource<AppTypes, AppNodeImpl> +
 //!         AsRef<AppQueryData>,
 //! {
 //!     let mut api = availability::define_api(options)?;
@@ -228,29 +236,39 @@
 //!
 //! ```
 //! # use hotshot_types::traits::signature_key::EncodedPublicKey;
-//! # use hotshot_query_service::availability::{AvailabilityDataSource, BlockHash, LeafHash, TransactionHash};
+//! # use hotshot_query_service::availability::{
+//! #   AvailabilityDataSource, BlockHash, LeafHash, TransactionHash,
+//! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
-//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use hotshot_query_service::testing::mocks::{
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! # };
 //! # type AppQueryData = ();
 //! struct AppState {
-//!     hotshot_qs: QueryData<AppTypes, AppQueryData>,
+//!     hotshot_qs: QueryData<AppTypes, AppNodeImpl, AppQueryData>,
 //!     // additional state for other modules
 //! }
 //!
 //! // Implement data source trait for availability API.
-//! impl AvailabilityDataSource<AppTypes> for AppState {
-//!     type Error = <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::Error;
+//! impl AvailabilityDataSource<AppTypes, AppNodeImpl> for AppState {
+//!     type Error =
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::Error;
 //!
 //!     type LeafIterType<'a> =
-//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::LeafIterType<'a>;
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafIterType<'a>;
 //!     type BlockIterType<'a> =
-//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::BlockIterType<'a>;
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockIterType<'a>;
 //!
 //!     type LeafStreamType =
-//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::LeafStreamType;
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafStreamType;
 //!     type BlockStreamType =
-//!         <QueryData<AppTypes, AppQueryData> as AvailabilityDataSource<AppTypes>>::BlockStreamType;
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockStreamType;
 //!
 //!     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
 //!         self.hotshot_qs.get_nth_leaf_iter(n)
@@ -258,7 +276,7 @@
 //!
 //!     // etc
 //! #   fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> { todo!() }
-//! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes>) -> Option<u64> { todo!() }
+//! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes, AppNodeImpl>) -> Option<u64> { todo!() }
 //! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
 //! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
 //! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
@@ -268,7 +286,7 @@
 //!
 //! // Implement data source trait for status API.
 //! impl StatusDataSource for AppState {
-//!     type Error = <QueryData<AppTypes, AppQueryData> as StatusDataSource>::Error;
+//!     type Error = <QueryData<AppTypes, AppNodeImpl, AppQueryData> as StatusDataSource>::Error;
 //!
 //!     fn block_height(&self) -> Result<usize, Self::Error> {
 //!         self.hotshot_qs.block_height()
@@ -314,14 +332,16 @@
 //! # use hotshot::types::HotShotHandle;
 //! # use hotshot_query_service::Error;
 //! # use hotshot_query_service::data_source::{UpdateDataSource, QueryData};
-//! # use hotshot_query_service::testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes};
+//! # use hotshot_query_service::testing::mocks::{
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! # };
 //! # use std::path::Path;
 //! # use tide_disco::App;
 //! # type AppQueryData = ();
 //! struct AppState {
 //!     // Top-level storage coordinator
 //!     store: AtomicStore,
-//!     hotshot_qs: QueryData<AppTypes, AppQueryData>,
+//!     hotshot_qs: QueryData<AppTypes, AppNodeImpl, AppQueryData>,
 //!     // additional state for other modules
 //! }
 //!
@@ -376,7 +396,19 @@ pub use error::Error;
 use data_source::QueryData;
 use futures::Future;
 use hotshot::types::HotShotHandle;
-use hotshot_types::traits::node_implementation::{NodeImplementation, NodeTypes};
+use hotshot_types::{
+    data::LeafType,
+    traits::{
+        node_implementation::{NodeImplementation, NodeType},
+        state::{TestableBlock, TestableState},
+    },
+};
+
+/// Leaf type appended to a chain by consensus.
+pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
+
+/// Certificates used by consensus to justify leaves.
+pub type QuorumCertificate<Types, I> = <Leaf<Types, I> as LeafType>::QuorumCertificate;
 
 #[derive(clap::Args, Default)]
 pub struct Options {
@@ -387,11 +419,15 @@ pub struct Options {
 }
 
 /// Run an instance of the HotShot Query service with no customization.
-pub fn run_standalone_service<Types: NodeTypes, NodeImpl: NodeImplementation<Types>>(
+pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>>(
     _options: &Options,
-    _data_source: QueryData<Types, ()>,
-    _hotshot: HotShotHandle<Types, NodeImpl>,
-) -> impl Future<Output = ()> + Send + Sync + 'static {
+    _data_source: QueryData<Types, I, ()>,
+    _hotshot: HotShotHandle<Types, I>,
+) -> impl Future<Output = ()> + Send + Sync + 'static
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
     async move { unimplemented!() }
 }
 
@@ -401,7 +437,7 @@ mod test {
     use crate::{
         availability::{AvailabilityDataSource, BlockHash, LeafHash, TransactionHash},
         status::{MempoolQueryData, StatusDataSource},
-        testing::mocks::MockTypes,
+        testing::mocks::{MockNodeImpl, MockTypes},
     };
     use async_std::{sync::RwLock, task::spawn};
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
@@ -417,22 +453,35 @@ mod test {
 
     struct CompositeState {
         store: AtomicStore,
-        hotshot_qs: QueryData<MockTypes, ()>,
+        hotshot_qs: QueryData<MockTypes, MockNodeImpl, ()>,
         module_state: RollingLog<BincodeLoadStore<u64>>,
     }
 
-    impl AvailabilityDataSource<MockTypes> for CompositeState {
-        type Error = <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::Error;
+    impl AvailabilityDataSource<MockTypes, MockNodeImpl> for CompositeState {
+        type Error = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+            MockTypes,
+            MockNodeImpl,
+        >>::Error;
 
         type LeafIterType<'a> =
-            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::LeafIterType<'a>;
+            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+                MockTypes,
+                MockNodeImpl,
+            >>::LeafIterType<'a>;
         type BlockIterType<'a> =
-            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::BlockIterType<'a>;
+            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+                MockTypes,
+                MockNodeImpl,
+            >>::BlockIterType<'a>;
 
-        type LeafStreamType =
-            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::LeafStreamType;
-        type BlockStreamType =
-            <QueryData<MockTypes, ()> as AvailabilityDataSource<MockTypes>>::BlockStreamType;
+        type LeafStreamType = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+            MockTypes,
+            MockNodeImpl,
+        >>::LeafStreamType;
+        type BlockStreamType = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+            MockTypes,
+            MockNodeImpl,
+        >>::BlockStreamType;
 
         fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
             self.hotshot_qs.get_nth_leaf_iter(n)
@@ -440,7 +489,7 @@ mod test {
         fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
             self.hotshot_qs.get_nth_block_iter(n)
         }
-        fn get_leaf_index_by_hash(&self, hash: LeafHash<MockTypes>) -> Option<u64> {
+        fn get_leaf_index_by_hash(&self, hash: LeafHash<MockTypes, MockNodeImpl>) -> Option<u64> {
             self.hotshot_qs.get_leaf_index_by_hash(hash)
         }
         fn get_block_index_by_hash(&self, hash: BlockHash<MockTypes>) -> Option<u64> {
@@ -463,7 +512,7 @@ mod test {
 
     // Implement data source trait for status API.
     impl StatusDataSource for CompositeState {
-        type Error = <QueryData<MockTypes, ()> as StatusDataSource>::Error;
+        type Error = <QueryData<MockTypes, MockNodeImpl, ()> as StatusDataSource>::Error;
 
         fn block_height(&self) -> Result<usize, Self::Error> {
             self.hotshot_qs.block_height()

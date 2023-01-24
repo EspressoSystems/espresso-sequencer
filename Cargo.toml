@@ -18,7 +18,7 @@ edition = "2021"
 
 [features]
 default = []
-testing = ["tempdir"]
+testing = ["rand", "tempdir"]
 
 [dependencies]
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.0.1", features = ["async-std-executor", "logging-utils"] }
@@ -30,9 +30,9 @@ commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" 
 custom_debug = "0.5"
 derive_more = "0.99"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "6d9e6cfe932843e8b2054d726bedad81f46e3a49", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "6d9e6cfe932843e8b2054d726bedad81f46e3a49" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "6d9e6cfe932843e8b2054d726bedad81f46e3a49" }
 itertools = "0.10"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
@@ -43,6 +43,7 @@ toml = "0.5"
 tracing = "0.1"
 
 # Dependencies enabled by feature "testing".
+rand = { version = "0.8", optional = true }
 tempdir = { version = "0.3", optional = true }
 
 # Dependencies enabled by feature "backtrace-on-stack-overflow".
@@ -54,5 +55,6 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 
 [dev-dependencies]
 portpicker = "0.1"
+rand = "0.8"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.0" }
 tempdir = "0.3"

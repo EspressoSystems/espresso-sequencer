@@ -14,7 +14,10 @@ use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use hotshot_types::traits::node_implementation::NodeTypes;
+use hotshot_types::traits::{
+    node_implementation::{NodeImplementation, NodeType},
+    state::{TestableBlock, TestableState},
+};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
 use std::fmt::Display;
@@ -156,10 +159,14 @@ impl Error {
     }
 }
 
-pub fn define_api<State, Types: NodeTypes>(options: &Options) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
+    options: &Options,
+) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types, I>,
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -311,7 +318,7 @@ mod test {
         data_source::QueryData,
         testing::{
             consensus::MockNetwork,
-            mocks::{MockTransaction, MockTypes},
+            mocks::{MockNodeImpl, MockTransaction, MockTypes},
             setup_test,
         },
         Error,
@@ -333,7 +340,10 @@ mod test {
         client: &Client<Error>,
     ) -> (
         u64,
-        Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
+        Vec<(
+            LeafQueryData<MockTypes, MockNodeImpl>,
+            BlockQueryData<MockTypes>,
+        )>,
     ) {
         let mut blocks = vec![];
         for i in 0.. {
@@ -368,7 +378,7 @@ mod test {
         // Check the consistency of every block/leaf pair.
         for i in 0..height {
             // Check that looking up the leaf various ways returns the correct leaf.
-            let leaf: LeafQueryData<MockTypes> =
+            let leaf: LeafQueryData<MockTypes, MockNodeImpl> =
                 client.get(&format!("leaf/{}", i)).send().await.unwrap();
             assert_eq!(leaf.height(), i);
             assert_eq!(
@@ -395,7 +405,7 @@ mod test {
             );
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
-            let proposals: Vec<LeafQueryData<MockTypes>> = client
+            let proposals: Vec<LeafQueryData<MockTypes, MockNodeImpl>> = client
                 .get(&format!("proposals/{}", leaf.proposer()))
                 .send()
                 .await
@@ -415,7 +425,7 @@ mod test {
             // include new empty blocks committed since we started checking.
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
                         "proposals/{}/limit/1",
                         leaf.proposer()
                     ))
@@ -427,7 +437,7 @@ mod test {
             );
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
                         "proposals/{}/limit/0",
                         leaf.proposer()
                     ))
@@ -502,7 +512,7 @@ mod test {
                 tracing::info!("waiting for block with transaction {}", nonce);
                 let (i, (leaf, block)) = leaf_blocks.next().await.unwrap();
                 tracing::info!("got block {}\nLeaf: {:?}\nBlock: {:?}", i, leaf, block);
-                let leaf: LeafQueryData<MockTypes> = leaf.unwrap();
+                let leaf: LeafQueryData<MockTypes, MockNodeImpl> = leaf.unwrap();
                 let block: BlockQueryData<MockTypes> = block.unwrap();
                 assert_eq!(leaf.height() as usize, i);
                 assert_eq!(leaf.block_hash(), block.hash());
@@ -522,6 +532,7 @@ mod test {
             validate(&client, (i + 1) as u64).await;
         }
 
+        tracing::error!("SHUTTING DOWN");
         network.shut_down().await;
     }
 
@@ -530,7 +541,7 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
-        let query_data = QueryData::<MockTypes, u64>::create(dir.path(), 0).unwrap();
+        let query_data = QueryData::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
         // Create the API extensions specification.
         let extensions_path = dir.path().join("extensions.toml");
@@ -546,11 +557,14 @@ mod test {
         };
         fs::write(&extensions_path, extensions.to_string().as_bytes()).unwrap();
 
-        let mut api = define_api::<RwLock<QueryData<MockTypes, u64>>, MockTypes>(&Options {
-            extensions: vec![extensions_path],
-            ..Default::default()
-        })
-        .unwrap();
+        let mut api =
+            define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>, MockTypes, MockNodeImpl>(
+                &Options {
+                    extensions: vec![extensions_path],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         api.get("get_ext", |_, state| {
             async move { Ok(*state.as_ref()) }.boxed()
         })

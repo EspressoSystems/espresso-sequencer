@@ -10,62 +10,76 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::{Leaf, QuorumCertificate};
 use bincode::Options;
 use commit::{Commitment, Committable};
-use hotshot::{
-    data::{Leaf, QuorumCertificate},
-    traits::Block,
+use hotshot_types::{
+    data::LeafType,
+    traits::{
+        election::SignedCertificate,
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::EncodedPublicKey,
+        state::{TestableBlock, TestableState},
+        Block,
+    },
 };
-use hotshot_types::traits::{node_implementation::NodeTypes, signature_key::EncodedPublicKey};
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
 
-pub type LeafHash<Types> = Commitment<Leaf<Types>>;
-pub type BlockHash<Types> = Commitment<<Types as NodeTypes>::BlockType>;
+pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
+pub type BlockHash<Types> = Commitment<<Types as NodeType>::BlockType>;
 pub type TransactionHash<Types> =
-    Commitment<<<Types as NodeTypes>::BlockType as Block>::Transaction>;
+    Commitment<<<Types as NodeType>::BlockType as Block>::Transaction>;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct LeafQueryData<Types: NodeTypes> {
-    leaf: Leaf<Types>,
-    qc: QuorumCertificate<Types>,
+pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
+    leaf: Leaf<Types, I>,
+    qc: QuorumCertificate<Types, I>,
 }
 
-impl<Types: NodeTypes> LeafQueryData<Types> {
-    pub fn new(leaf: Leaf<Types>, qc: QuorumCertificate<Types>) -> Self {
-        assert_eq!(qc.leaf_commitment, leaf.commit());
+impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
+    pub fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
+        assert_eq!(qc.leaf_commitment(), leaf.commit());
         Self { leaf, qc }
     }
 
-    pub fn leaf(&self) -> &Leaf<Types> {
+    pub fn leaf(&self) -> &Leaf<Types, I> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> &QuorumCertificate<Types> {
-        &self.qc
+    pub fn qc(&self) -> QuorumCertificate<Types, I> {
+        self.leaf.get_justify_qc()
     }
 
     pub fn height(&self) -> u64 {
-        self.leaf.height
+        self.leaf.get_height()
     }
 
-    pub fn hash(&self) -> LeafHash<Types> {
-        self.qc.leaf_commitment
+    pub fn hash(&self) -> LeafHash<Types, I> {
+        self.leaf.commit()
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
-        self.qc.block_commitment
+        self.leaf.get_deltas().commit()
     }
 
-    pub fn proposer(&self) -> &EncodedPublicKey {
-        &self.leaf.proposer_id
+    pub fn proposer(&self) -> EncodedPublicKey {
+        self.leaf.get_proposer_id()
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct BlockQueryData<Types: NodeTypes> {
+pub struct BlockQueryData<Types: NodeType> {
     block: Types::BlockType,
     hash: BlockHash<Types>,
     height: u64,
@@ -73,20 +87,26 @@ pub struct BlockQueryData<Types: NodeTypes> {
     txn_hashes: Vec<TransactionHash<Types>>,
 }
 
-impl<Types: NodeTypes> BlockQueryData<Types> {
-    pub fn new(leaf: Leaf<Types>, qc: QuorumCertificate<Types>) -> Self
+impl<Types: NodeType> BlockQueryData<Types>
+where
+    Types::BlockType: TestableBlock,
+    Types::StateType: TestableState,
+{
+    pub fn new<I: NodeImplementation<Types>>(
+        leaf: Leaf<Types, I>,
+        qc: QuorumCertificate<Types, I>,
+    ) -> Self
     where
         Types::BlockType: Serialize,
     {
-        assert_eq!(qc.block_commitment, leaf.deltas.commit());
+        assert_eq!(qc.leaf_commitment(), leaf.commit());
+        let block = leaf.get_deltas();
         Self {
-            hash: qc.block_commitment,
-            height: leaf.height,
-            size: bincode_opts()
-                .serialized_size(&leaf.deltas)
-                .unwrap_or_default(),
-            txn_hashes: leaf.deltas.contained_transactions().into_iter().collect(),
-            block: leaf.deltas,
+            hash: block.commit(),
+            height: leaf.get_height(),
+            size: bincode_opts().serialized_size(&block).unwrap_or_default(),
+            txn_hashes: block.contained_transactions().into_iter().collect(),
+            block,
         }
     }
 
@@ -132,7 +152,7 @@ impl<Types: NodeTypes> BlockQueryData<Types> {
     }
 }
 
-impl<Types: NodeTypes> IntoIterator for BlockQueryData<Types> {
+impl<Types: NodeType> IntoIterator for BlockQueryData<Types> {
     type Item = TransactionHash<Types>;
     type IntoIter = <Vec<Self::Item> as IntoIterator>::IntoIter;
 
@@ -141,7 +161,7 @@ impl<Types: NodeTypes> IntoIterator for BlockQueryData<Types> {
     }
 }
 
-impl<'a, Types: NodeTypes> IntoIterator for &'a BlockQueryData<Types> {
+impl<'a, Types: NodeType> IntoIterator for &'a BlockQueryData<Types> {
     type Item = TransactionHash<Types>;
     type IntoIter = std::iter::Copied<<&'a Vec<Self::Item> as IntoIterator>::IntoIter>;
 
@@ -152,14 +172,14 @@ impl<'a, Types: NodeTypes> IntoIterator for &'a BlockQueryData<Types> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct TransactionQueryData<Types: NodeTypes> {
+pub struct TransactionQueryData<Types: NodeType> {
     transaction: <Types::BlockType as Block>::Transaction,
     height: u64,
     index: u64,
     hash: TransactionHash<Types>,
 }
 
-impl<Types: NodeTypes> TransactionQueryData<Types> {
+impl<Types: NodeType> TransactionQueryData<Types> {
     pub fn transaction(&self) -> &<Types::BlockType as Block>::Transaction {
         &self.transaction
     }
