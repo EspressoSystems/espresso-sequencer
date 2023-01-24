@@ -51,6 +51,10 @@ tempdir = { version = "0.3", optional = true }
 # This feature allows unit tests to print out a backtrace if they overflow their stack. The
 # implementation may trigger undefined behavior, so it is only used in tests and requires its own
 # separate feature flag; it is not enabled just by using the "testing" feature.
+#
+# This feature is not supported on Windows because it uses Unix-style signal handling to catch
+# stack overflow exceptions.
+[target.'cfg(not(windows))'.dependencies]
 backtrace-on-stack-overflow = { version = "0.3", optional = true }
 
 [dev-dependencies]
