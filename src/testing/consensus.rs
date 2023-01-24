@@ -65,7 +65,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             next_view_timeout: 10000,
             timeout_ratio: (11, 10),
             propose_min_round_time: Duration::from_secs(0),
-            propose_max_round_time: Duration::from_secs(1),
+            propose_max_round_time: Duration::from_secs(2),
             min_transactions: 1,
             max_transactions: NonZeroUsize::new(100).unwrap(),
             num_bootstrap: 0,

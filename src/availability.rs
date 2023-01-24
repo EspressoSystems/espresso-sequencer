@@ -532,7 +532,6 @@ mod test {
             validate(&client, (i + 1) as u64).await;
         }
 
-        tracing::error!("SHUTTING DOWN");
         network.shut_down().await;
     }
 
