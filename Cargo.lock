@@ -3098,9 +3098,10 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.0.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service?tag=0.0.1#77ced1fe209b4675f189a6d5cacf26a563862560"
+version = "0.0.2"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service?tag=0.0.2#e72ca784eb752d0cb26b62426ba782b9baa2a1ee"
 dependencies = [
+ "async-compatibility-layer",
  "async-std",
  "atomic_store",
  "bincode",
