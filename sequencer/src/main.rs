@@ -76,5 +76,4 @@ async fn main() {
     serve(query_data, init_handle, args.port)
         .await
         .expect("Failed to initialize app")
-        .await
 }
