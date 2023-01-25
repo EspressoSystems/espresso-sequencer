@@ -3,12 +3,12 @@ use crate::{
     SeqTypes,
 };
 use async_std::{
-    sync::Mutex,
+    sync::RwLock,
     task::{spawn, JoinHandle},
 };
 use futures::{future::BoxFuture, FutureExt};
-use hotshot::traits::NodeImplementation;
 use hotshot::types::HotShotHandle;
+use hotshot::{traits::NodeImplementation, types::Event};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource},
     data_source::{QueryData, UpdateDataSource},
@@ -16,7 +16,7 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::traits::metrics::Metrics;
-use std::io;
+use std::{io, sync::Arc};
 use tide_disco::{Api, App};
 
 pub type HandleFromMetrics<I> =
@@ -25,6 +25,15 @@ pub type HandleFromMetrics<I> =
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: HotShotHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, ()>,
+}
+
+impl<I: NodeImplementation<SeqTypes>> AppState<I> {
+    pub fn update(
+        &mut self,
+        event: &Event<SeqTypes>,
+    ) -> Result<(), <QueryData<SeqTypes, ()> as UpdateDataSource<SeqTypes>>::Error> {
+        self.query_state.update(event)
+    }
 }
 
 impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppState<I> {
@@ -95,8 +104,8 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-) -> io::Result<JoinHandle<io::Result<()>>> {
-    type StateType<I> = Mutex<AppState<I>>;
+) -> io::Result<JoinHandle<()>> {
+    type StateType<I> = Arc<RwLock<AppState<I>>>;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
 
@@ -104,12 +113,14 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     let handle = init_handle(metrics).await.clone();
     handle.start().await;
 
-    let state = Mutex::new(AppState::<I> {
+    let mut watch_handle = handle.clone();
+
+    let state = Arc::new(RwLock::new(AppState::<I> {
         submit_state: handle,
         query_state,
-    });
+    }));
 
-    let mut app = App::<StateType<I>, hotshot_query_service::Error>::with_state(state);
+    let mut app = App::<StateType<I>, hotshot_query_service::Error>::with_state(state.clone());
 
     // Include API specification in binary
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
@@ -150,7 +161,13 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .register_module("status", status_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
-    Ok(spawn(app.serve(format!("0.0.0.0:{}", port))))
+    Ok(spawn(async move {
+        app.serve(format!("0.0.0.0:{}", port)).await.unwrap();
+
+        while let Ok(event) = watch_handle.next_event().await {
+            state.write().await.update(&event).unwrap();
+        }
+    }))
 }
 
 #[cfg(test)]

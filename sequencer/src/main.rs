@@ -75,7 +75,6 @@ async fn main() {
     // Inner error comes from spawn, outer error comes from anything before that
     serve(query_data, init_handle, args.port)
         .await
-        .expect("Failed to serve API")
-        .await
         .expect("Failed to initialize app")
+        .await
 }
