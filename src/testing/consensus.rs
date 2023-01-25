@@ -34,7 +34,7 @@ use std::time::Duration;
 use tempdir::TempDir;
 
 struct MockNode<UserData> {
-    query_data: Arc<RwLock<QueryData<MockTypes, UserData>>>,
+    query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
     hotshot: HotShotHandle<MockTypes, MockNodeImpl>,
 }
 
@@ -65,7 +65,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             next_view_timeout: 10000,
             timeout_ratio: (11, 10),
             propose_min_round_time: Duration::from_secs(0),
-            propose_max_round_time: Duration::from_secs(1),
+            propose_max_round_time: Duration::from_secs(2),
             min_transactions: 1,
             max_transactions: NonZeroUsize::new(100).unwrap(),
             num_bootstrap: 0,
@@ -120,7 +120,7 @@ impl<UserData> MockNetwork<UserData> {
         self.nodes[0].hotshot.clone()
     }
 
-    pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, UserData>>> {
+    pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>> {
         self.nodes[0].query_data.clone()
     }
 

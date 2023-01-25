@@ -384,10 +384,13 @@ impl metrics::Label for Label {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::testing::setup_test;
     use metrics::Metrics;
 
     #[test]
     fn test_prometheus_metrics() {
+        setup_test();
+
         let metrics = PrometheusMetrics::default();
 
         // Register one metric of each type.
@@ -443,6 +446,8 @@ mod test {
 
     #[test]
     fn test_namespace() {
+        setup_test();
+
         let metrics = PrometheusMetrics::default();
         let subgroup1 = metrics.subgroup("subgroup1".into());
         let subgroup2 = subgroup1.subgroup("subgroup2".into());

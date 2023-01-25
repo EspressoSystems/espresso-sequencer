@@ -36,3 +36,70 @@ application).
   data availability committee; missing data is fetched asynchronously from other nodes
 * Serves as a source of data for HotShot catchup
 * Easily extensible with application-specific functionality
+
+## Development
+
+```bash
+git clone git@github.com:EspressoSystems/hotshot-query-service
+cd hotshot-query-service
+```
+
+### Environment
+
+We recommend installing dependencies with the [nix](https://nixos.org) package manager, which will
+ensure you use the same Rust version and related tools as everyone else using a Nix environment
+(including the CI system). If you prefer not to use Nix, you should still be able to build the
+project with the normal [rustup](https://rustup.rs)-installed toolchain, and you can skip this
+section.
+
+#### Install nix
+
+Installation instructions can be found [here](https://nixos.org/download.html). If in a rush,
+running the following command and following the on-screen instructions should work in most cases
+
+```bash
+curl -L https://nixos.org/nix/install | sh
+```
+
+#### Activate the nix environment
+
+To activate a shell with the development environment run
+
+```bash
+nix-shell
+```
+
+from within the top-level directory of the repo.
+
+Note: for the remainder of this README it is necessary that this environment is active.
+
+#### direnv (optional, but recommended for development)
+
+To avoid manually activating the nix shell each time, the [direnv](https://direnv.net/) shell
+extension can be used to activate the environment when entering the local directory of this repo.
+Note that direnv needs to be [hooked](https://direnv.net/docs/hook.html) into the shell to function.
+
+To enable `direnv` run
+
+```bash
+direnv allow
+```
+
+from the root directory of this repo.
+
+### Building and testing
+
+Once you have Cargo installed (either via Nix or Rustup) you can build the project with
+`cargo build` or `cargo build --release`. To run unit tests, we recommend using
+
+```bash
+cargo test --release --all-features
+```
+
+You can also run unit tests using the development profile, but without the optimizations of the
+release profile, some stack sizes exceed the default Rust stack. Therefore, you will need to
+configure a default stack size to run the development build. 3MB seems to work well:
+
+```bash
+RUST_MIN_STACK=3145728 cargo test --all-features
+```

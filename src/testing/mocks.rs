@@ -19,12 +19,15 @@ use hotshot::traits::{
     Block, NodeImplementation,
 };
 use hotshot_types::{
-    data::ViewNumber,
+    data::{ValidatingLeaf, ValidatingProposal, ViewNumber},
     traits::{
-        block_contents::Transaction, node_implementation::NodeTypes,
-        signature_key::ed25519::Ed25519Pub, State,
+        block_contents::Transaction,
+        node_implementation::{ApplicationMetadata, NodeType},
+        signature_key::ed25519::Ed25519Pub,
+        state::{State, TestableBlock, TestableState, ValidatingConsensus},
     },
 };
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::collections::{BTreeSet, HashSet};
@@ -104,6 +107,7 @@ impl MockState {
 }
 
 impl State for MockState {
+    type ConsensusType = ValidatingConsensus;
     type Error = MockError;
     type BlockType = MockBlock;
     type Time = ViewNumber;
@@ -134,6 +138,20 @@ impl State for MockState {
     }
 
     fn on_commit(&self) {}
+}
+
+impl TestableState for MockState {
+    fn create_random_transaction(
+        &self,
+        rng: &mut dyn RngCore,
+    ) -> <Self::BlockType as Block>::Transaction {
+        loop {
+            let nonce = rng.next_u64();
+            if !self.spent.contains(&nonce) {
+                break MockTransaction { nonce };
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Index, IndexMut)]
@@ -216,12 +234,25 @@ impl Block for MockBlock {
     }
 }
 
+impl TestableBlock for MockBlock {
+    fn genesis() -> Self {
+        Self::genesis()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct MockMetadata;
+
+impl ApplicationMetadata for MockMetadata {}
+
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
 pub struct MockTypes;
 
-impl NodeTypes for MockTypes {
+impl NodeType for MockTypes {
+    type ConsensusType = ValidatingConsensus;
+    type ApplicationMetadataType = MockMetadata;
     type Time = ViewNumber;
     type BlockType = MockBlock;
     type SignatureKey = Ed25519Pub;
@@ -237,7 +268,9 @@ impl NodeTypes for MockTypes {
 pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
-    type Storage = MemoryStorage<MockTypes>;
-    type Networking = MemoryNetwork<MockTypes>;
-    type Election = GeneralStaticCommittee<MockTypes, Ed25519Pub>;
+    type Storage = MemoryStorage<MockTypes, Self::Leaf>;
+    type Networking = MemoryNetwork<MockTypes, Self::Leaf, Self::Proposal>;
+    type Election = GeneralStaticCommittee<MockTypes, Self::Leaf, Ed25519Pub>;
+    type Leaf = ValidatingLeaf<MockTypes>;
+    type Proposal = ValidatingProposal<MockTypes, Self::Election>;
 }

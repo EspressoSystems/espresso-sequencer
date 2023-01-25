@@ -11,6 +11,7 @@
 // General Public License for more details.
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use std::time::Duration;
 
 pub mod consensus;
@@ -20,4 +21,14 @@ pub async fn sleep(dur: Duration) {
     // For some reason, `async_std::task::sleep` doesn't work on the GitHub Windows runners (it
     // hangs forever). `spin_sleep::sleep` works fine.
     async_std::task::spawn_blocking(move || spin_sleep::sleep(dur)).await;
+}
+
+pub fn setup_test() {
+    setup_logging();
+    setup_backtrace();
+
+    #[cfg(all(feature = "backtrace-on-stack-overflow", not(windows)))]
+    unsafe {
+        backtrace_on_stack_overflow::enable();
+    }
 }
