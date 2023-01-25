@@ -1179,7 +1179,7 @@ dependencies = [
  "rust-ini",
  "serde",
  "serde_json",
- "toml",
+ "toml 0.5.11",
  "yaml-rust",
 ]
 
@@ -2320,7 +2320,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -2368,7 +2368,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -2382,14 +2382,14 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "toml",
+ "toml 0.6.0",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2434,14 +2434,14 @@ dependencies = [
  "surf-disco",
  "tempdir",
  "tide-disco",
- "toml",
+ "toml 0.5.11",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2476,7 +2476,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "bincode",
 ]
@@ -3236,7 +3236,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=6d9e6cfe932843e8b2054d726bedad81f46e3a49#6d9e6cfe932843e8b2054d726bedad81f46e3a49"
+source = "git+https://github.com/EspressoSystems/HotShot.git?rev=eb038939d6e146e6e7c97887ae58bb962a92bf6b#eb038939d6e146e6e7c97887ae58bb962a92bf6b"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3988,6 +3988,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom8"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae01545c9c7fc4486ab7debaf2aad7003ac19431791868fb2e8066df97fad2f8"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4495,7 +4504,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17d47ce914bf4de440332250b0edd23ce48c005f59fab39d3335866b114f11a"
 dependencies = [
  "thiserror",
- "toml",
+ "toml 0.5.11",
 ]
 
 [[package]]
@@ -5220,6 +5229,15 @@ dependencies = [
  "percent-encoding",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "serde_spanned"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c68e921cef53841b8925c2abadd27c9b891d9613bdc43d6b823062866df38e8"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -5954,7 +5972,7 @@ dependencies = [
  "tagged-base64 0.2.4",
  "tide",
  "tide-websockets",
- "toml",
+ "toml 0.5.11",
  "tracing",
  "tracing-distributed",
  "tracing-futures",
@@ -6096,6 +6114,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "toml"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fb9d890e4dc9298b70f740f615f2e05b9db37dce531f6b24fb77ac993f9f217"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4553f467ac8e3d374bc9a177a26801e5d0f9b211aa1673fb137a403afd1c9cf5"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "729bfd096e40da9c001f778f5cdecbd2957929a24e10e5883d9392220a751581"
+dependencies = [
+ "indexmap",
+ "nom8",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
 ]
 
 [[package]]

@@ -22,10 +22,8 @@ use hotshot_types::{
     traits::{
         metrics::Metrics,
         node_implementation::{NodeImplementation, NodeType},
-        state::{TestableBlock, TestableState},
     },
 };
-use serde::Serialize;
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -38,11 +36,7 @@ use std::iter::once;
 ///   should be used when initializing a [HotShotHandle](hotshot::types::HotShotHandle)
 /// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
 ///   emitted
-pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     type Error: Error + Debug;
 
     /// Get a handle for populating status metrics.
@@ -71,9 +65,6 @@ impl<
         I: NodeImplementation<Types>,
         T: UpdateAvailabilityData<Types, I> + UpdateStatusData + Send,
     > UpdateDataSource<Types, I> for T
-where
-    Types::BlockType: Serialize + TestableBlock,
-    Types::StateType: TestableState,
 {
     type Error = <Self as UpdateAvailabilityData<Types, I>>::Error;
 

@@ -15,16 +15,11 @@ use futures::stream::Stream;
 use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
-    state::{TestableBlock, TestableState},
 };
 use std::error::Error;
 use std::fmt::Debug;
 
-pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     type Error: Error + Debug;
 
     type LeafIterType<'a>: 'a + Iterator<Item = Option<LeafQueryData<Types, I>>>
@@ -48,11 +43,7 @@ where
     fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error>;
 }
 
-pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>> {
     type Error: Error + Debug;
     fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>;
     fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;

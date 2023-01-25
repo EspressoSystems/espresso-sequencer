@@ -14,10 +14,7 @@ use crate::api::load_api;
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    state::{TestableBlock, TestableState},
-};
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
 use std::fmt::Display;
@@ -165,8 +162,6 @@ pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types, I>,
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),

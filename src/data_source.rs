@@ -28,7 +28,6 @@ use hotshot_types::traits::{
     metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
-    state::{TestableBlock, TestableState},
 };
 use snafu::Snafu;
 use std::collections::HashMap;
@@ -67,11 +66,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// [AtomicStore::commit_version] alternate with calls to [QueryData::commit_version] or
 /// [QueryData::skip_version].
 #[derive(custom_debug::Debug)]
-pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData> {
     index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
@@ -84,11 +79,7 @@ where
     user_data: UserData,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData> {
     /// Create a new [QueryData] with storage at `path`.
     ///
     /// If there is already data at `path`, it will be archived.
@@ -236,9 +227,6 @@ where
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     fn as_ref(&self) -> &UserData {
         &self.user_data
@@ -247,9 +235,6 @@ where
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsMut<UserData>
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     fn as_mut(&mut self) -> &mut UserData {
         &mut self.user_data
@@ -262,9 +247,6 @@ pub struct StreamError;
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     type Error = StreamError;
 
@@ -312,9 +294,6 @@ where
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     type Error = PersistenceError;
 
@@ -343,11 +322,7 @@ where
 }
 
 /// Metric-related functions.
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData> {
     fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
         self.metrics.get_subgroup(["consensus"])
     }
@@ -355,9 +330,6 @@ where
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     type Error = MetricsError;
 
@@ -391,9 +363,6 @@ where
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateStatusData
     for QueryData<Types, I, UserData>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
 {
     fn metrics(&self) -> Box<dyn Metrics> {
         Box::new(self.metrics.clone())

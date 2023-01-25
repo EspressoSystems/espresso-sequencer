@@ -398,10 +398,7 @@ use futures::Future;
 use hotshot::types::HotShotHandle;
 use hotshot_types::{
     data::LeafType,
-    traits::{
-        node_implementation::{NodeImplementation, NodeType},
-        state::{TestableBlock, TestableState},
-    },
+    traits::node_implementation::{NodeImplementation, NodeType},
 };
 
 /// Leaf type appended to a chain by consensus.
@@ -423,11 +420,7 @@ pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>>(
     _options: &Options,
     _data_source: QueryData<Types, I, ()>,
     _hotshot: HotShotHandle<Types, I>,
-) -> impl Future<Output = ()> + Send + Sync + 'static
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+) -> impl Future<Output = ()> + Send + Sync + 'static {
     async move { unimplemented!() }
 }
 

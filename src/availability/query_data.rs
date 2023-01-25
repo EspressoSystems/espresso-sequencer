@@ -19,7 +19,6 @@ use hotshot_types::{
         election::SignedCertificate,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::EncodedPublicKey,
-        state::{TestableBlock, TestableState},
         Block,
     },
 };
@@ -33,20 +32,12 @@ pub type TransactionHash<Types> =
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
     leaf: Leaf<Types, I>,
     qc: QuorumCertificate<Types, I>,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
     pub fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
         assert_eq!(qc.leaf_commitment(), leaf.commit());
         Self { leaf, qc }
@@ -87,11 +78,7 @@ pub struct BlockQueryData<Types: NodeType> {
     txn_hashes: Vec<TransactionHash<Types>>,
 }
 
-impl<Types: NodeType> BlockQueryData<Types>
-where
-    Types::BlockType: TestableBlock,
-    Types::StateType: TestableState,
-{
+impl<Types: NodeType> BlockQueryData<Types> {
     pub fn new<I: NodeImplementation<Types>>(
         leaf: Leaf<Types, I>,
         qc: QuorumCertificate<Types, I>,
