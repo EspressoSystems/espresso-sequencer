@@ -72,8 +72,9 @@ async fn main() {
     }
     .expect("Failed to initialize query data storage");
 
-    // Inner error comes from spawn, outer error comes from anything before that
     serve(query_data, init_handle, args.port)
         .await
-        .expect("Failed to initialize app")
+        .expect("Failed to initialize API")
+        .await
+        .expect("Failed to initialize app");
 }

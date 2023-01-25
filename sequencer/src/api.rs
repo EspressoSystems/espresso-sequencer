@@ -2,7 +2,10 @@ use crate::{
     transaction::{SequencerTransaction, Transaction},
     SeqTypes,
 };
-use async_std::{sync::RwLock, task::spawn};
+use async_std::{
+    sync::RwLock,
+    task::{spawn, JoinHandle},
+};
 use futures::{future::BoxFuture, FutureExt};
 use hotshot::types::HotShotHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
@@ -101,7 +104,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-) -> io::Result<()> {
+) -> io::Result<JoinHandle<Result<(), io::Error>>> {
     type StateType<I> = Arc<RwLock<AppState<I>>>;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
@@ -158,7 +161,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .register_module("status", status_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
-    spawn(async move {
+    Ok(spawn(async move {
         futures::join!(app.serve(format!("0.0.0.0:{}", port)), async move {
             while let Ok(event) = watch_handle.next_event().await {
                 // If update results in an error, program state is unrecoverable
@@ -172,9 +175,8 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
                 }
             }
         })
-    });
-
-    Ok(())
+        .0
+    }))
 }
 
 #[cfg(test)]
