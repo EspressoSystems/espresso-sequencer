@@ -28,7 +28,7 @@ type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 pub async fn run(opt: &Options) {
     // Connect to the HotShot query service to stream sequenced blocks.
-    let hotshot = HotShotClient::new(opt.sequencer_url.clone());
+    let hotshot = HotShotClient::new(opt.sequencer_url.join("availability").unwrap());
     hotshot.connect(None).await;
 
     // Connect to the layer one rollup and matic contracts.
@@ -36,6 +36,7 @@ pub async fn run(opt: &Options) {
         tracing::error!("unable to connect to L1, sequencer task exiting");
         return;
     };
+    tracing::info!("connected to l1 at {}", opt.l1_provider);
     let rollup = ProofOfEfficiency::new(opt.rollup_address, l1.clone());
     let matic = Matic::new(opt.matic_address, l1);
 
@@ -43,6 +44,7 @@ pub async fn run(opt: &Options) {
     // the contract to do this correctly so we will approve a large amount of MATIC once, to save
     // the complexity and gas cost of having to frequently re-approve.
     loop {
+        tracing::info!("approving {} MATIC for {}", U256::MAX, rollup.address());
         match matic.approve(rollup.address(), U256::MAX).send().await {
             Ok(tx) => match tx.await {
                 Ok(Some(_)) => break,
@@ -75,6 +77,7 @@ pub async fn run(opt: &Options) {
             return;
         }
     };
+    tracing::info!("last batch sequenced: {}", from);
 
     // Get the maximum number of batches allowed to be sequenced at once.
     let max = match rollup.max_verify_batches().call().await {
@@ -88,6 +91,7 @@ pub async fn run(opt: &Options) {
             return;
         }
     };
+    tracing::info!("max batches per sequencer: {}", max);
 
     sequence(&opt.zkevm(), from, max, hotshot, rollup).await;
 }
