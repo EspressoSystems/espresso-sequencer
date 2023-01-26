@@ -17,6 +17,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -27,6 +28,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -37,6 +39,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -47,6 +50,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -57,6 +61,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -73,3 +78,5 @@ services:
       - ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC
       - ESPRESSO_ZKEVM_ADAPTOR_PORT
       - RUST_LOG
+    depends_on:
+      - sequencer0
