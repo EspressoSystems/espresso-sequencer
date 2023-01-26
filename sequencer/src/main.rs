@@ -1,7 +1,14 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use sequencer::{api::serve, init_node, Block, ChainVariables, GenesisTransaction};
-use std::net::ToSocketAddrs;
+use hotshot_query_service::data_source::QueryData;
+use sequencer::{
+    api::{serve, HandleFromMetrics},
+    init_node, Block, ChainVariables, GenesisTransaction,
+};
+use std::{
+    net::ToSocketAddrs,
+    path::{Path, PathBuf},
+};
 use url::Url;
 
 #[derive(Parser)]
@@ -17,6 +24,14 @@ struct Args {
     /// URL of the HotShot CDN.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
     cdn_url: Url,
+
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    storage_path: PathBuf,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    reset_store: bool,
 }
 
 #[async_std::main]
@@ -34,7 +49,6 @@ async fn main() {
         ),
     });
 
-    // Initialize HotShot.
     let cdn_addr = (
         args.cdn_url.host_str().unwrap(),
         args.cdn_url.port_or_known_default().unwrap(),
@@ -43,18 +57,24 @@ async fn main() {
         .unwrap()
         .next()
         .unwrap();
-    let mut handle = init_node(cdn_addr, genesis).await;
 
-    // Run consensus.
-    handle.start().await;
-    while let Ok(event) = handle.next_event().await {
-        tracing::info!("EVENT {:?}", event);
+    let init_handle: HandleFromMetrics<_> =
+        Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
+
+    let storage_path = Path::new(&args.storage_path);
+
+    let query_data = {
+        if args.reset_store {
+            QueryData::create(storage_path, ())
+        } else {
+            QueryData::open(storage_path, ())
+        }
     }
-    tracing::warn!("shutting down");
+    .expect("Failed to initialize query data storage");
 
-    // Inner error comes from spawn, outer error comes from anything before that
-    serve(handle, args.port)
-        .expect("Failed to serve API")
+    serve(query_data, init_handle, args.port)
         .await
-        .expect("Failed to initialize app")
+        .expect("Failed to initialize API")
+        .await
+        .expect("Failed to initialize app");
 }

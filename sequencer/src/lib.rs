@@ -22,6 +22,7 @@ use hotshot::{
     types::HotShotHandle,
 };
 use hotshot::{HotShot, HotShotInitializer};
+use hotshot_types::traits::metrics::Metrics;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
 use hotshot_types::{traits::metrics::NoMetrics, HotShotConfig};
 
@@ -142,9 +143,10 @@ async fn init_hotshot<
 pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
+    metrics: Box<dyn Metrics>,
 ) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
     let (config, _, networking) =
-        CentralizedServerNetwork::connect_with_server_config(NoMetrics::new(), addr).await;
+        CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
 
     // Generate public keys and this node's private key.
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())

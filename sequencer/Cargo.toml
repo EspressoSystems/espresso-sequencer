@@ -7,6 +7,7 @@ edition = "2021"
 [dev-dependencies]
 portpicker = "0.1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" } 
+tempdir = "0.3.7"
 
 [dependencies]
 ark-bls12-381 = "0.3.0"
@@ -20,9 +21,10 @@ cld = "0.5"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 derive_more = "0.99.17"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
-hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a" }
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
