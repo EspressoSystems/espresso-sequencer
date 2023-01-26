@@ -7,6 +7,15 @@ edition = "2021"
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = ["logging-utils"] }
 async-std = "1.12"
 clap = { version = "4.1", features = ["derive", "env"] }
+contract-bindings = { path = "../contract-bindings" }
 ethers = "1.0"
 futures = "0.3"
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service", tag = "0.0.2" }
+sequencer = { path = "../sequencer" }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
+tracing = "0.1"
+zkevm = { path = "../zkevm" }
+
+[dev-dependencies]
+commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }

@@ -61,16 +61,15 @@ services:
     depends_on:
       - cdn-server
 
-  # TODO: enable hermez adaptor once it's main function doesn't exit.
-  # hermez-adaptor:
-  #   image: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor:main
-  #   ports:
-  #     - "$ESPRESSO_ZKEVM_ADAPTOR_PORT:$ESPRESSO_ZKEVM_ADAPTOR_PORT"
-  #   environment:
-  #     - ESPRESSO_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
-  #     - ESPRESSO_ZKEVM_L1_PROVIDER
-  #     - ESPRESSO_ZKEVM_ROLLUP_ADDRESS
-  #     - ESPRESSO_ZKEVM_MATIC_ADDRESS
-  #     - ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC
-  #     - ESPRESSO_ZKEVM_ADAPTOR_PORT
-  #     - RUST_LOG
+  hermez-adaptor:
+    image: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor:main
+    ports:
+      - "$ESPRESSO_ZKEVM_ADAPTOR_PORT:$ESPRESSO_ZKEVM_ADAPTOR_PORT"
+    environment:
+      - ESPRESSO_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_ZKEVM_L1_PROVIDER
+      - ESPRESSO_ZKEVM_ROLLUP_ADDRESS
+      - ESPRESSO_ZKEVM_MATIC_ADDRESS
+      - ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC
+      - ESPRESSO_ZKEVM_ADAPTOR_PORT
+      - RUST_LOG

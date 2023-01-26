@@ -37,11 +37,18 @@ impl<I: NodeImplementation<SeqTypes>> AppState<I> {
 }
 
 impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppState<I> {
+    type Error = <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::Error;
+
     type LeafIterType<'a> =
         <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafIterType<'a>;
 
     type BlockIterType<'a> =
         <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::BlockIterType<'a>;
+
+    type LeafStreamType =
+        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafStreamType;
+    type BlockStreamType =
+        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::BlockStreamType;
 
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
         self.query_state.get_nth_leaf_iter(n)
@@ -77,6 +84,14 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppSt
         id: &hotshot_types::traits::signature_key::EncodedPublicKey,
     ) -> Vec<u64> {
         self.query_state.get_block_ids_by_proposer_id(id)
+    }
+
+    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
+        self.query_state.subscribe_leaves(height)
+    }
+
+    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
+        self.query_state.subscribe_blocks(height)
     }
 }
 

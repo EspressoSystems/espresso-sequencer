@@ -1,6 +1,7 @@
 use crate::{
     state::State,
     transaction::{GenesisTransaction, SequencerTransaction},
+    vm::Vm,
     Error,
 };
 use commit::{Commitment, Committable};
@@ -50,7 +51,6 @@ impl Committable for Block {
 }
 
 impl Block {
-    #[allow(unused)]
     pub fn new(parent_state: Commitment<State>) -> Self {
         Self {
             parent_state,
@@ -58,11 +58,23 @@ impl Block {
         }
     }
 
-    #[allow(unused)]
     pub fn genesis(txn: GenesisTransaction) -> Self {
         Self {
             parent_state: State::default().commit(),
             transactions: vec![SequencerTransaction::Genesis(txn)],
         }
+    }
+
+    /// Visit all transactions in this block.
+    pub fn transactions(&self) -> impl ExactSizeIterator<Item = &SequencerTransaction> + '_ {
+        self.transactions.iter()
+    }
+
+    /// Visit the valid transactions for `V` in this block.
+    pub fn vm_transactions<'a, V: Vm>(
+        &'a self,
+        vm: &'a V,
+    ) -> impl Iterator<Item = V::Transaction> + 'a {
+        self.transactions().filter_map(|txn| txn.as_vm(vm))
     }
 }

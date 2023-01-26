@@ -38,6 +38,7 @@ pub use block::Block;
 pub use chain_variables::ChainVariables;
 pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
+pub use vm::{Vm, VmId, VmTransaction};
 
 #[derive(Debug, Clone)]
 pub struct Node<N>(std::marker::PhantomData<fn(&N)>);
@@ -206,7 +207,7 @@ mod test {
         txn: &ApplicationTransaction,
     ) -> SequencerTransaction {
         let tx = SequencerTransaction::Wrapped(Transaction::new(
-            TestVm::id(),
+            TestVm::default().id(),
             bincode::serialize(txn).unwrap(),
         ));
 

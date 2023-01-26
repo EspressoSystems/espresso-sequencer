@@ -2912,9 +2912,16 @@ dependencies = [
  "async-compatibility-layer",
  "async-std",
  "clap 4.1.1",
+ "commit",
+ "contract-bindings",
  "ethers",
  "futures",
+ "hotshot-query-service",
+ "hotshot-types",
+ "sequencer",
  "surf-disco",
+ "tracing",
+ "zkevm",
 ]
 
 [[package]]
@@ -3097,13 +3104,14 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.0.1"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git?tag=0.0.1#77ced1fe209b4675f189a6d5cacf26a563862560"
+version = "0.0.2"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service?tag=0.0.2#e72ca784eb752d0cb26b62426ba782b9baa2a1ee"
 dependencies = [
+ "async-compatibility-layer",
  "async-std",
  "atomic_store",
  "bincode",
- "clap 4.0.32",
+ "clap 4.1.1",
  "commit",
  "custom_debug",
  "derive_more",
@@ -6354,17 +6362,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha1"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f04293dc80c3993519f2d7f6f511707ee7094fe0c6d3406feb330cdb3540eba3"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest 0.10.6",
-]
-
-[[package]]
 name = "sha1_smol"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6702,7 +6699,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "sha1 0.6.1",
+ "sha1",
  "syn",
 ]
 
@@ -8079,7 +8076,6 @@ dependencies = [
  "clap 4.1.1",
  "contract-bindings",
  "ethers",
- "hex",
  "sequencer",
  "tracing",
  "url",
