@@ -15,3 +15,6 @@ down:
 
 pull:
     {{compose}} pull
+
+hardhat *args:
+    cd zkevm-contracts && npx hardhat {{args}}
