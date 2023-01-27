@@ -3,7 +3,10 @@ use contract_bindings::bindings::{
     polygon_zk_evm::PolygonZkEVM,
     polygon_zk_evm_bridge::PolygonZkEVMBridge,
     polygon_zk_evm_global_exit_root::PolygonZkEVMGlobalExitRoot,
+    polygon_zk_evm_global_exit_root_l2::PolygonZkEVMGlobalExitRootL2,
+    polygon_zk_evm_timelock::PolygonZkEVMTimelock,
     shared_types::{BatchData, InitializePackedParameters},
+    verifier::Verifier,
     verifier_rollup_helper_mock::VerifierRollupHelperMock,
 };
 use ethers::{
@@ -21,15 +24,49 @@ use std::{fs, ops::Mul, path::Path, sync::Arc, time::Duration};
 
 #[async_trait::async_trait]
 pub trait Deploy<M: Middleware> {
-    async fn deploy(client: &Arc<M>) -> Self;
+    async fn deploy<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self;
 }
 
-#[async_trait::async_trait]
-impl<M: Middleware> Deploy<M> for PolygonZkEVM<M> {
-    async fn deploy(client: &Arc<M>) -> Self {
-        deploy_by_name("PolygonZkEVM", client, ()).await.into()
-    }
+/// Creates a deploy function for the contract.
+///
+/// If the contract is in a subdirectory of the "artifacts/contracts" directory,
+/// the subdirectory relative to the "artifacts/contracts" directory must be
+/// passed as first argument.
+macro_rules! mk_deploy {
+    ($prefix: tt, $contract:ident) => {
+        #[async_trait::async_trait]
+        impl<M: Middleware> Deploy<M> for $contract<M> {
+            async fn deploy<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self {
+                // Ideally we would make our bindings generator script inline
+                // the contract bytecode somewhere in this crate, then the
+                // heuristic for finding the hardhat artifact below would no
+                // longer be necessary.
+                let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join(format!(
+                        "zkevm-contracts/artifacts/contracts/{}/{}.sol/{}.json",
+                        $prefix,
+                        stringify!($contract),
+                        stringify!($contract)
+                    ));
+                let file = fs::File::open(&path)
+                    .unwrap_or_else(|_| panic!("Unable to open path {:?}", path));
+                let artifact = serde_json::from_reader::<_, HardhatArtifact>(file).unwrap();
+                deploy_artifact(artifact, client, args).await.into()
+            }
+        }
+    };
 }
+
+mk_deploy!("", PolygonZkEVM);
+mk_deploy!("", PolygonZkEVMBridge);
+mk_deploy!("", PolygonZkEVMGlobalExitRootL2);
+mk_deploy!("", PolygonZkEVMGlobalExitRoot);
+mk_deploy!("", PolygonZkEVMTimelock);
+mk_deploy!("verifiers", Verifier);
+mk_deploy!("mocks", VerifierRollupHelperMock);
+mk_deploy!("mocks", ERC20PermitMock);
 
 async fn deploy_artifact<M: Middleware, T: Tokenize>(
     artifact: HardhatArtifact,
@@ -42,37 +79,6 @@ async fn deploy_artifact<M: Middleware, T: Tokenize>(
         client.clone(),
     );
     factory.deploy(args).unwrap().send().await.unwrap()
-}
-
-/// A convenience function to deploy a contract given it's Name.
-async fn deploy_by_name<M: Middleware, T: Tokenize>(
-    name: &str,
-    client: &Arc<M>,
-    args: T,
-) -> Contract<M> {
-    let matches: Vec<_> = glob::glob(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join(format!(
-                "zkevm-contracts/artifacts/contracts/**/{name}.json",
-            ))
-            .to_str()
-            .unwrap(),
-    )
-    .unwrap()
-    .map(|entry| entry.unwrap())
-    .collect();
-
-    let path = if matches.len() == 1 {
-        matches[0].clone()
-    } else {
-        panic!("Not one exact match for contract {name}: {matches:?}");
-    };
-
-    let file = fs::File::open(&path).unwrap_or_else(|_| panic!("Unable to open path {:?}", path));
-    let artifact = serde_json::from_reader::<_, HardhatArtifact>(file).unwrap();
-    deploy_artifact(artifact, client, args).await
 }
 
 #[async_std::main]
@@ -119,14 +125,10 @@ async fn main() {
     let trusted_sequencer_client =
         Arc::new(SignerMiddleware::new(provider.clone(), trusted_sequencer));
 
-    let verifier: VerifierRollupHelperMock<_> =
-        deploy_by_name("VerifierRollupHelperMock", &client, ())
-            .await
-            .into();
+    let verifier = VerifierRollupHelperMock::deploy(&client, ()).await;
 
     let matic_token_initial_balance = parse_ether("20000000").unwrap();
-    let matic: ERC20PermitMock<_> = deploy_by_name(
-        "ERC20PermitMock",
+    let matic = ERC20PermitMock::deploy(
         &client,
         (
             "Matic Token".to_string(),
@@ -135,19 +137,11 @@ async fn main() {
             matic_token_initial_balance,
         ),
     )
-    .await
-    .into();
+    .await;
 
-    let global_exit_root: PolygonZkEVMGlobalExitRoot<_> =
-        deploy_by_name("PolygonZkEVMGlobalExitRoot", &client, ())
-            .await
-            .into();
-    let bridge: PolygonZkEVMBridge<_> = deploy_by_name("PolygonZkEVMBridge", &client, ())
-        .await
-        .into();
-
-    // let rollup: PolygonZkEVM<_> = deploy_by_name("PolygonZkEVM", &client, ()).await.into();
-    let rollup = PolygonZkEVM::deploy(&client).await;
+    let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(&client, ()).await;
+    let bridge = PolygonZkEVMBridge::deploy(&client, ()).await;
+    let rollup = PolygonZkEVM::deploy(&client, ()).await;
 
     global_exit_root
         .initialize(rollup.address(), bridge.address())
