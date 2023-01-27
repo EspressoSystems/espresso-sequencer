@@ -19,6 +19,18 @@ use ethers_solc::HardhatArtifact;
 use hex::FromHex;
 use std::{fs, ops::Mul, path::Path, sync::Arc, time::Duration};
 
+#[async_trait::async_trait]
+pub trait Deploy<M: Middleware> {
+    async fn deploy(client: &Arc<M>) -> Self;
+}
+
+#[async_trait::async_trait]
+impl<M: Middleware> Deploy<M> for PolygonZkEVM<M> {
+    async fn deploy(client: &Arc<M>) -> Self {
+        deploy_by_name("PolygonZkEVM", client, ()).await.into()
+    }
+}
+
 async fn deploy_artifact<M: Middleware, T: Tokenize>(
     artifact: HardhatArtifact,
     client: &Arc<M>,
@@ -134,7 +146,8 @@ async fn main() {
         .await
         .into();
 
-    let rollup: PolygonZkEVM<_> = deploy_by_name("PolygonZkEVM", &client, ()).await.into();
+    // let rollup: PolygonZkEVM<_> = deploy_by_name("PolygonZkEVM", &client, ()).await.into();
+    let rollup = PolygonZkEVM::deploy(&client).await;
 
     global_exit_root
         .initialize(rollup.address(), bridge.address())
