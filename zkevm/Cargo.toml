@@ -10,7 +10,6 @@ async-std = { version = "1.12", features = ["attributes"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 contract-bindings = { path = "../contract-bindings" }
 ethers = "1.0.2"
-hex = "0.4"
 sequencer = { path = "../sequencer" }
 tracing = "0.1"
 url = "2.3"

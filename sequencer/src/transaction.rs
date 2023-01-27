@@ -1,8 +1,12 @@
 use commit::{Commitment, Committable};
+use derive_more::From;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use serde::{Deserialize, Serialize};
 
-use crate::{chain_variables::ChainVariables, vm::VmId};
+use crate::{
+    chain_variables::ChainVariables,
+    vm::{Vm, VmId, VmTransaction},
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 pub struct Transaction {
@@ -11,9 +15,24 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    #[allow(unused)]
-    pub(crate) fn new(vm: VmId, payload: Vec<u8>) -> Self {
+    pub fn new(vm: VmId, payload: Vec<u8>) -> Self {
         Self { vm, payload }
+    }
+
+    pub fn vm(&self) -> VmId {
+        self.vm
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
+        if self.vm() == vm.id() {
+            V::Transaction::decode(self.payload())
+        } else {
+            None
+        }
     }
 }
 
@@ -24,6 +43,16 @@ impl ApplicationTransaction {
     #[allow(unused)]
     pub(crate) fn new(payload: Vec<u8>) -> Self {
         Self(payload)
+    }
+}
+
+impl VmTransaction for ApplicationTransaction {
+    fn encode(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
+    fn decode(bytes: &[u8]) -> Option<Self> {
+        bincode::deserialize(bytes).ok()
     }
 }
 
@@ -51,7 +80,7 @@ impl Committable for GenesisTransaction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, From)]
 /// A transaction tht can be either a CAP transaction or a collect reward transaction
 pub enum SequencerTransaction {
     Genesis(GenesisTransaction),
@@ -64,5 +93,14 @@ impl Committable for SequencerTransaction {
         commit::RawCommitmentBuilder::new("SequencerTransaction")
             .var_size_bytes(&bytes)
             .finalize()
+    }
+}
+
+impl SequencerTransaction {
+    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
+        match self {
+            Self::Genesis(_) => None,
+            Self::Wrapped(t) => t.as_vm(vm),
+        }
     }
 }
