@@ -24,7 +24,6 @@ pub mod polygon_zk_evm_global_exit_root_l2_mock;
 pub mod polygon_zk_evm_global_exit_root_mock;
 pub mod polygon_zk_evm_mock;
 pub mod polygon_zk_evm_timelock;
-pub mod proof_of_efficiency;
 pub mod safe_math;
 pub mod shared_types;
 pub mod token_wrapped;
