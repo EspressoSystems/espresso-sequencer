@@ -1,7 +1,7 @@
-pub mod bindings;
-mod contract;
+mod bindings;
+pub use bindings::*;
 
-pub use bindings::{
-    matic::{self, Matic},
-    proof_of_efficiency::{self, ProofOfEfficiency},
-};
+mod deploy;
+pub use deploy::*;
+
+pub use bindings::{matic::Matic, proof_of_efficiency::ProofOfEfficiency};
