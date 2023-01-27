@@ -62,11 +62,10 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use
 enabled.
 
 ### Developing contracts
-The development enviornment for contracts is a work in progress, for now we can
-compile contracts, deploy them and generate bindings but using modified
-contracts in the `zkevm-contracts` from rust requires manually executing the
-compiliation step. If the ABIs change the `gen-bindings` step, also need to be
-executed.
+The development environment for contracts is a work in progress, for now we can
+compile contracts, deploy them and generate bindings. Using modified contracts
+in the `zkevm-contracts` from rust requires manually executing the compilation
+step. If the ABIs change the `gen-bindings` step also needs to be executed.
 
 - Ensure submodules are checkout out: `git submodule update --init`
 - Install dependencies `just npm i`
