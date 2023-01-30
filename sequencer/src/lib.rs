@@ -298,7 +298,7 @@ mod test {
         // Keep getting events until we see a Decide event
         loop {
             let event = handle.next_event().await;
-            println!("Event: {:?}\n", event);
+            println!("Event: {event:?}\n");
 
             match event {
                 Ok(Event {
@@ -338,7 +338,7 @@ mod test {
         let mut handles = init_hotshot_handles().await;
 
         let event = handles[0].next_event().await;
-        println!("Event: {:?}\n", event);
+        println!("Event: {event:?}\n");
 
         // Should immediately get genesis block decide event
         match event {
@@ -357,7 +357,7 @@ mod test {
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
         let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
-        println!("Submitted: {:?}", txn);
+        println!("Submitted: {txn:?}");
 
         wait_for_decide_on_handle(handles[0].clone(), submitted_txn).await
     }

@@ -177,7 +177,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
     Ok(spawn(async move {
-        futures::join!(app.serve(format!("0.0.0.0:{}", port)), async move {
+        futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
             while let Ok(event) = watch_handle.next_event().await {
                 // If update results in an error, program state is unrecoverable
                 if let Err(err) = state.write().await.update(&event) {
@@ -220,7 +220,7 @@ mod test {
 
         let port = pick_unused_port().expect("No ports free");
 
-        let url = format!("http://localhost:{}", port).parse().unwrap();
+        let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(url);
 
         // Get list of HotShot handles, take the first one, and submit a transaction to it
