@@ -35,7 +35,7 @@ pub trait Deploy<M: Middleware> {
 /// the subdirectory relative to the "artifacts/contracts" directory must be
 /// passed as first argument.
 macro_rules! mk_deploy {
-    ($prefix: tt, $contract:ident) => {
+    ($prefix: expr, $contract:ident) => {
         #[async_trait::async_trait]
         impl<M: Middleware> Deploy<M> for $contract<M> {
             async fn deploy<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self {
@@ -87,6 +87,7 @@ pub async fn deploy_artifact<M: Middleware, T: Tokenize>(
 
 // We may want to use different names once we deploy a customized system without
 // trusted parties.
+#[derive(Debug, Clone)]
 pub struct TestClients {
     pub deployer: Arc<EthMiddleware>,
     pub trusted_aggregator: Arc<EthMiddleware>,
@@ -119,6 +120,7 @@ fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<
 }
 
 /// A system of hermez smart contracts for testing purposes.
+#[derive(Debug, Clone)]
 pub struct TestHermezSystem {
     pub rollup: PolygonZkEVM<EthMiddleware>,
     pub bridge: PolygonZkEVMBridge<EthMiddleware>,
