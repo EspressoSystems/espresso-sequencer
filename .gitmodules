@@ -1,3 +1,6 @@
 [submodule "zkevm-node"]
 	path = zkevm-node
 	url = git@github.com:EspressoSystems/zkevm-node
+[submodule "zkevm-contracts"]
+	path = zkevm-contracts
+	url = git@github.com:EspressoSystems/zkevm-contracts.git

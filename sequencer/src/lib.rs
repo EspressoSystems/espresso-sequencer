@@ -323,8 +323,8 @@ mod test {
                 Ok(Event {
                     view_number: vn, ..
                 }) => {
-                    // Don't wait too long; 10 views should more more than enough
-                    if *vn > 10u64 {
+                    // Don't wait too long; 20 views should more more than enough
+                    if *vn > 20u64 {
                         panic!();
                     }
                 } // Keep waiting

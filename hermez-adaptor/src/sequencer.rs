@@ -1,8 +1,8 @@
 use crate::Options;
 use async_std::{sync::Arc, task::sleep};
 use contract_bindings::{
-    proof_of_efficiency::{ForceBatchFilter, ForcedBatchData},
-    Matic, ProofOfEfficiency,
+    polygon_zk_evm::{ForceBatchFilter, ForcedBatchData},
+    Matic, PolygonZkEVM,
 };
 use ethers::{
     abi::{Detokenize, RawLog},
@@ -37,7 +37,7 @@ pub async fn run(opt: &Options) {
         return;
     };
     tracing::info!("connected to l1 at {}", opt.l1_provider);
-    let rollup = ProofOfEfficiency::new(opt.rollup_address, l1.clone());
+    let rollup = PolygonZkEVM::new(opt.rollup_address, l1.clone());
     let matic = Matic::new(opt.matic_address, l1);
 
     // The contract will need to take MATIC out of our account to collect sequencing fees. We trust
@@ -101,7 +101,7 @@ async fn sequence(
     from: u64,
     max_batches: u64,
     hotshot: HotShotClient,
-    rollup: ProofOfEfficiency<Middleware>,
+    rollup: PolygonZkEVM<Middleware>,
 ) {
     let mut blocks = match hotshot
         .socket(&format!("stream/blocks/{from}"))
@@ -165,7 +165,7 @@ async fn sequence(
 
 async fn sequence_batches(
     zkevm: &ZkEvm,
-    rollup: &ProofOfEfficiency<Middleware>,
+    rollup: &PolygonZkEVM<Middleware>,
     blocks: impl IntoIterator<Item = &Block>,
 ) {
     // Convert the blocks to byte-encoded EVM transactions.
@@ -406,7 +406,7 @@ mod test {
         let l2 = &connect_rpc(&l2_provider, &mnemonic, Some(l2_chain_id))
             .await
             .unwrap();
-        let rollup = ProofOfEfficiency::new(rollup_address, l1.clone());
+        let rollup = PolygonZkEVM::new(rollup_address, l1.clone());
         let l1_initial_block = l1.get_block_number().await.unwrap();
         let initial_batch_num = rollup.last_batch_sequenced().call().await.unwrap();
         let initial_force_batch_num = rollup.last_force_batch().call().await.unwrap();

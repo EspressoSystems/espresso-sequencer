@@ -15,3 +15,9 @@ down:
 
 pull:
     {{compose}} pull
+
+hardhat *args:
+    cd zkevm-contracts && nix develop -c bash -c "npx hardhat {{args}}"
+
+npm *args:
+   cd zkevm-contracts && nix develop -c bash -c "npm {{args}}"

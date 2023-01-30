@@ -31,8 +31,8 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
 use contract_bindings::{
-    proof_of_efficiency::{ForceBatchFilter, ForcedBatchData, SequenceForceBatchesFilter},
-    Matic, ProofOfEfficiency,
+    polygon_zk_evm::{ForceBatchFilter, ForcedBatchData, SequenceForceBatchesFilter},
+    Matic, PolygonZkEVM,
 };
 use ethers::{
     abi::RawLog,
@@ -95,7 +95,7 @@ struct Options {
 }
 
 async fn force_batch<M: Middleware>(
-    rollup: &ProofOfEfficiency<M>,
+    rollup: &PolygonZkEVM<M>,
     transactions: Bytes,
     matic_decimals: u32,
 ) -> u64 {
@@ -205,7 +205,7 @@ async fn main() {
     let l1_client = Arc::new(SignerMiddleware::new(l1, l1_wallet.clone()));
     let l2_client = Arc::new(SignerMiddleware::new(l2, l2_wallet.clone()));
 
-    let rollup = ProofOfEfficiency::new(opt.rollup_address, l1_client.clone());
+    let rollup = PolygonZkEVM::new(opt.rollup_address, l1_client.clone());
     let matic = Matic::new(opt.matic_address, l1_client.clone());
     let matic_decimals = matic.decimals().call().await.unwrap();
     tracing::info!("Found MATIC token, {} decimals", matic_decimals);
