@@ -104,7 +104,7 @@ async fn sequence(
     rollup: PolygonZkEVM<Middleware>,
 ) {
     let mut blocks = match hotshot
-        .socket(&format!("stream/blocks/{}", from))
+        .socket(&format!("stream/blocks/{from}"))
         .subscribe()
         .await
     {
@@ -236,7 +236,7 @@ async fn sequence_batches(
                         // If the RPC responds successfully but tells us there is no block with this
                         // number, it is lying. At this point we should just fail loudly.
                         break block.unwrap_or_else(|| {
-                            panic!("RPC says block {} does not exist", block_number)
+                            panic!("RPC says block {block_number} does not exist")
                         });
                     }
                     Err(err) => {
