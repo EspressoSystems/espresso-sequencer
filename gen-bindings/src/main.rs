@@ -2,7 +2,7 @@ use ethers::prelude::{Abigen, MultiAbigen};
 use std::path::{Path, PathBuf};
 
 fn find_paths(dir: &str, ext: &str) -> Vec<PathBuf> {
-    glob::glob(&format!("{}/**/*{}", dir, ext))
+    glob::glob(&format!("{dir}/**/*{ext}"))
         .unwrap()
         .map(|entry| entry.unwrap())
         .collect()
