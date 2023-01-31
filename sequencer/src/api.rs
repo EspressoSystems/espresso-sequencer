@@ -119,7 +119,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-) -> io::Result<JoinHandle<Result<(), io::Error>>> {
+) -> io::Result<(HotShotHandle<SeqTypes, I>, JoinHandle<io::Result<()>>)> {
     type StateType<I> = Arc<RwLock<AppState<I>>>;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
@@ -131,7 +131,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     let mut watch_handle = handle.clone();
 
     let state = Arc::new(RwLock::new(AppState::<I> {
-        submit_state: handle,
+        submit_state: handle.clone(),
         query_state,
     }));
 
@@ -176,7 +176,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .register_module("status", status_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
-    Ok(spawn(async move {
+    let task = spawn(async move {
         futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
             while let Ok(event) = watch_handle.next_event().await {
                 // If update results in an error, program state is unrecoverable
@@ -191,7 +191,8 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
             }
         })
         .0
-    }))
+    });
+    Ok((handle, task))
 }
 
 #[cfg(test)]
@@ -226,8 +227,6 @@ mod test {
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
 
-        let watch_handle = handles[0].clone();
-
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
 
@@ -236,7 +235,7 @@ mod test {
 
         let query_data = QueryData::create(storage_path, ()).unwrap();
 
-        serve(query_data, init_handle, port).await.unwrap();
+        let (watch_handle, _) = serve(query_data, init_handle, port).await.unwrap();
 
         client.connect(None).await;
 
