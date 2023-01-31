@@ -19,7 +19,7 @@ pub async fn handle_http_request(mut request: RpcServerRequest) -> tide::Result 
     let rpc_request: RequestObject = match request.body_json().await {
         Ok(result) => result,
         Err(err) => {
-            println!("Error: {:?}", err);
+            println!("Error: {err}");
             return Err(err);
         }
     };
