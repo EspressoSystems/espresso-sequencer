@@ -7,12 +7,15 @@ use ethers::{
 };
 use http_types::{headers::HeaderValue, Url};
 use jsonrpc_v2::{Data, Error as RpcError, MapRouter, Params, RequestObject, Server};
+use sequencer::{Transaction, VmId};
 use surf_disco::error::ClientError;
 use tide::security::{CorsMiddleware, Origin};
 
 pub type RpcApiService = Arc<Server<MapRouter>>;
 pub type RpcServer = tide::Server<RpcApiService>;
 pub type RpcServerRequest = tide::Request<RpcApiService>;
+
+pub type RpcData = (Url, VmId);
 
 /// Handle incoming HTTP JSON RPC requests.
 pub async fn handle_http_request(mut request: RpcServerRequest) -> tide::Result {
@@ -55,41 +58,45 @@ pub fn build_rpc_server(api: RpcApiService) -> RpcServer {
     // Prepare HTTP server with RPC route
     let mut app = tide::with_state(api);
     app.with(cors);
-    app.at("/")
-        // .with(WebSocket::new(handle_ws_request))
-        .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
-        .post(handle_http_request);
+    app.at("/").post(handle_http_request);
     app
 }
 
-pub async fn serve(opt: &Options) {
-    let rpc = Server::new()
-        .with_data(Data::new(opt.sequencer_url.clone()))
-        .with_method("eth_sendRawTransaction", eth_send_raw_transaction)
-        .finish();
-
-    let server = build_rpc_server(rpc);
-    server
-        .listen(&format!("http://127.0.0.1:{}", opt.port))
-        .await
-        .unwrap();
-}
-
 pub async fn eth_send_raw_transaction(
-    data: Data<Url>,
+    data: Data<RpcData>,
     Params((raw_tx,)): Params<(Bytes,)>,
 ) -> Result<H256, RpcError> {
-    let client = surf_disco::Client::<ClientError>::new(data.join("submit").unwrap());
+    let url = (*data).0.clone();
+    let vmid = (*data).1;
+
+    let client = surf_disco::Client::<ClientError>::new(url.join("submit").unwrap());
 
     client.connect(None).await;
 
+    let txn = Transaction::new(vmid, raw_tx.to_vec());
+
     client
-        .post::<()>("submit/submit")
-        .body_json(&raw_tx)
+        .post::<()>("submit")
+        .body_json(&txn)
         .unwrap()
         .send()
         .await
         .unwrap();
 
     Ok(keccak256(raw_tx).into())
+}
+
+pub async fn serve(opt: &Options) {
+    let rpc_data: RpcData = (opt.sequencer_url.clone(), opt.l2_chain_id.into());
+
+    let rpc = Server::new()
+        .with_data(Data::new(rpc_data))
+        .with_method("eth_sendRawTransaction", eth_send_raw_transaction)
+        .finish();
+
+    let server = build_rpc_server(rpc);
+    server
+        .listen(&format!("http://0.0.0.1:{}", opt.port))
+        .await
+        .unwrap();
 }
