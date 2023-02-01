@@ -67,7 +67,7 @@ pub async fn eth_send_raw_transaction(
     Params((raw_tx,)): Params<(Bytes,)>,
 ) -> Result<H256, RpcError> {
     let url = (*data).0.clone();
-    let vmid = (*data).1;
+    let vmid = data.1;
 
     let client = surf_disco::Client::<ClientError>::new(url.join("submit").unwrap());
 
