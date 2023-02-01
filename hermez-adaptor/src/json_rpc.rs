@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
 use crate::Options;
-use ethers::types::{Bytes, H256};
-use http_types::headers::HeaderValue;
+use ethers::{
+    types::{Bytes, H256},
+    utils::keccak256,
+};
+use http_types::{headers::HeaderValue, Url};
 use jsonrpc_v2::{Data, Error as RpcError, MapRouter, Params, RequestObject, Server};
-use surf_disco::{error::ClientError, Client};
+use surf_disco::error::ClientError;
 use tide::security::{CorsMiddleware, Origin};
 
 pub type RpcApiService = Arc<Server<MapRouter>>;
 pub type RpcServer = tide::Server<RpcApiService>;
 pub type RpcServerRequest = tide::Request<RpcApiService>;
-
-pub type ClientType = Client<ClientError>;
 
 /// Handle incoming HTTP JSON RPC requests.
 pub async fn handle_http_request(mut request: RpcServerRequest) -> tide::Result {
@@ -62,11 +63,9 @@ pub fn build_rpc_server(api: RpcApiService) -> RpcServer {
 }
 
 pub async fn serve(opt: &Options) {
-    // Use client as RPC server data?
-    let _client = surf_disco::Client::<ClientError>::new(opt.sequencer_url.join("submit").unwrap());
-
     let rpc = Server::new()
-        .with_method("eth_send_raw_transaction", eth_send_raw_transaction)
+        .with_data(Data::new(opt.sequencer_url.clone()))
+        .with_method("eth_sendRawTransaction", eth_send_raw_transaction)
         .finish();
 
     let server = build_rpc_server(rpc);
@@ -77,9 +76,20 @@ pub async fn serve(opt: &Options) {
 }
 
 pub async fn eth_send_raw_transaction(
-    _data: Data<ClientType>,
-    Params((_raw_tx,)): Params<(Bytes,)>,
+    data: Data<Url>,
+    Params((raw_tx,)): Params<(Bytes,)>,
 ) -> Result<H256, RpcError> {
-    // TODO
-    Ok(H256([0u8; 32]))
+    let client = surf_disco::Client::<ClientError>::new(data.join("submit").unwrap());
+
+    client.connect(None).await;
+
+    client
+        .post::<()>("submit/submit")
+        .body_json(&raw_tx)
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+
+    Ok(keccak256(raw_tx).into())
 }
