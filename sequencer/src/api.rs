@@ -28,11 +28,13 @@ struct AppState<I: NodeImplementation<SeqTypes>> {
 }
 
 impl<I: NodeImplementation<SeqTypes>> AppState<I> {
-    pub fn update(
+    pub async fn update(
         &mut self,
         event: &Event<SeqTypes>,
     ) -> Result<(), <QueryData<SeqTypes, ()> as UpdateDataSource<SeqTypes>>::Error> {
-        self.query_state.update(event)
+        self.query_state.update(event)?;
+        self.query_state.commit_version().await?;
+        Ok(())
     }
 }
 
@@ -180,7 +182,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
             while let Ok(event) = watch_handle.next_event().await {
                 // If update results in an error, program state is unrecoverable
-                if let Err(err) = state.write().await.update(&event) {
+                if let Err(err) = state.write().await.update(&event).await {
                     tracing::error!(
                         "failed to update event {:?}: {}; updater task will exit",
                         event,
@@ -189,6 +191,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
                     panic!();
                 }
             }
+            tracing::warn!("end of HotShot event stream, updater task will exit");
         })
         .0
     });
