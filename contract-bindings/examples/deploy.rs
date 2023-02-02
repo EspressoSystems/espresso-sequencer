@@ -1,11 +1,6 @@
-use std::{
-    io::{BufRead, BufReader},
-    path::Path,
-    process::Command,
-};
+use std::{path::Path, process::Command};
 
-use contract_bindings::{polygon_zk_evm::PolygonZkEVM, shared_types::BatchData, TestHermezSystem};
-use ethers::{providers::Middleware as _, types::BlockNumber};
+use contract_bindings::TestHermezSystem;
 
 #[async_std::main]
 async fn main() {
@@ -116,7 +111,7 @@ async fn main() {
 
     println!("Starting zkevm-node {cmd:?}");
 
-    let mut handle = cmd.spawn().expect("Failed to start docker");
+    let _handle = cmd.spawn().expect("Failed to start docker");
 
     loop {
         system.mine_block().await;

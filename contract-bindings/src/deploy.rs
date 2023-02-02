@@ -15,7 +15,7 @@ use ethers::{
     prelude::{ContractFactory, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
-    types::{TransactionRequest, U256},
+    types::TransactionRequest,
     utils::parse_ether,
 };
 use ethers_solc::HardhatArtifact;
@@ -139,7 +139,6 @@ impl TestHermezSystem {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        tracing::info!("Clients {:?}", clients);
 
         let verifier = VerifierRollupHelperMock::deploy(&clients.deployer, ()).await;
 
@@ -197,7 +196,7 @@ impl TestHermezSystem {
                     // admin: clients.admin.address(),
                     admin: clients.deployer.address(),
                     force_batch_allowed: true,
-                    chain_id: 1000,
+                    chain_id: 1001,
                     // trusted_sequencer: clients.trusted_sequencer.address(),
                     trusted_sequencer: clients.deployer.address(),
                     pending_state_timeout: 10,

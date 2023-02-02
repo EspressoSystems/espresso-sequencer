@@ -499,31 +499,31 @@ mod test {
             initial_batch_num + num_batches
         );
 
-        // // Wait for the transactions to complete on L2. Note that awaiting a [PendingTransaction]
-        // // will not work here -- [PendingTransaction] returns [None] if the transaction is thrown
-        // // out of the mempool, but since we bypassed the sequencer, our transactions were never in
-        // // the mempool in the first place.
-        // for (i, hash) in txn_hashes.into_iter().enumerate() {
-        //     loop {
-        //         if let Some(receipt) = l2.get_transaction_receipt(hash).await.unwrap() {
-        //             tracing::info!("transfer {} completed: {:?}", i, receipt);
-        //             break;
-        //         }
-        //         tracing::info!("Waiting for transfer {} to complete", i);
-        //         tracing::info!(
-        //             "L2 balance {}/{}",
-        //             l2.get_balance(l2.address(), None).await.unwrap(),
-        //             l2_initial_balance
-        //         );
-        //         sleep(Duration::from_secs(5)).await;
-        //     }
-        // }
+        // Wait for the transactions to complete on L2. Note that awaiting a [PendingTransaction]
+        // will not work here -- [PendingTransaction] returns [None] if the transaction is thrown
+        // out of the mempool, but since we bypassed the sequencer, our transactions were never in
+        // the mempool in the first place.
+        for (i, hash) in txn_hashes.into_iter().enumerate() {
+            loop {
+                if let Some(receipt) = l2.get_transaction_receipt(hash).await.unwrap() {
+                    tracing::info!("transfer {} completed: {:?}", i, receipt);
+                    break;
+                }
+                tracing::info!("Waiting for transfer {} to complete", i);
+                tracing::info!(
+                    "L2 balance {}/{}",
+                    l2.get_balance(l2.address(), None).await.unwrap(),
+                    l2_initial_balance
+                );
+                sleep(Duration::from_secs(5)).await;
+            }
+        }
 
-        // // Check the effects of the transfers.
-        // assert_eq!(
-        //     l2.get_balance(l2.address(), None).await.unwrap(),
-        //     l2_initial_balance - U256::from(num_batches) * transfer_amount
-        // );
+        // Check the effects of the transfers.
+        assert_eq!(
+            l2.get_balance(l2.address(), None).await.unwrap(),
+            l2_initial_balance - U256::from(num_batches) * transfer_amount
+        );
 
         tracing::info!("Waiting for batches to be verified");
         let event = rollup
