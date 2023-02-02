@@ -219,6 +219,13 @@ async fn main() {
         .await;
     }
 
+    // Approve rollup to spend our MATIC.
+    matic
+        .approve(rollup.address(), U256::MAX)
+        .send()
+        .await
+        .unwrap();
+
     // Get the initial block number. We will use this later when we search for logs that might
     // contain an event corresponding to the transaction we are going to submit.
     let l1_initial_block = l1_client.get_block_number().await.unwrap();

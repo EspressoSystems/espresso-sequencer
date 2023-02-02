@@ -15,7 +15,7 @@ use ethers::{
     prelude::{ContractFactory, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
-    types::U256,
+    types::{TransactionRequest, U256},
     utils::parse_ether,
 };
 use ethers_solc::HardhatArtifact;
@@ -139,6 +139,7 @@ impl TestHermezSystem {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
+        tracing::info!("Clients {:?}", clients);
 
         let verifier = VerifierRollupHelperMock::deploy(&clients.deployer, ()).await;
 
@@ -179,8 +180,9 @@ impl TestHermezSystem {
             .await
             .unwrap();
 
+        // Genesis root from ./config/test.genesis.config.json in zkevm-node repo.
         let genesis_root = <[u8; 32]>::from_hex(
-            "0000000000000000000000000000000000000000000000000000000000000001",
+            "bf34f9a52a63229e90d1016011655bc12140bba5b771817b88cbf340d08dcbde",
         )
         .unwrap();
         let trusted_sequencer_url = "http://zkevm-json-rpc:8123";
@@ -192,12 +194,16 @@ impl TestHermezSystem {
                 verifier.address(),
                 bridge.address(),
                 InitializePackedParameters {
-                    admin: clients.admin.address(),
+                    // admin: clients.admin.address(),
+                    admin: clients.deployer.address(),
                     force_batch_allowed: true,
                     chain_id: 1000,
-                    trusted_sequencer: clients.trusted_sequencer.address(),
+                    // trusted_sequencer: clients.trusted_sequencer.address(),
+                    trusted_sequencer: clients.deployer.address(),
                     pending_state_timeout: 10,
-                    trusted_aggregator: clients.trusted_aggregator.address(),
+                    // trusted_aggregator: clients.trusted_aggregator.address(),
+                    // The zkevm-node dev config uses the deployer wallet for the aggregator.
+                    trusted_aggregator: clients.deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
                 genesis_root,
@@ -210,28 +216,32 @@ impl TestHermezSystem {
             .await
             .unwrap();
 
-        // Fund sequencer address with Matic tokens.
-        matic
-            .transfer(
-                clients.trusted_sequencer.address(),
-                parse_ether("100").unwrap(),
-            )
-            .send()
-            .await
-            .unwrap()
-            .await
-            .unwrap();
+        // tracing::info!(
+        //     "Trusted aggregator {:?}",
+        //     rollup.trusted_aggregator().await.unwrap()
+        // );
 
-        // Approve Matic
-        let matic_trusted: ERC20PermitMock<_> =
-            matic.connect(clients.trusted_sequencer.clone()).into();
-        matic_trusted
-            .approve(rollup.address(), U256::MAX)
-            .send()
-            .await
-            .unwrap()
-            .await
-            .unwrap();
+        // panic!("blah");
+
+        // // Fund sequencer address with Matic tokens.
+        // matic
+        //     .transfer(clients.deployer.address(), parse_ether("100").unwrap())
+        //     .send()
+        //     .await
+        //     .unwrap()
+        //     .await
+        //     .unwrap();
+
+        // // Approve Matic
+        // let matic_trusted: ERC20PermitMock<_> =
+        //     matic.connect(clients.trusted_sequencer.clone()).into();
+        // matic_trusted
+        //     .approve(rollup.address(), U256::MAX)
+        //     .send()
+        //     .await
+        //     .unwrap()
+        //     .await
+        //     .unwrap();
 
         Self {
             rollup,
@@ -241,6 +251,28 @@ impl TestHermezSystem {
             matic,
             clients,
             provider,
+        }
+    }
+
+    /// A helper function to mine a block
+    pub async fn mine_block(&self) {
+        let deployer = self.clients.deployer.clone();
+        deployer
+            .send_transaction(
+                TransactionRequest::new()
+                    .to(deployer.address())
+                    .value(0)
+                    .from(deployer.address()),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    /// A helper function to mine `n` blocks
+    pub async fn mine_blocks(&self, n: u64) {
+        for _ in 0..n {
+            self.mine_block().await;
         }
     }
 }

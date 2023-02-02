@@ -35,6 +35,7 @@ async fn main() {
     println!("Waiting for L1 to start ...");
     std::thread::sleep(std::time::Duration::from_secs(2));
 
+    let system = TestHermezSystem::deploy().await;
     let TestHermezSystem {
         // provider,
         rollup,
@@ -42,7 +43,7 @@ async fn main() {
         matic,
         global_exit_root,
         ..
-    } = TestHermezSystem::deploy().await;
+    } = system.clone();
 
     // // Try to sequence a batch
     // let l2_tx_data = hex::decode("1234").unwrap();
@@ -100,8 +101,13 @@ async fn main() {
     .arg("--env-file")
     .arg("../../.env")
     .arg("up")
+    .arg("zkevm-prover")
+    .arg("zkevm-aggregator")
+    .arg("zkevm-pool-db")
+    .arg("zkevm-state-db")
+    .arg("zkevm-permissionless-node")
     .arg("-V")
-    // .arg("--force-recreate")
+    .arg("--force-recreate")
     .arg("--abort-on-container-exit");
 
     for (k, v) in cmd.get_envs() {
@@ -112,7 +118,12 @@ async fn main() {
 
     let mut handle = cmd.spawn().expect("Failed to start docker");
 
-    handle.wait().unwrap();
+    loop {
+        system.mine_block().await;
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
+    // handle.wait().unwrap();
 
     // let stdout = cmd.stdout.as_mut().unwrap();
     // let stdout_reader = BufReader::new(stdout);
@@ -121,5 +132,8 @@ async fn main() {
     // for line in stdout_lines {
     //     println!("Read: {:?}", line);
     // }
-    println!("Done!")
+    //
+    // system.mine_blocks(10).await;
+
+    // println!("Done!")
 }
