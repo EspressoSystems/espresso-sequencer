@@ -45,7 +45,7 @@ jobs:
         name: Clippy
         with:
           token: ${{ github.token }}
-          args: --workspace --examples --bins --tests -- -D warnings
+          args: --workspace --all-features --all-targets -- -D warnings
 
       - name: Audit
         run: cargo audit --ignore RUSTSEC-2020-0159 --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2022-0006 --ignore RUSTSEC-2022-0040
