@@ -23,7 +23,7 @@ use zkevm::{hermez, ZkEvm};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type Middleware = SignerMiddleware<Provider<Http>, LocalWallet>;
+type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 pub async fn run(opt: &Options) {
@@ -344,7 +344,11 @@ async fn connect_rpc(
         }
     };
     let wallet = wallet.with_chain_id(chain_id);
-    Some(Arc::new(SignerMiddleware::new(provider, wallet)))
+    let address = wallet.address();
+    Some(Arc::new(NonceManagerMiddleware::new(
+        SignerMiddleware::new(provider, wallet),
+        address,
+    )))
 }
 
 #[cfg(test)]
@@ -415,13 +419,13 @@ mod test {
         let l1_initial_block = l1.get_block_number().await.unwrap();
         let initial_batch_num = rollup.last_batch_sequenced().call().await.unwrap();
         let initial_force_batch_num = rollup.last_force_batch().call().await.unwrap();
-        let l2_initial_balance = l2.get_balance(l2.address(), None).await.unwrap();
+        let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
         tracing::info!(
             "L1 chain id: {:?}, L2 chain id: {}, address: {}, rollup address: {}, \
              L1 initial block: {}, initial batch num: {}, L2 initial balance: {}",
             l1_chain_id,
             l2_chain_id,
-            l1.address(),
+            l1.inner().address(),
             rollup.address(),
             l1_initial_block,
             initial_batch_num,
@@ -443,11 +447,14 @@ mod test {
         // Create a few test batches.
         let transfer_amount = 1.into();
         let num_batches = 2u64;
-        let nonce = l2.get_transaction_count(l2.address(), None).await.unwrap();
+        let nonce = l2
+            .get_transaction_count(l2.inner().address(), None)
+            .await
+            .unwrap();
         let (batches, txn_hashes): (Vec<_>, Vec<_>) =
             join_all((0..num_batches).into_iter().map(|i| async move {
                 let mut transfer = TransactionRequest {
-                    from: Some(l2.address()),
+                    from: Some(l2.inner().address()),
                     to: Some(Address::random().into()),
                     value: Some(transfer_amount),
                     nonce: Some(nonce + i),
@@ -456,7 +463,12 @@ mod test {
                 .into();
                 l2.fill_transaction(&mut transfer, None).await.unwrap();
                 tracing::info!("transfer {}: {:?}", i, transfer);
-                let signature = l2.signer().sign_transaction(&transfer).await.unwrap();
+                let signature = l2
+                    .inner()
+                    .signer()
+                    .sign_transaction(&transfer)
+                    .await
+                    .unwrap();
                 let txn = EvmTransaction::new(transfer, signature);
                 let hash = txn.hash();
                 tracing::info!("transfer hash: {}", hash);
@@ -484,7 +496,7 @@ mod test {
             .unwrap();
         assert_eq!(force_batch_events.len(), num_batches as usize);
         for (i, event) in force_batch_events.into_iter().enumerate() {
-            assert_eq!(event.sequencer, l1.address());
+            assert_eq!(event.sequencer, l1.inner().address());
             assert_eq!(
                 event.force_batch_num,
                 initial_force_batch_num + 1 + i as u64
@@ -517,7 +529,7 @@ mod test {
                 tracing::info!("Waiting for transfer {} to complete", i);
                 tracing::info!(
                     "L2 balance {}/{}",
-                    l2.get_balance(l2.address(), None).await.unwrap(),
+                    l2.get_balance(l2.inner().address(), None).await.unwrap(),
                     l2_initial_balance
                 );
                 sleep(Duration::from_secs(5)).await;
@@ -526,11 +538,11 @@ mod test {
 
         // Check the effects of the transfers.
         assert_eq!(
-            l2.get_balance(l2.address(), None).await.unwrap(),
+            l2.get_balance(l2.inner().address(), None).await.unwrap(),
             l2_initial_balance - U256::from(num_batches) * transfer_amount
         );
 
-        tracing::info!("Waiting for batches to be verified");
+        // Wait for the batches to be verified.
         let event = rollup
             .trusted_verify_batches_filter()
             .from_block(l1_initial_block)
