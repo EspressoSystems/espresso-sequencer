@@ -374,7 +374,7 @@ mod test {
         // Create blocks periodically. This seems to be required, but we should
         // investigate how exactly the Ethereum block number drivers the
         // zkevm-node.
-        node.l1().mine_blocks_periodic(Duration::from_secs(5)).await;
+        node.l1().mine_blocks_periodic(Duration::from_secs(1)).await;
 
         // Get test setup from environment.
         let env = node.env();
