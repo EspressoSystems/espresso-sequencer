@@ -72,9 +72,13 @@ async fn main() {
     }
     .expect("Failed to initialize query data storage");
 
-    serve(query_data, init_handle, args.port)
+    let (handle, task) = serve(query_data, init_handle, args.port)
         .await
-        .expect("Failed to initialize API")
-        .await
-        .expect("Failed to initialize app");
+        .expect("Failed to initialize API");
+
+    // Start doing consensus.
+    handle.start().await;
+
+    // Block on the API server.
+    task.await.expect("Error in API server");
 }

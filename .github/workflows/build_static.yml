@@ -33,7 +33,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git
             target
-          key: espresso-sequencer-static-v1-${{ hashFiles('Cargo.lock') }}
+          key: espresso-sequencer-static-v3-${{ hashFiles('Cargo.lock') }}
 
       - name: Fix Git Security Issue
         run: git config --global --add safe.directory "$PWD"

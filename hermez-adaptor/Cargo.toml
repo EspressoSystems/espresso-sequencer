@@ -11,9 +11,13 @@ contract-bindings = { path = "../contract-bindings" }
 ethers = "1.0"
 futures = "0.3"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
+http-types = "2.12.0"
+jsonrpc-v2 = "0.11.0"
 sequencer = { path = "../sequencer" }
+serde_json = "1.0.82"
 surf = "2.3.2"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
+tide = "0.16.0"
 tracing = "0.1"
 zkevm = { path = "../zkevm" }
 
