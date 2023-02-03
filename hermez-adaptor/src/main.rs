@@ -1,69 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use ethers::prelude::*;
 use futures::join;
-use surf_disco::Url;
-use zkevm::ZkEvm;
-
-mod json_rpc;
-mod sequencer;
-
-#[derive(Parser)]
-pub struct Options {
-    /// URL of a HotShot sequencer node.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
-    sequencer_url: Url,
-
-    /// URL of layer 1 Ethereum JSON-RPC provider.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
-    l1_provider: Url,
-
-    /// Chain ID for layer 1 Ethereum.
-    ///
-    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
-    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
-    /// the RPC will be used.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
-    l1_chain_id: Option<u64>,
-
-    /// Chain ID for layer 2 EVM.
-    ///
-    /// This will be used as the VM ID for layer 2 EVM transactions within the HotShot sequencer.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L2_CHAIN_ID", default_value = "1001")]
-    l2_chain_id: u64,
-
-    /// Address of Hermez rollup contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_ROLLUP_ADDRESS")]
-    rollup_address: Address,
-
-    /// Address of Matic token contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_MATIC_ADDRESS")]
-    matic_address: Address,
-
-    /// Mnemonic phrase for the sequencer wallet.
-    ///
-    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
-    /// contract. It must be funded with ETH and MATIC on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC")]
-    sequencer_mnemonic: String,
-
-    /// Port on which to serve the JSON-RPC API.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_ZKEVM_ADAPTOR_PORT",
-        default_value = "8545"
-    )]
-    port: u16,
-}
-
-impl Options {
-    fn zkevm(&self) -> ZkEvm {
-        ZkEvm {
-            chain_id: self.l2_chain_id,
-        }
-    }
-}
+use hermez_adaptor::{json_rpc, sequencer, Options};
 
 #[async_std::main]
 async fn main() {

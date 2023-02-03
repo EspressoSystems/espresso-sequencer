@@ -180,7 +180,9 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
 
     let task = spawn(async move {
         futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
+            tracing::debug!("waiting for event");
             while let Ok(event) = watch_handle.next_event().await {
+                tracing::debug!("got event {:?}", event);
                 // If update results in an error, program state is unrecoverable
                 if let Err(err) = state.write().await.update(&event).await {
                     tracing::error!(
@@ -202,7 +204,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
 mod test {
     use crate::{
         api::serve,
-        test::{init_hotshot_handles, wait_for_decide_on_handle},
+        testing::{init_hotshot_handles, wait_for_decide_on_handle},
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
         Node, SeqTypes,
@@ -229,6 +231,9 @@ mod test {
 
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.start().await;
+        }
 
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));

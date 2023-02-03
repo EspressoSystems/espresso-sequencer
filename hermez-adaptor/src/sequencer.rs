@@ -354,10 +354,10 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::ZkEvmNode;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::future::join_all;
-    use hermez_adaptor::ZkEvmNode;
     use hotshot_types::traits::block_contents::Block as _;
     use sequencer::{State, Vm};
     use zkevm::EvmTransaction;

@@ -15,7 +15,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -24,9 +24,9 @@ services:
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50002:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -35,9 +35,9 @@ services:
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50003:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -46,9 +46,9 @@ services:
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50004:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -57,9 +57,9 @@ services:
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
-      - "50005:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL=tcp://cdn-server:$ESPRESSO_CDN_SERVER_PORT
+      - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -71,7 +71,7 @@ services:
     ports:
       - "$ESPRESSO_ZKEVM_ADAPTOR_PORT:$ESPRESSO_ZKEVM_ADAPTOR_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_ZKEVM_L1_PROVIDER
       - ESPRESSO_ZKEVM_ROLLUP_ADDRESS
       - ESPRESSO_ZKEVM_MATIC_ADDRESS

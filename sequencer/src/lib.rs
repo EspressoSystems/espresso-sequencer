@@ -177,47 +177,19 @@ pub async fn init_node(
     .await
 }
 
-#[cfg(test)]
-mod test {
-
-    use core::panic;
-    use std::sync::Arc;
-
-    use crate::{
-        transaction::{ApplicationTransaction, Transaction},
-        vm::{TestVm, Vm},
-    };
-
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
     use super::*;
+    use core::panic;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
         types::{Event, EventType::Decide},
     };
-
     use hotshot_types::ExecutionType;
-
-    use std::time::Duration;
-
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-
-    // Submit transaction to given handle, return clone of transaction
-    async fn submit_txn_to_handle(
-        handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
-        txn: &ApplicationTransaction,
-    ) -> SequencerTransaction {
-        let tx = SequencerTransaction::Wrapped(Transaction::new(
-            TestVm::default().id(),
-            bincode::serialize(txn).unwrap(),
-        ));
-
-        handle
-            .submit_transaction(tx.clone())
-            .await
-            .expect("Failed to submit transaction");
-
-        tx
-    }
+    use std::sync::Arc;
+    use std::time::Duration;
 
     pub async fn init_hotshot_handles(
     ) -> Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> {
@@ -243,8 +215,8 @@ mod test {
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 0,
-            max_transactions: 2usize.try_into().unwrap(),
+            min_transactions: 1,
+            max_transactions: 10000.try_into().unwrap(),
             known_nodes: nodes_pub_keys.clone(),
             next_view_timeout: Duration::from_secs(60).as_millis() as u64,
             timeout_ratio: (10, 11),
@@ -281,11 +253,6 @@ mod test {
             .await;
 
             handles.push(handle);
-
-            for handle in handles.iter() {
-                handle.start().await;
-            }
-            println!("Started");
         }
         handles
     }
@@ -332,10 +299,46 @@ mod test {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        transaction::{ApplicationTransaction, Transaction},
+        vm::{TestVm, Vm},
+    };
+    use core::panic;
+    use hotshot::{
+        traits::implementations::MemoryNetwork,
+        types::{Event, EventType::Decide},
+    };
+    use testing::{init_hotshot_handles, wait_for_decide_on_handle};
+
+    // Submit transaction to given handle, return clone of transaction
+    async fn submit_txn_to_handle(
+        handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+        txn: &ApplicationTransaction,
+    ) -> SequencerTransaction {
+        let tx = SequencerTransaction::Wrapped(Transaction::new(
+            TestVm::default().id(),
+            bincode::serialize(txn).unwrap(),
+        ));
+
+        handle
+            .submit_transaction(tx.clone())
+            .await
+            .expect("Failed to submit transaction");
+
+        tx
+    }
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         let mut handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.start().await;
+        }
 
         let event = handles[0].next_event().await;
         println!("Event: {event:?}\n");
