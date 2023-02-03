@@ -353,21 +353,26 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::future::join_all;
+    use hermez_adaptor::ZkEvmNode;
     use hotshot_types::traits::block_contents::Block as _;
     use sequencer::{State, Vm};
     use std::env;
     use zkevm::EvmTransaction;
 
-    // This test is ignored pending some better test infrastructure (e.g. mock L1 contracts). To run
-    // it anyways, use `--ignored`, as in `cargo test --release -p hermez-adaptor -- --ignored`.
-    // That will connect to the local demo of the zkEVM system, so you'll need to be running
-    // `just demo` while you run the test, and you should not simultaneously run any other tests
-    // which also use the same demo.
+    // This test is ignored pending a CI that can run docker-compose and more
+    // testing that it passes reliably.
     #[ignore]
     #[async_std::test]
     async fn test_sequencer_task() {
         setup_logging();
         setup_backtrace();
+
+        let node = ZkEvmNode::start("test-sequencer-task".to_string()).await;
+
+        // Create blocks periodically. This seems to be required, but we should
+        // investigate how exactly the Ethereum block number drivers the
+        // zkevm-node.
+        node.l1().mine_blocks_periodic(Duration::from_secs(5)).await;
 
         // Get test setup from environment.
         let l1_chain_id = env::var("ESPRESSO_ZKEVM_L1_CHAIN_ID")
@@ -389,11 +394,11 @@ mod test {
             "test test test test test test test test test test test junk".into()
         });
         let rollup_address: Address = env::var("ESPRESSO_ZKEVM_ROLLUP_ADDRESS")
-            .unwrap_or_else(|_| "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6".into())
+            .unwrap_or_else(|_| format!("{:?}", node.l1().rollup.address()))
             .parse()
             .unwrap();
         let matic_address: Address = env::var("ESPRESSO_ZKEVM_MATIC_ADDRESS")
-            .unwrap_or_else(|_| "0x5FbDB2315678afecb367f032d93F642f64180aa3".into())
+            .unwrap_or_else(|_| format!("{:?}", node.l1().matic.address()))
             .parse()
             .unwrap();
 

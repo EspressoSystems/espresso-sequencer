@@ -93,6 +93,8 @@ pub struct TestClients {
     pub trusted_aggregator: Arc<EthMiddleware>,
     pub trusted_sequencer: Arc<EthMiddleware>,
     pub admin: Arc<EthMiddleware>,
+    // The block_driver client shouldn't be used for anything else to avoid nonce issues.
+    pub block_driver: Arc<EthMiddleware>,
 }
 impl TestClients {
     pub fn new(provider: &Provider<Http>, chain_id: u64) -> Self {
@@ -101,6 +103,7 @@ impl TestClients {
             trusted_aggregator: get_test_client(1, provider, chain_id),
             trusted_sequencer: get_test_client(2, provider, chain_id),
             admin: get_test_client(3, provider, chain_id),
+            block_driver: get_test_client(4, provider, chain_id),
         }
     }
 }
@@ -121,7 +124,7 @@ fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<
 
 /// A system of hermez smart contracts for testing purposes.
 #[derive(Debug, Clone)]
-pub struct TestHermezSystem {
+pub struct TestHermezContracts {
     pub rollup: PolygonZkEVM<EthMiddleware>,
     pub bridge: PolygonZkEVMBridge<EthMiddleware>,
     pub global_exit_root: PolygonZkEVMGlobalExitRoot<EthMiddleware>,
@@ -131,7 +134,7 @@ pub struct TestHermezSystem {
     pub provider: Provider<Http>,
 }
 
-impl TestHermezSystem {
+impl TestHermezContracts {
     /// Deploy the system of contracts for testing purposes.
     pub async fn deploy() -> Self {
         let mut provider = Provider::try_from("http://localhost:8545").unwrap();
@@ -186,6 +189,9 @@ impl TestHermezSystem {
         .unwrap();
         let trusted_sequencer_url = "http://zkevm-json-rpc:8123";
         let network_name = "zkevm";
+
+        // Note that the test zkevm-node expects all wallets to be the deployer
+        // wallet.
         rollup
             .initialize(
                 global_exit_root.address(),
@@ -215,33 +221,6 @@ impl TestHermezSystem {
             .await
             .unwrap();
 
-        // tracing::info!(
-        //     "Trusted aggregator {:?}",
-        //     rollup.trusted_aggregator().await.unwrap()
-        // );
-
-        // panic!("blah");
-
-        // // Fund sequencer address with Matic tokens.
-        // matic
-        //     .transfer(clients.deployer.address(), parse_ether("100").unwrap())
-        //     .send()
-        //     .await
-        //     .unwrap()
-        //     .await
-        //     .unwrap();
-
-        // // Approve Matic
-        // let matic_trusted: ERC20PermitMock<_> =
-        //     matic.connect(clients.trusted_sequencer.clone()).into();
-        // matic_trusted
-        //     .approve(rollup.address(), U256::MAX)
-        //     .send()
-        //     .await
-        //     .unwrap()
-        //     .await
-        //     .unwrap();
-
         Self {
             rollup,
             bridge,
@@ -253,15 +232,22 @@ impl TestHermezSystem {
         }
     }
 
+    // The functions to create blocks below look a bit weird. This is due to
+    // lifetime issues I encountered when spawning the periodic task. It's
+    // surely possible to write this in a more concise way.
+
     /// A helper function to mine a block
     pub async fn mine_block(&self) {
-        let deployer = self.clients.deployer.clone();
-        deployer
+        Self::do_mine_block(self.clients.block_driver.clone()).await;
+    }
+
+    async fn do_mine_block(client: Arc<EthMiddleware>) {
+        client
             .send_transaction(
                 TransactionRequest::new()
-                    .to(deployer.address())
+                    .to(client.address())
                     .value(0)
-                    .from(deployer.address()),
+                    .from(client.address()),
                 None,
             )
             .await
@@ -272,6 +258,25 @@ impl TestHermezSystem {
     pub async fn mine_blocks(&self, n: u64) {
         for _ in 0..n {
             self.mine_block().await;
+        }
+    }
+
+    /// A helper function to mine blocks periodically
+    pub async fn mine_blocks_periodic(
+        &self,
+        interval: Duration,
+    ) -> async_std::task::JoinHandle<()> {
+        async_std::task::spawn(Self::do_mine_blocks_periodic(
+            self.clients.block_driver.clone(),
+            interval,
+        ))
+    }
+
+    // This function is here because async closures are unstable.
+    async fn do_mine_blocks_periodic(client: Arc<EthMiddleware>, interval: Duration) {
+        loop {
+            Self::do_mine_block(client.clone()).await;
+            async_std::task::sleep(interval).await
         }
     }
 }

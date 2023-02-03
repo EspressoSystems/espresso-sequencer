@@ -3149,6 +3149,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-types",
  "sequencer",
+ "surf",
  "surf-disco",
  "tracing",
  "zkevm",
