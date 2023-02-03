@@ -401,10 +401,6 @@ mod test {
             .unwrap_or_else(|_| format!("{:?}", node.l1().rollup.address()))
             .parse()
             .unwrap();
-        let matic_address: Address = env::var("ESPRESSO_ZKEVM_MATIC_ADDRESS")
-            .unwrap_or_else(|_| format!("{:?}", node.l1().matic.address()))
-            .parse()
-            .unwrap();
 
         let zkevm = ZkEvm {
             chain_id: l2_chain_id,
@@ -434,15 +430,6 @@ mod test {
 
         // Put the contract in permissionless mode.
         send(rollup.set_force_batch_allowed(true)).await.unwrap();
-
-        // Approve rollup contract
-        Matic::new(matic_address, l1.clone())
-            .approve(rollup_address, U256::MAX)
-            .send()
-            .await
-            .unwrap()
-            .await
-            .unwrap();
 
         // Create a few test batches.
         let transfer_amount = 1.into();

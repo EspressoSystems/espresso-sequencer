@@ -15,7 +15,7 @@ use ethers::{
     prelude::{ContractFactory, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
-    types::TransactionRequest,
+    types::{TransactionRequest, U256},
     utils::parse_ether,
 };
 use ethers_solc::HardhatArtifact;
@@ -207,7 +207,6 @@ impl TestHermezContracts {
                     trusted_sequencer: clients.deployer.address(),
                     pending_state_timeout: 10,
                     // trusted_aggregator: clients.trusted_aggregator.address(),
-                    // The zkevm-node dev config uses the deployer wallet for the aggregator.
                     trusted_aggregator: clients.deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
@@ -215,6 +214,15 @@ impl TestHermezContracts {
                 trusted_sequencer_url.to_string(),
                 network_name.to_string(),
             )
+            .send()
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
+        // Approve rollup to move Matic in deployer account.
+        matic
+            .approve(rollup.address(), U256::MAX)
             .send()
             .await
             .unwrap()
