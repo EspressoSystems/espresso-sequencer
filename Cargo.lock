@@ -3472,6 +3472,7 @@ dependencies = [
  "hotshot-types",
  "http-types",
  "jsonrpc-v2",
+ "portpicker",
  "sequencer",
  "serde_json",
  "surf",

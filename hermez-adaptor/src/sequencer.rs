@@ -360,11 +360,9 @@ mod test {
     use hermez_adaptor::ZkEvmNode;
     use hotshot_types::traits::block_contents::Block as _;
     use sequencer::{State, Vm};
-    use std::env;
     use zkevm::EvmTransaction;
 
-    // This test is ignored pending a CI that can run docker-compose and more
-    // testing that it passes reliably.
+    // This test is ignored pending more testing that it passes reliably.
     #[ignore]
     #[async_std::test]
     async fn test_sequencer_task() {
@@ -379,57 +377,31 @@ mod test {
         node.l1().mine_blocks_periodic(Duration::from_secs(5)).await;
 
         // Get test setup from environment.
-        let l1_chain_id = env::var("ESPRESSO_ZKEVM_L1_CHAIN_ID")
-            .ok()
-            .map(|s| s.parse().unwrap());
-        let l2_chain_id = env::var("ESPRESSO_ZKEVM_L2_CHAIN_ID")
-            .unwrap_or_else(|_| "1001".into())
-            .parse()
-            .unwrap();
-        let l1_provider = env::var("ESPRESSO_ZKEVM_L1_PROVIDER")
-            .unwrap_or_else(|_| "http://localhost:8545".into())
-            .parse()
-            .unwrap();
-        let l2_provider = env::var("ESPRESSO_ZKEVM_L2_PROVIDER")
-            .unwrap_or_else(|_| "http://localhost:8126".into())
-            .parse()
-            .unwrap();
-        let mnemonic = env::var("ESPRESSO_ZKEVM_DEPLOYER_MNEMONIC").unwrap_or_else(|_| {
-            "test test test test test test test test test test test junk".into()
-        });
-        let rollup_address: Address = env::var("ESPRESSO_ZKEVM_ROLLUP_ADDRESS")
-            .unwrap_or_else(|_| format!("{:?}", node.l1().rollup.address()))
-            .parse()
-            .unwrap();
+        let env = node.env();
+        let l1_provider = env.l1_provider();
+        let l2_provider = env.l2_provider();
+        let mnemonic = env.funded_mnemonic();
+        let rollup_address = node.l1().rollup.address();
 
+        let l1 = connect_rpc(&l1_provider, mnemonic, None).await.unwrap();
+        let l2 = &connect_rpc(&l2_provider, mnemonic, None).await.unwrap();
         let zkevm = ZkEvm {
-            chain_id: l2_chain_id,
+            chain_id: l2.get_chainid().await.unwrap().as_u64(),
         };
-        let l1 = connect_rpc(&l1_provider, &mnemonic, l1_chain_id)
-            .await
-            .unwrap();
-        let l2 = &connect_rpc(&l2_provider, &mnemonic, Some(l2_chain_id))
-            .await
-            .unwrap();
         let rollup = PolygonZkEVM::new(rollup_address, l1.clone());
         let l1_initial_block = l1.get_block_number().await.unwrap();
         let initial_batch_num = rollup.last_batch_sequenced().call().await.unwrap();
         let initial_force_batch_num = rollup.last_force_batch().call().await.unwrap();
         let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
         tracing::info!(
-            "L1 chain id: {:?}, L2 chain id: {}, address: {}, rollup address: {}, \
+            "address: {}, rollup address: {}, \
              L1 initial block: {}, initial batch num: {}, L2 initial balance: {}",
-            l1_chain_id,
-            l2_chain_id,
             l1.inner().address(),
             rollup.address(),
             l1_initial_block,
             initial_batch_num,
             l2_initial_balance,
         );
-
-        // Put the contract in permissionless mode.
-        send(rollup.set_force_batch_allowed(true)).await.unwrap();
 
         // Create a few test batches.
         let transfer_amount = 1.into();

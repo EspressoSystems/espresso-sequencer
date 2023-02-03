@@ -56,7 +56,7 @@
               cargo-clippy = {
                 enable = true;
                 description = "Run clippy";
-                entry = "cargo clippy --workspace --examples --bins --tests -- -D warnings";
+                entry = "cargo clippy --workspace --all-features --all-targets -- -D warnings";
                 pass_filenames = false;
               };
             };

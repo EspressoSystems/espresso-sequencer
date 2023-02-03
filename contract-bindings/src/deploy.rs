@@ -136,8 +136,8 @@ pub struct TestHermezContracts {
 
 impl TestHermezContracts {
     /// Deploy the system of contracts for testing purposes.
-    pub async fn deploy() -> Self {
-        let mut provider = Provider::try_from("http://localhost:8545").unwrap();
+    pub async fn deploy(provider: impl AsRef<str>, trusted_sequencer: impl AsRef<str>) -> Self {
+        let mut provider = Provider::try_from(provider.as_ref()).unwrap();
         provider.set_interval(Duration::from_millis(10));
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
@@ -187,7 +187,6 @@ impl TestHermezContracts {
             "bf34f9a52a63229e90d1016011655bc12140bba5b771817b88cbf340d08dcbde",
         )
         .unwrap();
-        let trusted_sequencer_url = "http://zkevm-json-rpc:8123";
         let network_name = "zkevm";
 
         // Note that the test zkevm-node expects all wallets to be the deployer
@@ -211,7 +210,7 @@ impl TestHermezContracts {
                     trusted_aggregator_timeout: 10,
                 },
                 genesis_root,
-                trusted_sequencer_url.to_string(),
+                trusted_sequencer.as_ref().into(),
                 network_name.to_string(),
             )
             .send()
