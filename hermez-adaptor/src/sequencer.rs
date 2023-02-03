@@ -362,8 +362,6 @@ mod test {
     use sequencer::{State, Vm};
     use zkevm::EvmTransaction;
 
-    // This test is ignored pending more testing that it passes reliably.
-    #[ignore]
     #[async_std::test]
     async fn test_sequencer_task() {
         setup_logging();
