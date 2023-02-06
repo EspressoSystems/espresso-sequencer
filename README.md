@@ -11,7 +11,7 @@
 
 ## Run the tests
 
-    cargo test
+    cargo test --all-features
 
 ## Building figures
 

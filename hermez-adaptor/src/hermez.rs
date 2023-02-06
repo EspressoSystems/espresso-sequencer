@@ -196,8 +196,7 @@ impl ZkEvmNode {
 
         println!("Waiting for L1 to start ...");
 
-        // TODO: L1 port should be configurable
-        wait_for_http(env.l1_provider(), Duration::from_millis(100), 30)
+        wait_for_http(env.l1_provider(), Duration::from_millis(200), 30)
             .await
             .unwrap();
 
@@ -207,15 +206,15 @@ impl ZkEvmNode {
         // Start zkevm-node
         Self::compose_cmd_prefix(&env, &project_name)
             .env(
-                "ZKEVM_NODE_ETHERMAN_POEADDR",
+                "ESPRESSO_ZKEVM_ROLLUP_ADDRESS",
                 format!("{:?}", l1.rollup.address()),
             )
             .env(
-                "ZKEVM_NODE_ETHERMAN_MATICADDR",
+                "ESPRESSO_ZKEVM_MATIC_ADDRESS",
                 format!("{:?}", l1.matic.address()),
             )
             .env(
-                "ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR",
+                "ESPRESSO_ZKEVM_GER_ADDRESS",
                 format!("{:?}", l1.global_exit_root.address()),
             )
             .arg("up")
@@ -231,7 +230,7 @@ impl ZkEvmNode {
             .expect("Failed to start zkevm-node compose environment");
 
         // TODO: L2 port should be configurable
-        wait_for_http(env.l2_provider(), Duration::from_secs(1), 20)
+        wait_for_http(env.l2_provider(), Duration::from_secs(1), 30)
             .await
             .expect("Failed to start zkevm-node");
 
@@ -256,5 +255,22 @@ impl ZkEvmNode {
 impl Drop for ZkEvmNode {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
+    use super::*;
+    #[async_std::test]
+    async fn test_two_nodes() {
+        setup_logging();
+        setup_backtrace();
+
+        let node1 = async_std::task::spawn(ZkEvmNode::start("node-1".to_string()));
+        let node2 = async_std::task::spawn(ZkEvmNode::start("node-2".to_string()));
+        node2.await;
+        node1.await;
     }
 }

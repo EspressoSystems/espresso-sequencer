@@ -28,6 +28,7 @@ zkevm = { path = "../zkevm" }
 portpicker = { version = "0.1", optional = true }
 
 [dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
 portpicker = "0.1"
