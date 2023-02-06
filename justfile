@@ -33,4 +33,4 @@ docker-stop-rm:
     docker stop $(docker ps -aq); docker rm $(docker ps -aq)
 
 anvil *args:
-    docker run ghcr.io/foundry-rs/foundry:latest anvil {{args}}
+    docker run ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
