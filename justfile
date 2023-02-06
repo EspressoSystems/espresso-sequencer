@@ -1,6 +1,6 @@
 # The zkevm-node docker-compose file currently only works if run from the zkevm-node/test directory.
-compose := "cd zkevm-node/test && docker compose -f permissionless-docker-compose.yml -f ../../docker-compose.yaml --env-file ../../.env"
-compose-zkevm-node := "cd zkevm-node/test && docker compose -f permissionless-docker-compose.yml --env-file ../../.env"
+compose := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
+compose-zkevm-node := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
 
 zkevm-node:
     {{compose-zkevm-node}} up -V --force-recreate --abort-on-container-exit
@@ -31,3 +31,6 @@ compose *args:
 
 docker-stop-rm:
     docker stop $(docker ps -aq); docker rm $(docker ps -aq)
+
+anvil *args:
+    docker run ghcr.io/foundry-rs/foundry:latest anvil {{args}}

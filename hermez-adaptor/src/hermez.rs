@@ -146,16 +146,15 @@ impl ZkEvmNode {
 
     fn compose_cmd_prefix(env: &ZkEvmEnv, project_name: &str) -> Command {
         let mut cmd = env.cmd("docker");
-        let work_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("zkevm-node/test");
+        let work_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         cmd.current_dir(work_dir)
             .arg("compose")
             .arg("--project-name")
             .arg(project_name)
             .arg("-f")
-            .arg("permissionless-docker-compose.yml");
+            .arg("permissionless-docker-compose.yaml")
+            .arg("-f")
+            .arg("docker-compose-anvil.yaml");
         cmd
     }
 

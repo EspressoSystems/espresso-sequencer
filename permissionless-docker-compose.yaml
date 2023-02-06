@@ -1,0 +1,129 @@
+version: "3"
+services:
+
+  zkevm-aggregator:
+    image: ghcr.io/espressosystems/zkevm-node:hotshot-integration
+    expose:
+      - 50081
+      - 9091 # needed if metrics enabled
+    environment:
+      - ZKEVM_NODE_STATEDB_USER=state_user
+      - ZKEVM_NODE_STATEDB_PASSWORD=state_password
+      - ZKEVM_NODE_STATEDB_NAME=state_db
+      - ZKEVM_NODE_STATEDB_HOST=zkevm-state-db
+      # - ZKEVM_NODE_AGGREGATOR_VERIFYPROOFINTERVAL=10s # Defaults to 90s
+      # - ZKEVM_NODE_AGGREGATOR_RETRYTIME=2s # Defaults to 5s
+      - ZKEVM_NODE_ETHERMAN_POEADDR=$ESPRESSO_ZKEVM_ROLLUP_ADDRESS
+      - ZKEVM_NODE_ETHERMAN_MATICADDR=$ESPRESSO_ZKEVM_MATIC_ADDRESS
+      - ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR=$ESPRESSO_ZKEVM_GER_ADDRESS
+      - ZKEVM_NODE_ETHERMAN_URL=http://zkevm-mock-l1-network:$ESPRESSO_ZKEVM_L1_PORT
+    volumes:
+      - ./zkevm-node/test/test.keystore:/pk/keystore
+      - ./zkevm-node/test/config/test.node.config.toml:/app/config.toml
+      - ./zkevm-node/test/config/test.genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --genesis /app/genesis.json --cfg /app/config.toml --components aggregator"
+    depends_on:
+      - zkevm-permissionless-node
+
+  zkevm-state-db:
+    image: postgres
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    expose:
+      - 5432
+    volumes:
+      - ./zkevm-node/db/scripts/init_prover_db.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=state_user
+      - POSTGRES_PASSWORD=state_password
+      - POSTGRES_DB=state_db
+    command: ["postgres", "-N", "500"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U state_user -d state_db"]
+      interval: 1s
+      timeout: 0.5s
+      retries: 10
+
+  zkevm-pool-db:
+    image: postgres
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    expose:
+      - 5432
+    environment:
+      - POSTGRES_USER=pool_user
+      - POSTGRES_PASSWORD=pool_password
+      - POSTGRES_DB=pool_db
+    command: ["postgres", "-N", "500"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U pool_user -d pool_db"]
+      interval: 1s
+      timeout: 0.5s
+      retries: 10
+
+  zkevm-prover:
+    image: hermeznetwork/zkevm-prover@sha256:ca123e5d23b38ac27c4b32c3a6c92ee7c988beb2f2405369e7065b0d63601245
+    expose:
+      - 50052 # Mock prover
+      - 50061 # MT
+      - 50071 # Executor
+    volumes:
+      - ./zkevm-node/test/config/test.prover.config.json:/usr/src/app/config.json
+    command: >
+      zkProver -c /usr/src/app/config.json
+    depends_on:
+      - zkevm-permissionless-node
+    stop_signal: SIGKILL
+
+  zkevm-permissionless-node:
+    image: ghcr.io/espressosystems/zkevm-node:hotshot-integration
+    ports:
+      - $ESPRESSO_ZKEVM_L2_PORT:$ESPRESSO_ZKEVM_L2_PORT
+    environment:
+      - ZKEVM_NODE_TRUSTED=false
+      - ZKEVM_NODE_STATEDB_USER=state_user
+      - ZKEVM_NODE_STATEDB_PASSWORD=state_password
+      - ZKEVM_NODE_STATEDB_NAME=state_db
+      - ZKEVM_NODE_STATEDB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_USER=pool_user
+      - ZKEVM_NODE_POOL_PASSWORD=pool_password
+      - ZKEVM_NODE_POOL_NAME=pool_db
+      - ZKEVM_NODE_POOL_HOST=zkevm-pool-db
+      - ZKEVM_NODE_RPC_PORT=$ESPRESSO_ZKEVM_L2_PORT
+      - ZKEVM_NODE_RPC_SEQUENCERNODEURI=http://hermez-adaptor:$ESPRESSO_ZKEVM_ADAPTOR_PORT
+      - ZKEVM_NODE_ETHERMAN_URL=http://zkevm-mock-l1-network:$ESPRESSO_ZKEVM_L1_PORT
+      - ZKEVM_NODE_ETHERMAN_POEADDR=$ESPRESSO_ZKEVM_ROLLUP_ADDRESS
+      - ZKEVM_NODE_ETHERMAN_MATICADDR=$ESPRESSO_ZKEVM_MATIC_ADDRESS
+      - ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR=$ESPRESSO_ZKEVM_GER_ADDRESS
+    volumes:
+      - ./zkevm-node/test/test.keystore:/pk/keystore
+      - ./zkevm-node/test/config/test.node.config.toml:/app/config.toml
+      - ./zkevm-node/test/config/test.genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --genesis /app/genesis.json --cfg /app/config.toml --components \"rpc,synchronizer\""
+    depends_on:
+      zkevm-mock-l1-network:
+        condition: service_started
+      zkevm-state-db:
+        condition: service_healthy
+      zkevm-pool-db:
+        condition: service_healthy
+    healthcheck:
+      # curl not installed in container, but wget is
+      test: "wget http://localhost:$ESPRESSO_ZKEVM_L2_PORT -q --spider --tries 1 || exit 1"
+      interval: 0.5s
+      timeout: 0.5s
+      retries: 10
