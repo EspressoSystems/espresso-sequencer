@@ -1820,6 +1820,7 @@ checksum = "f3ad85c1f65dc7b37604eb0e89748faf0b9653065f2a8ef69f96a687ec1e9279"
 name = "contract-bindings"
 version = "0.1.0"
 dependencies = [
+ "async-compatibility-layer",
  "async-std",
  "async-trait",
  "ethers",
@@ -1827,6 +1828,7 @@ dependencies = [
  "glob",
  "hex",
  "serde_json",
+ "tracing",
  "tracing-subscriber",
 ]
 
@@ -3472,8 +3474,10 @@ dependencies = [
  "hotshot-types",
  "http-types",
  "jsonrpc-v2",
+ "portpicker",
  "sequencer",
  "serde_json",
+ "surf",
  "surf-disco",
  "tide",
  "tracing",

@@ -1,0 +1,18 @@
+version: "3"
+services:
+  zkevm-mock-l1-network:
+    image: ghcr.io/foundry-rs/foundry:latest
+    ports:
+      - $ESPRESSO_ZKEVM_L1_PORT:$ESPRESSO_ZKEVM_L1_PORT
+    environment:
+      - ESPRESSO_ZKEVM_L1_PORT
+    # The way the foundry image handles arguments is strange, the double quotes
+    # make it work here.
+    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_ZKEVM_L1_PORT --chain-id 1337'"
+
+    # Loading state with anvil doesn't set the block number, so it's disabled at the moment.
+    # volumes:
+    #   - ./anvil-state:/state
+    # command: "'anvil --host 0.0.0.0 --port $ESPRESSO_ZKEVM_L1_PORT --chain-id 1337 --load-state /state'"
+
+    stop_signal: SIGKILL

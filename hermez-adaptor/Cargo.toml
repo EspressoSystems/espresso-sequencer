@@ -3,6 +3,9 @@ name = "hermez-adaptor"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+testing = ["portpicker"]
+
 [dependencies]
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = ["logging-utils"] }
 async-std = "1.12"
@@ -15,11 +18,17 @@ http-types = "2.12.0"
 jsonrpc-v2 = "0.11.0"
 sequencer = { path = "../sequencer" }
 serde_json = "1.0.82"
+surf = "2.3.2"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tide = "0.16.0"
 tracing = "0.1"
 zkevm = { path = "../zkevm" }
 
+# Dependencies for feature "testing".
+portpicker = { version = "0.1", optional = true }
+
 [dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
+portpicker = "0.1"

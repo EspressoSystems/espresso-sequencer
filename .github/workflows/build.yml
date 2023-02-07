@@ -17,10 +17,16 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, X64]
-    container:
-      image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: ubuntu-latest
     steps:
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
         with:
@@ -29,11 +35,26 @@ jobs:
 
       - uses: actions/checkout@v3
         name: Checkout Repository
+        with:
+          submodules: true
+          token: ${{ secrets.ORG_GITHUB_PAT }}
 
       - name: Configure Git
         run: |
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
+
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v2
+        # if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull all docker compose images
+        run: docker-compose -f docker-compose.yaml -f docker-compose-anvil.yaml -f permissionless-docker-compose.yaml pull
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
@@ -45,17 +66,17 @@ jobs:
         name: Clippy
         with:
           token: ${{ github.token }}
-          args: --workspace --examples --bins --tests -- -D warnings
+          args: --workspace --all-features --all-targets -- -D warnings
 
       - name: Audit
         run: cargo audit --ignore RUSTSEC-2020-0159 --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2022-0006 --ignore RUSTSEC-2022-0040
 
       - name: Build
         run: |
-          cargo build --workspace
+          cargo build --release --workspace
 
       - name: Test
         run: |
-          cargo test --workspace --no-run
-          cargo test --workspace --verbose -- -Zunstable-options --report-time --test-threads 2
+          cargo test --release --workspace --all-features --no-run
+          cargo test --release --workspace --all-features --verbose -- -Zunstable-options --report-time --test-threads 2
         timeout-minutes: 30
