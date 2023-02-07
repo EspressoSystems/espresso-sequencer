@@ -1,6 +1,8 @@
 # The zkevm-node docker-compose file currently only works if run from the zkevm-node/test directory.
-compose := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
-compose-zkevm-node := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
+compose-base := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml"
+compose-anvil := compose-base + " -f docker-compose-anvil.yaml --env-file .env.anvil"
+compose := compose-base + " -f docker-compose-geth.yaml"
+compose-zkevm-node := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-anvil.yaml"
 
 zkevm-node:
     {{compose-zkevm-node}} up -V --force-recreate --abort-on-container-exit
@@ -10,6 +12,11 @@ zkevm-node-background:
 
 demo:
     {{compose}} up -V --force-recreate --abort-on-container-exit
+
+# This currently doesn't quite work yet, likely because the block number is zero
+# after anvil loads state.
+demo-anvil:
+    {{compose-anvil}} up -V --force-recreate --abort-on-container-exit
 
 demo-background:
     {{compose}} up -d -V --force-recreate

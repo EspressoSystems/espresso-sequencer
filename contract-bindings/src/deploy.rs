@@ -55,7 +55,13 @@ macro_rules! mk_deploy {
                 let file = fs::File::open(&path)
                     .unwrap_or_else(|_| panic!("Unable to open path {:?}", path));
                 let artifact = serde_json::from_reader::<_, HardhatArtifact>(file).unwrap();
-                deploy_artifact(artifact, client, args).await.into()
+                let contract: $contract<M> = deploy_artifact(artifact, client, args).await.into();
+                tracing::info!(
+                    "Deployed {} at {}",
+                    stringify!($contract),
+                    contract.address()
+                );
+                contract
             }
         }
     };
