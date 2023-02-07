@@ -100,7 +100,7 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor
 
       - name: Build and push sequencer docker
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
@@ -110,7 +110,7 @@ jobs:
           labels: ${{ steps.sequencer.outputs.labels }}
 
       - name: Build and push cdn-server docker
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: ./
           file: ./docker/cdn-server.Dockerfile
@@ -120,7 +120,7 @@ jobs:
           labels: ${{ steps.cdn-server.outputs.labels }}
 
       - name: Build and push hermez-adaptor docker
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: ./
           file: ./docker/hermez-adaptor.Dockerfile
