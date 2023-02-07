@@ -79,6 +79,7 @@ async fn main() {
         .wait()
         .unwrap();
 
+    // Create an .env.anvil file with contract addresses for anvil.
     let file = File::open(".env").unwrap();
     let lines: Vec<_> = io::BufReader::new(file).lines().collect();
     let mut new_lines: Vec<String> = vec![];
@@ -105,7 +106,7 @@ async fn main() {
     let mut file = File::create(".env.anvil").unwrap();
     writeln!(
         file,
-        "# This file is updated via `cargo run --bin deploy`, don't edit by hand."
+        "# This file is updated via `cargo run --bin anvil-deploy`, don't edit by hand."
     )
     .unwrap();
     writeln!(file).unwrap();
