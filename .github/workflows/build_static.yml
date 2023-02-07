@@ -26,7 +26,7 @@ jobs:
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Cache cargo
-        uses: actions/cache@v3.2.3
+        uses: actions/cache@v3.2.4
         with:
           path: |
             ~/.cargo/registry/index
