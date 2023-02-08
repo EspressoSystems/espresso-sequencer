@@ -288,10 +288,13 @@ impl Drop for ZkEvmNode {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
-    use super::*;
+    // This test currently causes an OOM on the GitHub runners, so it is disabled to avoid CI
+    // failures.
     #[async_std::test]
+    #[ignore]
     async fn test_two_nodes() {
         setup_logging();
         setup_backtrace();
