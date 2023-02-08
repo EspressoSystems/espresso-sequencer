@@ -3479,6 +3479,7 @@ dependencies = [
  "serde_json",
  "surf",
  "surf-disco",
+ "tempdir",
  "tide",
  "tracing",
  "zkevm",

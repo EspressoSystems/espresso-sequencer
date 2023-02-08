@@ -5,11 +5,12 @@ use portpicker::pick_unused_port;
 use std::{
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
 };
 use surf_disco::Url;
 
-async fn wait_for_http(
+pub async fn wait_for_http(
     url: impl AsRef<str>,
     interval: Duration,
     max_retries: usize,
@@ -76,6 +77,7 @@ impl ZkEvmEnv {
                 "ESPRESSO_SEQUENCER_API_PORT",
                 self.sequencer_api_port.to_string(),
             )
+            .env("ESPRESSO_SEQUENCER_URL", self.sequencer().as_ref())
             .env(
                 "ESPRESSO_SEQUENCER_STORAGE_PATH",
                 self.sequencer_storage_path.as_os_str(),
@@ -88,7 +90,11 @@ impl ZkEvmEnv {
                 "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC",
                 &self.sequencer_mnemonic,
             )
-            .env("ESPRESSO_ZKEVM_ADAPTOR_PORT", self.adaptor_port.to_string());
+            .env("ESPRESSO_ZKEVM_ADAPTOR_PORT", self.adaptor_port.to_string())
+            .env(
+                "ESPRESSO_ZKEVM_ADAPTOR_URL",
+                format!("http://host.docker.internal:{}", self.adaptor_port),
+            );
         if let Some(id) = self.l1_chain_id {
             cmd.env("ESPRESSO_ZKEVM_L1_CHAIN_ID", id.to_string());
         }
@@ -120,6 +126,26 @@ impl ZkEvmEnv {
 
     pub fn funded_mnemonic(&self) -> &str {
         &self.sequencer_mnemonic
+    }
+
+    pub fn sequencer_port(&self) -> u16 {
+        self.sequencer_api_port
+    }
+
+    pub fn sequencer(&self) -> Url {
+        format!("http://localhost:{}", self.sequencer_api_port)
+            .parse()
+            .unwrap()
+    }
+
+    pub fn l2_adaptor_port(&self) -> u16 {
+        self.adaptor_port
+    }
+
+    pub fn l2_adaptor(&self) -> Url {
+        format!("http://localhost:{}", self.adaptor_port)
+            .parse()
+            .unwrap()
     }
 }
 
@@ -159,11 +185,15 @@ impl ZkEvmNode {
     }
 
     /// Start the L1, deploy contracts, start the L2
-    ///
-    /// The `project_name` must be unique for each test. At the moment however
-    /// there will be port conflicts if more than one `ZkEvmNode`s are started
-    /// at the same time.
     pub async fn start(project_name: String) -> Self {
+        // Add a unique number to `project_name` to ensure that all instances use a unique name.
+        static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let project_name = format!(
+            "{}-{}",
+            project_name,
+            ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+        );
+
         let env = ZkEvmEnv::random();
         tracing::info!("Starting ZkEvmNode with env: {:?}", env);
         tracing::info!(
@@ -195,7 +225,7 @@ impl ZkEvmNode {
 
         println!("Waiting for L1 to start ...");
 
-        wait_for_http(env.l1_provider(), Duration::from_millis(200), 30)
+        wait_for_http(env.l1_provider(), Duration::from_millis(200), 100)
             .await
             .unwrap();
 
@@ -228,7 +258,7 @@ impl ZkEvmNode {
             .expect("Failed to start zkevm-node compose environment");
 
         // TODO: L2 port should be configurable
-        wait_for_http(env.l2_provider(), Duration::from_secs(1), 30)
+        wait_for_http(env.l2_provider(), Duration::from_secs(1), 100)
             .await
             .expect("Failed to start zkevm-node");
 
@@ -258,10 +288,13 @@ impl Drop for ZkEvmNode {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
-    use super::*;
+    // This test currently causes an OOM on the GitHub runners, so it is disabled to avoid CI
+    // failures.
     #[async_std::test]
+    #[ignore]
     async fn test_two_nodes() {
         setup_logging();
         setup_backtrace();
