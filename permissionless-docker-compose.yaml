@@ -33,43 +33,23 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-        reservations:
           memory: 1G
     expose:
       - 5432
     volumes:
-      - ./zkevm-node/db/scripts/init_prover_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./zkevm-node/db/scripts/init_prover_db.sql:/docker-entrypoint-initdb.d/1.sql
+      - ./zkevm-node-additions/init_pool_db.sql:/docker-entrypoint-initdb.d/2.sql
     environment:
       - POSTGRES_USER=state_user
       - POSTGRES_PASSWORD=state_password
       - POSTGRES_DB=state_db
     command: ["postgres", "-N", "500"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -q -U state_user -d state_db"]
+      # Postgres can be falsely "ready" once before running init scripts.
+      # See https://github.com/docker-library/postgres/issues/146 for discusson.
+      test: "pg_isready -U state_user -d state_db && sleep 1 && pg_isready -U state_user -d state_db"
       interval: 1s
-      timeout: 0.5s
-      retries: 10
-
-  zkevm-pool-db:
-    image: postgres
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
-    expose:
-      - 5432
-    environment:
-      - POSTGRES_USER=pool_user
-      - POSTGRES_PASSWORD=pool_password
-      - POSTGRES_DB=pool_db
-    command: ["postgres", "-N", "500"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -q -U pool_user -d pool_db"]
-      interval: 1s
-      timeout: 0.5s
+      timeout: 2s
       retries: 10
 
   zkevm-prover:
@@ -96,10 +76,10 @@ services:
       - ZKEVM_NODE_STATEDB_PASSWORD=state_password
       - ZKEVM_NODE_STATEDB_NAME=state_db
       - ZKEVM_NODE_STATEDB_HOST=zkevm-state-db
-      - ZKEVM_NODE_POOL_USER=pool_user
-      - ZKEVM_NODE_POOL_PASSWORD=pool_password
-      - ZKEVM_NODE_POOL_NAME=pool_db
-      - ZKEVM_NODE_POOL_HOST=zkevm-pool-db
+      - ZKEVM_NODE_POOLDB_USER=state_user
+      - ZKEVM_NODE_POOLDB_PASSWORD=state_password
+      - ZKEVM_NODE_POOLDB_NAME=pool_db # different DB name to run pool migrations
+      - ZKEVM_NODE_POOLDB_HOST=zkevm-state-db
       - ZKEVM_NODE_RPC_PORT=$ESPRESSO_ZKEVM_L2_PORT
       - ZKEVM_NODE_RPC_SEQUENCERNODEURI=http://hermez-adaptor:$ESPRESSO_ZKEVM_ADAPTOR_PORT
       - ZKEVM_NODE_ETHERMAN_URL=http://zkevm-mock-l1-network:$ESPRESSO_ZKEVM_L1_PORT
@@ -118,8 +98,6 @@ services:
       zkevm-mock-l1-network:
         condition: service_started
       zkevm-state-db:
-        condition: service_healthy
-      zkevm-pool-db:
         condition: service_healthy
     healthcheck:
       # curl not installed in container, but wget is

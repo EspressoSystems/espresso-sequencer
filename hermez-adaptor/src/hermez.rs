@@ -219,7 +219,6 @@ impl ZkEvmNode {
             .arg("up")
             .arg("zkevm-prover")
             .arg("zkevm-aggregator")
-            .arg("zkevm-pool-db")
             .arg("zkevm-state-db")
             .arg("zkevm-permissionless-node")
             .arg("-V")

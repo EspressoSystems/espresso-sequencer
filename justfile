@@ -2,7 +2,7 @@
 compose-base := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml"
 compose-anvil := compose-base + " -f docker-compose-anvil.yaml --env-file .env.anvil"
 compose := compose-base + " -f docker-compose-geth.yaml"
-compose-zkevm-node := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml -f docker-compose-anvil.yaml"
+compose-zkevm-node := "docker compose -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
 
 zkevm-node:
     {{compose-zkevm-node}} up -V --force-recreate --abort-on-container-exit
