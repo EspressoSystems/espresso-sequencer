@@ -104,7 +104,7 @@ async fn test_end_to_end() {
 
     // Wait for the adaptor to start serving.
     tracing::info!("connecting to adaptor at {}", env.l2_adaptor());
-    wait_for_http(env.l2_adaptor(), Duration::from_secs(1), 100)
+    wait_for_http(&env.l2_adaptor(), Duration::from_secs(1), 100)
         .await
         .unwrap();
 
