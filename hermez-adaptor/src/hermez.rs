@@ -1,6 +1,8 @@
 #![cfg(any(test, feature = "testing"))]
 
+use async_std::task::sleep;
 use contract_bindings::TestHermezContracts;
+use ethers::prelude::*;
 use portpicker::pick_unused_port;
 use std::{
     path::{Path, PathBuf},
@@ -11,21 +13,38 @@ use std::{
 use surf_disco::Url;
 
 pub async fn wait_for_http(
-    url: impl AsRef<str>,
+    url: &Url,
     interval: Duration,
     max_retries: usize,
-) -> Result<(), ()> {
-    let url = url.as_ref();
-    for _ in 0..(max_retries + 1) {
+) -> Result<usize, String> {
+    for i in 0..(max_retries + 1) {
         let res = surf::get(url).await;
         if res.is_ok() {
             tracing::debug!("Connected to {url}");
-            return Ok(());
+            return Ok(i);
         }
         tracing::debug!("Waiting for {url}, retrying in {interval:?}");
-        std::thread::sleep(interval);
+        sleep(interval).await;
     }
-    panic!("Url {url:?} not available.")
+    Err(format!("Url {url:?} not available."))
+}
+
+pub async fn wait_for_rpc(
+    url: &Url,
+    interval: Duration,
+    max_retries: usize,
+) -> Result<usize, String> {
+    let retries = wait_for_http(url, interval, max_retries).await?;
+    let client = Provider::new(Http::new(url.clone()));
+    for i in retries..(max_retries + 1) {
+        if client.get_block_number().await.is_ok() {
+            tracing::debug!("JSON-RPC ready at {url}");
+            return Ok(i);
+        }
+        tracing::debug!("Waiting for JSON-RPC at {url}, retrying in {interval:?}");
+        sleep(interval).await;
+    }
+    Err(format!("No JSON-RPC at {url}"))
 }
 
 #[derive(Clone, Debug)]
@@ -225,7 +244,7 @@ impl ZkEvmNode {
 
         println!("Waiting for L1 to start ...");
 
-        wait_for_http(env.l1_provider(), Duration::from_millis(200), 100)
+        wait_for_rpc(&env.l1_provider(), Duration::from_millis(200), 100)
             .await
             .unwrap();
 
@@ -257,8 +276,7 @@ impl ZkEvmNode {
             .spawn()
             .expect("Failed to start zkevm-node compose environment");
 
-        // TODO: L2 port should be configurable
-        wait_for_http(env.l2_provider(), Duration::from_secs(1), 100)
+        wait_for_rpc(&env.l2_provider(), Duration::from_secs(1), 100)
             .await
             .expect("Failed to start zkevm-node");
 
