@@ -369,11 +369,6 @@ mod test {
 
         let node = ZkEvmNode::start("test-sequencer-task".to_string()).await;
 
-        // Create blocks periodically. This seems to be required, but we should
-        // investigate how exactly the Ethereum block number drivers the
-        // zkevm-node.
-        node.l1().mine_blocks_periodic(Duration::from_secs(1)).await;
-
         // Get test setup from environment.
         let env = node.env();
         let l1_provider = env.l1_provider();
