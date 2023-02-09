@@ -37,7 +37,7 @@ pub async fn wait_for_rpc(
     let retries = wait_for_http(url, interval, max_retries).await?;
     let client = Provider::new(Http::new(url.clone()));
     for i in retries..(max_retries + 1) {
-        if client.get_chainid().await.is_ok() {
+        if client.get_block_number().await.is_ok() {
             tracing::debug!("JSON-RPC ready at {url}");
             return Ok(i);
         }
