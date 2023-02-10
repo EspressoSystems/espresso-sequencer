@@ -220,18 +220,6 @@ impl ZkEvmNode {
             Self::compose_cmd_prefix(&env, &project_name)
         );
 
-        // Pull Docker images before doing anything. This can take a long time, and if we do it
-        // later it might cause some `wait_for_http` calls to time out.
-        let status = Self::compose_cmd_prefix(&env, &project_name)
-            .arg("pull")
-            .spawn()
-            .expect("Failed to pull Docker images")
-            .wait()
-            .expect("Error waiting for Docker pull command");
-        if !status.success() {
-            panic!("Failed to pull Docker images ({status})");
-        }
-
         // Start L1
         Self::compose_cmd_prefix(&env, &project_name)
             .arg("up")
@@ -242,7 +230,7 @@ impl ZkEvmNode {
             .spawn()
             .expect("Failed to start L1 docker container");
 
-        println!("Waiting for L1 to start ...");
+        tracing::info!("Waiting for L1 to start ...");
 
         wait_for_rpc(&env.l1_provider(), Duration::from_millis(200), 100)
             .await
@@ -270,6 +258,7 @@ impl ZkEvmNode {
             .arg("zkevm-aggregator")
             .arg("zkevm-state-db")
             .arg("zkevm-permissionless-node")
+            .arg("zkevm-eth-tx-manager")
             .arg("-V")
             .arg("--force-recreate")
             .arg("--abort-on-container-exit")

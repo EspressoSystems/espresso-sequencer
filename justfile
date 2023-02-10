@@ -7,6 +7,9 @@ compose-zkevm-node := "docker compose -f permissionless-docker-compose.yaml -f d
 zkevm-node:
     {{compose-zkevm-node}} up -V --force-recreate --abort-on-container-exit
 
+zkevm-prover:
+    {{compose-zkevm-node}} up -V --force-recreate --abort-on-container-exit zkevm-state-db zkevm-prover
+
 zkevm-node-background:
     {{compose-zkevm-node}} up -d -V --force-recreate
 
@@ -25,7 +28,7 @@ down:
     {{compose}} down -v --remove-orphans
 
 pull:
-    {{compose}} pull
+    {{compose}} pull && {{compose-anvil}} pull
 
 hardhat *args:
     cd zkevm-contracts && nix develop -c bash -c "npx hardhat {{args}}"

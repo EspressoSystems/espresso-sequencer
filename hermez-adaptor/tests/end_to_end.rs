@@ -127,7 +127,7 @@ async fn test_end_to_end() {
             .await
             .unwrap()
             .tx_hash();
-        tracing::info!("Transaction {}: {}", i, hash);
+        tracing::info!("Transaction {}: {:?}", i, hash);
 
         // Wait for the transaction to be included in a block. We must ensure this transaction is
         // sequenced before the next one, or both could be invalidated due to nonce misordering.

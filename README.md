@@ -11,6 +11,7 @@
 
 ## Run the tests
 
+    just pull # to pull docker images
     cargo test --all-features
 
 ## Building figures

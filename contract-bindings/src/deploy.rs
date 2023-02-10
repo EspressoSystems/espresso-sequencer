@@ -196,7 +196,7 @@ impl TestHermezContracts {
         let network_name = "zkevm";
 
         // Note that the test zkevm-node expects all wallets to be the deployer
-        // wallet.
+        // wallet (account 0), except for the aggregator wallet (account 1).
         rollup
             .initialize(
                 global_exit_root.address(),
@@ -211,8 +211,8 @@ impl TestHermezContracts {
                     // trusted_sequencer: clients.trusted_sequencer.address(),
                     trusted_sequencer: clients.deployer.address(),
                     pending_state_timeout: 10,
-                    // trusted_aggregator: clients.trusted_aggregator.address(),
-                    trusted_aggregator: clients.deployer.address(),
+                    trusted_aggregator: clients.trusted_aggregator.address(),
+                    // trusted_aggregator: clients.deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
                 genesis_root,
