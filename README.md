@@ -62,17 +62,27 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use
 enabled.
 
 ### Developing contracts
-The development environment for contracts is a work in progress, for now we can
-compile contracts, deploy them and generate bindings. Using modified contracts
-in the `zkevm-contracts` from rust requires manually executing the compilation
-step. If the ABIs change the `gen-bindings` step also needs to be executed.
 
-- Ensure submodules are checkout out: `git submodule update --init`
-- Install dependencies `just npm i`
-- Compile the contracts `just hardhat compile`
-- Update the rust bindings: `cargo run --bin gen-bindings`
-- Run a hardhat dev node: `just hardhat node`
+The contracts specific to HotShot can be found in the director `contracts`.
+We use the foundry framework in order to compile, deploy and test those contracts locally.
 
+To compile
+```shell
+> forge buid
+```
+
+To run the tests
+```shell
+> forge test
+```
+
+### Generating the bindings and deploying Hotshot contracts with Hermez contracts
+
+* Generate the contracts bindings: `cargo run --bin gen-bindings`.
+* Edit src/contract-bindings/src/deploy.rs
+  * Add reference to new contract binding, e.g. `use crate::bindings::counter::Counter`
+  * Add call to `mk_deploy` macro, e.g. `mk_deploy!(ESPRESSO_CONTRACTS_PREFIX,Counter);`
+  
 ## Implementation Plan
 
 We will work towards the architecture illustrated above in three phases.

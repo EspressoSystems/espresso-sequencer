@@ -17,19 +17,19 @@
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-
+  inputs.foundry.url = "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, ... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry,... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
         arch = (builtins.elemAt (builtins.elemAt info 1) 0);
         os = (builtins.elemAt (builtins.elemAt info 3) 0);
-        overlays = [ (import rust-overlay) ];
+        overlays = [ (import rust-overlay) foundry.overlay ];
         pkgs = import nixpkgs {
           inherit system overlays;
         };
@@ -104,6 +104,8 @@
                 graphviz
                 plantuml
                 coreutils
+
+                foundry-bin
 
               ] ++ lib.optionals stdenv.isDarwin[darwin.apple_sdk.frameworks.SystemConfiguration];
               shellHook = ''
