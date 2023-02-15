@@ -10,14 +10,20 @@
 
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
+  inputs.fenix = {
+    url = "github:nix-community/fenix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
   inputs.flake-utils.url = "github:numtide/flake-utils";
+
 
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, ... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
@@ -89,6 +95,7 @@
                 cargo-watch
                 cargo-sort
                 just
+                fenix.packages.${system}.rust-analyzer
 
                 # Tools
                 nixWithFlakes
@@ -98,6 +105,7 @@
                 graphviz
                 plantuml
                 coreutils
+
               ] ++ lib.optionals stdenv.isDarwin[darwin.apple_sdk.frameworks.SystemConfiguration];
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
