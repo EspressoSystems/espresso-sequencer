@@ -80,17 +80,18 @@ pub async fn run(opt: &Options) {
     tracing::info!("last batch sequenced: {}", from);
 
     // Get the maximum number of batches allowed to be sequenced at once.
-    let max = match rollup.max_verify_batches().call().await {
-        Ok(max) => max,
-        Err(err) => {
-            tracing::error!(
-                "unable to read MAX_VERIFY_BATCHES from rollup contract: {}",
-                err
-            );
-            tracing::error!("sequencer task will exit");
-            return;
-        }
-    };
+    // let max = match rollup.max_verify_batches().call().await {
+    //     Ok(max) => max,
+    //     Err(err) => {
+    //         tracing::error!(
+    //             "unable to read MAX_VERIFY_BATCHES from rollup contract: {}",
+    //             err
+    //         );
+    //         tracing::error!("sequencer task will exit");
+    //         return;
+    //     }
+    // };
+    let max = 1000; // TODO: No longer exposed in rollup contract.
     tracing::info!("max batches per sequencer: {}", max);
 
     sequence(&opt.zkevm(), from, max, hotshot, rollup).await;
@@ -501,7 +502,7 @@ mod test {
 
         // Wait for the batches to be verified.
         let event = rollup
-            .trusted_verify_batches_filter()
+            .verify_batches_trusted_aggregator_filter()
             .from_block(l1_initial_block)
             .stream()
             .await

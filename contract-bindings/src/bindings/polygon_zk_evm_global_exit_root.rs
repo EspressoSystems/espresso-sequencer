@@ -16,7 +16,7 @@ pub mod polygon_zk_evm_global_exit_root {
     use ethers::providers::Middleware;
     #[doc = "PolygonZkEVMGlobalExitRoot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"Initialized\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true}],\"type\":\"event\",\"name\":\"UpdateGlobalExitRoot\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"getLastGlobalExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_rollupAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"initialize\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastMainnetExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"rollupAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_rollupAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true}],\"type\":\"event\",\"name\":\"UpdateGlobalExitRoot\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"getLastGlobalExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastMainnetExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"rollupAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static POLYGONZKEVMGLOBALEXITROOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -81,16 +81,6 @@ pub mod polygon_zk_evm_global_exit_root {
                 .method_hash([37, 123, 54, 50], p0)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `initialize` (0x485cc955) function"]
-        pub fn initialize(
-            &self,
-            rollup_address: ethers::core::types::Address,
-            bridge_address: ethers::core::types::Address,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([72, 92, 201, 85], (rollup_address, bridge_address))
-                .expect("method not found (this should never happen)")
-        }
         #[doc = "Calls the contract's `lastMainnetExitRoot` (0x319cf735) function"]
         pub fn last_mainnet_exit_root(
             &self,
@@ -124,12 +114,6 @@ pub mod polygon_zk_evm_global_exit_root {
                 .method_hash([51, 214, 36, 125], new_root)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Gets the contract's `Initialized` event"]
-        pub fn initialized_filter(
-            &self,
-        ) -> ethers::contract::builders::Event<M, InitializedFilter> {
-            self.0.event()
-        }
         #[doc = "Gets the contract's `UpdateGlobalExitRoot` event"]
         pub fn update_global_exit_root_filter(
             &self,
@@ -137,9 +121,7 @@ pub mod polygon_zk_evm_global_exit_root {
             self.0.event()
         }
         #[doc = r" Returns an [`Event`](#ethers_contract::builders::Event) builder for all events of this contract"]
-        pub fn events(
-            &self,
-        ) -> ethers::contract::builders::Event<M, PolygonZkEVMGlobalExitRootEvents> {
+        pub fn events(&self) -> ethers::contract::builders::Event<M, UpdateGlobalExitRootFilter> {
             self.0.event_with_filter(Default::default())
         }
     }
@@ -150,19 +132,18 @@ pub mod polygon_zk_evm_global_exit_root {
             Self(contract)
         }
     }
+    #[doc = "Custom Error type `OnlyAllowedContracts` with signature `OnlyAllowedContracts()` and selector `[180, 147, 101, 221]`"]
     #[derive(
         Clone,
         Debug,
+        Default,
         Eq,
         PartialEq,
-        ethers :: contract :: EthEvent,
+        ethers :: contract :: EthError,
         ethers :: contract :: EthDisplay,
-        Default,
     )]
-    #[ethevent(name = "Initialized", abi = "Initialized(uint8)")]
-    pub struct InitializedFilter {
-        pub version: u8,
-    }
+    #[etherror(name = "OnlyAllowedContracts", abi = "OnlyAllowedContracts()")]
+    pub struct OnlyAllowedContracts;
     #[derive(
         Clone,
         Debug,
@@ -181,37 +162,6 @@ pub mod polygon_zk_evm_global_exit_root {
         pub mainnet_exit_root: [u8; 32],
         #[ethevent(indexed)]
         pub rollup_exit_root: [u8; 32],
-    }
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
-    pub enum PolygonZkEVMGlobalExitRootEvents {
-        InitializedFilter(InitializedFilter),
-        UpdateGlobalExitRootFilter(UpdateGlobalExitRootFilter),
-    }
-    impl ethers::contract::EthLogDecode for PolygonZkEVMGlobalExitRootEvents {
-        fn decode_log(
-            log: &ethers::core::abi::RawLog,
-        ) -> ::std::result::Result<Self, ethers::core::abi::Error>
-        where
-            Self: Sized,
-        {
-            if let Ok(decoded) = InitializedFilter::decode_log(log) {
-                return Ok(PolygonZkEVMGlobalExitRootEvents::InitializedFilter(decoded));
-            }
-            if let Ok(decoded) = UpdateGlobalExitRootFilter::decode_log(log) {
-                return Ok(PolygonZkEVMGlobalExitRootEvents::UpdateGlobalExitRootFilter(decoded));
-            }
-            Err(ethers::core::abi::Error::InvalidData)
-        }
-    }
-    impl ::std::fmt::Display for PolygonZkEVMGlobalExitRootEvents {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-            match self {
-                PolygonZkEVMGlobalExitRootEvents::InitializedFilter(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootEvents::UpdateGlobalExitRootFilter(element) => {
-                    element.fmt(f)
-                }
-            }
-        }
     }
     #[doc = "Container type for all input parameters for the `bridgeAddress` function with signature `bridgeAddress()` and selector `[163, 197, 115, 235]`"]
     #[derive(
@@ -249,21 +199,6 @@ pub mod polygon_zk_evm_global_exit_root {
     )]
     #[ethcall(name = "globalExitRootMap", abi = "globalExitRootMap(bytes32)")]
     pub struct GlobalExitRootMapCall(pub [u8; 32]);
-    #[doc = "Container type for all input parameters for the `initialize` function with signature `initialize(address,address)` and selector `[72, 92, 201, 85]`"]
-    #[derive(
-        Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
-        Default,
-    )]
-    #[ethcall(name = "initialize", abi = "initialize(address,address)")]
-    pub struct InitializeCall {
-        pub rollup_address: ethers::core::types::Address,
-        pub bridge_address: ethers::core::types::Address,
-    }
     #[doc = "Container type for all input parameters for the `lastMainnetExitRoot` function with signature `lastMainnetExitRoot()` and selector `[49, 156, 247, 53]`"]
     #[derive(
         Clone,
@@ -319,7 +254,6 @@ pub mod polygon_zk_evm_global_exit_root {
         BridgeAddress(BridgeAddressCall),
         GetLastGlobalExitRoot(GetLastGlobalExitRootCall),
         GlobalExitRootMap(GlobalExitRootMapCall),
-        Initialize(InitializeCall),
         LastMainnetExitRoot(LastMainnetExitRootCall),
         LastRollupExitRoot(LastRollupExitRootCall),
         RollupAddress(RollupAddressCall),
@@ -345,11 +279,6 @@ pub mod polygon_zk_evm_global_exit_root {
                 <GlobalExitRootMapCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
                 return Ok(PolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(decoded));
-            }
-            if let Ok(decoded) =
-                <InitializeCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(PolygonZkEVMGlobalExitRootCalls::Initialize(decoded));
             }
             if let Ok(decoded) =
                 <LastMainnetExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
@@ -382,7 +311,6 @@ pub mod polygon_zk_evm_global_exit_root {
                 PolygonZkEVMGlobalExitRootCalls::BridgeAddress(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => element.encode(),
-                PolygonZkEVMGlobalExitRootCalls::Initialize(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootCalls::LastMainnetExitRoot(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootCalls::LastRollupExitRoot(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootCalls::RollupAddress(element) => element.encode(),
@@ -396,7 +324,6 @@ pub mod polygon_zk_evm_global_exit_root {
                 PolygonZkEVMGlobalExitRootCalls::BridgeAddress(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootCalls::Initialize(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootCalls::LastMainnetExitRoot(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootCalls::LastRollupExitRoot(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootCalls::RollupAddress(element) => element.fmt(f),
@@ -417,11 +344,6 @@ pub mod polygon_zk_evm_global_exit_root {
     impl ::std::convert::From<GlobalExitRootMapCall> for PolygonZkEVMGlobalExitRootCalls {
         fn from(var: GlobalExitRootMapCall) -> Self {
             PolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(var)
-        }
-    }
-    impl ::std::convert::From<InitializeCall> for PolygonZkEVMGlobalExitRootCalls {
-        fn from(var: InitializeCall) -> Self {
-            PolygonZkEVMGlobalExitRootCalls::Initialize(var)
         }
     }
     impl ::std::convert::From<LastMainnetExitRootCall> for PolygonZkEVMGlobalExitRootCalls {

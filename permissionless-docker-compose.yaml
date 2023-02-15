@@ -94,6 +94,7 @@ services:
       - ZKEVM_NODE_ETHERMAN_POEADDR=$ESPRESSO_ZKEVM_ROLLUP_ADDRESS
       - ZKEVM_NODE_ETHERMAN_MATICADDR=$ESPRESSO_ZKEVM_MATIC_ADDRESS
       - ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR=$ESPRESSO_ZKEVM_GER_ADDRESS
+      - ZKEVM_NODE_SYNCHRONIZER_GENBLOCKNUMBER=$ESPRESSO_ZKEVM_GENBLOCKNUMBER
     volumes:
       - ./zkevm-node/test/sequencer.keystore:/pk/keystore
       - ./zkevm-node/test/config/test.node.config.toml:/app/config.toml

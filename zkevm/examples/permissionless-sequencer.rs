@@ -210,15 +210,6 @@ async fn main() {
     let matic_decimals = matic.decimals().call().await.unwrap();
     tracing::info!("Found MATIC token, {} decimals", matic_decimals);
 
-    // Configure the rollup to allow permissionless sequencers.
-    if !rollup.force_batch_allowed().call().await.unwrap() {
-        await_tx(
-            "enable forced batches",
-            rollup.set_force_batch_allowed(true).send().await.unwrap(),
-        )
-        .await;
-    }
-
     // Get the initial block number. We will use this later when we search for logs that might
     // contain an event corresponding to the transaction we are going to submit.
     let l1_initial_block = l1_client.get_block_number().await.unwrap();
@@ -295,7 +286,7 @@ async fn main() {
 
     // Wait for the prover to verify the forced batch.
     let event = rollup
-        .trusted_verify_batches_filter()
+        .verify_batches_trusted_aggregator_filter()
         .from_block(l1_initial_block)
         .stream()
         .await

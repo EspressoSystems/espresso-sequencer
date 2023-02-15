@@ -253,6 +253,10 @@ impl ZkEvmNode {
                 "ESPRESSO_ZKEVM_GER_ADDRESS",
                 format!("{:?}", l1.global_exit_root.address()),
             )
+            .env(
+                "ESPRESSO_ZKEVM_GENBLOCKNUMBER",
+                l1.gen_block_number.to_string(),
+            )
             .arg("up")
             .arg("zkevm-prover")
             .arg("zkevm-aggregator")

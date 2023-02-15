@@ -1,6 +1,6 @@
-pub use i_polygon_zk_evm_global_exit_root::*;
+pub use i_base_polygon_zk_evm_global_exit_root::*;
 #[allow(clippy::too_many_arguments, non_camel_case_types)]
-pub mod i_polygon_zk_evm_global_exit_root {
+pub mod i_base_polygon_zk_evm_global_exit_root {
     #![allow(clippy::enum_variant_names)]
     #![allow(dead_code)]
     #![allow(clippy::type_complexity)]
@@ -14,34 +14,34 @@ pub mod i_polygon_zk_evm_global_exit_root {
         types::*,
     };
     use ethers::providers::Middleware;
-    #[doc = "IPolygonZkEVMGlobalExitRoot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
+    #[doc = "IBasePolygonZkEVMGlobalExitRoot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"getLastGlobalExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRootNum\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRollupExitRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRootNum\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRollupExitRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
-    pub static IPOLYGONZKEVMGLOBALEXITROOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
+    pub static IBASEPOLYGONZKEVMGLOBALEXITROOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
             ethers::core::utils::__serde_json::from_str(__ABI).expect("invalid abi")
         });
-    pub struct IPolygonZkEVMGlobalExitRoot<M>(ethers::contract::Contract<M>);
-    impl<M> Clone for IPolygonZkEVMGlobalExitRoot<M> {
+    pub struct IBasePolygonZkEVMGlobalExitRoot<M>(ethers::contract::Contract<M>);
+    impl<M> Clone for IBasePolygonZkEVMGlobalExitRoot<M> {
         fn clone(&self) -> Self {
-            IPolygonZkEVMGlobalExitRoot(self.0.clone())
+            IBasePolygonZkEVMGlobalExitRoot(self.0.clone())
         }
     }
-    impl<M> std::ops::Deref for IPolygonZkEVMGlobalExitRoot<M> {
+    impl<M> std::ops::Deref for IBasePolygonZkEVMGlobalExitRoot<M> {
         type Target = ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> std::fmt::Debug for IPolygonZkEVMGlobalExitRoot<M> {
+    impl<M> std::fmt::Debug for IBasePolygonZkEVMGlobalExitRoot<M> {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.debug_tuple(stringify!(IPolygonZkEVMGlobalExitRoot))
+            f.debug_tuple(stringify!(IBasePolygonZkEVMGlobalExitRoot))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ethers::providers::Middleware> IPolygonZkEVMGlobalExitRoot<M> {
+    impl<M: ethers::providers::Middleware> IBasePolygonZkEVMGlobalExitRoot<M> {
         #[doc = r" Creates a new contract instance with the specified `ethers`"]
         #[doc = r" client at the given `Address`. The contract derefs to a `ethers::Contract`"]
         #[doc = r" object"]
@@ -51,18 +51,10 @@ pub mod i_polygon_zk_evm_global_exit_root {
         ) -> Self {
             ethers::contract::Contract::new(
                 address.into(),
-                IPOLYGONZKEVMGLOBALEXITROOT_ABI.clone(),
+                IBASEPOLYGONZKEVMGLOBALEXITROOT_ABI.clone(),
                 client,
             )
             .into()
-        }
-        #[doc = "Calls the contract's `getLastGlobalExitRoot` (0x3ed691ef) function"]
-        pub fn get_last_global_exit_root(
-            &self,
-        ) -> ethers::contract::builders::ContractCall<M, [u8; 32]> {
-            self.0
-                .method_hash([62, 214, 145, 239], ())
-                .expect("method not found (this should never happen)")
         }
         #[doc = "Calls the contract's `globalExitRootMap` (0x257b3632) function"]
         pub fn global_exit_root_map(
@@ -84,7 +76,7 @@ pub mod i_polygon_zk_evm_global_exit_root {
         }
     }
     impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>>
-        for IPolygonZkEVMGlobalExitRoot<M>
+        for IBasePolygonZkEVMGlobalExitRoot<M>
     {
         fn from(contract: ethers::contract::Contract<M>) -> Self {
             Self(contract)
@@ -102,18 +94,6 @@ pub mod i_polygon_zk_evm_global_exit_root {
     )]
     #[etherror(name = "OnlyAllowedContracts", abi = "OnlyAllowedContracts()")]
     pub struct OnlyAllowedContracts;
-    #[doc = "Container type for all input parameters for the `getLastGlobalExitRoot` function with signature `getLastGlobalExitRoot()` and selector `[62, 214, 145, 239]`"]
-    #[derive(
-        Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
-        Default,
-    )]
-    #[ethcall(name = "getLastGlobalExitRoot", abi = "getLastGlobalExitRoot()")]
-    pub struct GetLastGlobalExitRootCall;
     #[doc = "Container type for all input parameters for the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `[37, 123, 54, 50]`"]
     #[derive(
         Clone,
@@ -143,81 +123,59 @@ pub mod i_polygon_zk_evm_global_exit_root {
         pub new_rollup_exit_root: [u8; 32],
     }
     #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
-    pub enum IPolygonZkEVMGlobalExitRootCalls {
-        GetLastGlobalExitRoot(GetLastGlobalExitRootCall),
+    pub enum IBasePolygonZkEVMGlobalExitRootCalls {
         GlobalExitRootMap(GlobalExitRootMapCall),
         UpdateExitRoot(UpdateExitRootCall),
     }
-    impl ethers::core::abi::AbiDecode for IPolygonZkEVMGlobalExitRootCalls {
+    impl ethers::core::abi::AbiDecode for IBasePolygonZkEVMGlobalExitRootCalls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
             if let Ok(decoded) =
-                <GetLastGlobalExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <GlobalExitRootMapCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
-                return Ok(IPolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(
+                return Ok(IBasePolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(
                     decoded,
                 ));
             }
             if let Ok(decoded) =
-                <GlobalExitRootMapCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(decoded));
-            }
-            if let Ok(decoded) =
                 <UpdateExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
-                return Ok(IPolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(decoded));
+                return Ok(IBasePolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(
+                    decoded,
+                ));
             }
             Err(ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ethers::core::abi::AbiEncode for IPolygonZkEVMGlobalExitRootCalls {
+    impl ethers::core::abi::AbiEncode for IBasePolygonZkEVMGlobalExitRootCalls {
         fn encode(self) -> Vec<u8> {
             match self {
-                IPolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(element) => {
+                IBasePolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => {
                     element.encode()
                 }
-                IPolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => element.encode(),
-                IPolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(element) => element.encode(),
+                IBasePolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(element) => element.encode(),
             }
         }
     }
-    impl ::std::fmt::Display for IPolygonZkEVMGlobalExitRootCalls {
+    impl ::std::fmt::Display for IBasePolygonZkEVMGlobalExitRootCalls {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match self {
-                IPolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(element) => element.fmt(f),
-                IPolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => element.fmt(f),
-                IPolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(element) => element.fmt(f),
+                IBasePolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(element) => element.fmt(f),
+                IBasePolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(element) => element.fmt(f),
             }
         }
     }
-    impl ::std::convert::From<GetLastGlobalExitRootCall> for IPolygonZkEVMGlobalExitRootCalls {
-        fn from(var: GetLastGlobalExitRootCall) -> Self {
-            IPolygonZkEVMGlobalExitRootCalls::GetLastGlobalExitRoot(var)
-        }
-    }
-    impl ::std::convert::From<GlobalExitRootMapCall> for IPolygonZkEVMGlobalExitRootCalls {
+    impl ::std::convert::From<GlobalExitRootMapCall> for IBasePolygonZkEVMGlobalExitRootCalls {
         fn from(var: GlobalExitRootMapCall) -> Self {
-            IPolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(var)
+            IBasePolygonZkEVMGlobalExitRootCalls::GlobalExitRootMap(var)
         }
     }
-    impl ::std::convert::From<UpdateExitRootCall> for IPolygonZkEVMGlobalExitRootCalls {
+    impl ::std::convert::From<UpdateExitRootCall> for IBasePolygonZkEVMGlobalExitRootCalls {
         fn from(var: UpdateExitRootCall) -> Self {
-            IPolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(var)
+            IBasePolygonZkEVMGlobalExitRootCalls::UpdateExitRoot(var)
         }
     }
-    #[doc = "Container type for all return fields from the `getLastGlobalExitRoot` function with signature `getLastGlobalExitRoot()` and selector `[62, 214, 145, 239]`"]
-    #[derive(
-        Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
-        Default,
-    )]
-    pub struct GetLastGlobalExitRootReturn(pub [u8; 32]);
     #[doc = "Container type for all return fields from the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `[37, 123, 54, 50]`"]
     #[derive(
         Clone,

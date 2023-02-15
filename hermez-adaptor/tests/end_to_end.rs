@@ -183,7 +183,7 @@ async fn test_end_to_end() {
 
     // Wait for the batches to be verified.
     let verified_filter = rollup
-        .trusted_verify_batches_filter()
+        .verify_batches_trusted_aggregator_filter()
         .from_block(l1_initial_block);
     let mut events = verified_filter.stream().await.unwrap();
     loop {

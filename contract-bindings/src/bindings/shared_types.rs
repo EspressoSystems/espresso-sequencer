@@ -1,4 +1,4 @@
-#[doc = "`InitializePackedParameters(address,uint64,address,uint64,bool,address,uint64)`"]
+#[doc = "`InitializePackedParameters(address,address,uint64,address,uint64)`"]
 #[derive(
     Clone,
     Debug,
@@ -10,10 +10,8 @@
 )]
 pub struct InitializePackedParameters {
     pub admin: ethers::core::types::Address,
-    pub chain_id: u64,
     pub trusted_sequencer: ethers::core::types::Address,
     pub pending_state_timeout: u64,
-    pub force_batch_allowed: bool,
     pub trusted_aggregator: ethers::core::types::Address,
     pub trusted_aggregator_timeout: u64,
 }

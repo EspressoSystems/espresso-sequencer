@@ -16,7 +16,7 @@ pub mod polygon_zk_evm_global_exit_root_mock {
     use ethers::providers::Middleware;
     #[doc = "PolygonZkEVMGlobalExitRootMock was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_rollupAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"Initialized\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true}],\"type\":\"event\",\"name\":\"UpdateGlobalExitRoot\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"getLastGlobalExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_rollupAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"initialize\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastMainnetExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"rollupAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setLastGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_rollupAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[],\"indexed\":true}],\"type\":\"event\",\"name\":\"UpdateGlobalExitRoot\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"getLastGlobalExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastMainnetExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"rollupAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setLastGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static POLYGONZKEVMGLOBALEXITROOTMOCK_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -81,16 +81,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
                 .method_hash([37, 123, 54, 50], p0)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `initialize` (0x485cc955) function"]
-        pub fn initialize(
-            &self,
-            rollup_address: ethers::core::types::Address,
-            bridge_address: ethers::core::types::Address,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([72, 92, 201, 85], (rollup_address, bridge_address))
-                .expect("method not found (this should never happen)")
-        }
         #[doc = "Calls the contract's `lastMainnetExitRoot` (0x319cf735) function"]
         pub fn last_mainnet_exit_root(
             &self,
@@ -143,12 +133,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
                 .method_hash([51, 214, 36, 125], new_root)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Gets the contract's `Initialized` event"]
-        pub fn initialized_filter(
-            &self,
-        ) -> ethers::contract::builders::Event<M, InitializedFilter> {
-            self.0.event()
-        }
         #[doc = "Gets the contract's `UpdateGlobalExitRoot` event"]
         pub fn update_global_exit_root_filter(
             &self,
@@ -156,9 +140,7 @@ pub mod polygon_zk_evm_global_exit_root_mock {
             self.0.event()
         }
         #[doc = r" Returns an [`Event`](#ethers_contract::builders::Event) builder for all events of this contract"]
-        pub fn events(
-            &self,
-        ) -> ethers::contract::builders::Event<M, PolygonZkEVMGlobalExitRootMockEvents> {
+        pub fn events(&self) -> ethers::contract::builders::Event<M, UpdateGlobalExitRootFilter> {
             self.0.event_with_filter(Default::default())
         }
     }
@@ -169,19 +151,18 @@ pub mod polygon_zk_evm_global_exit_root_mock {
             Self(contract)
         }
     }
+    #[doc = "Custom Error type `OnlyAllowedContracts` with signature `OnlyAllowedContracts()` and selector `[180, 147, 101, 221]`"]
     #[derive(
         Clone,
         Debug,
+        Default,
         Eq,
         PartialEq,
-        ethers :: contract :: EthEvent,
+        ethers :: contract :: EthError,
         ethers :: contract :: EthDisplay,
-        Default,
     )]
-    #[ethevent(name = "Initialized", abi = "Initialized(uint8)")]
-    pub struct InitializedFilter {
-        pub version: u8,
-    }
+    #[etherror(name = "OnlyAllowedContracts", abi = "OnlyAllowedContracts()")]
+    pub struct OnlyAllowedContracts;
     #[derive(
         Clone,
         Debug,
@@ -200,41 +181,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
         pub mainnet_exit_root: [u8; 32],
         #[ethevent(indexed)]
         pub rollup_exit_root: [u8; 32],
-    }
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
-    pub enum PolygonZkEVMGlobalExitRootMockEvents {
-        InitializedFilter(InitializedFilter),
-        UpdateGlobalExitRootFilter(UpdateGlobalExitRootFilter),
-    }
-    impl ethers::contract::EthLogDecode for PolygonZkEVMGlobalExitRootMockEvents {
-        fn decode_log(
-            log: &ethers::core::abi::RawLog,
-        ) -> ::std::result::Result<Self, ethers::core::abi::Error>
-        where
-            Self: Sized,
-        {
-            if let Ok(decoded) = InitializedFilter::decode_log(log) {
-                return Ok(PolygonZkEVMGlobalExitRootMockEvents::InitializedFilter(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) = UpdateGlobalExitRootFilter::decode_log(log) {
-                return Ok(
-                    PolygonZkEVMGlobalExitRootMockEvents::UpdateGlobalExitRootFilter(decoded),
-                );
-            }
-            Err(ethers::core::abi::Error::InvalidData)
-        }
-    }
-    impl ::std::fmt::Display for PolygonZkEVMGlobalExitRootMockEvents {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-            match self {
-                PolygonZkEVMGlobalExitRootMockEvents::InitializedFilter(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootMockEvents::UpdateGlobalExitRootFilter(element) => {
-                    element.fmt(f)
-                }
-            }
-        }
     }
     #[doc = "Container type for all input parameters for the `bridgeAddress` function with signature `bridgeAddress()` and selector `[163, 197, 115, 235]`"]
     #[derive(
@@ -272,21 +218,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
     )]
     #[ethcall(name = "globalExitRootMap", abi = "globalExitRootMap(bytes32)")]
     pub struct GlobalExitRootMapCall(pub [u8; 32]);
-    #[doc = "Container type for all input parameters for the `initialize` function with signature `initialize(address,address)` and selector `[72, 92, 201, 85]`"]
-    #[derive(
-        Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
-        Default,
-    )]
-    #[ethcall(name = "initialize", abi = "initialize(address,address)")]
-    pub struct InitializeCall {
-        pub rollup_address: ethers::core::types::Address,
-        pub bridge_address: ethers::core::types::Address,
-    }
     #[doc = "Container type for all input parameters for the `lastMainnetExitRoot` function with signature `lastMainnetExitRoot()` and selector `[49, 156, 247, 53]`"]
     #[derive(
         Clone,
@@ -371,7 +302,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
         BridgeAddress(BridgeAddressCall),
         GetLastGlobalExitRoot(GetLastGlobalExitRootCall),
         GlobalExitRootMap(GlobalExitRootMapCall),
-        Initialize(InitializeCall),
         LastMainnetExitRoot(LastMainnetExitRootCall),
         LastRollupExitRoot(LastRollupExitRootCall),
         RollupAddress(RollupAddressCall),
@@ -401,11 +331,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
                 return Ok(PolygonZkEVMGlobalExitRootMockCalls::GlobalExitRootMap(
                     decoded,
                 ));
-            }
-            if let Ok(decoded) =
-                <InitializeCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(PolygonZkEVMGlobalExitRootMockCalls::Initialize(decoded));
             }
             if let Ok(decoded) =
                 <LastMainnetExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
@@ -456,7 +381,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
                     element.encode()
                 }
                 PolygonZkEVMGlobalExitRootMockCalls::GlobalExitRootMap(element) => element.encode(),
-                PolygonZkEVMGlobalExitRootMockCalls::Initialize(element) => element.encode(),
                 PolygonZkEVMGlobalExitRootMockCalls::LastMainnetExitRoot(element) => {
                     element.encode()
                 }
@@ -480,7 +404,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
                     element.fmt(f)
                 }
                 PolygonZkEVMGlobalExitRootMockCalls::GlobalExitRootMap(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootMockCalls::Initialize(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootMockCalls::LastMainnetExitRoot(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootMockCalls::LastRollupExitRoot(element) => element.fmt(f),
                 PolygonZkEVMGlobalExitRootMockCalls::RollupAddress(element) => element.fmt(f),
@@ -505,11 +428,6 @@ pub mod polygon_zk_evm_global_exit_root_mock {
     impl ::std::convert::From<GlobalExitRootMapCall> for PolygonZkEVMGlobalExitRootMockCalls {
         fn from(var: GlobalExitRootMapCall) -> Self {
             PolygonZkEVMGlobalExitRootMockCalls::GlobalExitRootMap(var)
-        }
-    }
-    impl ::std::convert::From<InitializeCall> for PolygonZkEVMGlobalExitRootMockCalls {
-        fn from(var: InitializeCall) -> Self {
-            PolygonZkEVMGlobalExitRootMockCalls::Initialize(var)
         }
     }
     impl ::std::convert::From<LastMainnetExitRootCall> for PolygonZkEVMGlobalExitRootMockCalls {

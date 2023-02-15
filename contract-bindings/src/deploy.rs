@@ -16,7 +16,7 @@ use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
     types::{TransactionRequest, U256},
-    utils::parse_ether,
+    utils::{get_contract_address, parse_ether},
 };
 use ethers_solc::HardhatArtifact;
 use hex::FromHex;
@@ -136,6 +136,7 @@ pub struct TestHermezContracts {
     pub global_exit_root: PolygonZkEVMGlobalExitRoot<EthMiddleware>,
     pub verifier: VerifierRollupHelperMock<EthMiddleware>,
     pub matic: ERC20PermitMock<EthMiddleware>,
+    pub gen_block_number: u64,
     pub clients: TestClients,
     pub provider: Provider<Http>,
 }
@@ -148,32 +149,55 @@ impl TestHermezContracts {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
+        let deployer = clients.deployer.clone();
 
-        let verifier = VerifierRollupHelperMock::deploy(&clients.deployer, ()).await;
+        let verifier = VerifierRollupHelperMock::deploy(&deployer, ()).await;
 
         let matic_token_initial_balance = parse_ether("20000000").unwrap();
         let matic = ERC20PermitMock::deploy(
-            &clients.deployer,
+            &deployer,
             (
                 "Matic Token".to_string(),
                 "MATIC".to_string(),
-                clients.deployer.address(),
+                deployer.address(),
                 matic_token_initial_balance,
             ),
         )
         .await;
 
-        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(&clients.deployer, ()).await;
-        let bridge = PolygonZkEVMBridge::deploy(&clients.deployer, ()).await;
-        let rollup = PolygonZkEVM::deploy(&clients.deployer, ()).await;
-
-        global_exit_root
-            .initialize(rollup.address(), bridge.address())
-            .send()
-            .await
-            .unwrap()
+        // We need to pass the addresses to the GER constructor.
+        let nonce = provider
+            .get_transaction_count(deployer.address(), None)
             .await
             .unwrap();
+        let precalc_bridge_address = get_contract_address(deployer.address(), nonce + 1);
+        let precalc_rollup_address = get_contract_address(deployer.address(), nonce + 2);
+
+        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(
+            &deployer,
+            (precalc_rollup_address, precalc_bridge_address),
+        )
+        .await;
+
+        let bridge = PolygonZkEVMBridge::deploy(&deployer, ()).await;
+        assert_eq!(bridge.address(), precalc_bridge_address);
+
+        let chain_id = U256::from(1001);
+        let fork_id = U256::from(1);
+        let rollup = PolygonZkEVM::deploy(
+            &deployer,
+            (
+                global_exit_root.address(),
+                matic.address(),
+                verifier.address(),
+                bridge.address(),
+                chain_id,
+                fork_id,
+            ),
+        )
+        .await;
+        assert_eq!(rollup.address(), precalc_rollup_address);
+        let gen_block_number = provider.get_block_number().await.unwrap().as_u64();
 
         let network_id_mainnet = 0;
         bridge
@@ -194,30 +218,32 @@ impl TestHermezContracts {
         )
         .unwrap();
         let network_name = "zkevm";
+        let version = "0.0.1".to_string();
 
         // Note that the test zkevm-node expects all wallets to be the deployer
         // wallet (account 0), except for the aggregator wallet (account 1).
         rollup
             .initialize(
-                global_exit_root.address(),
-                matic.address(),
-                verifier.address(),
-                bridge.address(),
                 InitializePackedParameters {
                     // admin: clients.admin.address(),
-                    admin: clients.deployer.address(),
-                    force_batch_allowed: true,
-                    chain_id: 1001,
+                    admin: deployer.address(),
+                    // force_batch_allowed: true,
+                    // chain_id: 1001,
                     // trusted_sequencer: clients.trusted_sequencer.address(),
-                    trusted_sequencer: clients.deployer.address(),
+                    trusted_sequencer: deployer.address(),
                     pending_state_timeout: 10,
                     trusted_aggregator: clients.trusted_aggregator.address(),
-                    // trusted_aggregator: clients.deployer.address(),
+                    // trusted_aggregator: deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
+                // global_exit_root.address(),
                 genesis_root,
                 trusted_sequencer.as_ref().into(),
                 network_name.to_string(),
+                version,
+                // matic.address(),
+                // verifier.address(),
+                // bridge.address(),
             )
             .send()
             .await
@@ -240,6 +266,7 @@ impl TestHermezContracts {
             global_exit_root,
             verifier,
             matic,
+            gen_block_number,
             clients,
             provider,
         }
