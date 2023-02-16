@@ -56,12 +56,7 @@ services:
       retries: 10
 
   zkevm-prover:
-    image: hermeznetwork/zkevm-prover:e7ac5c4
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 700M
-    #       cpus: "1"
+    image: hermeznetwork/zkevm-prover:88f3835
     expose:
       - 50052 # Mock prover
       - 50061 # MT
