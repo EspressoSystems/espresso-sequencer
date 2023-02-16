@@ -12,6 +12,9 @@ use std::{
 };
 use surf_disco::Url;
 
+// This private constant is defined by _MAX_VERIFY_BATCHES in PolygonZkEVM.sol
+pub const HERMEZ_MAX_VERIFY_BATCHES: usize = 1000;
+
 pub async fn wait_for_http(
     url: &Url,
     interval: Duration,
