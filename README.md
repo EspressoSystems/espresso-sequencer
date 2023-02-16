@@ -26,7 +26,7 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 ### Running with Docker
 
-#### Generate Personal Access Token
+#### Authenticate with GitHub container registry
 
 * Go to your github profile
 * Developer Settings > Personal access tokens > Personal access tokens (classic)
