@@ -197,6 +197,8 @@ impl TestHermezContracts {
         )
         .await;
         assert_eq!(rollup.address(), precalc_rollup_address);
+
+        // Remember the genesis block number where the rollup contract was deployed.
         let gen_block_number = provider.get_block_number().await.unwrap().as_u64();
 
         let network_id_mainnet = 0;
@@ -213,11 +215,14 @@ impl TestHermezContracts {
             .unwrap();
 
         // Genesis root from ./config/test.genesis.config.json in zkevm-node repo.
+        //
+        // Note that setting a wrong value currently does not seem to have any
+        // noticeable effect, which is suspicious.
         let genesis_root = <[u8; 32]>::from_hex(
-            "bf34f9a52a63229e90d1016011655bc12140bba5b771817b88cbf340d08dcbde",
+            "5c8df6a4b7748c1308a60c5380a2ff77deb5cfee3bf4fba76eef189d651d4558",
         )
         .unwrap();
-        let network_name = "zkevm";
+        let network_name = "zkevm".to_string();
         let version = "0.0.1".to_string();
 
         // Note that the test zkevm-node expects all wallets to be the deployer
@@ -225,25 +230,16 @@ impl TestHermezContracts {
         rollup
             .initialize(
                 InitializePackedParameters {
-                    // admin: clients.admin.address(),
                     admin: deployer.address(),
-                    // force_batch_allowed: true,
-                    // chain_id: 1001,
-                    // trusted_sequencer: clients.trusted_sequencer.address(),
                     trusted_sequencer: deployer.address(),
                     pending_state_timeout: 10,
                     trusted_aggregator: clients.trusted_aggregator.address(),
-                    // trusted_aggregator: deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
-                // global_exit_root.address(),
                 genesis_root,
                 trusted_sequencer.as_ref().into(),
-                network_name.to_string(),
+                network_name,
                 version,
-                // matic.address(),
-                // verifier.address(),
-                // bridge.address(),
             )
             .send()
             .await

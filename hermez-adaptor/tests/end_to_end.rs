@@ -118,7 +118,7 @@ async fn test_end_to_end() {
             .send_transaction(
                 TransactionRequest {
                     from: Some(l2.inner().address()),
-                    to: Some(Address::random().into()),
+                    to: Some(Address::zero().into()),
                     value: Some(transfer_amount),
                     ..Default::default()
                 },
