@@ -26,6 +26,16 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 ### Running with Docker
 
+#### Generate Personal Access Token
+
+* Go to your github profile
+* Developer Settings > Personal access tokens > Personal access tokens (classic)
+* Generate a new token
+  * for the scope options of the token, tick the *repo* box.
+* Run ``docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>``
+
+#### Run the demo
+
 To get the latest images: `just pull`
 
 To start the demo: `just demo`
@@ -34,6 +44,9 @@ To start the demo in the background: `just demo-background`. This can be useful 
 
 To stop the demo: `just down`
 
+#### Run the integration tests
+
+* ``cargo test --all-features end_to_end``
 ### Running natively
 
 Build all executables with `cargo build --release`. You may then start a single CDN server and
