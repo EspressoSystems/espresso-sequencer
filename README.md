@@ -29,11 +29,14 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 To get the latest images: `just pull`
 
-To start the demo: `just demo`
+To start the demo: `just demo`. Note: currently broken due to failing genesis
+check in the synchronizer.
 
 To start the demo in the background: `just demo-background`. This can be useful because the command should exit sucessfully only once the demo is running.
 
 To stop the demo: `just down`
+
+To build the docker images locally: `just build-docker`. To revert to the CI docker images: `just pull`.
 
 ### Running natively
 
