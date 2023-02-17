@@ -27,6 +27,16 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 ### Running with Docker
 
+#### Authenticate with GitHub container registry
+
+* Go to your github profile
+* Developer Settings > Personal access tokens > Personal access tokens (classic)
+* Generate a new token
+  * for the scope options of the token, tick the *repo* box.
+* Run ``docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>``
+
+#### Run the demo
+
 To get the latest images: `just pull`
 
 To start the demo: `just demo`. Note: currently broken due to failing genesis
@@ -37,6 +47,10 @@ To start the demo in the background: `just demo-background`. This can be useful 
 To stop the demo: `just down`
 
 To build the docker images locally: `just build-docker`. To revert to the CI docker images: `just pull`.
+
+#### Run the integration tests
+
+* ``cargo test --all-features end_to_end``
 
 ### Running natively
 
