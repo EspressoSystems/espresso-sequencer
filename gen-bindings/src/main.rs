@@ -1,5 +1,8 @@
 use ethers::prelude::{Abigen, MultiAbigen};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn find_paths(dir: &str, ext: &str) -> Vec<PathBuf> {
     glob::glob(&format!("{dir}/**/*{ext}"))
@@ -48,6 +51,14 @@ fn main() -> Result<(), ()> {
     let bindings = gen.build().unwrap();
     let bindings_dir = workspace_dir.join("contract-bindings/src/bindings");
     bindings.write_to_module(&bindings_dir, false).unwrap();
+
+    // Unfortunately the bindings are not always correctly formatted.
+    Command::new("rustfmt")
+        .arg(bindings_dir.join("mod.rs").to_str().unwrap())
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
 
     println!("zkevm-contract bindings written to {bindings_dir:?}");
 

@@ -89,6 +89,7 @@ step. If the ABIs change the `gen-bindings` step also needs to be executed.
 - Install dependencies `just npm i`
 - Compile the contracts `just hardhat compile`
 - Update the rust bindings: `cargo run --bin gen-bindings`
+- Compile contracts and update bindings: `just update-contract-bindings`
 - Run a hardhat dev node: `just hardhat node`
 
 ## Implementation Plan
