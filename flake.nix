@@ -7,29 +7,32 @@
   };
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
-  inputs.fenix = {
-    url = "github:nix-community/fenix";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
+  inputs.fenix.url = "github:nix-community/fenix";
+  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   inputs.foundry.url = "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
+  inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
+
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry,... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
         arch = (builtins.elemAt (builtins.elemAt info 1) 0);
         os = (builtins.elemAt (builtins.elemAt info 3) 0);
-        overlays = [ (import rust-overlay) foundry.overlay ];
+        overlays = [
+          (import rust-overlay)
+          foundry.overlay
+          solc-bin.overlays.default
+        ];
         pkgs = import nixpkgs {
           inherit system overlays;
         };
@@ -78,6 +81,7 @@
             nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
               exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
             '';
+            solc = pkgs.solc-bin.latest;
           in
           mkShell
             {
@@ -106,8 +110,8 @@
                 coreutils
 
                 foundry-bin
-
-              ] ++ lib.optionals stdenv.isDarwin[darwin.apple_sdk.frameworks.SystemConfiguration];
+                solc
+              ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ];
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.
@@ -116,6 +120,7 @@
               RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
               RUST_BACKTRACE = 1;
               RUST_LOG = "info,libp2p=off";
+              FOUNDRY_SOLC = "${solc}/bin/solc";
             };
         devShells.staticShell =
           let
@@ -127,7 +132,7 @@
               pkgs.rust-bin.stable.latest.minimal.override {
                 extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
                 targets = [ "${arch}-unknown-${os}-musl" ];
-            };
+              };
             opensslMusl = muslPkgs.openssl.override { static = true; };
             curlMusl = (muslPkgs.pkgsStatic.curl.override {
               http2Support = false;

@@ -63,18 +63,23 @@ enabled.
 
 ### Developing contracts
 
-The contracts specific to HotShot can be found in the director `contracts`.
-We use the foundry framework in order to compile, deploy and test those contracts locally.
+A foundry project for the contracts specific to HotShot can be found in the director `contracts`.
 
 To compile
 ```shell
-> forge buid
+cd contracts
+forge build
 ```
 
 To run the tests
 ```shell
-> forge test
+cd contracts
+forge test
 ```
+
+In order to avoid constant warnings about checksum mismatches with
+[svm-rs](https://github.com/roynalnaruto/svm-rs) managed `solc` we set
+`FOUNDRY_SRC` to solc installed via flake.nix.
 
 ### Generating the bindings and deploying Hotshot contracts with Hermez contracts
 
