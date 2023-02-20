@@ -25,7 +25,7 @@ pub mod counter {
     #[doc = r" Bytecode of the #name contract"]
     pub static COUNTER_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
         ethers::contract::Lazy::new(|| {
-            "0x608060405234801561001057600080fd5b5061010b806100206000396000f3fe6080604052348015600f57600080fd5b506004361060505760003560e01c80632f576f201460555780633fb5c1cb1460575780635f879d311460555780638381f58a146067578063d09de08a146081575b600080fd5b005b605560623660046097565b600055565b606f60005481565b60405190815260200160405180910390f35b605560008054908060908360af565b9190505550565b60006020828403121560a857600080fd5b5035919050565b60006001820160ce57634e487b7160e01b600052601160045260246000fd5b506001019056fea2646970667358221220636719bb675654b3d10c09345f65ce1ed8c90c798d97708368e1f38638265b8964736f6c63430008110033" . parse () . expect ("invalid bytecode")
+            "0x608060405234801561001057600080fd5b5061010b806100206000396000f3fe6080604052348015600f57600080fd5b506004361060505760003560e01c80632f576f201460555780633fb5c1cb1460575780635f879d311460555780638381f58a146067578063d09de08a146081575b600080fd5b005b605560623660046097565b600055565b606f60005481565b60405190815260200160405180910390f35b605560008054908060908360af565b9190505550565b60006020828403121560a857600080fd5b5035919050565b60006001820160ce57634e487b7160e01b600052601160045260246000fd5b506001019056fea26469706673582212209b6ea12c7e9f56f9a2590e7774823649dbf3565929c8a12cb5516db74bddf79e64736f6c63430008120033" . parse () . expect ("invalid bytecode")
         });
     pub struct Counter<M>(ethers::contract::Contract<M>);
     impl<M> Clone for Counter<M> {
@@ -136,7 +136,7 @@ pub mod counter {
             Self(contract)
         }
     }
-    #[doc = "Container type for all input parameters for the `doNothing` function with signature `doNothing()` and selector `0x2f576f20`"]
+    #[doc = "Container type for all input parameters for the `doNothing` function with signature `doNothing()` and selector `[47, 87, 111, 32]`"]
     #[derive(
         Clone,
         Debug,
@@ -148,7 +148,7 @@ pub mod counter {
     )]
     #[ethcall(name = "doNothing", abi = "doNothing()")]
     pub struct DoNothingCall;
-    #[doc = "Container type for all input parameters for the `doNothing3` function with signature `doNothing3()` and selector `0x5f879d31`"]
+    #[doc = "Container type for all input parameters for the `doNothing3` function with signature `doNothing3()` and selector `[95, 135, 157, 49]`"]
     #[derive(
         Clone,
         Debug,
@@ -160,7 +160,7 @@ pub mod counter {
     )]
     #[ethcall(name = "doNothing3", abi = "doNothing3()")]
     pub struct DoNothing3Call;
-    #[doc = "Container type for all input parameters for the `increment` function with signature `increment()` and selector `0xd09de08a`"]
+    #[doc = "Container type for all input parameters for the `increment` function with signature `increment()` and selector `[208, 157, 224, 138]`"]
     #[derive(
         Clone,
         Debug,
@@ -172,7 +172,7 @@ pub mod counter {
     )]
     #[ethcall(name = "increment", abi = "increment()")]
     pub struct IncrementCall;
-    #[doc = "Container type for all input parameters for the `number` function with signature `number()` and selector `0x8381f58a`"]
+    #[doc = "Container type for all input parameters for the `number` function with signature `number()` and selector `[131, 129, 245, 138]`"]
     #[derive(
         Clone,
         Debug,
@@ -184,7 +184,7 @@ pub mod counter {
     )]
     #[ethcall(name = "number", abi = "number()")]
     pub struct NumberCall;
-    #[doc = "Container type for all input parameters for the `setNumber` function with signature `setNumber(uint256)` and selector `0x3fb5c1cb`"]
+    #[doc = "Container type for all input parameters for the `setNumber` function with signature `setNumber(uint256)` and selector `[63, 181, 193, 203]`"]
     #[derive(
         Clone,
         Debug,
@@ -284,7 +284,7 @@ pub mod counter {
             CounterCalls::SetNumber(var)
         }
     }
-    #[doc = "Container type for all return fields from the `number` function with signature `number()` and selector `0x8381f58a`"]
+    #[doc = "Container type for all return fields from the `number` function with signature `number()` and selector `[131, 129, 245, 138]`"]
     #[derive(
         Clone,
         Debug,
