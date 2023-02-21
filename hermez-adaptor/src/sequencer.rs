@@ -344,7 +344,7 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ZkEvmNode;
+    use crate::{Layer1Backend, ZkEvmNode};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::future::join_all;
@@ -357,7 +357,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let node = ZkEvmNode::start("test-sequencer-task".to_string()).await;
+        let node = ZkEvmNode::start("test-sequencer-task".to_string(), Layer1Backend::Anvil).await;
 
         // Get test setup from environment.
         let env = node.env();

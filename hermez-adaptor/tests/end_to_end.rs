@@ -13,7 +13,7 @@ use futures::{
     join,
     stream::StreamExt,
 };
-use hermez_adaptor::{wait_for_http, ZkEvmNode};
+use hermez_adaptor::{wait_for_http, Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
 use sequencer::SeqTypes;
 use std::time::Duration;
@@ -26,7 +26,7 @@ async fn test_end_to_end() {
     setup_logging();
     setup_backtrace();
 
-    let node = ZkEvmNode::start("test-end-to-end".to_string()).await;
+    let node = ZkEvmNode::start("test-end-to-end".to_string(), Layer1Backend::Anvil).await;
 
     // Create blocks periodically. This seems to be required, but we should
     // investigate how exactly the Ethereum block number drivers the

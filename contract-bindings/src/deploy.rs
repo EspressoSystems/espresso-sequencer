@@ -15,7 +15,7 @@ use ethers::{
     prelude::{ContractFactory, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
-    types::{TransactionRequest, U256},
+    types::{Address, TransactionRequest, U256},
     utils::{get_contract_address, parse_ether},
 };
 use ethers_solc::HardhatArtifact;
@@ -114,7 +114,7 @@ impl TestClients {
     }
 }
 
-fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<EthMiddleware> {
+pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<EthMiddleware> {
     let mnemonic = MnemonicBuilder::<English>::default()
         .phrase("test test test test test test test test test test test junk");
     Arc::new(SignerMiddleware::new(
@@ -142,6 +142,53 @@ pub struct TestHermezContracts {
 }
 
 impl TestHermezContracts {
+    /// Connect to a system of deployed contracts for testing purposes.
+    pub async fn connect(
+        provider: impl AsRef<str>,
+        rollup_address: Address,
+        bridge_address: Address,
+        global_exit_root_address: Address,
+        verifier_address: Address,
+        matic_address: Address,
+    ) -> Self {
+        let mut provider = Provider::try_from(provider.as_ref()).unwrap();
+        provider.set_interval(Duration::from_millis(10));
+        let chain_id = provider.get_chainid().await.unwrap().as_u64();
+        let clients = TestClients::new(&provider, chain_id);
+        let deployer = clients.deployer.clone();
+        let rollup = PolygonZkEVM::new(rollup_address, deployer.clone());
+        let mut block_num = 0;
+
+        // Iterate over all block numbers to figure out when the rollup contract
+        // was deployed.
+        let gen_block_number = loop {
+            if let Ok(bytes) = provider
+                .get_code(rollup_address, Some(block_num.into()))
+                .await
+            {
+                if !bytes.is_empty() {
+                    break block_num;
+                }
+            }
+
+            block_num += 1;
+        };
+
+        Self {
+            rollup,
+            bridge: PolygonZkEVMBridge::new(bridge_address, deployer.clone()),
+            global_exit_root: PolygonZkEVMGlobalExitRoot::new(
+                global_exit_root_address,
+                deployer.clone(),
+            ),
+            verifier: VerifierRollupHelperMock::new(verifier_address, deployer.clone()),
+            matic: ERC20PermitMock::new(matic_address, deployer.clone()),
+            gen_block_number,
+            clients,
+            provider,
+        }
+    }
+
     /// Deploy the system of contracts for testing purposes.
     pub async fn deploy(provider: impl AsRef<str>, trusted_sequencer: impl AsRef<str>) -> Self {
         let mut provider = Provider::try_from(provider.as_ref()).unwrap();
