@@ -1,6 +1,6 @@
 use crate::{
     bindings::{
-        erc20_permit_mock::ERC20PermitMock, polygon_zk_evm::PolygonZkEVM,
+        counter::Counter, erc20_permit_mock::ERC20PermitMock, polygon_zk_evm::PolygonZkEVM,
         polygon_zk_evm_bridge::PolygonZkEVMBridge,
         polygon_zk_evm_global_exit_root::PolygonZkEVMGlobalExitRoot,
         polygon_zk_evm_global_exit_root_l2::PolygonZkEVMGlobalExitRootL2,
@@ -47,7 +47,7 @@ macro_rules! mk_deploy {
                     .parent()
                     .unwrap()
                     .join(format!(
-                        "zkevm-contracts/artifacts/contracts/{}/{}.sol/{}.json",
+                        "{}/{}.sol/{}.json",
                         $prefix,
                         stringify!($contract),
                         stringify!($contract)
@@ -68,14 +68,23 @@ macro_rules! mk_deploy {
 }
 
 // If other contracts need to be deployed, add them here.
-mk_deploy!("", PolygonZkEVM);
-mk_deploy!("", PolygonZkEVMBridge);
-mk_deploy!("", PolygonZkEVMGlobalExitRootL2);
-mk_deploy!("", PolygonZkEVMGlobalExitRoot);
-mk_deploy!("", PolygonZkEVMTimelock);
-mk_deploy!("verifiers", Verifier);
-mk_deploy!("mocks", VerifierRollupHelperMock);
-mk_deploy!("mocks", ERC20PermitMock);
+const ZKEVM_CONTRACTS_PREFIX: &str = "zkevm-contracts/artifacts/contracts/";
+const ESPRESSO_CONTRACTS_PREFIX: &str = "contracts/out";
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVM);
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMBridge);
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMGlobalExitRootL2);
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMGlobalExitRoot);
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMTimelock);
+mk_deploy!(ZKEVM_CONTRACTS_PREFIX.to_owned() + "/verifiers", Verifier);
+mk_deploy!(
+    ZKEVM_CONTRACTS_PREFIX.to_owned() + "/mocks",
+    VerifierRollupHelperMock
+);
+mk_deploy!(
+    ZKEVM_CONTRACTS_PREFIX.to_owned() + "/mocks",
+    ERC20PermitMock
+);
+mk_deploy!(ESPRESSO_CONTRACTS_PREFIX, Counter);
 
 /// Deploy a contract from a hardhat artifact.
 pub async fn deploy_artifact<M: Middleware, T: Tokenize>(
