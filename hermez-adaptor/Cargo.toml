@@ -3,6 +3,10 @@ name = "hermez-adaptor"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "zkevm-node"
+required-features = ["testing"]
+
 [features]
 testing = ["portpicker"]
 

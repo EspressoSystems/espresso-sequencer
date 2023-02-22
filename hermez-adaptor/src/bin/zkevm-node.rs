@@ -1,4 +1,3 @@
-#![cfg(any(test, feature = "testing"))]
 use clap::Parser;
 use hermez_adaptor::DemoZkEvmNode;
 use scopeguard::defer;
