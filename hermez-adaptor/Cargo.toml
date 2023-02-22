@@ -32,7 +32,6 @@ zkevm = { path = "../zkevm" }
 
 # Dependencies for feature "testing".
 portpicker = { version = "0.1", optional = true }
-scopeguard = "1.1.0"
 snafu = "0.7.4"
 
 [dev-dependencies]

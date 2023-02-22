@@ -106,14 +106,15 @@ impl DemoZkEvmNode {
             layer1_backend,
         }
     }
+}
 
-    pub fn stop(&self) -> &Self {
+impl Drop for DemoZkEvmNode {
+    fn drop(&mut self) {
         ZkEvmNode::compose_cmd_prefix(self.env(), self.project_name(), self.layer1_backend())
             .arg("down")
             .arg("-v")
             .arg("--remove-orphans")
             .spawn()
             .expect("Failed to run docker compose down");
-        self
     }
 }

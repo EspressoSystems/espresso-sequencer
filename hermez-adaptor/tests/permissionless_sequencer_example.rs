@@ -1,7 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use escargot::CargoBuild;
 use hermez_adaptor::DemoZkEvmNode;
-use scopeguard::defer;
 use std::path::Path;
 
 #[async_std::test]
@@ -9,8 +8,7 @@ async fn test_permissionless_sequencer_example() {
     setup_logging();
     setup_backtrace();
 
-    let node = DemoZkEvmNode::start().await;
-    defer! {node.stop();}
+    let _node = DemoZkEvmNode::start().await;
 
     let exit_status = CargoBuild::new()
         .manifest_path(

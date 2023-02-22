@@ -3495,7 +3495,6 @@ dependencies = [
  "http-types",
  "jsonrpc-v2",
  "portpicker",
- "scopeguard",
  "sequencer",
  "serde_json",
  "snafu",
