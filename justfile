@@ -1,22 +1,23 @@
 # The zkevm-node docker-compose file currently only works if run from the zkevm-node/test directory.
-compose-base := "docker compose -f docker-compose.yaml -f permissionless-docker-compose.yaml"
+compose-base := "docker compose --project-name demo -f docker-compose.yaml -f permissionless-docker-compose.yaml"
+compose-espresso := "docker compose --project-name demo -f docker-compose.yaml"
 compose-anvil := compose-base + " -f docker-compose-anvil.yaml --env-file .env.anvil"
 compose := compose-base + " -f docker-compose-geth.yaml"
-compose-zkevm-node := "docker compose -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
+compose-zkevm-node := "docker compose --project-name demo -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
 
 zkevm-node:
     cargo run --all-features --bin zkevm-node
 
 demo:
     cargo run --all-features --bin zkevm-node
-    docker compose -f docker-compose.yaml up -V --force-recreate --abort-on-container-exit
+    {{compose-espresso}} up -V --force-recreate --abort-on-container-exit
 
 demo-anvil:
     cargo run --all-features --bin zkevm-node -- --backend anvil
-    docker compose -f docker-compose.yaml up -V --force-recreate --abort-on-container-exit
+    {{compose-espresso}} up -V --force-recreate --abort-on-container-exit
 
 demo-background:
-    {{compose}} up -d -V --force-recreate
+    {{compose}} --project-name demo up -d -V --force-recreate
 
 down:
     {{compose}} down -v --remove-orphans

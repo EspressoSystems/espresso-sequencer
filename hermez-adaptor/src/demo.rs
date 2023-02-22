@@ -35,7 +35,6 @@ impl DemoZkEvmNode {
 
     /// Start the L1, deploy contracts, start the L2
     pub async fn start() -> Self {
-        // Add a unique number to `project_name` to ensure that all instances use a unique name.
         let env = ZkEvmEnv::default();
         let project_name = "demo".to_string();
         let layer1_backend = Layer1Backend::Geth;

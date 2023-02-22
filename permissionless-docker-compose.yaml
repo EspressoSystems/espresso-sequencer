@@ -17,8 +17,7 @@ services:
       - ZKEVM_NODE_ETHERMAN_MATICADDR=$ESPRESSO_ZKEVM_MATIC_ADDRESS
       - ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR=$ESPRESSO_ZKEVM_GER_ADDRESS
       - ZKEVM_NODE_ETHERMAN_URL=http://zkevm-mock-l1-network:$ESPRESSO_ZKEVM_L1_PORT
-      # - ZKEVM_NODE_AGGREGATOR_SENDER_ADDRESS=0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
-      - ZKEVM_NODE_AGGREGATOR_SENDER_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 # Second account
+      - ZKEVM_NODE_AGGREGATOR_SENDERADDRESS=0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
     volumes:
       - ./zkevm-node/test/sequencer.keystore:/pk/sequencer.keystore
       - ./zkevm-node/test/aggregator.keystore:/pk/aggregator.keystore
