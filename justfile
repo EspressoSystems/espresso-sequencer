@@ -9,15 +9,8 @@ zkevm-node:
     cargo run --all-features --bin zkevm-node
 
 demo:
-    cargo run --all-features --bin zkevm-node
-    {{compose-espresso}} up -V --force-recreate --abort-on-container-exit
-
-demo-anvil:
-    cargo run --all-features --bin zkevm-node -- --backend anvil
-    {{compose-espresso}} up -V --force-recreate --abort-on-container-exit
-
-demo-background:
-    {{compose}} --project-name demo up -d -V --force-recreate
+    cargo run --all-features --bin zkevm-node -- --daemon
+    {{compose-espresso}} up -V --force-recreate --abort-on-container-exit || just down
 
 down:
     {{compose}} down -v --remove-orphans
