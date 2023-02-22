@@ -7,7 +7,7 @@ use scopeguard::defer;
 struct Options {
     /// Whether to run in background
     #[clap(short, long, action)]
-    daemon: bool,
+    detach: bool,
 }
 
 #[async_std::main]
@@ -15,7 +15,7 @@ async fn main() {
     let opt = Options::parse();
     let node = DemoZkEvmNode::start().await;
 
-    if !opt.daemon {
+    if !opt.detach {
         defer! {node.stop();}
         loop {
             async_std::task::sleep(std::time::Duration::from_secs(1)).await;

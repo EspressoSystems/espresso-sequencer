@@ -9,7 +9,7 @@ zkevm-node:
     cargo run --all-features --bin zkevm-node
 
 demo:
-    cargo run --all-features --bin zkevm-node -- --daemon
+    cargo run --all-features --bin zkevm-node -- --detach
     {{compose-espresso}} up -V --force-recreate --abort-on-container-exit || just down
 
 down:
