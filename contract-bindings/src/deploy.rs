@@ -281,15 +281,15 @@ impl TestHermezContracts {
         let network_name = "zkevm".to_string();
         let version = "0.0.1".to_string();
 
-        // Note that the test zkevm-node expects all wallets to be the deployer
-        // wallet (account 0), except for the aggregator wallet (account 1).
+        // Note we currently use the deployer account for everything because the
+        // zkevm-contracts geth L1 image still deploys like that.
         rollup
             .initialize(
                 InitializePackedParameters {
                     admin: deployer.address(),
                     trusted_sequencer: deployer.address(),
                     pending_state_timeout: 10,
-                    trusted_aggregator: clients.trusted_aggregator.address(),
+                    trusted_aggregator: deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
                 genesis_root,

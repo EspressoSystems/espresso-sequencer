@@ -17,6 +17,7 @@ services:
       - ZKEVM_NODE_ETHERMAN_MATICADDR=$ESPRESSO_ZKEVM_MATIC_ADDRESS
       - ZKEVM_NODE_ETHERMAN_GLOBALEXITROOTMANAGERADDR=$ESPRESSO_ZKEVM_GER_ADDRESS
       - ZKEVM_NODE_ETHERMAN_URL=http://zkevm-mock-l1-network:$ESPRESSO_ZKEVM_L1_PORT
+      # Use the deployer account to match zkevm-contracts geth L1 deployment.
       - ZKEVM_NODE_AGGREGATOR_SENDERADDRESS=0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
     volumes:
       - ./zkevm-node/test/sequencer.keystore:/pk/sequencer.keystore
