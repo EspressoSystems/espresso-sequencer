@@ -21,7 +21,6 @@ async fn test_permissionless_sequencer_example() {
         )
         .example("permissionless-sequencer")
         .current_release()
-        .current_target()
         .features("testing")
         .run()
         .expect("Failed to run cargo build")
