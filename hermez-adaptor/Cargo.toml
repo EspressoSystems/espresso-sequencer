@@ -11,7 +11,7 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 async-std = "1.12"
 clap = { version = "4.1", features = ["derive", "env"] }
 contract-bindings = { path = "../contract-bindings" }
-dotenv = "0.15.0"
+dotenvy = "0.15.6"
 escargot = "0.5.7"
 ethers = "1.0"
 futures = "0.3"

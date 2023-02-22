@@ -12,10 +12,6 @@ async fn test_permissionless_sequencer_example() {
     let node = DemoZkEvmNode::start().await;
     defer! {node.stop();}
 
-    for (key, value) in std::env::vars() {
-        println!("{key}: {value}");
-    }
-
     let exit_status = CargoBuild::new()
         .manifest_path(
             Path::new(env!("CARGO_MANIFEST_DIR"))
