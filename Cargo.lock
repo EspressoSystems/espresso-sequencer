@@ -2683,6 +2683,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "escargot"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5584ba17d7ab26a8a7284f13e5bd196294dd2f2d79773cff29b9e9edef601a6"
+dependencies = [
+ "log",
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "espresso-systems-common"
 version = "0.1.1"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.1.1#bd3f7b1bbb03269a499101048a06472401953dca"
@@ -3475,6 +3487,7 @@ dependencies = [
  "commit",
  "contract-bindings",
  "dotenv",
+ "escargot",
  "ethers",
  "futures",
  "hotshot-query-service",
@@ -3482,6 +3495,7 @@ dependencies = [
  "http-types",
  "jsonrpc-v2",
  "portpicker",
+ "scopeguard",
  "sequencer",
  "serde_json",
  "snafu",

@@ -1,11 +1,7 @@
 #![cfg(any(test, feature = "testing"))]
-
-use contract_bindings::TestHermezContracts;
-use ethers::prelude::*;
-
-use std::time::Duration;
-
 use crate::{wait_for_rpc, Layer1Backend, ZkEvmEnv, ZkEvmNode};
+use contract_bindings::TestHermezContracts;
+use std::{collections::HashMap, env, time::Duration};
 
 /// A zkevm-node inside docker compose with custom contracts
 #[derive(Debug, Clone)]
@@ -61,16 +57,12 @@ impl DemoZkEvmNode {
             .await
             .unwrap();
 
-        // Load env vars from .env file
-        dotenv::dotenv().ok();
-        fn load_address(name: &str) -> Address {
-            std::env::var(name).unwrap().parse().unwrap()
-        }
-        let rollup_address = load_address("ESPRESSO_ZKEVM_ROLLUP_ADDRESS");
-        let bridge_address = load_address("ESPRESSO_ZKEVM_BRIDGE_ADDRESS");
-        let global_exit_root_address = load_address("ESPRESSO_ZKEVM_GER_ADDRESS");
-        let verifier_address = load_address("ESPRESSO_ZKEVM_VERIFIER_ADDRESS");
-        let matic_address = load_address("ESPRESSO_ZKEVM_MATIC_ADDRESS");
+        let dotenv = load_dotenv();
+        let rollup_address = dotenv["ESPRESSO_ZKEVM_ROLLUP_ADDRESS"].parse().unwrap();
+        let bridge_address = dotenv["ESPRESSO_ZKEVM_BRIDGE_ADDRESS"].parse().unwrap();
+        let global_exit_root_address = dotenv["ESPRESSO_ZKEVM_GER_ADDRESS"].parse().unwrap();
+        let verifier_address = dotenv["ESPRESSO_ZKEVM_VERIFIER_ADDRESS"].parse().unwrap();
+        let matic_address = dotenv["ESPRESSO_ZKEVM_MATIC_ADDRESS"].parse().unwrap();
 
         let l1 = TestHermezContracts::connect(
             &env.l1_provider(),
@@ -112,8 +104,7 @@ impl DemoZkEvmNode {
         }
     }
 
-    #[allow(dead_code)]
-    fn stop(&self) -> &Self {
+    pub fn stop(&self) -> &Self {
         ZkEvmNode::compose_cmd_prefix(self.env(), self.project_name(), self.layer1_backend())
             .arg("down")
             .arg("-v")
@@ -121,5 +112,37 @@ impl DemoZkEvmNode {
             .spawn()
             .expect("Failed to run docker compose down");
         self
+    }
+}
+
+fn load_dotenv() -> HashMap<String, String> {
+    let old_vars: HashMap<_, _> = env::vars().collect();
+
+    // dotenv only supports loading the vars into the environment.
+    dotenv::dotenv().ok();
+    let new_vars: HashMap<_, _> = dotenv::vars().collect();
+
+    // Rebuild the old environment.
+    for key in new_vars.keys() {
+        match old_vars.get(key) {
+            // If the key was in the old environment, set it back.
+            Some(value) => env::set_var(key, value),
+            // If the key was not in the old environment, remove it.
+            None => env::remove_var(key),
+        }
+    }
+    new_vars
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_load_dotenv_keeps_env() {
+        let old_vars: HashMap<_, _> = env::vars().collect();
+        load_dotenv();
+        let new_vars: HashMap<_, _> = env::vars().collect();
+        assert_eq!(new_vars, old_vars);
     }
 }
