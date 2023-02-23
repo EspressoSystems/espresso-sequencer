@@ -19,14 +19,25 @@ env:
 jobs:
   build:
     runs-on: self-hosted
+    container:
+      image: ghcr.io/espressosystems/devops-rust:stable
     steps:
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      # From https://docs.docker.com/engine/install/ubuntu/
+      - name: Install docker compose
+        run: |
+          apt update
+          apt install -y lsb-release
+          mkdir -m 0755 -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+          apt update
+          apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - name: Try docker
+        run: docker info
 
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
