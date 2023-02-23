@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release-*
+      - ma/ci-testing-ubuntu-latest
     tags:
       # YYYYMMDD
       - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
@@ -41,6 +42,9 @@ jobs:
         with:
           submodules: true
           token: ${{ secrets.ORG_GITHUB_PAT }}
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Configure Git
         run: |
