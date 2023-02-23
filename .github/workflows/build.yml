@@ -45,6 +45,11 @@ jobs:
           all_but_latest: true
           access_token: ${{ github.token }}
 
+      - name: Configure git submodule directories
+        run: |
+          git config --global --add safe.directory /__w/espresso-sequencer/espresso-sequencer/zkevm-contracts
+          git config --global --add safe.directory /__w/espresso-sequencer/espresso-sequencer/zkevm-node
+
       - uses: actions/checkout@v3
         name: Checkout Repository
         with:
