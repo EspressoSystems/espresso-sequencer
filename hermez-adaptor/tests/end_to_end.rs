@@ -13,7 +13,7 @@ use futures::{
     join,
     stream::StreamExt,
 };
-use hermez_adaptor::{wait_for_http, ZkEvmNode};
+use hermez_adaptor::{wait_for_http, Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
 use sequencer::SeqTypes;
 use std::time::Duration;
@@ -26,7 +26,7 @@ async fn test_end_to_end() {
     setup_logging();
     setup_backtrace();
 
-    let node = ZkEvmNode::start("test-end-to-end".to_string()).await;
+    let node = ZkEvmNode::start("test-end-to-end".to_string(), Layer1Backend::Anvil).await;
 
     // Create blocks periodically. This seems to be required, but we should
     // investigate how exactly the Ethereum block number drivers the
@@ -118,7 +118,7 @@ async fn test_end_to_end() {
             .send_transaction(
                 TransactionRequest {
                     from: Some(l2.inner().address()),
-                    to: Some(Address::random().into()),
+                    to: Some(Address::zero().into()),
                     value: Some(transfer_amount),
                     ..Default::default()
                 },
@@ -127,7 +127,7 @@ async fn test_end_to_end() {
             .await
             .unwrap()
             .tx_hash();
-        tracing::info!("Transaction {}: {}", i, hash);
+        tracing::info!("Transaction {}: {:?}", i, hash);
 
         // Wait for the transaction to be included in a block. We must ensure this transaction is
         // sequenced before the next one, or both could be invalidated due to nonce misordering.
@@ -183,7 +183,7 @@ async fn test_end_to_end() {
 
     // Wait for the batches to be verified.
     let verified_filter = rollup
-        .trusted_verify_batches_filter()
+        .verify_batches_trusted_aggregator_filter()
         .from_block(l1_initial_block);
     let mut events = verified_filter.stream().await.unwrap();
     loop {

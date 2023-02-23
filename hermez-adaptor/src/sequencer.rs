@@ -1,4 +1,4 @@
-use crate::Options;
+use crate::{Options, HERMEZ_MAX_VERIFY_BATCHES};
 use async_std::{sync::Arc, task::sleep};
 use contract_bindings::{
     polygon_zk_evm::{ForceBatchFilter, ForcedBatchData},
@@ -79,27 +79,12 @@ pub async fn run(opt: &Options) {
     };
     tracing::info!("last batch sequenced: {}", from);
 
-    // Get the maximum number of batches allowed to be sequenced at once.
-    let max = match rollup.max_verify_batches().call().await {
-        Ok(max) => max,
-        Err(err) => {
-            tracing::error!(
-                "unable to read MAX_VERIFY_BATCHES from rollup contract: {}",
-                err
-            );
-            tracing::error!("sequencer task will exit");
-            return;
-        }
-    };
-    tracing::info!("max batches per sequencer: {}", max);
-
-    sequence(&opt.zkevm(), from, max, hotshot, rollup).await;
+    sequence(&opt.zkevm(), from, hotshot, rollup).await;
 }
 
 async fn sequence(
     zkevm: &ZkEvm,
     from: u64,
-    max_batches: u64,
     hotshot: HotShotClient,
     rollup: PolygonZkEVM<Middleware>,
 ) {
@@ -131,11 +116,12 @@ async fn sequence(
         };
         tracing::info!("received block from HotShot: {:?}", block);
 
-        // It is possible that multiple blocks are already available, if HotShot is running faster
-        // than we are. Collect as many blocks as are ready (up to `max_batches`) so we can send
-        // them all to the contract at once to save a little gas.
+        // It is possible that multiple blocks are already available, if HotShot
+        // is running faster than we are. Collect as many blocks as are ready
+        // (up to the allowed maximum) so we can send them all to the contract
+        // at once to save a little gas.
         let mut to_sequence = vec![block];
-        while to_sequence.len() + 1 < max_batches as usize {
+        while to_sequence.len() + 1 < HERMEZ_MAX_VERIFY_BATCHES {
             if let Some(Some(Ok(block))) = blocks.as_mut().peek().now_or_never() {
                 tracing::info!("an additional block is also ready: {:?}", block);
                 // Since the block has been peeked, we can remove it from the stream with `next()`,
@@ -151,7 +137,11 @@ async fn sequence(
                 break;
             }
         }
-        tracing::info!("sequencing {}/{} blocks", to_sequence.len(), max_batches);
+        tracing::info!(
+            "sequencing {}/{} blocks",
+            to_sequence.len(),
+            HERMEZ_MAX_VERIFY_BATCHES
+        );
 
         // Sequence the blocks.
         sequence_batches(
@@ -354,7 +344,7 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ZkEvmNode;
+    use crate::{Layer1Backend, ZkEvmNode};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use futures::future::join_all;
@@ -367,7 +357,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let node = ZkEvmNode::start("test-sequencer-task".to_string()).await;
+        let node = ZkEvmNode::start("test-sequencer-task".to_string(), Layer1Backend::Anvil).await;
 
         // Get test setup from environment.
         let env = node.env();
@@ -496,7 +486,7 @@ mod test {
 
         // Wait for the batches to be verified.
         let event = rollup
-            .trusted_verify_batches_filter()
+            .verify_batches_trusted_aggregator_filter()
             .from_block(l1_initial_block)
             .stream()
             .await

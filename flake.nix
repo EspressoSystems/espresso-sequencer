@@ -28,6 +28,7 @@
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
         arch = (builtins.elemAt (builtins.elemAt info 1) 0);
         os = (builtins.elemAt (builtins.elemAt info 3) 0);
+        RUST_LOG = "info,libp2p=off,isahc=error,surf=error";
         overlays = [
           (import rust-overlay)
           foundry.overlay
@@ -119,7 +120,7 @@
               '' + self.checks.${system}.pre-commit-check.shellHook;
               RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
               RUST_BACKTRACE = 1;
-              RUST_LOG = "info,libp2p=off";
+              inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
             };
         devShells.staticShell =
@@ -162,7 +163,7 @@
               [ protobuf stableMuslRustToolchain fd cmake ];
             meta.broken = if "${os}" == "darwin" then true else false;
 
-            RUST_LOG = "info,libp2p=off";
+            inherit RUST_LOG;
           };
       }
     );

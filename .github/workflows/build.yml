@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Check /proc/cpuinfo
+        run: cat /proc/cpuinfo
+
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 

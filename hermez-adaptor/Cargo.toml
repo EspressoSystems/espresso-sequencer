@@ -3,6 +3,10 @@ name = "hermez-adaptor"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "zkevm-node"
+required-features = ["testing"]
+
 [features]
 testing = ["portpicker"]
 
@@ -11,6 +15,8 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 async-std = "1.12"
 clap = { version = "4.1", features = ["derive", "env"] }
 contract-bindings = { path = "../contract-bindings" }
+dotenvy = "0.15.6"
+escargot = "0.5.7"
 ethers = "1.0"
 futures = "0.3"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
@@ -26,6 +32,7 @@ zkevm = { path = "../zkevm" }
 
 # Dependencies for feature "testing".
 portpicker = { version = "0.1", optional = true }
+snafu = "0.7.4"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }

@@ -15,8 +15,8 @@ use ethers::{
     prelude::{ContractFactory, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
-    types::{TransactionRequest, U256},
-    utils::parse_ether,
+    types::{Address, TransactionRequest, U256},
+    utils::{get_contract_address, parse_ether},
 };
 use ethers_solc::HardhatArtifact;
 use hex::FromHex;
@@ -123,7 +123,7 @@ impl TestClients {
     }
 }
 
-fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<EthMiddleware> {
+pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<EthMiddleware> {
     let mnemonic = MnemonicBuilder::<English>::default()
         .phrase("test test test test test test test test test test test junk");
     Arc::new(SignerMiddleware::new(
@@ -145,11 +145,59 @@ pub struct TestHermezContracts {
     pub global_exit_root: PolygonZkEVMGlobalExitRoot<EthMiddleware>,
     pub verifier: VerifierRollupHelperMock<EthMiddleware>,
     pub matic: ERC20PermitMock<EthMiddleware>,
+    pub gen_block_number: u64,
     pub clients: TestClients,
     pub provider: Provider<Http>,
 }
 
 impl TestHermezContracts {
+    /// Connect to a system of deployed contracts for testing purposes.
+    pub async fn connect(
+        provider: impl AsRef<str>,
+        rollup_address: Address,
+        bridge_address: Address,
+        global_exit_root_address: Address,
+        verifier_address: Address,
+        matic_address: Address,
+    ) -> Self {
+        let mut provider = Provider::try_from(provider.as_ref()).unwrap();
+        provider.set_interval(Duration::from_millis(10));
+        let chain_id = provider.get_chainid().await.unwrap().as_u64();
+        let clients = TestClients::new(&provider, chain_id);
+        let deployer = clients.deployer.clone();
+        let rollup = PolygonZkEVM::new(rollup_address, deployer.clone());
+        let mut block_num = 0;
+
+        // Iterate over all block numbers to figure out when the rollup contract
+        // was deployed.
+        let gen_block_number = loop {
+            if let Ok(bytes) = provider
+                .get_code(rollup_address, Some(block_num.into()))
+                .await
+            {
+                if !bytes.is_empty() {
+                    break block_num;
+                }
+            }
+
+            block_num += 1;
+        };
+
+        Self {
+            rollup,
+            bridge: PolygonZkEVMBridge::new(bridge_address, deployer.clone()),
+            global_exit_root: PolygonZkEVMGlobalExitRoot::new(
+                global_exit_root_address,
+                deployer.clone(),
+            ),
+            verifier: VerifierRollupHelperMock::new(verifier_address, deployer.clone()),
+            matic: ERC20PermitMock::new(matic_address, deployer.clone()),
+            gen_block_number,
+            clients,
+            provider,
+        }
+    }
+
     /// Deploy the system of contracts for testing purposes.
     pub async fn deploy(provider: impl AsRef<str>, trusted_sequencer: impl AsRef<str>) -> Self {
         let mut provider = Provider::try_from(provider.as_ref()).unwrap();
@@ -157,32 +205,57 @@ impl TestHermezContracts {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
+        let deployer = clients.deployer.clone();
 
-        let verifier = VerifierRollupHelperMock::deploy(&clients.deployer, ()).await;
+        let verifier = VerifierRollupHelperMock::deploy(&deployer, ()).await;
 
         let matic_token_initial_balance = parse_ether("20000000").unwrap();
         let matic = ERC20PermitMock::deploy(
-            &clients.deployer,
+            &deployer,
             (
                 "Matic Token".to_string(),
                 "MATIC".to_string(),
-                clients.deployer.address(),
+                deployer.address(),
                 matic_token_initial_balance,
             ),
         )
         .await;
 
-        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(&clients.deployer, ()).await;
-        let bridge = PolygonZkEVMBridge::deploy(&clients.deployer, ()).await;
-        let rollup = PolygonZkEVM::deploy(&clients.deployer, ()).await;
-
-        global_exit_root
-            .initialize(rollup.address(), bridge.address())
-            .send()
-            .await
-            .unwrap()
+        // We need to pass the addresses to the GER constructor.
+        let nonce = provider
+            .get_transaction_count(deployer.address(), None)
             .await
             .unwrap();
+        let precalc_bridge_address = get_contract_address(deployer.address(), nonce + 1);
+        let precalc_rollup_address = get_contract_address(deployer.address(), nonce + 2);
+
+        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(
+            &deployer,
+            (precalc_rollup_address, precalc_bridge_address),
+        )
+        .await;
+
+        let bridge = PolygonZkEVMBridge::deploy(&deployer, ()).await;
+        assert_eq!(bridge.address(), precalc_bridge_address);
+
+        let chain_id = U256::from(1001);
+        let fork_id = U256::from(1);
+        let rollup = PolygonZkEVM::deploy(
+            &deployer,
+            (
+                global_exit_root.address(),
+                matic.address(),
+                verifier.address(),
+                bridge.address(),
+                chain_id,
+                fork_id,
+            ),
+        )
+        .await;
+        assert_eq!(rollup.address(), precalc_rollup_address);
+
+        // Remember the genesis block number where the rollup contract was deployed.
+        let gen_block_number = provider.get_block_number().await.unwrap().as_u64();
 
         let network_id_mainnet = 0;
         bridge
@@ -198,35 +271,31 @@ impl TestHermezContracts {
             .unwrap();
 
         // Genesis root from ./config/test.genesis.config.json in zkevm-node repo.
+        //
+        // Note that setting a wrong value currently does not seem to have any
+        // noticeable effect, which is suspicious.
         let genesis_root = <[u8; 32]>::from_hex(
-            "bf34f9a52a63229e90d1016011655bc12140bba5b771817b88cbf340d08dcbde",
+            "5c8df6a4b7748c1308a60c5380a2ff77deb5cfee3bf4fba76eef189d651d4558",
         )
         .unwrap();
-        let network_name = "zkevm";
+        let network_name = "zkevm".to_string();
+        let version = "0.0.1".to_string();
 
-        // Note that the test zkevm-node expects all wallets to be the deployer
-        // wallet.
+        // Note we currently use the deployer account for everything because the
+        // zkevm-contracts geth L1 image still deploys like that.
         rollup
             .initialize(
-                global_exit_root.address(),
-                matic.address(),
-                verifier.address(),
-                bridge.address(),
                 InitializePackedParameters {
-                    // admin: clients.admin.address(),
-                    admin: clients.deployer.address(),
-                    force_batch_allowed: true,
-                    chain_id: 1001,
-                    // trusted_sequencer: clients.trusted_sequencer.address(),
-                    trusted_sequencer: clients.deployer.address(),
+                    admin: deployer.address(),
+                    trusted_sequencer: deployer.address(),
                     pending_state_timeout: 10,
-                    // trusted_aggregator: clients.trusted_aggregator.address(),
-                    trusted_aggregator: clients.deployer.address(),
+                    trusted_aggregator: deployer.address(),
                     trusted_aggregator_timeout: 10,
                 },
                 genesis_root,
                 trusted_sequencer.as_ref().into(),
-                network_name.to_string(),
+                network_name,
+                version,
             )
             .send()
             .await
@@ -249,6 +318,7 @@ impl TestHermezContracts {
             global_exit_root,
             verifier,
             matic,
+            gen_block_number,
             clients,
             provider,
         }

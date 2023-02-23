@@ -16,7 +16,7 @@ pub mod emergency_manager {
     use ethers::providers::Middleware;
     #[doc = "EmergencyManager was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"event\",\"name\":\"EmergencyStateActivated\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"type\":\"event\",\"name\":\"EmergencyStateDeactivated\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"isEmergencyState\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\",\"components\":[]}]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyEmergencyState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyNotEmergencyState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"event\",\"name\":\"EmergencyStateActivated\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"type\":\"event\",\"name\":\"EmergencyStateDeactivated\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"isEmergencyState\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\",\"components\":[]}]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static EMERGENCYMANAGER_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -78,6 +78,78 @@ pub mod emergency_manager {
     impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>> for EmergencyManager<M> {
         fn from(contract: ethers::contract::Contract<M>) -> Self {
             Self(contract)
+        }
+    }
+    #[doc = "Custom Error type `OnlyEmergencyState` with signature `OnlyEmergencyState()` and selector `[83, 134, 105, 129]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthError,
+        ethers :: contract :: EthDisplay,
+    )]
+    #[etherror(name = "OnlyEmergencyState", abi = "OnlyEmergencyState()")]
+    pub struct OnlyEmergencyState;
+    #[doc = "Custom Error type `OnlyNotEmergencyState` with signature `OnlyNotEmergencyState()` and selector `[47, 0, 71, 252]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthError,
+        ethers :: contract :: EthDisplay,
+    )]
+    #[etherror(name = "OnlyNotEmergencyState", abi = "OnlyNotEmergencyState()")]
+    pub struct OnlyNotEmergencyState;
+    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    pub enum EmergencyManagerErrors {
+        OnlyEmergencyState(OnlyEmergencyState),
+        OnlyNotEmergencyState(OnlyNotEmergencyState),
+    }
+    impl ethers::core::abi::AbiDecode for EmergencyManagerErrors {
+        fn decode(
+            data: impl AsRef<[u8]>,
+        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
+            if let Ok(decoded) =
+                <OnlyEmergencyState as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(EmergencyManagerErrors::OnlyEmergencyState(decoded));
+            }
+            if let Ok(decoded) =
+                <OnlyNotEmergencyState as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(EmergencyManagerErrors::OnlyNotEmergencyState(decoded));
+            }
+            Err(ethers::core::abi::Error::InvalidData.into())
+        }
+    }
+    impl ethers::core::abi::AbiEncode for EmergencyManagerErrors {
+        fn encode(self) -> Vec<u8> {
+            match self {
+                EmergencyManagerErrors::OnlyEmergencyState(element) => element.encode(),
+                EmergencyManagerErrors::OnlyNotEmergencyState(element) => element.encode(),
+            }
+        }
+    }
+    impl ::std::fmt::Display for EmergencyManagerErrors {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match self {
+                EmergencyManagerErrors::OnlyEmergencyState(element) => element.fmt(f),
+                EmergencyManagerErrors::OnlyNotEmergencyState(element) => element.fmt(f),
+            }
+        }
+    }
+    impl ::std::convert::From<OnlyEmergencyState> for EmergencyManagerErrors {
+        fn from(var: OnlyEmergencyState) -> Self {
+            EmergencyManagerErrors::OnlyEmergencyState(var)
+        }
+    }
+    impl ::std::convert::From<OnlyNotEmergencyState> for EmergencyManagerErrors {
+        fn from(var: OnlyNotEmergencyState) -> Self {
+            EmergencyManagerErrors::OnlyNotEmergencyState(var)
         }
     }
     #[derive(

@@ -11,6 +11,7 @@
 
 ## Run the tests
 
+    just pull # to pull docker images
     cargo test --all-features
 
 ## Building figures
@@ -38,15 +39,19 @@ uncommitted changes, you can also run the same demo by manually building and run
 
 To get the latest images: `just pull`
 
-To start the demo: `just demo`
+To start the demo: `just demo`. Note: currently broken due to failing genesis
+check in the synchronizer.
 
 To start the demo in the background: `just demo-background`. This can be useful because the command should exit sucessfully only once the demo is running.
 
 To stop the demo: `just down`
 
+To build the docker images locally: `just build-docker`. To revert to the CI docker images: `just pull`.
+
 #### Run the integration tests
 
 * ``cargo test --all-features end_to_end``
+
 ### Running natively
 
 Build all executables with `cargo build --release`. You may then start a single CDN server and
@@ -76,7 +81,8 @@ enabled.
 
 ### Developing contracts
 
-A foundry project for the contracts specific to HotShot can be found in the director `contracts`.
+
+A foundry project for the contracts specific to HotShot can be found in the directory `contracts`.
 
 To compile
 ```shell
@@ -100,7 +106,16 @@ In order to avoid constant warnings about checksum mismatches with
 * Edit src/contract-bindings/src/deploy.rs
   * Add reference to new contract binding, e.g. `use crate::bindings::counter::Counter`
   * Add call to `mk_deploy` macro, e.g. `mk_deploy!(ESPRESSO_CONTRACTS_PREFIX,Counter);`
-  
+
+### Working on Hermez contracts in zkevm-contracts
+
+- Ensure submodules are checkout out: `git submodule update --init`
+- Install dependencies `just npm i`
+- Compile the contracts `just hardhat compile`
+- Update the rust bindings: `cargo run --bin gen-bindings`
+- Compile contracts and update bindings: `just update-contract-bindings`
+- Run a hardhat dev node: `just hardhat node`
+
 ## Implementation Plan
 
 We will work towards the architecture illustrated above in three phases.
