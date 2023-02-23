@@ -51,9 +51,9 @@ services:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discusson.
       test: "pg_isready -U state_user -d state_db && sleep 1 && pg_isready -U state_user -d state_db"
-      interval: 0.5s
-      timeout: 0.5s
-      retries: 60
+      interval: 1s
+      timeout: 2s
+      retries: 20
 
   zkevm-prover:
     image: hermeznetwork/zkevm-prover:88f3835
