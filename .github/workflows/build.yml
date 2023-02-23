@@ -24,6 +24,12 @@ jobs:
       - name: Check /proc/cpuinfo
         run: cat /proc/cpuinfo
 
+      - name: Docker info
+        run: docker info
+
+      - name: Docker compose help
+        run: docker compose --help
+
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
