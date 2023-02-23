@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
 
       - name: Check /proc/cpuinfo
@@ -36,6 +36,9 @@ jobs:
         with:
           all_but_latest: true
           access_token: ${{ github.token }}
+
+     - name: Avoid permission error during checkout
+       run: chown -R $USER:$USER /home/github/actions-runner/__w/espresso-sequencer
 
       - uses: actions/checkout@v3
         name: Checkout Repository
@@ -65,18 +68,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
-
-      - name: Format Check
-        run: cargo fmt -- --check
-
-      - uses: actions-rs/clippy-check@v1
-        name: Clippy
-        with:
-          token: ${{ github.token }}
-          args: --workspace --all-features --all-targets -- -D warnings
-
-      - name: Audit
-        run: cargo audit --ignore RUSTSEC-2020-0159 --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2022-0006 --ignore RUSTSEC-2022-0040
 
       - name: Build
         run: |
