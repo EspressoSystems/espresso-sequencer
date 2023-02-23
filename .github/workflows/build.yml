@@ -46,9 +46,6 @@ jobs:
           submodules: true
           token: ${{ secrets.ORG_GITHUB_PAT }}
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-
       - name: Configure Git
         run: |
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
