@@ -70,7 +70,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull all docker compose images
-        run: docker-compose -f docker-compose.yaml -f docker-compose-anvil.yaml -f permissionless-docker-compose.yaml pull
+        run: docker compose -f docker-compose.yaml -f docker-compose-anvil.yaml -f permissionless-docker-compose.yaml pull
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
