@@ -38,7 +38,7 @@ jobs:
           access_token: ${{ github.token }}
 
       - name: Avoid permission error during checkout
-        run: sudo chown -R $USER /home/github/actions-runner/__w/espresso-sequencer
+        run: sudo chown -R $USER /home/runner1/actions-runner/_work/espresso-sequencer
 
       - uses: actions/checkout@v3
         name: Checkout Repository
