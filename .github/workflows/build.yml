@@ -19,6 +19,8 @@ env:
 jobs:
   build:
     runs-on: self-hosted
+    container:
+      image: ubuntu-latest
     steps:
 
       - name: Check /proc/cpuinfo
