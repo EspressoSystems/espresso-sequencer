@@ -254,10 +254,9 @@ impl ZkEvmNode {
         project_name: &str,
         layer1_backend: &Layer1Backend,
     ) -> Command {
-        let mut cmd = env.cmd("docker");
+        let mut cmd = env.cmd("docker-compose");
         let work_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         cmd.current_dir(work_dir)
-            .arg("compose")
             .arg("--project-name")
             .arg(project_name)
             .arg("-f")

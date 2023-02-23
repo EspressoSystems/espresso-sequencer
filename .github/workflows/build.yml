@@ -19,8 +19,6 @@ env:
 jobs:
   build:
     runs-on: self-hosted
-    container:
-      image: ubuntu-latest
     steps:
 
       - name: Check /proc/cpuinfo
@@ -30,7 +28,7 @@ jobs:
         run: docker info
 
       - name: Docker compose help
-        run: docker compose --help
+        run: docker-compose --help
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
