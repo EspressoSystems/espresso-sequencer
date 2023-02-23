@@ -23,9 +23,6 @@ jobs:
       image: ghcr.io/espressosystems/devops-rust:stable
     steps:
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
         with:
