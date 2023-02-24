@@ -4,9 +4,11 @@ use async_std::task::sleep;
 use contract_bindings::TestHermezContracts;
 use ethers::prelude::*;
 use portpicker::pick_unused_port;
+use snafu::Snafu;
 use std::{
     path::{Path, PathBuf},
     process::Command,
+    str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
 };
@@ -58,6 +60,23 @@ pub struct ZkEvmEnv {
     l2_chain_id: Option<u64>,
     sequencer_mnemonic: String,
     adaptor_port: u16,
+}
+
+impl Default for ZkEvmEnv {
+    fn default() -> Self {
+        Self {
+            cdn_server_port: 50000,
+            sequencer_api_port: 50001,
+            sequencer_storage_path: "/store/sequencer".into(),
+            l1_port: 8545,
+            l2_port: 8126,
+            l1_chain_id: None,
+            l2_chain_id: None,
+            sequencer_mnemonic: "test test test test test test test test test test test junk"
+                .into(),
+            adaptor_port: 8127,
+        }
+    }
 }
 
 impl ZkEvmEnv {
@@ -168,12 +187,49 @@ impl ZkEvmEnv {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Layer1Backend {
+    Geth,
+    Anvil,
+}
+
+impl Layer1Backend {
+    pub fn compose_file(&self) -> String {
+        match self {
+            Layer1Backend::Geth => "docker-compose-geth.yaml",
+            Layer1Backend::Anvil => "docker-compose-anvil.yaml",
+        }
+        .to_string()
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ParseBackendError {
+    #[snafu(display("Unsupported backend {backend}"))]
+    UnsupportedBackend { backend: String },
+}
+
+impl FromStr for Layer1Backend {
+    type Err = ParseBackendError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "geth" => Ok(Layer1Backend::Geth),
+            "anvil" => Ok(Layer1Backend::Anvil),
+            _ => Err(ParseBackendError::UnsupportedBackend {
+                backend: s.to_string(),
+            }),
+        }
+    }
+}
+
 /// A zkevm-node inside docker compose with custom contracts
 #[derive(Debug, Clone)]
 pub struct ZkEvmNode {
     env: ZkEvmEnv,
     l1: TestHermezContracts,
     project_name: String,
+    layer1_backend: Layer1Backend,
 }
 
 impl ZkEvmNode {
@@ -189,7 +245,15 @@ impl ZkEvmNode {
         &self.project_name
     }
 
-    fn compose_cmd_prefix(env: &ZkEvmEnv, project_name: &str) -> Command {
+    pub fn layer1_backend(&self) -> &Layer1Backend {
+        &self.layer1_backend
+    }
+
+    pub(crate) fn compose_cmd_prefix(
+        env: &ZkEvmEnv,
+        project_name: &str,
+        layer1_backend: &Layer1Backend,
+    ) -> Command {
         let mut cmd = env.cmd("docker");
         let work_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         cmd.current_dir(work_dir)
@@ -199,12 +263,12 @@ impl ZkEvmNode {
             .arg("-f")
             .arg("permissionless-docker-compose.yaml")
             .arg("-f")
-            .arg("docker-compose-anvil.yaml");
+            .arg(layer1_backend.compose_file());
         cmd
     }
 
     /// Start the L1, deploy contracts, start the L2
-    pub async fn start(project_name: String) -> Self {
+    pub async fn start(project_name: String, layer1_backend: Layer1Backend) -> Self {
         // Add a unique number to `project_name` to ensure that all instances use a unique name.
         static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
         let project_name = format!(
@@ -217,23 +281,11 @@ impl ZkEvmNode {
         tracing::info!("Starting ZkEvmNode with env: {:?}", env);
         tracing::info!(
             "Compose prefix: {:?}",
-            Self::compose_cmd_prefix(&env, &project_name)
+            Self::compose_cmd_prefix(&env, &project_name, &layer1_backend)
         );
 
-        // Pull Docker images before doing anything. This can take a long time, and if we do it
-        // later it might cause some `wait_for_http` calls to time out.
-        let status = Self::compose_cmd_prefix(&env, &project_name)
-            .arg("pull")
-            .spawn()
-            .expect("Failed to pull Docker images")
-            .wait()
-            .expect("Error waiting for Docker pull command");
-        if !status.success() {
-            panic!("Failed to pull Docker images ({status})");
-        }
-
         // Start L1
-        Self::compose_cmd_prefix(&env, &project_name)
+        Self::compose_cmd_prefix(&env, &project_name, &layer1_backend)
             .arg("up")
             .arg("zkevm-mock-l1-network")
             .arg("-V")
@@ -242,7 +294,7 @@ impl ZkEvmNode {
             .spawn()
             .expect("Failed to start L1 docker container");
 
-        println!("Waiting for L1 to start ...");
+        tracing::info!("Waiting for L1 to start ...");
 
         wait_for_rpc(&env.l1_provider(), Duration::from_millis(200), 100)
             .await
@@ -252,7 +304,7 @@ impl ZkEvmNode {
         let l1 = TestHermezContracts::deploy(&env.l1_provider(), "http://dummy:1234").await;
 
         // Start zkevm-node
-        Self::compose_cmd_prefix(&env, &project_name)
+        Self::compose_cmd_prefix(&env, &project_name, &layer1_backend)
             .env(
                 "ESPRESSO_ZKEVM_ROLLUP_ADDRESS",
                 format!("{:?}", l1.rollup.address()),
@@ -265,11 +317,16 @@ impl ZkEvmNode {
                 "ESPRESSO_ZKEVM_GER_ADDRESS",
                 format!("{:?}", l1.global_exit_root.address()),
             )
+            .env(
+                "ESPRESSO_ZKEVM_GENBLOCKNUMBER",
+                l1.gen_block_number.to_string(),
+            )
             .arg("up")
             .arg("zkevm-prover")
             .arg("zkevm-aggregator")
             .arg("zkevm-state-db")
             .arg("zkevm-permissionless-node")
+            .arg("zkevm-eth-tx-manager")
             .arg("-V")
             .arg("--force-recreate")
             .arg("--abort-on-container-exit")
@@ -284,11 +341,12 @@ impl ZkEvmNode {
             env,
             project_name,
             l1,
+            layer1_backend,
         }
     }
 
     fn stop(&self) -> &Self {
-        Self::compose_cmd_prefix(&self.env, &self.project_name)
+        Self::compose_cmd_prefix(self.env(), self.project_name(), self.layer1_backend())
             .arg("down")
             .arg("-v")
             .arg("--remove-orphans")
@@ -317,8 +375,10 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let node1 = async_std::task::spawn(ZkEvmNode::start("node-1".to_string()));
-        let node2 = async_std::task::spawn(ZkEvmNode::start("node-2".to_string()));
+        let node1 =
+            async_std::task::spawn(ZkEvmNode::start("node-1".to_string(), Layer1Backend::Anvil));
+        let node2 =
+            async_std::task::spawn(ZkEvmNode::start("node-2".to_string(), Layer1Backend::Anvil));
         node2.await;
         node1.await;
     }

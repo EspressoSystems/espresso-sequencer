@@ -67,3 +67,10 @@ mod hermez;
 
 #[cfg(any(test, feature = "testing"))]
 pub use hermez::*;
+
+mod demo;
+#[cfg(any(test, feature = "testing"))]
+pub use demo::*;
+
+// This private constant is defined by _MAX_VERIFY_BATCHES in PolygonZkEVM.sol
+pub const HERMEZ_MAX_VERIFY_BATCHES: usize = 1000;

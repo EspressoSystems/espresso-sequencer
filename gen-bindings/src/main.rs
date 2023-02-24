@@ -1,8 +1,10 @@
 use ethers::prelude::{Abigen, MultiAbigen};
 use std::collections::HashSet;
 use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn find_paths(dir: &str, ext: &str) -> Vec<PathBuf> {
     glob::glob(&format!("{dir}/**/*{ext}"))

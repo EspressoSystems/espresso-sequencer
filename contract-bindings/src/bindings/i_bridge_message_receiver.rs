@@ -16,7 +16,7 @@ pub mod i_bridge_message_receiver {
     use ethers::providers::Middleware;
     #[doc = "IBridgeMessageReceiver was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"originAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"onMessageReceived\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\",\"components\":[]}]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"originAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"payable\",\"type\":\"function\",\"name\":\"onMessageReceived\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static IBRIDGEMESSAGERECEIVER_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -62,7 +62,7 @@ pub mod i_bridge_message_receiver {
             origin_address: ethers::core::types::Address,
             origin_network: u32,
             data: ethers::core::types::Bytes,
-        ) -> ethers::contract::builders::ContractCall<M, bool> {
+        ) -> ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([24, 6, 181, 242], (origin_address, origin_network, data))
                 .expect("method not found (this should never happen)")
@@ -94,15 +94,4 @@ pub mod i_bridge_message_receiver {
         pub origin_network: u32,
         pub data: ethers::core::types::Bytes,
     }
-    #[doc = "Container type for all return fields from the `onMessageReceived` function with signature `onMessageReceived(address,uint32,bytes)` and selector `[24, 6, 181, 242]`"]
-    #[derive(
-        Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
-        Default,
-    )]
-    pub struct OnMessageReceivedReturn(pub bool);
 }
