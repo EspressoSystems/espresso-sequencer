@@ -3490,6 +3490,7 @@ dependencies = [
  "escargot",
  "ethers",
  "futures",
+ "hostname",
  "hotshot-query-service",
  "hotshot-types",
  "http-types",

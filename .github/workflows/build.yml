@@ -78,8 +78,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
 
       - name: Build
         run: |

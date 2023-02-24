@@ -143,7 +143,7 @@ impl ZkEvmEnv {
     }
 
     pub fn l1_provider(&self) -> Url {
-        format!("http://localhost:{}", self.l1_port)
+        format!("http://zkevm-mock-l1-network:{}", self.l1_port)
             .parse()
             .unwrap()
     }
@@ -153,7 +153,7 @@ impl ZkEvmEnv {
     }
 
     pub fn l2_provider(&self) -> Url {
-        format!("http://localhost:{}", self.l2_port)
+        format!("http://zkevm-permissionless-node:{}", self.l2_port)
             .parse()
             .unwrap()
     }
@@ -267,6 +267,23 @@ impl ZkEvmNode {
         cmd
     }
 
+    /// Connect the current container to the docker compose network.
+    ///
+    /// The network should be destroyed on `docker compose down` so disconnecting
+    /// is not needed.
+    pub(crate) fn connect_network(project_name: &str) {
+        // Connect to network
+        Command::new("docker")
+            .arg("network")
+            .arg("connect")
+            .arg(format!("{project_name}_default"))
+            .arg(hostname::get().unwrap())
+            .spawn()
+            .expect("Failed to run docker network connect")
+            .wait()
+            .expect("Failed to wait for docker network connect");
+    }
+
     /// Start the L1, deploy contracts, start the L2
     pub async fn start(project_name: String, layer1_backend: Layer1Backend) -> Self {
         // Add a unique number to `project_name` to ensure that all instances use a unique name.
@@ -293,6 +310,8 @@ impl ZkEvmNode {
             .arg("--abort-on-container-exit")
             .spawn()
             .expect("Failed to start L1 docker container");
+
+        Self::connect_network(&project_name);
 
         tracing::info!("Waiting for L1 to start ...");
 
