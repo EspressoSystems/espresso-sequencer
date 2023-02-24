@@ -79,12 +79,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
-
       - name: Build
         run: |
           cargo build --release --workspace
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
 
       - name: Test
         run: |
