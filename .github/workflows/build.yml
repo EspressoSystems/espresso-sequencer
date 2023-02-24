@@ -52,6 +52,7 @@ jobs:
         run: |
           git config --global --add safe.directory /__w/espresso-sequencer/espresso-sequencer/zkevm-contracts
           git config --global --add safe.directory /__w/espresso-sequencer/espresso-sequencer/zkevm-node
+          git config --global --add safe.directory /__w/espresso-sequencer/espresso-sequencer/contracts/lib/forge-std
 
       - uses: actions/checkout@v3
         name: Checkout Repository
