@@ -19,7 +19,6 @@ dotenvy = "0.15.6"
 escargot = "0.5.7"
 ethers = "1.0"
 futures = "0.3"
-hostname = "0.3.1"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
 http-types = "2.12.0"
 jsonrpc-v2 = "0.11.0"

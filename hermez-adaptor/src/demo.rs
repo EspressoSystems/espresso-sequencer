@@ -51,8 +51,6 @@ impl DemoZkEvmNode {
             .spawn()
             .expect("Failed to start L1 docker container");
 
-        ZkEvmNode::connect_network(&project_name);
-
         tracing::info!("Waiting for L1 to start ...");
 
         wait_for_rpc(&env.l1_provider(), Duration::from_millis(200), 100)
