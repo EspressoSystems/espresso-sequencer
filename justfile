@@ -1,7 +1,7 @@
 # The zkevm-node docker-compose file currently only works if run from the zkevm-node/test directory.
 compose-base := "docker compose --project-name demo -f docker-compose.yaml -f permissionless-docker-compose.yaml"
 compose-espresso := "docker compose --project-name demo -f docker-compose.yaml"
-compose-anvil := compose-base + " -f docker-compose-anvil.yaml --env-file .env.anvil"
+compose-anvil := compose-base + " -f docker-compose-anvil.yaml"
 compose := compose-base + " -f docker-compose-geth.yaml"
 compose-zkevm-node := "docker compose --project-name demo -f permissionless-docker-compose.yaml -f docker-compose-geth.yaml"
 
