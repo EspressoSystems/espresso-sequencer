@@ -1,7 +1,7 @@
 use crate::{
     bindings::{
-        counter::Counter, erc20_permit_mock::ERC20PermitMock, hot_shot::HotShot,
-        polygon_zk_evm::PolygonZkEVM, polygon_zk_evm_bridge::PolygonZkEVMBridge,
+        erc20_permit_mock::ERC20PermitMock, hot_shot::HotShot, polygon_zk_evm::PolygonZkEVM,
+        polygon_zk_evm_bridge::PolygonZkEVMBridge,
         polygon_zk_evm_global_exit_root::PolygonZkEVMGlobalExitRoot,
         polygon_zk_evm_global_exit_root_l2::PolygonZkEVMGlobalExitRootL2,
         polygon_zk_evm_timelock::PolygonZkEVMTimelock, verifier::Verifier,
@@ -69,7 +69,6 @@ macro_rules! mk_deploy {
 
 // If other contracts need to be deployed, add them here.
 const ZKEVM_CONTRACTS_PREFIX: &str = "zkevm-contracts/artifacts/contracts/";
-const ESPRESSO_CONTRACTS_PREFIX: &str = "contracts/out";
 mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVM);
 mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMBridge);
 mk_deploy!(ZKEVM_CONTRACTS_PREFIX, PolygonZkEVMGlobalExitRootL2);
@@ -84,8 +83,6 @@ mk_deploy!(
     ZKEVM_CONTRACTS_PREFIX.to_owned() + "/mocks",
     ERC20PermitMock
 );
-mk_deploy!(ESPRESSO_CONTRACTS_PREFIX, Counter);
-mk_deploy!(ESPRESSO_CONTRACTS_PREFIX, HotShot);
 
 /// Deploy a contract from a hardhat artifact.
 pub async fn deploy_artifact<M: Middleware, T: Tokenize>(
@@ -212,7 +209,11 @@ impl TestHermezContracts {
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer.clone();
 
-        let hotshot = HotShot::deploy_contract(&deployer, ()).await;
+        let hotshot = HotShot::deploy(deployer.clone(), ())
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
 
         let verifier = VerifierRollupHelperMock::deploy_contract(&deployer, ()).await;
 
