@@ -11,6 +11,8 @@ pub mod emergency_manager;
 pub mod erc20_permit_mock;
 pub mod erc20_weird_metadata;
 pub mod global_exit_root_lib;
+pub mod hot_shot;
+pub mod hot_shot_test;
 pub mod i_base_polygon_zk_evm_global_exit_root;
 pub mod i_bridge_message_receiver;
 pub mod i_polygon_zk_evm_bridge;

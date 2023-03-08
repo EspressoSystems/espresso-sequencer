@@ -1,7 +1,7 @@
 use crate::{
     bindings::{
-        counter::Counter, erc20_permit_mock::ERC20PermitMock, polygon_zk_evm::PolygonZkEVM,
-        polygon_zk_evm_bridge::PolygonZkEVMBridge,
+        counter::Counter, erc20_permit_mock::ERC20PermitMock, hot_shot::HotShot,
+        polygon_zk_evm::PolygonZkEVM, polygon_zk_evm_bridge::PolygonZkEVMBridge,
         polygon_zk_evm_global_exit_root::PolygonZkEVMGlobalExitRoot,
         polygon_zk_evm_global_exit_root_l2::PolygonZkEVMGlobalExitRootL2,
         polygon_zk_evm_timelock::PolygonZkEVMTimelock, verifier::Verifier,
@@ -26,7 +26,7 @@ type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 #[async_trait::async_trait]
 pub trait Deploy<M: Middleware> {
-    async fn deploy<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self;
+    async fn deploy_contract<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self;
 }
 
 /// Creates a deploy function for the contract.
@@ -38,7 +38,7 @@ macro_rules! mk_deploy {
     ($prefix: expr, $contract:ident) => {
         #[async_trait::async_trait]
         impl<M: Middleware> Deploy<M> for $contract<M> {
-            async fn deploy<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self {
+            async fn deploy_contract<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self {
                 // Ideally we would make our bindings generator script inline
                 // the contract bytecode somewhere in this crate, then the
                 // heuristic for finding the hardhat artifact below would no
@@ -85,6 +85,7 @@ mk_deploy!(
     ERC20PermitMock
 );
 mk_deploy!(ESPRESSO_CONTRACTS_PREFIX, Counter);
+mk_deploy!(ESPRESSO_CONTRACTS_PREFIX, HotShot);
 
 /// Deploy a contract from a hardhat artifact.
 pub async fn deploy_artifact<M: Middleware, T: Tokenize>(
@@ -140,6 +141,7 @@ pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> 
 /// A system of hermez smart contracts for testing purposes.
 #[derive(Debug, Clone)]
 pub struct TestHermezContracts {
+    pub hotshot: HotShot<EthMiddleware>,
     pub rollup: PolygonZkEVM<EthMiddleware>,
     pub bridge: PolygonZkEVMBridge<EthMiddleware>,
     pub global_exit_root: PolygonZkEVMGlobalExitRoot<EthMiddleware>,
@@ -154,6 +156,7 @@ impl TestHermezContracts {
     /// Connect to a system of deployed contracts for testing purposes.
     pub async fn connect(
         provider: impl AsRef<str>,
+        hotshot_address: Address,
         rollup_address: Address,
         bridge_address: Address,
         global_exit_root_address: Address,
@@ -165,6 +168,7 @@ impl TestHermezContracts {
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer.clone();
+        let hotshot = HotShot::new(hotshot_address, deployer.clone());
         let rollup = PolygonZkEVM::new(rollup_address, deployer.clone());
         let mut block_num = 0;
 
@@ -184,6 +188,7 @@ impl TestHermezContracts {
         };
 
         Self {
+            hotshot,
             rollup,
             bridge: PolygonZkEVMBridge::new(bridge_address, deployer.clone()),
             global_exit_root: PolygonZkEVMGlobalExitRoot::new(
@@ -207,10 +212,12 @@ impl TestHermezContracts {
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer.clone();
 
-        let verifier = VerifierRollupHelperMock::deploy(&deployer, ()).await;
+        let hotshot = HotShot::deploy_contract(&deployer, ()).await;
+
+        let verifier = VerifierRollupHelperMock::deploy_contract(&deployer, ()).await;
 
         let matic_token_initial_balance = parse_ether("20000000").unwrap();
-        let matic = ERC20PermitMock::deploy(
+        let matic = ERC20PermitMock::deploy_contract(
             &deployer,
             (
                 "Matic Token".to_string(),
@@ -229,18 +236,18 @@ impl TestHermezContracts {
         let precalc_bridge_address = get_contract_address(deployer.address(), nonce + 1);
         let precalc_rollup_address = get_contract_address(deployer.address(), nonce + 2);
 
-        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy(
+        let global_exit_root = PolygonZkEVMGlobalExitRoot::deploy_contract(
             &deployer,
             (precalc_rollup_address, precalc_bridge_address),
         )
         .await;
 
-        let bridge = PolygonZkEVMBridge::deploy(&deployer, ()).await;
+        let bridge = PolygonZkEVMBridge::deploy_contract(&deployer, ()).await;
         assert_eq!(bridge.address(), precalc_bridge_address);
 
         let chain_id = U256::from(1001);
         let fork_id = U256::from(1);
-        let rollup = PolygonZkEVM::deploy(
+        let rollup = PolygonZkEVM::deploy_contract(
             &deployer,
             (
                 global_exit_root.address(),
@@ -313,6 +320,7 @@ impl TestHermezContracts {
             .unwrap();
 
         Self {
+            hotshot,
             rollup,
             bridge,
             global_exit_root,
