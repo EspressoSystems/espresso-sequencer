@@ -95,6 +95,7 @@
                 stableToolchain
 
                 # Rust tools
+                cargo-audit
                 cargo-edit
                 cargo-watch
                 cargo-sort
