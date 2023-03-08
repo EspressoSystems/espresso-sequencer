@@ -14,10 +14,10 @@ contract HotShotTest is Test {
     function testPublishCommitment() public {
         uint256 comm = 576467464341;
         bytes memory qc = "0x3333";
-        uint block_number = 3;
-        hotshot.publishHotShotBlockCommitment(block_number,comm,qc);
+        uint256 block_number = 3;
+        hotshot.newBlock(block_number, comm, qc);
 
-        assertEq(hotshot.getHotShotBlockCommitment(12),0);
-        assertEq(hotshot.getHotShotBlockCommitment(3),comm);
+        assertEq(hotshot.commitments(12), 0);
+        assertEq(hotshot.commitments(3), comm);
     }
 }

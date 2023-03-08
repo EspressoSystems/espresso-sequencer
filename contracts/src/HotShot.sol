@@ -3,20 +3,19 @@ pragma solidity ^0.8.13;
 import "forge-std/console.sol";
 
 contract HotShot {
+    mapping(uint256 => uint256) public commitments;
 
-    mapping(uint => uint256) public hotshotBlocksCommitments;
-    event newHotShotBlockCommitment(uint _blockNumber, uint256 comm);
+    event NewBlock(uint256 _blockNumber, uint256 commmitment);
 
-    function publishHotShotBlockCommitment(uint _blockNumber, uint256 _comm, bytes memory _qc) public {
-
+    function verifyQC(uint256 blockNumber, uint256 commitment, bytes memory qc) private pure returns (bool) {
         // TODO Check the QC
-        console.logBytes(_qc);
-
-        hotshotBlocksCommitments[_blockNumber] = _comm;
-        emit newHotShotBlockCommitment(_blockNumber, _comm);
+        return true;
     }
 
-    function getHotShotBlockCommitment(uint _blockNumber) public view returns (uint256) {
-        return hotshotBlocksCommitments[_blockNumber];
+    function newBlock(uint256 blockNumber, uint256 commitment, bytes memory qc) public {
+        require(verifyQC(blockNumber, commitment, qc), "Invalid QC");
+
+        commitments[blockNumber] = commitment;
+        emit NewBlock(blockNumber, commitment);
     }
 }

@@ -109,7 +109,7 @@ In order to avoid constant warnings about checksum mismatches with
 
 ### Working on Hermez contracts in zkevm-contracts
 
-- Ensure submodules are checkout out: `git submodule update --init`
+- Ensure submodules are checkout out: `git submodule update --init --recursive`
 - Install dependencies `just npm i`
 - Compile the contracts `just hardhat compile`
 - Update the rust bindings: `cargo run --bin gen-bindings`
