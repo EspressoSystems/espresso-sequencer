@@ -18,7 +18,7 @@ use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData
 use sequencer::SeqTypes;
 use std::time::Duration;
 use surf_disco::Url;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use zkevm::ZkEvm;
 
 #[async_std::test]
@@ -62,7 +62,7 @@ async fn test_end_to_end() {
     // Start a sequencer network.
     let nodes = sequencer::testing::init_hotshot_handles().await;
     let api_node = nodes[0].clone();
-    let sequencer_store = TempDir::new("test_end_to_end").unwrap();
+    let sequencer_store = TempDir::new().unwrap();
     sequencer::api::serve(
         QueryData::create(sequencer_store.path(), ()).unwrap(),
         Box::new(move |_| ready(api_node).boxed()),
