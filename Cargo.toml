@@ -2,9 +2,9 @@
 
 members = [
   "contract-bindings",
-  "contracts/rust"
-,
+  "contracts/rust",
   "gen-bindings",
   "hermez-adaptor",
   "sequencer",
+  "utils",
   "zkevm"]

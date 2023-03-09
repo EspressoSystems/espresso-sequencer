@@ -5,10 +5,11 @@ import "forge-std/console.sol";
 contract HotShot {
     mapping(uint256 => uint256) public commitments;
 
-    event NewBlock(uint256 _blockNumber, uint256 commmitment);
+    event NewBlock(uint256 _blockNumber, uint256 commitment);
 
     function verifyQC(uint256 blockNumber, uint256 commitment, bytes memory qc) private pure returns (bool) {
         // TODO Check the QC
+        // TODO Check the block number
         return true;
     }
 

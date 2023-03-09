@@ -1391,9 +1391,9 @@ dependencies = [
 
 [[package]]
 name = "cargo_metadata"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "982a0cf6a99c350d7246035613882e376d58cebe571785abc5da4f648d53ac0a"
+checksum = "08a1ec454bc3eead8719cb56e15dbbfecdbc14e4b3a3ae4936cc6e31f5fc0d07"
 dependencies = [
  "camino",
  "cargo-platform",
@@ -3576,6 +3576,7 @@ dependencies = [
  "jsonrpc-v2",
  "portpicker",
  "sequencer",
+ "sequencer-utils",
  "serde_json",
  "snafu",
  "surf",
@@ -3848,8 +3849,8 @@ dependencies = [
  "ethers",
  "ethers-providers 2.0.0",
  "ethers-solc",
- "hermez-adaptor",
  "hex",
+ "sequencer-utils",
  "tokio",
 ]
 
@@ -6292,9 +6293,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.50"
+version = "1.0.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ef7d57beacfaf2d8aee5937dab7b7f28de3cb8b1828479bb5de2a7106f2bae2"
+checksum = "5d727cae5b39d21da60fa540906919ad737832fe0b1c165da3a34d6548c849d6"
 dependencies = [
  "unicode-ident",
 ]
@@ -7068,6 +7069,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sequencer-utils"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "ethers",
+ "portpicker",
+ "surf",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7757,9 +7770,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.107"
+version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
  "quote",

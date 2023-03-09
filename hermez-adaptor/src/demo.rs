@@ -1,6 +1,7 @@
 #![cfg(any(test, feature = "testing"))]
-use crate::{wait_for_rpc, Layer1Backend, ZkEvmEnv, ZkEvmNode};
+use crate::{Layer1Backend, ZkEvmEnv, ZkEvmNode};
 use contract_bindings::TestHermezContracts;
+use sequencer_utils::wait_for_rpc;
 use std::{collections::HashMap, time::Duration};
 
 /// A zkevm-node inside docker compose with custom contracts
