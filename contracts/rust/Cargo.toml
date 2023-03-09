@@ -5,3 +5,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+contract-bindings = { path = "../../contract-bindings" }
+ethers = { version = "1.0.2", features = ["abigen"] }
+ethers-providers = "2.0.0"
+ethers-solc = "1.0.2"
+hermez-adaptor ={ path = "../../hermez-adaptor" }
+hex = "0.4.3"
+tokio = "1.26.0"

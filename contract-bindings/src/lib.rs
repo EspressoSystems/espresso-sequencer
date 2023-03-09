@@ -1,4 +1,4 @@
-mod bindings;
+pub mod bindings;
 pub use bindings::*;
 
 mod deploy;
