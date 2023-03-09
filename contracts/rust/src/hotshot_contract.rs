@@ -1,7 +1,7 @@
 #[cfg(test)]
 
 mod test {
-    use contract_bindings::bindings::hot_shot::HotShot;
+    use contract_bindings::hot_shot::HotShot;
     use contract_bindings::TestClients;
     use ethers::{
         providers::{Middleware, Provider},
