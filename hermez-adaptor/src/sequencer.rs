@@ -394,7 +394,7 @@ mod test {
             .await
             .unwrap();
         let (batches, txn_hashes): (Vec<_>, Vec<_>) =
-            join_all((0..num_batches).into_iter().map(|i| async move {
+            join_all((0..num_batches).map(|i| async move {
                 let mut transfer = TransactionRequest {
                     from: Some(l2.inner().address()),
                     to: Some(Address::random().into()),
