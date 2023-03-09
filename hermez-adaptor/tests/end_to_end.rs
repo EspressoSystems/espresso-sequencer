@@ -13,9 +13,10 @@ use futures::{
     join,
     stream::StreamExt,
 };
-use hermez_adaptor::{wait_for_http, Layer1Backend, ZkEvmNode};
+use hermez_adaptor::{Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
 use sequencer::SeqTypes;
+use sequencer_utils::wait_for_http;
 use std::time::Duration;
 use surf_disco::Url;
 use tempfile::TempDir;

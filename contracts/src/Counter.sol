@@ -8,13 +8,9 @@ contract Counter {
         number = newNumber2;
     }
 
-    function doNothing() public {
+    function doNothing() public {}
 
-    }
-
-    function doNothing3() public {
-
-    }
+    function doNothing3() public {}
 
     function increment() public {
         number++;

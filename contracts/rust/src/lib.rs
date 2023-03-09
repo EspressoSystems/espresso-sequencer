@@ -1,0 +1,1 @@
+mod hotshot_contract;

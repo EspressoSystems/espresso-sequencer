@@ -1,0 +1,15 @@
+[package]
+name = "hotshot_contract"
+version = "0.1.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-std = "1.12.0"
+contract-bindings = { path = "../../contract-bindings" }
+ethers = { version = "1.0.2", features = ["abigen"] }
+ethers-providers = "2.0.0"
+ethers-solc = "1.0.2"
+hex = "0.4.3"
+sequencer-utils = { path = "../../utils" }
+tokio = "1.26.0"

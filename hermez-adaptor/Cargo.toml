@@ -23,6 +23,7 @@ hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-qu
 http-types = "2.12.0"
 jsonrpc-v2 = "0.11.0"
 sequencer = { path = "../sequencer" }
+sequencer-utils = { path = "../utils" }
 serde_json = "1.0.82"
 surf = "2.3.2"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
