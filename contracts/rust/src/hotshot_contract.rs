@@ -1,9 +1,10 @@
 #[cfg(test)]
 
 mod test {
-    use contract_bindings::hot_shot::HotShot;
+    use contract_bindings::hot_shot::{HotShot, NewBlocksCall};
     use contract_bindings::TestClients;
     use ethers::{
+        abi::AbiDecode,
         providers::{Middleware, Provider},
         types::U256,
     };
@@ -31,7 +32,7 @@ mod test {
         let commitment = U256::from(1234);
 
         hotshot
-            .new_block(block_num, commitment, vec![1, 2, 3].into())
+            .new_blocks(block_num, vec![commitment], vec![vec![1, 2, 3].into()])
             .send()
             .await
             .unwrap()
@@ -43,14 +44,23 @@ mod test {
             commitment,
         );
 
-        let event = &hotshot
-            .new_block_filter()
+        let (event, meta) = &hotshot
+            .new_blocks_filter()
             .from_block(0)
-            .query()
+            .query_with_meta()
             .await
             .unwrap()[0];
 
-        assert_eq!(event.block_number, block_num);
-        assert_eq!(event.commitment, commitment);
+        assert_eq!(event.first_block_number, block_num);
+
+        // Parse the commitments from calldata.
+        let tx = provider
+            .get_transaction(meta.transaction_hash)
+            .await
+            .unwrap()
+            .unwrap();
+        let call = NewBlocksCall::decode(&tx.input).unwrap();
+        assert_eq!(call.first_block_number, block_num);
+        assert_eq!(call.new_commitments, vec![commitment]);
     }
 }
