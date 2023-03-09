@@ -3845,6 +3845,7 @@ dependencies = [
 name = "hotshot_contract"
 version = "0.1.0"
 dependencies = [
+ "async-std",
  "contract-bindings",
  "ethers",
  "ethers-providers 2.0.0",

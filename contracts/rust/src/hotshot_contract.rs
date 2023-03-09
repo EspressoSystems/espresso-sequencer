@@ -10,7 +10,7 @@ mod test {
     use sequencer_utils::Anvil;
     use std::time::Duration;
 
-    #[tokio::test]
+    #[async_std::test]
     async fn test_hotshot_contract() {
         let anvil = Anvil::spawn(None).await;
 
