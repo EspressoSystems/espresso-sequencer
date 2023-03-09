@@ -150,7 +150,6 @@ pub async fn init_node(
 
     // Generate public keys and this node's private key.
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
-        .into_iter()
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
     let sk = priv_keys[config.node_index as usize].clone();
