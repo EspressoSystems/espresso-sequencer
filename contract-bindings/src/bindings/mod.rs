@@ -15,6 +15,7 @@ pub mod hot_shot;
 pub mod hot_shot_test;
 pub mod i_base_polygon_zk_evm_global_exit_root;
 pub mod i_bridge_message_receiver;
+pub mod i_hot_shot;
 pub mod i_polygon_zk_evm_bridge;
 pub mod i_polygon_zk_evm_errors;
 pub mod i_polygon_zk_evm_global_exit_root;

@@ -255,6 +255,7 @@ impl TestHermezContracts {
                 matic.address(),
                 verifier.address(),
                 bridge.address(),
+                hotshot.address(),
                 chain_id,
                 fork_id,
             ),
