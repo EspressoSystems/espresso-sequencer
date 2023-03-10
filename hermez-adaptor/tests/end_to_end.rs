@@ -40,7 +40,7 @@ async fn test_end_to_end() {
     let l2_provider = env.l2_provider();
     let mnemonic = env.funded_mnemonic();
     let rollup_address = node.l1().rollup.address();
-    let matic_address = node.l1().matic.address();
+    let hotshot_address = node.l1().hotshot.address();
 
     let l1 = connect_rpc(&l1_provider, mnemonic, None).await.unwrap();
     let l2 = connect_rpc(&l2_provider, mnemonic, None).await.unwrap();
@@ -51,11 +51,11 @@ async fn test_end_to_end() {
     let l1_initial_block = l1.get_block_number().await.unwrap();
     let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
     tracing::info!(
-        "address: {}, rollup address: {}, matic address: {}, L1 initial block: {}, \
+        "address: {}, rollup address: {}, hotshot address: {}, L1 initial block: {}, \
         L2 initial balance: {}",
         l1.inner().address(),
         rollup.address(),
-        matic_address,
+        hotshot_address,
         l1_initial_block,
         l2_initial_balance,
     );
@@ -81,8 +81,7 @@ async fn test_end_to_end() {
         l1_provider: env.l1_provider(),
         l1_chain_id: None,
         l2_chain_id: zkevm.chain_id,
-        rollup_address,
-        matic_address,
+        hotshot_address,
         sequencer_mnemonic: mnemonic.to_string(),
         port: env.l2_adaptor_port(),
     };

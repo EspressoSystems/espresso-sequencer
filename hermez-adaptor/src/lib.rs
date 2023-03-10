@@ -30,13 +30,9 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_ZKEVM_L2_CHAIN_ID", default_value = "1001")]
     pub l2_chain_id: u64,
 
-    /// Address of Hermez rollup contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_ROLLUP_ADDRESS")]
-    pub rollup_address: Address,
-
-    /// Address of Matic token contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_MATIC_ADDRESS")]
-    pub matic_address: Address,
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS")]
+    pub hotshot_address: Address,
 
     /// Mnemonic phrase for the sequencer wallet.
     ///
@@ -56,7 +52,7 @@ pub struct Options {
 }
 
 impl Options {
-    fn zkevm(&self) -> ZkEvm {
+    pub fn zkevm(&self) -> ZkEvm {
         ZkEvm {
             chain_id: self.l2_chain_id,
         }
@@ -71,6 +67,3 @@ pub use hermez::*;
 mod demo;
 #[cfg(any(test, feature = "testing"))]
 pub use demo::*;
-
-// This private constant is defined by _MAX_VERIFY_BATCHES in PolygonZkEVM.sol
-pub const HERMEZ_MAX_VERIFY_BATCHES: usize = 1000;

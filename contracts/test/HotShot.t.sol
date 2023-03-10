@@ -23,15 +23,13 @@ contract HotShotTest is Test {
         comms[1] = 234274238974;
         qcs[1] = "0x4444";
 
-        uint256 block_number = 3;
-
         vm.expectEmit(false, false, false, true, address(hotshot));
-        emit NewBlocks(block_number);
+        emit NewBlocks(0);
 
-        hotshot.newBlocks(block_number, comms, qcs);
+        hotshot.newBlocks(comms, qcs);
 
-        assertEq(hotshot.commitments(3), comms[0]);
-        assertEq(hotshot.commitments(4), comms[1]);
-        assertEq(hotshot.commitments(5), 0);
+        assertEq(hotshot.commitments(0), comms[0]);
+        assertEq(hotshot.commitments(1), comms[1]);
+        assertEq(hotshot.commitments(2), 0);
     }
 }

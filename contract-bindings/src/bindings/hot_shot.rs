@@ -16,7 +16,7 @@ pub mod hot_shot {
     use ethers::providers::Middleware;
     #[doc = "HotShot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"InvalidQC\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"TooManyBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"numQCs\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"WrongNumberOfQCs\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"MAX_BLOCKS\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256[]\",\"name\":\"newCommitments\",\"type\":\"uint256[]\",\"components\":[]},{\"internalType\":\"bytes[]\",\"name\":\"qcs\",\"type\":\"bytes[]\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlocks\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"InvalidQC\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"TooManyBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"numQCs\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"WrongNumberOfQCs\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"MAX_BLOCKS\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"blockHeight\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256[]\",\"name\":\"newCommitments\",\"type\":\"uint256[]\",\"components\":[]},{\"internalType\":\"bytes[]\",\"name\":\"qcs\",\"type\":\"bytes[]\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlocks\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static HOTSHOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -25,7 +25,7 @@ pub mod hot_shot {
     #[doc = r" Bytecode of the #name contract"]
     pub static HOTSHOT_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
         ethers::contract::Lazy::new(|| {
-            "0x608060405234801561001057600080fd5b506103a0806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806326833dcc1461004657806349ce899714610061578063c3d8ba6414610081575b600080fd5b61004f6103e881565b60405190815260200160405180910390f35b61004f61006f3660046101e6565b60006020819052908152604090205481565b61009461008f36600461024b565b610096565b005b8281146100c55760405163638df5d160e11b815260048101849052602481018290526044015b60405180910390fd5b6103e88311156100eb5760405163e082840b60e01b8152600481018490526024016100bc565b60005b838110156101ab57600061010282886102db565b905061014f8187878581811061011a5761011a6102f4565b90506020020135868686818110610133576101336102f4565b9050602002810190610145919061030a565b6001949350505050565b61016f57604051637818671960e01b8152600481018290526024016100bc565b858583818110610181576101816102f4565b60009384526020848152604090942093029190910135909155506101a481610351565b90506100ee565b506040518581527fa0a391577f56d0814bea5cb4a08a08d48de779f03ea2c62b82251c75785f3b149060200160405180910390a15050505050565b6000602082840312156101f857600080fd5b5035919050565b60008083601f84011261021157600080fd5b50813567ffffffffffffffff81111561022957600080fd5b6020830191508360208260051b850101111561024457600080fd5b9250929050565b60008060008060006060868803121561026357600080fd5b85359450602086013567ffffffffffffffff8082111561028257600080fd5b61028e89838a016101ff565b909650945060408801359150808211156102a757600080fd5b506102b4888289016101ff565b969995985093965092949392505050565b634e487b7160e01b600052601160045260246000fd5b808201808211156102ee576102ee6102c5565b92915050565b634e487b7160e01b600052603260045260246000fd5b6000808335601e1984360301811261032157600080fd5b83018035915067ffffffffffffffff82111561033c57600080fd5b60200191503681900382131561024457600080fd5b600060018201610363576103636102c5565b506001019056fea2646970667358221220521e37cc8b2571fc08c9ecbea07a535762bb9697893e8fc1323d6ae8becc960964736f6c63430008120033" . parse () . expect ("invalid bytecode")
+            "0x608060405234801561001057600080fd5b506103bd806100206000396000f3fe608060405234801561001057600080fd5b506004361061004c5760003560e01c806326833dcc1461005157806349ce89971461006c578063676923501461008c578063f44ff712146100a1575b600080fd5b61005a6103e881565b60405190815260200160405180910390f35b61005a61007a366004610211565b60006020819052908152604090205481565b61009f61009a366004610276565b6100aa565b005b61005a60015481565b8281146100d95760405163638df5d160e11b815260048101849052602481018290526044015b60405180910390fd5b6103e88311156100ff5760405163e082840b60e01b8152600481018490526024016100d0565b60015460005b848110156101d65761015a600154878784818110610125576101256102e2565b9050602002013586868581811061013e5761013e6102e2565b905060200281019061015091906102f8565b6001949350505050565b61017d57600154604051637818671960e01b81526004016100d091815260200190565b85858281811061018f5761018f6102e2565b9050602002013560008060015481526020019081526020016000208190555060018060008282546101c09190610355565b909155506101cf90508161036e565b9050610105565b506040518181527fa0a391577f56d0814bea5cb4a08a08d48de779f03ea2c62b82251c75785f3b149060200160405180910390a15050505050565b60006020828403121561022357600080fd5b5035919050565b60008083601f84011261023c57600080fd5b50813567ffffffffffffffff81111561025457600080fd5b6020830191508360208260051b850101111561026f57600080fd5b9250929050565b6000806000806040858703121561028c57600080fd5b843567ffffffffffffffff808211156102a457600080fd5b6102b08883890161022a565b909650945060208701359150808211156102c957600080fd5b506102d68782880161022a565b95989497509550505050565b634e487b7160e01b600052603260045260246000fd5b6000808335601e1984360301811261030f57600080fd5b83018035915067ffffffffffffffff82111561032a57600080fd5b60200191503681900382131561026f57600080fd5b634e487b7160e01b600052601160045260246000fd5b808201808211156103685761036861033f565b92915050565b6000600182016103805761038061033f565b506001019056fea26469706673582212202c8119d847293799e674e5f28829416c4570a7dcb1182a51385c5d89952a377564736f6c63430008120033" . parse () . expect ("invalid bytecode")
         });
     pub struct HotShot<M>(ethers::contract::Contract<M>);
     impl<M> Clone for HotShot<M> {
@@ -103,6 +103,14 @@ pub mod hot_shot {
                 .method_hash([38, 131, 61, 204], ())
                 .expect("method not found (this should never happen)")
         }
+        #[doc = "Calls the contract's `blockHeight` (0xf44ff712) function"]
+        pub fn block_height(
+            &self,
+        ) -> ethers::contract::builders::ContractCall<M, ethers::core::types::U256> {
+            self.0
+                .method_hash([244, 79, 247, 18], ())
+                .expect("method not found (this should never happen)")
+        }
         #[doc = "Calls the contract's `commitments` (0x49ce8997) function"]
         pub fn commitments(
             &self,
@@ -112,18 +120,14 @@ pub mod hot_shot {
                 .method_hash([73, 206, 137, 151], p0)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `newBlocks` (0xc3d8ba64) function"]
+        #[doc = "Calls the contract's `newBlocks` (0x67692350) function"]
         pub fn new_blocks(
             &self,
-            first_block_number: ethers::core::types::U256,
             new_commitments: ::std::vec::Vec<ethers::core::types::U256>,
             qcs: ::std::vec::Vec<ethers::core::types::Bytes>,
         ) -> ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash(
-                    [195, 216, 186, 100],
-                    (first_block_number, new_commitments, qcs),
-                )
+                .method_hash([103, 105, 35, 80], (new_commitments, qcs))
                 .expect("method not found (this should never happen)")
         }
         #[doc = "Gets the contract's `NewBlocks` event"]
@@ -268,6 +272,18 @@ pub mod hot_shot {
     )]
     #[ethcall(name = "MAX_BLOCKS", abi = "MAX_BLOCKS()")]
     pub struct MaxBlocksCall;
+    #[doc = "Container type for all input parameters for the `blockHeight` function with signature `blockHeight()` and selector `[244, 79, 247, 18]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthCall,
+        ethers :: contract :: EthDisplay,
+        Default,
+    )]
+    #[ethcall(name = "blockHeight", abi = "blockHeight()")]
+    pub struct BlockHeightCall;
     #[doc = "Container type for all input parameters for the `commitments` function with signature `commitments(uint256)` and selector `[73, 206, 137, 151]`"]
     #[derive(
         Clone,
@@ -280,7 +296,7 @@ pub mod hot_shot {
     )]
     #[ethcall(name = "commitments", abi = "commitments(uint256)")]
     pub struct CommitmentsCall(pub ethers::core::types::U256);
-    #[doc = "Container type for all input parameters for the `newBlocks` function with signature `newBlocks(uint256,uint256[],bytes[])` and selector `[195, 216, 186, 100]`"]
+    #[doc = "Container type for all input parameters for the `newBlocks` function with signature `newBlocks(uint256[],bytes[])` and selector `[103, 105, 35, 80]`"]
     #[derive(
         Clone,
         Debug,
@@ -290,15 +306,15 @@ pub mod hot_shot {
         ethers :: contract :: EthDisplay,
         Default,
     )]
-    #[ethcall(name = "newBlocks", abi = "newBlocks(uint256,uint256[],bytes[])")]
+    #[ethcall(name = "newBlocks", abi = "newBlocks(uint256[],bytes[])")]
     pub struct NewBlocksCall {
-        pub first_block_number: ethers::core::types::U256,
         pub new_commitments: ::std::vec::Vec<ethers::core::types::U256>,
         pub qcs: ::std::vec::Vec<ethers::core::types::Bytes>,
     }
     #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
     pub enum HotShotCalls {
         MaxBlocks(MaxBlocksCall),
+        BlockHeight(BlockHeightCall),
         Commitments(CommitmentsCall),
         NewBlocks(NewBlocksCall),
     }
@@ -310,6 +326,11 @@ pub mod hot_shot {
                 <MaxBlocksCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
                 return Ok(HotShotCalls::MaxBlocks(decoded));
+            }
+            if let Ok(decoded) =
+                <BlockHeightCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotCalls::BlockHeight(decoded));
             }
             if let Ok(decoded) =
                 <CommitmentsCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
@@ -328,6 +349,7 @@ pub mod hot_shot {
         fn encode(self) -> Vec<u8> {
             match self {
                 HotShotCalls::MaxBlocks(element) => element.encode(),
+                HotShotCalls::BlockHeight(element) => element.encode(),
                 HotShotCalls::Commitments(element) => element.encode(),
                 HotShotCalls::NewBlocks(element) => element.encode(),
             }
@@ -337,6 +359,7 @@ pub mod hot_shot {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match self {
                 HotShotCalls::MaxBlocks(element) => element.fmt(f),
+                HotShotCalls::BlockHeight(element) => element.fmt(f),
                 HotShotCalls::Commitments(element) => element.fmt(f),
                 HotShotCalls::NewBlocks(element) => element.fmt(f),
             }
@@ -345,6 +368,11 @@ pub mod hot_shot {
     impl ::std::convert::From<MaxBlocksCall> for HotShotCalls {
         fn from(var: MaxBlocksCall) -> Self {
             HotShotCalls::MaxBlocks(var)
+        }
+    }
+    impl ::std::convert::From<BlockHeightCall> for HotShotCalls {
+        fn from(var: BlockHeightCall) -> Self {
+            HotShotCalls::BlockHeight(var)
         }
     }
     impl ::std::convert::From<CommitmentsCall> for HotShotCalls {
@@ -368,6 +396,17 @@ pub mod hot_shot {
         Default,
     )]
     pub struct MaxBlocksReturn(pub ethers::core::types::U256);
+    #[doc = "Container type for all return fields from the `blockHeight` function with signature `blockHeight()` and selector `[244, 79, 247, 18]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthAbiType,
+        ethers :: contract :: EthAbiCodec,
+        Default,
+    )]
+    pub struct BlockHeightReturn(pub ethers::core::types::U256);
     #[doc = "Container type for all return fields from the `commitments` function with signature `commitments(uint256)` and selector `[73, 206, 137, 151]`"]
     #[derive(
         Clone,
