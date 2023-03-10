@@ -227,7 +227,11 @@ mod test {
     use contract_bindings::{hot_shot::NewBlocksCall, PolygonZkEVM};
     use ethers::abi::AbiDecode;
     use futures::future::join_all;
-    use hotshot_types::{data::Leaf, traits::block_contents::Block as _};
+    use hotshot_types::{
+        constants::genesis_proposer_id,
+        data::{Leaf, QuorumCertificate, ViewNumber},
+        traits::{block_contents::Block as _, state::ConsensusTime},
+    };
     use sequencer::{Block, State, Vm};
     use zkevm::{EvmTransaction, ZkEvm};
 
@@ -303,8 +307,19 @@ mod test {
                     .unwrap();
 
                 // Fake a leaf that sequences this block.
-                let leaf = Leaf::genesis(block);
-                let mut qc = leaf.justify_qc.clone();
+                let mut qc = QuorumCertificate::genesis();
+                let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
+                let leaf = Leaf::new(
+                    Default::default(),
+                    block,
+                    parent_leaf,
+                    qc.clone(),
+                    ViewNumber::genesis(),
+                    i,
+                    vec![],
+                    0,
+                    genesis_proposer_id(),
+                );
                 qc.leaf_commitment = leaf.commit();
                 (LeafQueryData::new(leaf, qc), hash)
             }))
