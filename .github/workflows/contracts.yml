@@ -47,8 +47,11 @@ jobs:
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
+      - name: Format check
+        run: cd contracts && forge fmt --check
+
       - name: Build contracts
-        run: cd contracts && forge build
+        run: cd contracts && forge build --deny-warnings
 
       - name: Check if bindings up to date
         run: |

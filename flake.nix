@@ -69,6 +69,12 @@
                 entry = "cargo clippy --workspace --all-features --all-targets -- -D warnings";
                 pass_filenames = false;
               };
+              forge-fmt = {
+                enable = true;
+                description = "Enforce forge fmt";
+                entry = "cd contracts && forge fmt --check";
+                pass_filenames = false;
+              };
             };
           };
         };

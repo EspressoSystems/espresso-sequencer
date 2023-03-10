@@ -16,7 +16,7 @@ pub mod hot_shot {
     use ethers::providers::Middleware;
     #[doc = "HotShot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_blockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false},{\"internalType\":\"uint256\",\"name\":\"commitment\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlock\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"commitment\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"qc\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlock\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"InvalidQC\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"TooManyBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"numQCs\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"WrongNumberOfQCs\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"MAX_BLOCKS\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256[]\",\"name\":\"newCommitments\",\"type\":\"uint256[]\",\"components\":[]},{\"internalType\":\"bytes[]\",\"name\":\"qcs\",\"type\":\"bytes[]\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlocks\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static HOTSHOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -25,7 +25,7 @@ pub mod hot_shot {
     #[doc = r" Bytecode of the #name contract"]
     pub static HOTSHOT_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
         ethers::contract::Lazy::new(|| {
-            "0x608060405234801561001057600080fd5b506101f9806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c806349ce89971461003b57806374b04c901461006d575b600080fd5b61005b6100493660046100d0565b60006020819052908152604090205481565b60405190815260200160405180910390f35b61008061007b3660046100ff565b610082565b005b6000838152602081815260409182902084905581518581529081018490527fb668ba11ae450fb7171e441064428739f46a67eea1afc046f70740f3bf5bb528910160405180910390a1505050565b6000602082840312156100e257600080fd5b5035919050565b634e487b7160e01b600052604160045260246000fd5b60008060006060848603121561011457600080fd5b8335925060208401359150604084013567ffffffffffffffff8082111561013a57600080fd5b818601915086601f83011261014e57600080fd5b813581811115610160576101606100e9565b604051601f8201601f19908116603f01168101908382118183101715610188576101886100e9565b816040528281528960208487010111156101a157600080fd5b826020860160208301376000602084830101528095505050505050925092509256fea2646970667358221220da3ac87a28f0458cf93a331b4de817cd890c637ffb4d6700fb1b7df38d11f0c364736f6c63430008120033" . parse () . expect ("invalid bytecode")
+            "0x608060405234801561001057600080fd5b506103a0806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806326833dcc1461004657806349ce899714610061578063c3d8ba6414610081575b600080fd5b61004f6103e881565b60405190815260200160405180910390f35b61004f61006f3660046101e6565b60006020819052908152604090205481565b61009461008f36600461024b565b610096565b005b8281146100c55760405163638df5d160e11b815260048101849052602481018290526044015b60405180910390fd5b6103e88311156100eb5760405163e082840b60e01b8152600481018490526024016100bc565b60005b838110156101ab57600061010282886102db565b905061014f8187878581811061011a5761011a6102f4565b90506020020135868686818110610133576101336102f4565b9050602002810190610145919061030a565b6001949350505050565b61016f57604051637818671960e01b8152600481018290526024016100bc565b858583818110610181576101816102f4565b60009384526020848152604090942093029190910135909155506101a481610351565b90506100ee565b506040518581527fa0a391577f56d0814bea5cb4a08a08d48de779f03ea2c62b82251c75785f3b149060200160405180910390a15050505050565b6000602082840312156101f857600080fd5b5035919050565b60008083601f84011261021157600080fd5b50813567ffffffffffffffff81111561022957600080fd5b6020830191508360208260051b850101111561024457600080fd5b9250929050565b60008060008060006060868803121561026357600080fd5b85359450602086013567ffffffffffffffff8082111561028257600080fd5b61028e89838a016101ff565b909650945060408801359150808211156102a757600080fd5b506102b4888289016101ff565b969995985093965092949392505050565b634e487b7160e01b600052601160045260246000fd5b808201808211156102ee576102ee6102c5565b92915050565b634e487b7160e01b600052603260045260246000fd5b6000808335601e1984360301811261032157600080fd5b83018035915067ffffffffffffffff82111561033c57600080fd5b60200191503681900382131561024457600080fd5b600060018201610363576103636102c5565b506001019056fea2646970667358221220521e37cc8b2571fc08c9ecbea07a535762bb9697893e8fc1323d6ae8becc960964736f6c63430008120033" . parse () . expect ("invalid bytecode")
         });
     pub struct HotShot<M>(ethers::contract::Contract<M>);
     impl<M> Clone for HotShot<M> {
@@ -95,6 +95,14 @@ pub mod hot_shot {
             let deployer = ethers::contract::ContractDeployer::new(deployer);
             Ok(deployer)
         }
+        #[doc = "Calls the contract's `MAX_BLOCKS` (0x26833dcc) function"]
+        pub fn max_blocks(
+            &self,
+        ) -> ethers::contract::builders::ContractCall<M, ethers::core::types::U256> {
+            self.0
+                .method_hash([38, 131, 61, 204], ())
+                .expect("method not found (this should never happen)")
+        }
         #[doc = "Calls the contract's `commitments` (0x49ce8997) function"]
         pub fn commitments(
             &self,
@@ -104,29 +112,135 @@ pub mod hot_shot {
                 .method_hash([73, 206, 137, 151], p0)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `newBlock` (0x74b04c90) function"]
-        pub fn new_block(
+        #[doc = "Calls the contract's `newBlocks` (0xc3d8ba64) function"]
+        pub fn new_blocks(
             &self,
-            block_number: ethers::core::types::U256,
-            commitment: ethers::core::types::U256,
-            qc: ethers::core::types::Bytes,
+            first_block_number: ethers::core::types::U256,
+            new_commitments: ::std::vec::Vec<ethers::core::types::U256>,
+            qcs: ::std::vec::Vec<ethers::core::types::Bytes>,
         ) -> ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([116, 176, 76, 144], (block_number, commitment, qc))
+                .method_hash(
+                    [195, 216, 186, 100],
+                    (first_block_number, new_commitments, qcs),
+                )
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Gets the contract's `NewBlock` event"]
-        pub fn new_block_filter(&self) -> ethers::contract::builders::Event<M, NewBlockFilter> {
+        #[doc = "Gets the contract's `NewBlocks` event"]
+        pub fn new_blocks_filter(&self) -> ethers::contract::builders::Event<M, NewBlocksFilter> {
             self.0.event()
         }
         #[doc = r" Returns an [`Event`](#ethers_contract::builders::Event) builder for all events of this contract"]
-        pub fn events(&self) -> ethers::contract::builders::Event<M, NewBlockFilter> {
+        pub fn events(&self) -> ethers::contract::builders::Event<M, NewBlocksFilter> {
             self.0.event_with_filter(Default::default())
         }
     }
     impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>> for HotShot<M> {
         fn from(contract: ethers::contract::Contract<M>) -> Self {
             Self(contract)
+        }
+    }
+    #[doc = "Custom Error type `InvalidQC` with signature `InvalidQC(uint256)` and selector `[120, 24, 103, 25]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthError,
+        ethers :: contract :: EthDisplay,
+    )]
+    #[etherror(name = "InvalidQC", abi = "InvalidQC(uint256)")]
+    pub struct InvalidQC {
+        pub block_number: ethers::core::types::U256,
+    }
+    #[doc = "Custom Error type `TooManyBlocks` with signature `TooManyBlocks(uint256)` and selector `[224, 130, 132, 11]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthError,
+        ethers :: contract :: EthDisplay,
+    )]
+    #[etherror(name = "TooManyBlocks", abi = "TooManyBlocks(uint256)")]
+    pub struct TooManyBlocks {
+        pub num_blocks: ethers::core::types::U256,
+    }
+    #[doc = "Custom Error type `WrongNumberOfQCs` with signature `WrongNumberOfQCs(uint256,uint256)` and selector `[199, 27, 235, 162]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthError,
+        ethers :: contract :: EthDisplay,
+    )]
+    #[etherror(name = "WrongNumberOfQCs", abi = "WrongNumberOfQCs(uint256,uint256)")]
+    pub struct WrongNumberOfQCs {
+        pub num_blocks: ethers::core::types::U256,
+        pub num_q_cs: ethers::core::types::U256,
+    }
+    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    pub enum HotShotErrors {
+        InvalidQC(InvalidQC),
+        TooManyBlocks(TooManyBlocks),
+        WrongNumberOfQCs(WrongNumberOfQCs),
+    }
+    impl ethers::core::abi::AbiDecode for HotShotErrors {
+        fn decode(
+            data: impl AsRef<[u8]>,
+        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
+            if let Ok(decoded) = <InvalidQC as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotErrors::InvalidQC(decoded));
+            }
+            if let Ok(decoded) =
+                <TooManyBlocks as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotErrors::TooManyBlocks(decoded));
+            }
+            if let Ok(decoded) =
+                <WrongNumberOfQCs as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotErrors::WrongNumberOfQCs(decoded));
+            }
+            Err(ethers::core::abi::Error::InvalidData.into())
+        }
+    }
+    impl ethers::core::abi::AbiEncode for HotShotErrors {
+        fn encode(self) -> Vec<u8> {
+            match self {
+                HotShotErrors::InvalidQC(element) => element.encode(),
+                HotShotErrors::TooManyBlocks(element) => element.encode(),
+                HotShotErrors::WrongNumberOfQCs(element) => element.encode(),
+            }
+        }
+    }
+    impl ::std::fmt::Display for HotShotErrors {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match self {
+                HotShotErrors::InvalidQC(element) => element.fmt(f),
+                HotShotErrors::TooManyBlocks(element) => element.fmt(f),
+                HotShotErrors::WrongNumberOfQCs(element) => element.fmt(f),
+            }
+        }
+    }
+    impl ::std::convert::From<InvalidQC> for HotShotErrors {
+        fn from(var: InvalidQC) -> Self {
+            HotShotErrors::InvalidQC(var)
+        }
+    }
+    impl ::std::convert::From<TooManyBlocks> for HotShotErrors {
+        fn from(var: TooManyBlocks) -> Self {
+            HotShotErrors::TooManyBlocks(var)
+        }
+    }
+    impl ::std::convert::From<WrongNumberOfQCs> for HotShotErrors {
+        fn from(var: WrongNumberOfQCs) -> Self {
+            HotShotErrors::WrongNumberOfQCs(var)
         }
     }
     #[derive(
@@ -138,11 +252,22 @@ pub mod hot_shot {
         ethers :: contract :: EthDisplay,
         Default,
     )]
-    #[ethevent(name = "NewBlock", abi = "NewBlock(uint256,uint256)")]
-    pub struct NewBlockFilter {
-        pub block_number: ethers::core::types::U256,
-        pub commitment: ethers::core::types::U256,
+    #[ethevent(name = "NewBlocks", abi = "NewBlocks(uint256)")]
+    pub struct NewBlocksFilter {
+        pub first_block_number: ethers::core::types::U256,
     }
+    #[doc = "Container type for all input parameters for the `MAX_BLOCKS` function with signature `MAX_BLOCKS()` and selector `[38, 131, 61, 204]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthCall,
+        ethers :: contract :: EthDisplay,
+        Default,
+    )]
+    #[ethcall(name = "MAX_BLOCKS", abi = "MAX_BLOCKS()")]
+    pub struct MaxBlocksCall;
     #[doc = "Container type for all input parameters for the `commitments` function with signature `commitments(uint256)` and selector `[73, 206, 137, 151]`"]
     #[derive(
         Clone,
@@ -155,7 +280,7 @@ pub mod hot_shot {
     )]
     #[ethcall(name = "commitments", abi = "commitments(uint256)")]
     pub struct CommitmentsCall(pub ethers::core::types::U256);
-    #[doc = "Container type for all input parameters for the `newBlock` function with signature `newBlock(uint256,uint256,bytes)` and selector `[116, 176, 76, 144]`"]
+    #[doc = "Container type for all input parameters for the `newBlocks` function with signature `newBlocks(uint256,uint256[],bytes[])` and selector `[195, 216, 186, 100]`"]
     #[derive(
         Clone,
         Debug,
@@ -165,30 +290,36 @@ pub mod hot_shot {
         ethers :: contract :: EthDisplay,
         Default,
     )]
-    #[ethcall(name = "newBlock", abi = "newBlock(uint256,uint256,bytes)")]
-    pub struct NewBlockCall {
-        pub block_number: ethers::core::types::U256,
-        pub commitment: ethers::core::types::U256,
-        pub qc: ethers::core::types::Bytes,
+    #[ethcall(name = "newBlocks", abi = "newBlocks(uint256,uint256[],bytes[])")]
+    pub struct NewBlocksCall {
+        pub first_block_number: ethers::core::types::U256,
+        pub new_commitments: ::std::vec::Vec<ethers::core::types::U256>,
+        pub qcs: ::std::vec::Vec<ethers::core::types::Bytes>,
     }
     #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
     pub enum HotShotCalls {
+        MaxBlocks(MaxBlocksCall),
         Commitments(CommitmentsCall),
-        NewBlock(NewBlockCall),
+        NewBlocks(NewBlocksCall),
     }
     impl ethers::core::abi::AbiDecode for HotShotCalls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
             if let Ok(decoded) =
+                <MaxBlocksCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotCalls::MaxBlocks(decoded));
+            }
+            if let Ok(decoded) =
                 <CommitmentsCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
                 return Ok(HotShotCalls::Commitments(decoded));
             }
             if let Ok(decoded) =
-                <NewBlockCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <NewBlocksCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
-                return Ok(HotShotCalls::NewBlock(decoded));
+                return Ok(HotShotCalls::NewBlocks(decoded));
             }
             Err(ethers::core::abi::Error::InvalidData.into())
         }
@@ -196,17 +327,24 @@ pub mod hot_shot {
     impl ethers::core::abi::AbiEncode for HotShotCalls {
         fn encode(self) -> Vec<u8> {
             match self {
+                HotShotCalls::MaxBlocks(element) => element.encode(),
                 HotShotCalls::Commitments(element) => element.encode(),
-                HotShotCalls::NewBlock(element) => element.encode(),
+                HotShotCalls::NewBlocks(element) => element.encode(),
             }
         }
     }
     impl ::std::fmt::Display for HotShotCalls {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match self {
+                HotShotCalls::MaxBlocks(element) => element.fmt(f),
                 HotShotCalls::Commitments(element) => element.fmt(f),
-                HotShotCalls::NewBlock(element) => element.fmt(f),
+                HotShotCalls::NewBlocks(element) => element.fmt(f),
             }
+        }
+    }
+    impl ::std::convert::From<MaxBlocksCall> for HotShotCalls {
+        fn from(var: MaxBlocksCall) -> Self {
+            HotShotCalls::MaxBlocks(var)
         }
     }
     impl ::std::convert::From<CommitmentsCall> for HotShotCalls {
@@ -214,11 +352,22 @@ pub mod hot_shot {
             HotShotCalls::Commitments(var)
         }
     }
-    impl ::std::convert::From<NewBlockCall> for HotShotCalls {
-        fn from(var: NewBlockCall) -> Self {
-            HotShotCalls::NewBlock(var)
+    impl ::std::convert::From<NewBlocksCall> for HotShotCalls {
+        fn from(var: NewBlocksCall) -> Self {
+            HotShotCalls::NewBlocks(var)
         }
     }
+    #[doc = "Container type for all return fields from the `MAX_BLOCKS` function with signature `MAX_BLOCKS()` and selector `[38, 131, 61, 204]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthAbiType,
+        ethers :: contract :: EthAbiCodec,
+        Default,
+    )]
+    pub struct MaxBlocksReturn(pub ethers::core::types::U256);
     #[doc = "Container type for all return fields from the `commitments` function with signature `commitments(uint256)` and selector `[73, 206, 137, 151]`"]
     #[derive(
         Clone,
