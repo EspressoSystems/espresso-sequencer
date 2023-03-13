@@ -6,7 +6,7 @@ contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
 
-    event NewBlocks(uint256 firstBlockNumber);
+    event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
     error WrongNumberOfQCs(uint256 numBlocks, uint256 numQCs);
     error TooManyBlocks(uint256 numBlocks);
@@ -40,6 +40,6 @@ contract HotShot {
             commitments[blockNumber] = newCommitments[i];
         }
 
-        emit NewBlocks(firstBlockNumber);
+        emit NewBlocks(firstBlockNumber, newCommitments.length);
     }
 }
