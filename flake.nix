@@ -12,6 +12,11 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
+  inputs.nixpkgs-cross-overlay = {
+    url = "github:alekseysidorov/nixpkgs-cross-overlay";
+    inputs.flake-utils.follows = "flake-utils";
+  };
+
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   inputs.foundry.url = "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
@@ -22,7 +27,8 @@
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
+
+  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
@@ -172,6 +178,10 @@
 
             inherit RUST_LOG;
           };
+        devShells.crossShell = import ./cross-shell.nix {
+          localSystem = system;
+          crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; };
+        };
       }
     );
 }
