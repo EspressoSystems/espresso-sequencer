@@ -12,28 +12,17 @@ pkgs.mkShell rec {
   # Native project dependencies like build utilities and additional routines
   # like container building, linters, etc.
   nativeBuildInputs = with pkgs.pkgsBuildHost; [
-    # git
-    # Linters
-    # dprint
-    # nixpkgs-fmt
-
     # Rust
-    #(rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
     (rust-bin.stable.latest.minimal.override {
       extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
     })
-    # rust-bin.stable.latest.default
 
-    protobuf # required by libp2p
-
-    sccache
     # Will add some dependencies like libiconv
     rustBuildHostDependencies
-    # Manipulations with containers
-    # skopeo
-    # docker
-    # Add crate dependencies
+
+    # Crate dependencies
     cargoDeps.openssl-sys
+    protobuf # required by libp2p
   ];
   # Libraries essential to build the service binaries
   buildInputs = with pkgs; [
@@ -44,10 +33,6 @@ pkgs.mkShell rec {
   propagatedBuildInputs = with pkgs; [
     openssl.dev
   ];
-  # Prettify shell prompt
-  # shellHook = "${pkgs.crossBashPrompt}";
-  # Use sscache to improve rebuilding performance
-  RUSTC_WRAPPER = "sccache";
 
   /* Service docker image definition
 
