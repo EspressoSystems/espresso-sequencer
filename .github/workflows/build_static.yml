@@ -46,7 +46,7 @@ jobs:
       - name: Compile all executables
         timeout-minutes: 60
         run: |
-          nix develop .#staticShell --option sandbox relaxed -c cargo build --release
+          nix develop .#crossShell --option sandbox relaxed -c cargo build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
