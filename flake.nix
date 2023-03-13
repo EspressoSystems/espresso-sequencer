@@ -180,7 +180,7 @@
           };
         devShells.crossShell = import ./cross-shell.nix {
           localSystem = system;
-          crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; };
+          crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true;};
         };
       }
     );
