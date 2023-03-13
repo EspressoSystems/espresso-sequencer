@@ -33,7 +33,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git
             target
-          key: espresso-sequencer-static-v3-${{ hashFiles('Cargo.lock') }}
+          key: espresso-sequencer-static-v4-${{ hashFiles('Cargo.lock') }}
 
       - name: Fix Git Security Issue
         run: git config --global --add safe.directory "$PWD"
@@ -44,7 +44,7 @@ jobs:
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
       - name: Compile all executables
-        timeout-minutes: 60
+        timeout-minutes: 120
         run: |
           nix develop .#crossShell --option sandbox relaxed -c cargo build --release
 
