@@ -29,6 +29,8 @@ serde_json = "1.0.82"
 surf = "2.3.2"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tide = "0.16.0"
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
+toml = "0.5"
 tracing = "0.1"
 zkevm = { path = "../zkevm" }
 
@@ -41,5 +43,6 @@ async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
 portpicker = "0.1"
+rand_chacha = "0.3"
 sequencer = { path = "../sequencer", features = ["testing"] }
 tempfile = "3.4.0"

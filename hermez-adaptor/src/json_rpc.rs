@@ -96,7 +96,7 @@ pub async fn serve(opt: &Options) {
 
     let server = build_rpc_server(rpc);
     server
-        .listen(&format!("http://0.0.0.0:{}", opt.port))
+        .listen(&format!("http://0.0.0.0:{}", opt.rpc_port))
         .await
         .unwrap();
 }

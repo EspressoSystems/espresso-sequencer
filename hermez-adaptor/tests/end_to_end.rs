@@ -83,7 +83,8 @@ async fn test_end_to_end() {
         l2_chain_id: zkevm.chain_id,
         hotshot_address,
         sequencer_mnemonic: mnemonic.to_string(),
-        port: env.l2_adaptor_port(),
+        rpc_port: env.l2_adaptor_rpc_port(),
+        query_port: env.l2_adaptor_query_port(),
     };
     spawn_local(async move {
         join!(
@@ -103,8 +104,15 @@ async fn test_end_to_end() {
         .unwrap();
 
     // Wait for the adaptor to start serving.
-    tracing::info!("connecting to adaptor at {}", env.l2_adaptor());
-    wait_for_http(&env.l2_adaptor(), Duration::from_secs(1), 100)
+    tracing::info!("connecting to adaptor RPC at {}", env.l2_adaptor_rpc());
+    wait_for_http(&env.l2_adaptor_rpc(), Duration::from_secs(1), 100)
+        .await
+        .unwrap();
+    tracing::info!(
+        "connecting to adaptor query service at {}",
+        env.l2_adaptor_query()
+    );
+    wait_for_http(&env.l2_adaptor_query(), Duration::from_secs(1), 100)
         .await
         .unwrap();
 

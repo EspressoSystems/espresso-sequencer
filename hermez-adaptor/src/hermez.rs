@@ -23,7 +23,8 @@ pub struct ZkEvmEnv {
     l1_chain_id: Option<u64>,
     l2_chain_id: Option<u64>,
     sequencer_mnemonic: String,
-    adaptor_port: u16,
+    adaptor_rpc_port: u16,
+    adaptor_query_port: u16,
 }
 
 impl Default for ZkEvmEnv {
@@ -38,7 +39,8 @@ impl Default for ZkEvmEnv {
             l2_chain_id: None,
             sequencer_mnemonic: "test test test test test test test test test test test junk"
                 .into(),
-            adaptor_port: 8127,
+            adaptor_rpc_port: 8127,
+            adaptor_query_port: 50100,
         }
     }
 }
@@ -49,7 +51,8 @@ impl ZkEvmEnv {
         let sequencer_api_port = pick_unused_port().unwrap();
         let l1_port = pick_unused_port().unwrap();
         let l2_port = pick_unused_port().unwrap();
-        let adaptor_port = pick_unused_port().unwrap();
+        let adaptor_rpc_port = pick_unused_port().unwrap();
+        let adaptor_query_port = pick_unused_port().unwrap();
 
         // Use default values for things that are deterministic or internal to a docker-compose
         // service.
@@ -66,7 +69,8 @@ impl ZkEvmEnv {
             l2_port,
             l1_chain_id,
             l2_chain_id,
-            adaptor_port,
+            adaptor_rpc_port,
+            adaptor_query_port,
             sequencer_storage_path,
             sequencer_mnemonic,
         }
@@ -92,10 +96,21 @@ impl ZkEvmEnv {
                 "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC",
                 &self.sequencer_mnemonic,
             )
-            .env("ESPRESSO_ZKEVM_ADAPTOR_PORT", self.adaptor_port.to_string())
             .env(
-                "ESPRESSO_ZKEVM_ADAPTOR_URL",
-                format!("http://host.docker.internal:{}", self.adaptor_port),
+                "ESPRESSO_ZKEVM_ADAPTOR_RPC_PORT",
+                self.adaptor_rpc_port.to_string(),
+            )
+            .env(
+                "ESPRESSO_ZKEVM_ADAPTOR_RPC_URL",
+                format!("http://host.docker.internal:{}", self.adaptor_rpc_port),
+            )
+            .env(
+                "ESPRESSO_ZKEVM_ADAPTOR_QUERY_PORT",
+                self.adaptor_query_port.to_string(),
+            )
+            .env(
+                "ESPRESSO_ZKEVM_ADAPTOR_QUERY_URL",
+                format!("http://host.docker.internal:{}", self.adaptor_query_port),
             );
         if let Some(id) = self.l1_chain_id {
             cmd.env("ESPRESSO_ZKEVM_L1_CHAIN_ID", id.to_string());
@@ -140,12 +155,22 @@ impl ZkEvmEnv {
             .unwrap()
     }
 
-    pub fn l2_adaptor_port(&self) -> u16 {
-        self.adaptor_port
+    pub fn l2_adaptor_rpc_port(&self) -> u16 {
+        self.adaptor_rpc_port
     }
 
-    pub fn l2_adaptor(&self) -> Url {
-        format!("http://localhost:{}", self.adaptor_port)
+    pub fn l2_adaptor_rpc(&self) -> Url {
+        format!("http://localhost:{}", self.adaptor_rpc_port)
+            .parse()
+            .unwrap()
+    }
+
+    pub fn l2_adaptor_query_port(&self) -> u16 {
+        self.adaptor_query_port
+    }
+
+    pub fn l2_adaptor_query(&self) -> Url {
+        format!("http://localhost:{}", self.adaptor_query_port)
             .parse()
             .unwrap()
     }
