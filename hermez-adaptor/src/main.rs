@@ -1,7 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use futures::join;
-use hermez_adaptor::{json_rpc, sequencer, Options};
+use hermez_adaptor::{json_rpc, query_service, sequencer, Options};
 
 #[async_std::main]
 async fn main() {
@@ -9,5 +9,9 @@ async fn main() {
     setup_backtrace();
 
     let opt = Options::parse();
-    join!(json_rpc::serve(&opt), sequencer::run(&opt));
+    join!(
+        json_rpc::serve(&opt),
+        query_service::serve(&opt),
+        sequencer::run(&opt)
+    );
 }

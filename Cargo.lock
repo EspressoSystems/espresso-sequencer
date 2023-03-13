@@ -3576,6 +3576,7 @@ dependencies = [
  "http-types",
  "jsonrpc-v2",
  "portpicker",
+ "rand_chacha 0.3.1",
  "sequencer",
  "sequencer-utils",
  "serde_json",
@@ -3584,6 +3585,8 @@ dependencies = [
  "surf-disco",
  "tempfile",
  "tide",
+ "tide-disco",
+ "toml",
  "tracing",
  "zkevm",
 ]

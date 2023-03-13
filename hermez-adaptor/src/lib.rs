@@ -4,6 +4,7 @@ use surf_disco::Url;
 use zkevm::ZkEvm;
 
 pub mod json_rpc;
+pub mod query_service;
 pub mod sequencer;
 
 #[derive(Parser)]
@@ -45,10 +46,19 @@ pub struct Options {
     #[clap(
         short,
         long,
-        env = "ESPRESSO_ZKEVM_ADAPTOR_PORT",
+        env = "ESPRESSO_ZKEVM_ADAPTOR_RPC_PORT",
         default_value = "8545"
     )]
-    pub port: u16,
+    pub rpc_port: u16,
+
+    /// Port on which to serve the Hermez query API adaptor.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_ZKEVM_ADAPTOR_QUERY_PORT",
+        default_value = "50100"
+    )]
+    pub query_port: u16,
 }
 
 impl Options {
