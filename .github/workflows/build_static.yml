@@ -44,9 +44,9 @@ jobs:
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
       - name: Compile all executables
-        timeout-minutes: 120
+        # timeout-minutes: 120
         run: |
-          nix develop .#crossShell --option sandbox relaxed -c cargo build --release
+          nix develop .#crossShell --accept-flake-config --option sandbox relaxed -c cargo build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
