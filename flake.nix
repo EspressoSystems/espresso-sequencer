@@ -178,10 +178,14 @@
 
             inherit RUST_LOG;
           };
-        devShells.crossShell = import ./cross-shell.nix {
-          localSystem = system;
-          crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
-        };
+        devShells.crossShell =
+          let
+            localSystem = system;
+            crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
+            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+              inherit overlays localSystem crossSystem; };
+          in
+          import ./cross-shell.nix { inherit pkgs; };
       }
     );
 }

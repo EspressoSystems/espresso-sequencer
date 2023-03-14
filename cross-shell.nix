@@ -1,13 +1,6 @@
 # A simplest nix shell file with the project dependencies and
 # a cross-compilation support.
-{ localSystem ? builtins.currentSystem
-, crossSystem ? null
-}:
-let
-  pkgs = import ./nix {
-    inherit localSystem crossSystem;
-  };
-in
+{ pkgs }:
 pkgs.mkShell rec {
   # Native project dependencies like build utilities and additional routines
   # like container building, linters, etc.
