@@ -2,8 +2,14 @@
   description = "Espresso Decentralized Sequencer";
 
   nixConfig = {
-    extra-substituters = [ "https://espresso-systems-private.cachix.org" ];
-    extra-trusted-public-keys = [ "espresso-systems-private.cachix.org-1:LHYk03zKQCeZ4dvg3NctyCq88e44oBZVug5LpYKjPRI=" ];
+    extra-substituters = [
+      "https://espresso-systems-private.cachix.org"
+      "https://nixpkgs-cross-overlay.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "espresso-systems-private.cachix.org-1:LHYk03zKQCeZ4dvg3NctyCq88e44oBZVug5LpYKjPRI="
+      "nixpkgs-cross-overlay.cachix.org-1:TjKExGN4ys960TlsGqNOI/NBdoz2Jdr2ow1VybWV5JM="
+    ];
   };
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -183,7 +189,8 @@
             localSystem = system;
             crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
             pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
-              inherit overlays localSystem crossSystem; };
+              inherit overlays localSystem crossSystem;
+            };
           in
           import ./cross-shell.nix { inherit pkgs; };
       }
