@@ -115,6 +115,8 @@ In order to avoid constant warnings about checksum mismatches with
 - Update the rust bindings: `cargo run --bin gen-bindings`
 - Compile contracts and update bindings: `just update-contract-bindings`
 - Run a hardhat dev node: `just hardhat node`
+- Update the zkevm-node contract bindings to match zkevm-contracts: `just
+  update-zkevm-node-contract-bindings`
 
 ## Implementation Plan
 

@@ -22,7 +22,10 @@ hardhat *args:
     cd zkevm-contracts && nix develop -c bash -c "npx hardhat {{args}}"
 
 update-contract-bindings: (hardhat "compile")
-   cargo run --bin gen-bindings
+    cargo run --bin gen-bindings
+
+update-zkevm-node-contract-bindings:
+    scripts/update-zkevm-node-contract-bindings
 
 npm *args:
    cd zkevm-contracts && nix develop -c bash -c "npm {{args}}"
