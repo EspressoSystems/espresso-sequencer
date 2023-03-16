@@ -7,7 +7,7 @@ import "../src/HotShot.sol";
 contract HotShotTest is Test {
     HotShot public hotshot;
 
-    event NewBlocks(uint256 firstBlockNumber);
+    event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
     function setUp() public {
         hotshot = new HotShot();
@@ -24,7 +24,7 @@ contract HotShotTest is Test {
         qcs[1] = "0x4444";
 
         vm.expectEmit(false, false, false, true, address(hotshot));
-        emit NewBlocks(0);
+        emit NewBlocks(0, 2);
 
         hotshot.newBlocks(comms, qcs);
 

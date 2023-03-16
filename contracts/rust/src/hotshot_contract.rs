@@ -52,6 +52,7 @@ mod test {
             .unwrap()[0];
 
         assert_eq!(event.first_block_number, block_num);
+        assert_eq!(event.num_blocks, 1.into());
 
         // Parse the commitments from calldata.
         let tx = provider

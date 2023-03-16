@@ -7,7 +7,7 @@ contract HotShot {
     mapping(uint256 => uint256) public commitments;
     uint256 public blockHeight;
 
-    event NewBlocks(uint256 firstBlockNumber);
+    event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
     error WrongNumberOfQCs(uint256 numBlocks, uint256 numQCs);
     error TooManyBlocks(uint256 numBlocks);
@@ -41,6 +41,6 @@ contract HotShot {
             blockHeight += 1;
         }
 
-        emit NewBlocks(firstBlockNumber);
+        emit NewBlocks(firstBlockNumber, newCommitments.length);
     }
 }

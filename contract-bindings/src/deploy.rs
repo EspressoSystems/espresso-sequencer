@@ -57,7 +57,7 @@ macro_rules! mk_deploy {
                 let artifact = serde_json::from_reader::<_, HardhatArtifact>(file).unwrap();
                 let contract: $contract<M> = deploy_artifact(artifact, client, args).await.into();
                 tracing::info!(
-                    "Deployed {} at {}",
+                    "Deployed {} at {:?}",
                     stringify!($contract),
                     contract.address()
                 );
