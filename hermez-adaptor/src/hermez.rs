@@ -307,6 +307,10 @@ impl ZkEvmNode {
                 format!("{:?}", l1.global_exit_root.address()),
             )
             .env(
+                "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS ",
+                format!("{:?}", l1.hotshot.address()),
+            )
+            .env(
                 "ESPRESSO_ZKEVM_GENBLOCKNUMBER",
                 l1.gen_block_number.to_string(),
             )
