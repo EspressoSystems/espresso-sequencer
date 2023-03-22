@@ -142,48 +142,6 @@
               inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
             };
-        devShells.staticShell =
-          let
-            muslPkgs = import nixpkgs {
-              localSystem = system;
-              crossSystem = { config = "${arch}-unknown-${os}-musl"; };
-            };
-            stableMuslRustToolchain =
-              pkgs.rust-bin.stable.latest.minimal.override {
-                extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-                targets = [ "${arch}-unknown-${os}-musl" ];
-              };
-            opensslMusl = muslPkgs.openssl.override { static = true; };
-            curlMusl = (muslPkgs.pkgsStatic.curl.override {
-              http2Support = false;
-              libssh2 = muslPkgs.pkgsStatic.libssh2.dev;
-              zstdSupport = false;
-              idnSupport = false;
-            }).overrideAttrs (oldAttrs:
-              let confFlags = oldAttrs.configureFlags;
-              in {
-                configureFlags = (muslPkgs.lib.take 13 confFlags)
-                  ++ (muslPkgs.lib.drop 14 confFlags)
-                  ++ [ (muslPkgs.lib.withFeature true "libssh2") ];
-              });
-          in
-          mkShell {
-            DEP_CURL_STATIC = "y";
-            "CARGO_TARGET_${pkgs.lib.toUpper arch}_UNKNOWN_${pkgs.lib.toUpper os}_MUSL_LINKER" =
-              "${pkgs.llvmPackages_latest.lld}/bin/lld";
-            RUSTFLAGS =
-              "-C target-feature=+crt-static -L${opensslMusl.out}/lib/ -L${curlMusl.out}/lib -L${muslPkgs.pkgsStatic.zstd.out}/lib -L${muslPkgs.pkgsStatic.libssh2}/lib -L${muslPkgs.pkgsStatic.openssl}/lib -lssh2";
-            OPENSSL_STATIC = "true";
-            OPENSSL_DIR = "-L${muslPkgs.pkgsStatic.openssl}";
-            OPENSSL_INCLUDE_DIR = "${opensslMusl.dev}/include/";
-            OPENSSL_LIB_DIR = "${opensslMusl.dev}/lib/";
-            CARGO_BUILD_TARGET = "${arch}-unknown-${os}-musl";
-            buildInputs = with pkgs;
-              [ protobuf stableMuslRustToolchain fd cmake ];
-            meta.broken = if "${os}" == "darwin" then true else false;
-
-            inherit RUST_LOG;
-          };
         devShells.crossShell =
           let
             localSystem = system;
