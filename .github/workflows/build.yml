@@ -25,6 +25,9 @@ jobs:
       - name: Check /proc/cpuinfo
         run: cat /proc/cpuinfo
 
+      - name: Abort early if Intel ADX instructions (required by zkevm-prover) is not available
+        run: cat /proc/cpuinfo | grep -q ' adx ' || ( echo "Retry CI in the hopes of getting another CPU" && exit 1 )
+
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 

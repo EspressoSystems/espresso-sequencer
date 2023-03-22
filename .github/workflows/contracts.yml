@@ -48,10 +48,10 @@ jobs:
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
       - name: Format check
-        run: cd contracts && forge fmt --check
+        run: forge fmt --check
 
       - name: Build contracts
-        run: cd contracts && forge build --deny-warnings
+        run: forge build --deny-warnings
 
       - name: Check if bindings up to date
         run: |
@@ -62,4 +62,4 @@ jobs:
           # exit $(git status --porcelain | wc -l)
 
       - name: Run tests
-        run: cd contracts && forge test -vvv
+        run: forge test -vvv

@@ -1,0 +1,11 @@
+[profile.default]
+# Note that if we want to move the `./contracts` directory into it's own repo we
+# need to move the foundry.toml and remove the `./contracts` prefix from the
+# directories below.
+src = 'contracts/src'
+out = 'contracts/out'
+test = 'contracts/test'
+libs = ['contracts/lib']
+
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config

@@ -72,7 +72,7 @@
               forge-fmt = {
                 enable = true;
                 description = "Enforce forge fmt";
-                entry = "cd contracts && forge fmt --check";
+                entry = "forge fmt";
                 pass_filenames = false;
               };
             };

@@ -81,18 +81,15 @@ enabled.
 
 ### Developing contracts
 
-
 A foundry project for the contracts specific to HotShot can be found in the directory `contracts`.
 
 To compile
 ```shell
-cd contracts
 forge build
 ```
 
 To run the tests
 ```shell
-cd contracts
 forge test
 ```
 

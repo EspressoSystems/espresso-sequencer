@@ -103,8 +103,14 @@ services:
       - "-c"
       - "/app/zkevm-node run --genesis /app/genesis.json --cfg /app/config.toml --components \"rpc,synchronizer\""
     depends_on:
-      zkevm-mock-l1-network:
-        condition: service_started
+      # This service does depend on `zkevm-mock-l1-network` but docker compose
+      # v2.16.0 may decide to restart and recreate the `zkevm-mock-l1-network`
+      # container after contract deployment, when we start the zkevm-node
+      # services. This causes the state of the L1 to reset which makes the
+      # deployed contracts disappear and breaks the zkevm-node.
+      #
+      # zkevm-mock-l1-network:
+      #   condition: service_started
       zkevm-state-db:
         condition: service_healthy
     healthcheck:
