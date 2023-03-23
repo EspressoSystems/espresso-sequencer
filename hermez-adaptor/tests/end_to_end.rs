@@ -16,7 +16,7 @@ use futures::{
 use hermez_adaptor::{Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
 use sequencer::SeqTypes;
-use sequencer_utils::{wait_for_http, wait_for_rpc};
+use sequencer_utils::wait_for_http;
 use std::time::Duration;
 use surf_disco::Url;
 use tempfile::TempDir;
@@ -106,7 +106,8 @@ async fn test_end_to_end() {
 
     // Wait for the adaptor to start serving.
     tracing::info!("connecting to adaptor RPC at {}", env.l2_adaptor_rpc());
-    wait_for_rpc(&env.l2_adaptor_rpc(), Duration::from_secs(1), 100)
+    // The adaptor is not a full RPC, therefore we can't use `wait_for_rpc`.`
+    wait_for_http(&env.l2_adaptor_rpc(), Duration::from_secs(1), 100)
         .await
         .unwrap();
     tracing::info!(
