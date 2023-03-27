@@ -27,6 +27,8 @@ pub struct ZkEvmEnv {
     adaptor_query_port: u16,
 }
 
+pub const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
+
 impl Default for ZkEvmEnv {
     fn default() -> Self {
         Self {
@@ -37,8 +39,7 @@ impl Default for ZkEvmEnv {
             l2_port: 8126,
             l1_chain_id: None,
             l2_chain_id: None,
-            sequencer_mnemonic: "test test test test test test test test test test test junk"
-                .into(),
+            sequencer_mnemonic: TEST_MNEMONIC.into(),
             adaptor_rpc_port: 8127,
             adaptor_query_port: 50100,
         }

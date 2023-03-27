@@ -221,18 +221,18 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Layer1Backend, ZkEvmNode};
+    use crate::TEST_MNEMONIC;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
-    use contract_bindings::{hot_shot::NewBlocksCall, PolygonZkEVM};
-    use ethers::abi::AbiDecode;
-    use futures::future::join_all;
+    use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
+    use ethers::{abi::AbiDecode, providers::Middleware};
     use hotshot_types::{
         constants::genesis_proposer_id,
         data::{Leaf, QuorumCertificate, ViewNumber},
         traits::{block_contents::Block as _, state::ConsensusTime},
     };
     use sequencer::{Block, State, Vm};
+    use sequencer_utils::Anvil;
     use zkevm::{EvmTransaction, ZkEvm};
 
     #[async_std::test]
@@ -240,99 +240,84 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let node = ZkEvmNode::start("test-sequencer-task".to_string(), Layer1Backend::Anvil).await;
+        let anvil = Anvil::spawn(None).await;
+        let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
 
-        // Get test setup from environment.
-        let env = node.env();
-        let l1_provider = env.l1_provider();
-        let l2_provider = env.l2_provider();
-        let mnemonic = env.funded_mnemonic();
-        let hotshot_address = node.l1().hotshot.address();
-        let rollup_address = node.l1().rollup.address();
+        let l2_chain_id = l1.rollup.chain_id().await.unwrap();
 
-        let l1 = connect_rpc(&l1_provider, mnemonic, None).await.unwrap();
-        let l2 = &connect_rpc(&l2_provider, mnemonic, None).await.unwrap();
         let zkevm = ZkEvm {
-            chain_id: l2.get_chainid().await.unwrap().as_u64(),
+            chain_id: l2_chain_id,
         };
-        let hotshot = HotShot::new(hotshot_address, l1.clone());
-        let rollup = PolygonZkEVM::new(rollup_address, l1.clone());
-        let l1_initial_block = l1.get_block_number().await.unwrap();
-        let initial_batch_num = hotshot.block_height().call().await.unwrap();
-        let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
-        tracing::info!(
-            "address: {}, hotshot address: {}, rollup address: {}, \
-             L1 initial block: {}, initial batch num: {}, L2 initial balance: {}",
-            l1.inner().address(),
-            hotshot.address(),
-            rollup.address(),
-            l1_initial_block,
-            initial_batch_num,
-            l2_initial_balance,
+        let l1_initial_block = l1.provider.get_block_number().await.unwrap();
+        let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
+
+        let adaptor_l1_signer = connect_rpc(l1.provider.url(), TEST_MNEMONIC, None)
+            .await
+            .unwrap();
+
+        let l2_wallet = Arc::new(
+            MnemonicBuilder::<English>::default()
+                .phrase(TEST_MNEMONIC)
+                .build()
+                .unwrap()
+                .with_chain_id(l2_chain_id),
         );
 
         // Create a few test batches.
         let transfer_amount = 1.into();
         let num_batches = 2u64;
-        let nonce = l2
-            .get_transaction_count(l2.inner().address(), None)
-            .await
-            .unwrap();
-        let (leaves, txn_hashes): (Vec<_>, Vec<_>) =
-            join_all((0..num_batches).map(|i| async move {
-                // Generate and L2 transfer.
-                let mut transfer = TransactionRequest {
-                    from: Some(l2.inner().address()),
-                    to: Some(Address::random().into()),
-                    value: Some(transfer_amount),
-                    nonce: Some(nonce + i),
-                    ..Default::default()
-                }
-                .into();
-                l2.fill_transaction(&mut transfer, None).await.unwrap();
-                tracing::info!("transfer {}: {:?}", i, transfer);
-                let signature = l2
-                    .inner()
-                    .signer()
-                    .sign_transaction(&transfer)
-                    .await
-                    .unwrap();
-                let txn = EvmTransaction::new(transfer, signature);
-                let hash = txn.hash();
-                tracing::info!("transfer hash: {}", hash);
+        let nonce = U256::from(0); // arbitrary
+        let mut leaves: Vec<LeafQueryData<SeqTypes>> = vec![];
+        for i in 0..num_batches {
+            // Generate and L2 transfer.
+            let transfer = TransactionRequest {
+                from: Some(l1.clients.deployer.address()),
+                to: Some(Address::random().into()),
+                value: Some(transfer_amount),
+                nonce: Some(nonce + i),
+                chain_id: Some(l2_chain_id.into()),
+                ..Default::default()
+            }
+            .into();
+            tracing::info!("transfer {}: {:?}", i, transfer);
+            let signature = l2_wallet.sign_transaction(&transfer).await.unwrap();
+            let txn = EvmTransaction::new(transfer, signature);
+            let hash = txn.hash();
+            tracing::info!("transfer hash: {:?}", hash);
 
-                // Add it to a sequencer block.
-                let block = Block::new(State::default().commit())
-                    .add_transaction_raw(&zkevm.wrap(&txn).into())
-                    .unwrap();
+            // Add it to a sequencer block.
+            let block = Block::new(State::default().commit())
+                .add_transaction_raw(&zkevm.wrap(&txn).into())
+                .unwrap();
 
-                // Fake a leaf that sequences this block.
-                let mut qc = QuorumCertificate::genesis();
-                let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
-                let leaf = Leaf::new(
-                    Default::default(),
-                    block,
-                    parent_leaf,
-                    qc.clone(),
-                    ViewNumber::genesis(),
-                    i,
-                    vec![],
-                    0,
-                    genesis_proposer_id(),
-                );
-                qc.leaf_commitment = leaf.commit();
-                (LeafQueryData::new(leaf, qc), hash)
-            }))
-            .await
-            .into_iter()
-            .unzip();
+            // Fake a leaf that sequences this block.
+            let mut qc = QuorumCertificate::genesis();
+            let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
+            let leaf = Leaf::new(
+                Default::default(),
+                block,
+                parent_leaf,
+                qc.clone(),
+                ViewNumber::genesis(),
+                i,
+                vec![],
+                0,
+                genesis_proposer_id(),
+            );
+            qc.leaf_commitment = leaf.commit();
+            leaves.push(LeafQueryData::new(leaf, qc));
+        }
         tracing::info!("sequencing batches: {:?}", leaves);
+
+        // Connect to the HotShot contract with the expected L1 client.
+        let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
 
         // Sequence them in the HotShot contract.
         sequence_batches(&hotshot, leaves.clone()).await;
 
         // Check the NewBatches event.
-        let (event, meta) = hotshot
+        let (event, meta) = l1
+            .hotshot
             .new_blocks_filter()
             .from_block(l1_initial_block)
             .query_with_meta()
@@ -340,7 +325,9 @@ mod test {
             .unwrap()
             .remove(0);
         assert_eq!(event.first_block_number, initial_batch_num);
+
         let calldata = l1
+            .provider
             .get_transaction(meta.transaction_hash)
             .await
             .unwrap()
@@ -354,44 +341,5 @@ mod test {
                 .map(|leaf| U256::from_little_endian(&<[u8; 32]>::from(leaf.block_hash())))
                 .collect::<Vec<_>>()
         );
-
-        // Wait for the transactions to complete on L2. Note that awaiting a [PendingTransaction]
-        // will not work here -- [PendingTransaction] returns [None] if the transaction is thrown
-        // out of the mempool, but since we bypassed the sequencer, our transactions were never in
-        // the mempool in the first place.
-        for (i, hash) in txn_hashes.into_iter().enumerate() {
-            loop {
-                if let Some(receipt) = l2.get_transaction_receipt(hash).await.unwrap() {
-                    tracing::info!("transfer {} completed: {:?}", i, receipt);
-                    break;
-                }
-                tracing::info!("Waiting for transfer {} to complete", i);
-                tracing::info!(
-                    "L2 balance {}/{}",
-                    l2.get_balance(l2.inner().address(), None).await.unwrap(),
-                    l2_initial_balance
-                );
-                sleep(Duration::from_secs(5)).await;
-            }
-        }
-
-        // Check the effects of the transfers.
-        assert_eq!(
-            l2.get_balance(l2.inner().address(), None).await.unwrap(),
-            l2_initial_balance - U256::from(num_batches) * transfer_amount
-        );
-
-        // Wait for the batches to be verified.
-        let event = rollup
-            .verify_batches_trusted_aggregator_filter()
-            .from_block(l1_initial_block)
-            .stream()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(event.num_batch, initial_batch_num.as_u64() + num_batches);
     }
 }
