@@ -16,7 +16,7 @@ pub mod i_hot_shot {
     use ethers::providers::Middleware;
     #[doc = "IHotShot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false},{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static IHOTSHOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -60,11 +60,33 @@ pub mod i_hot_shot {
                 .method_hash([73, 206, 137, 151], block_number)
                 .expect("method not found (this should never happen)")
         }
+        #[doc = "Gets the contract's `NewBlocks` event"]
+        pub fn new_blocks_filter(&self) -> ethers::contract::builders::Event<M, NewBlocksFilter> {
+            self.0.event()
+        }
+        #[doc = r" Returns an [`Event`](#ethers_contract::builders::Event) builder for all events of this contract"]
+        pub fn events(&self) -> ethers::contract::builders::Event<M, NewBlocksFilter> {
+            self.0.event_with_filter(Default::default())
+        }
     }
     impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>> for IHotShot<M> {
         fn from(contract: ethers::contract::Contract<M>) -> Self {
             Self(contract)
         }
+    }
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthEvent,
+        ethers :: contract :: EthDisplay,
+        Default,
+    )]
+    #[ethevent(name = "NewBlocks", abi = "NewBlocks(uint256,uint256)")]
+    pub struct NewBlocksFilter {
+        pub first_block_number: ethers::core::types::U256,
+        pub num_blocks: ethers::core::types::U256,
     }
     #[doc = "Container type for all input parameters for the `commitments` function with signature `commitments(uint256)` and selector `[73, 206, 137, 151]`"]
     #[derive(

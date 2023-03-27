@@ -6,7 +6,7 @@ REPO_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
 cd "$REPO_DIR"
 
 # Compile contracts
-just hardhat compile
+just hardhat compile --force
 
 # Copy contracts ABI and bytecode from zkevm-contracts to zkevm-node
 function copy_contract() {

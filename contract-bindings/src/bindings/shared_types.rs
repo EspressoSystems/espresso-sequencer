@@ -1,4 +1,4 @@
-#[doc = "`HotShotParameters(bytes32,bytes32,bytes)`"]
+#[doc = "`PackedHotShotParams(bytes32,bytes32,bytes)`"]
 #[derive(
     Clone,
     Debug,
@@ -8,7 +8,7 @@
     ethers :: contract :: EthAbiType,
     ethers :: contract :: EthAbiCodec,
 )]
-pub struct HotShotParameters {
+pub struct PackedHotShotParams {
     pub old_acc_input_hash: [u8; 32],
     pub new_acc_input_hash: [u8; 32],
     pub comm_proof: ethers::core::types::Bytes,

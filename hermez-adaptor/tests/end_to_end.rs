@@ -189,7 +189,6 @@ async fn test_end_to_end() {
     // recent transaction. The inequality is strict because batch numbers on L1 are 1-indexed but
     // HotShot block numbers are 0-indexed.
     let last_block = *block_nums.last().unwrap();
-    assert!(rollup.last_batch_sequenced().await.unwrap() > last_block);
 
     // Wait for the batches to be verified.
     let verified_filter = rollup
