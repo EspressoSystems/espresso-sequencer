@@ -2,8 +2,14 @@
   description = "Espresso Decentralized Sequencer";
 
   nixConfig = {
-    extra-substituters = [ "https://espresso-systems-private.cachix.org" ];
-    extra-trusted-public-keys = [ "espresso-systems-private.cachix.org-1:LHYk03zKQCeZ4dvg3NctyCq88e44oBZVug5LpYKjPRI=" ];
+    extra-substituters = [
+      "https://espresso-systems-private.cachix.org"
+      "https://nixpkgs-cross-overlay.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "espresso-systems-private.cachix.org-1:LHYk03zKQCeZ4dvg3NctyCq88e44oBZVug5LpYKjPRI="
+      "nixpkgs-cross-overlay.cachix.org-1:TjKExGN4ys960TlsGqNOI/NBdoz2Jdr2ow1VybWV5JM="
+    ];
   };
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -11,6 +17,11 @@
 
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
+
+  inputs.nixpkgs-cross-overlay = {
+    url = "github:alekseysidorov/nixpkgs-cross-overlay";
+    inputs.flake-utils.follows = "flake-utils";
+  };
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
@@ -22,7 +33,8 @@
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
+
+  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
@@ -130,48 +142,15 @@
               inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
             };
-        devShells.staticShell =
+        devShells.crossShell =
           let
-            muslPkgs = import nixpkgs {
-              localSystem = system;
-              crossSystem = { config = "${arch}-unknown-${os}-musl"; };
+            localSystem = system;
+            crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
+            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+              inherit overlays localSystem crossSystem;
             };
-            stableMuslRustToolchain =
-              pkgs.rust-bin.stable.latest.minimal.override {
-                extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-                targets = [ "${arch}-unknown-${os}-musl" ];
-              };
-            opensslMusl = muslPkgs.openssl.override { static = true; };
-            curlMusl = (muslPkgs.pkgsStatic.curl.override {
-              http2Support = false;
-              libssh2 = muslPkgs.pkgsStatic.libssh2.dev;
-              zstdSupport = false;
-              idnSupport = false;
-            }).overrideAttrs (oldAttrs:
-              let confFlags = oldAttrs.configureFlags;
-              in {
-                configureFlags = (muslPkgs.lib.take 13 confFlags)
-                  ++ (muslPkgs.lib.drop 14 confFlags)
-                  ++ [ (muslPkgs.lib.withFeature true "libssh2") ];
-              });
           in
-          mkShell {
-            DEP_CURL_STATIC = "y";
-            "CARGO_TARGET_${pkgs.lib.toUpper arch}_UNKNOWN_${pkgs.lib.toUpper os}_MUSL_LINKER" =
-              "${pkgs.llvmPackages_latest.lld}/bin/lld";
-            RUSTFLAGS =
-              "-C target-feature=+crt-static -L${opensslMusl.out}/lib/ -L${curlMusl.out}/lib -L${muslPkgs.pkgsStatic.zstd.out}/lib -L${muslPkgs.pkgsStatic.libssh2}/lib -L${muslPkgs.pkgsStatic.openssl}/lib -lssh2";
-            OPENSSL_STATIC = "true";
-            OPENSSL_DIR = "-L${muslPkgs.pkgsStatic.openssl}";
-            OPENSSL_INCLUDE_DIR = "${opensslMusl.dev}/include/";
-            OPENSSL_LIB_DIR = "${opensslMusl.dev}/lib/";
-            CARGO_BUILD_TARGET = "${arch}-unknown-${os}-musl";
-            buildInputs = with pkgs;
-              [ protobuf stableMuslRustToolchain fd cmake ];
-            meta.broken = if "${os}" == "darwin" then true else false;
-
-            inherit RUST_LOG;
-          };
+          import ./cross-shell.nix { inherit pkgs; };
       }
     );
 }
