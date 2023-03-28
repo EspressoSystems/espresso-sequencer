@@ -19,7 +19,10 @@ impl Anvil {
             .arg("-p")
             .arg(format!("{port}:8545"))
             .arg("ghcr.io/foundry-rs/foundry:latest")
-            .arg("anvil --host 0.0.0.0")
+            // Ideally the stdout would be captured, in tests but I could not
+            // get this to work. Pass `--silent` to avoid spamming the test
+            // output.
+            .arg("anvil --silent --host 0.0.0.0")
             .spawn()
             .unwrap();
 

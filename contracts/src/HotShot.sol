@@ -5,6 +5,7 @@ import "forge-std/console.sol";
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
+    uint256 public blockHeight;
 
     event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
@@ -22,7 +23,7 @@ contract HotShot {
         return true;
     }
 
-    function newBlocks(uint256 firstBlockNumber, uint256[] calldata newCommitments, bytes[] calldata qcs) external {
+    function newBlocks(uint256[] calldata newCommitments, bytes[] calldata qcs) external {
         if (newCommitments.length != qcs.length) {
             revert WrongNumberOfQCs(newCommitments.length, qcs.length);
         }
@@ -30,14 +31,14 @@ contract HotShot {
             revert TooManyBlocks(newCommitments.length);
         }
 
+        uint256 firstBlockNumber = blockHeight;
         for (uint256 i = 0; i < newCommitments.length; ++i) {
-            uint256 blockNumber = firstBlockNumber + i;
-
-            if (!verifyQC(blockNumber, newCommitments[i], qcs[i])) {
-                revert InvalidQC(blockNumber);
+            if (!verifyQC(blockHeight, newCommitments[i], qcs[i])) {
+                revert InvalidQC(blockHeight);
             }
 
-            commitments[blockNumber] = newCommitments[i];
+            commitments[blockHeight] = newCommitments[i];
+            blockHeight += 1;
         }
 
         emit NewBlocks(firstBlockNumber, newCommitments.length);
