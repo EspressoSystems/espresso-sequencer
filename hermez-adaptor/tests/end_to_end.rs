@@ -40,7 +40,7 @@ async fn test_end_to_end() {
     let l2_provider = env.l2_provider();
     let mnemonic = env.funded_mnemonic();
     let rollup_address = node.l1().rollup.address();
-    let matic_address = node.l1().matic.address();
+    let hotshot_address = node.l1().hotshot.address();
 
     let l1 = connect_rpc(&l1_provider, mnemonic, None).await.unwrap();
     let l2 = connect_rpc(&l2_provider, mnemonic, None).await.unwrap();
@@ -51,11 +51,11 @@ async fn test_end_to_end() {
     let l1_initial_block = l1.get_block_number().await.unwrap();
     let l2_initial_balance = l2.get_balance(l2.inner().address(), None).await.unwrap();
     tracing::info!(
-        "address: {}, rollup address: {}, matic address: {}, L1 initial block: {}, \
+        "address: {}, rollup address: {}, hotshot address: {}, L1 initial block: {}, \
         L2 initial balance: {}",
         l1.inner().address(),
         rollup.address(),
-        matic_address,
+        hotshot_address,
         l1_initial_block,
         l2_initial_balance,
     );
@@ -81,15 +81,16 @@ async fn test_end_to_end() {
         l1_provider: env.l1_provider(),
         l1_chain_id: None,
         l2_chain_id: zkevm.chain_id,
-        rollup_address,
-        matic_address,
+        hotshot_address,
         sequencer_mnemonic: mnemonic.to_string(),
-        port: env.l2_adaptor_port(),
+        rpc_port: env.l2_adaptor_rpc_port(),
+        query_port: env.l2_adaptor_query_port(),
     };
     spawn_local(async move {
         join!(
             hermez_adaptor::json_rpc::serve(&adaptor_opt),
             hermez_adaptor::sequencer::run(&adaptor_opt),
+            hermez_adaptor::query_service::serve(&adaptor_opt),
         );
     });
 
@@ -104,8 +105,16 @@ async fn test_end_to_end() {
         .unwrap();
 
     // Wait for the adaptor to start serving.
-    tracing::info!("connecting to adaptor at {}", env.l2_adaptor());
-    wait_for_http(&env.l2_adaptor(), Duration::from_secs(1), 100)
+    tracing::info!("connecting to adaptor RPC at {}", env.l2_adaptor_rpc());
+    // The adaptor is not a full RPC, therefore we can't use `wait_for_rpc`.`
+    wait_for_http(&env.l2_adaptor_rpc(), Duration::from_secs(1), 100)
+        .await
+        .unwrap();
+    tracing::info!(
+        "connecting to adaptor query service at {}",
+        env.l2_adaptor_query()
+    );
+    wait_for_http(&env.l2_adaptor_query(), Duration::from_secs(1), 100)
         .await
         .unwrap();
 
@@ -180,7 +189,6 @@ async fn test_end_to_end() {
     // recent transaction. The inequality is strict because batch numbers on L1 are 1-indexed but
     // HotShot block numbers are 0-indexed.
     let last_block = *block_nums.last().unwrap();
-    assert!(rollup.last_batch_sequenced().await.unwrap() > last_block);
 
     // Wait for the batches to be verified.
     let verified_filter = rollup

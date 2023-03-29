@@ -32,7 +32,7 @@ mod test {
         let commitment = U256::from(1234);
 
         hotshot
-            .new_blocks(block_num, vec![commitment], vec![vec![1, 2, 3].into()])
+            .new_blocks(vec![commitment], vec![vec![1, 2, 3].into()])
             .send()
             .await
             .unwrap()
@@ -61,7 +61,6 @@ mod test {
             .unwrap()
             .unwrap();
         let call = NewBlocksCall::decode(&tx.input).unwrap();
-        assert_eq!(call.first_block_number, block_num);
         assert_eq!(call.new_commitments, vec![commitment]);
     }
 }

@@ -5,11 +5,8 @@ set -euo pipefail
 REPO_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
 cd "$REPO_DIR"
 
-# Install npm dependencies
-just npm i
-
 # Compile contracts
-just hardhat compile
+just hardhat compile --force
 
 # Copy contracts ABI and bytecode from zkevm-contracts to zkevm-node
 function copy_contract() {
@@ -24,6 +21,7 @@ copy_contract PolygonZkEVM polygonzkevm
 copy_contract mocks/VerifierRollupHelperMock mockverifier
 copy_contract PolygonZkEVMBridge polygonzkevmbrige
 copy_contract PolygonZkEVMGlobalExitRoot polygonzkevmglobalexitroot
+copy_contract interfaces/IHotShot ihotshot
 
 # Generate the go bindings
 cd zkevm-node/etherman/smartcontracts/
