@@ -4,7 +4,7 @@ use ethers::{abi::Address, signers::Signer, types::Signature};
 use sequencer::VmTransaction;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Transaction {
     pub amount: Amount,
     pub destination: Address,
@@ -23,6 +23,8 @@ impl VmTransaction for Transaction {
         serde_json::from_slice(bytes).ok()
     }
 }
+
+#[derive(Clone, Debug)]
 pub struct SignedTransaction {
     pub transaction: Transaction,
     signature: Signature,
@@ -61,10 +63,10 @@ mod tests {
             destination: alice.address(),
             nonce: 1,
         };
-        let signed_transaction = SignedTransaction::new(transaction.clone(), &alice).await;
+        let signed_transaction = SignedTransaction::new(transaction, &alice).await;
         let recovered_address = signed_transaction
             .recover()
             .expect("Should recover address");
-        assert!(recovered_address == alice.address());
+        assert_eq!(recovered_address, alice.address());
     }
 }
