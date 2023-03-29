@@ -1,23 +1,26 @@
 use crate::error::RollupError;
 use crate::state::{Amount, Nonce};
-use ethers::{
-    abi::Address,
-    signers::{Signer, Wallet},
-    types::Signature,
-};
-use ethers_core::k256::ecdsa::SigningKey;
+use ethers::{abi::Address, signers::Signer, types::Signature};
+use sequencer::VmTransaction;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub amount: Amount,
     pub destination: Address,
     pub nonce: Nonce,
 }
 
-impl Transaction {
-    pub fn as_bytes(&self) -> Vec<u8> {
-        // TODO: serialization
-        vec![]
+impl VmTransaction for Transaction {
+    fn encode(&self) -> Vec<u8> {
+        serde_json::to_string(&self)
+            .expect("Serialization should not fail")
+            .as_bytes()
+            .to_vec()
+    }
+
+    fn decode(bytes: &[u8]) -> Option<Self> {
+        serde_json::from_slice(bytes).ok()
     }
 }
 pub struct SignedTransaction {
@@ -27,14 +30,14 @@ pub struct SignedTransaction {
 
 impl SignedTransaction {
     pub fn recover(&self) -> Result<Address, RollupError> {
-        let bytes = self.transaction.as_bytes();
+        let bytes = self.transaction.encode();
         self.signature
             .recover(bytes)
-            .map_err(|_| RollupError("signature error".into()))
+            .map_err(|_| RollupError::SignatureError)
     }
 
-    pub async fn new(transaction: Transaction, wallet: &Wallet<SigningKey>) -> Self {
-        let bytes = transaction.as_bytes();
+    pub async fn new(transaction: Transaction, wallet: &impl Signer) -> Self {
+        let bytes = transaction.encode();
         let signature = wallet.sign_message(&bytes).await.unwrap();
         Self {
             signature,
