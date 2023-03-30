@@ -7,9 +7,9 @@ mod vm;
 
 use ark_bls12_381::Parameters;
 use async_std::task::sleep;
-use hotshot::traits::implementations::CentralizedServerNetwork;
-use hotshot::traits::NetworkingImplementation;
-use hotshot::types::SignatureKey;
+use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+use hotshot::traits::implementations::{CentralizedServerNetwork, MemoryCommChannel};
+use hotshot::types::{Message, SignatureKey};
 use hotshot::{
     traits::{
         election::{
@@ -22,8 +22,13 @@ use hotshot::{
     types::HotShotHandle,
 };
 use hotshot::{HotShot, HotShotInitializer};
+use hotshot_types::data::{CommitmentProposal, SequencingLeaf};
+use hotshot_types::traits::election::{CommitteeExchange, QuorumExchange};
 use hotshot_types::traits::metrics::Metrics;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
+use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::state::SequencingConsensus;
+use hotshot_types::vote::QuorumVote;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeType};
 use hotshot_types::{traits::metrics::NoMetrics, HotShotConfig};
 
 use jf_primitives::signatures::BLSSignatureScheme;
@@ -41,28 +46,61 @@ pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
 
 #[derive(Debug, Clone)]
-pub struct Node<N>(std::marker::PhantomData<fn(&N)>);
-
-impl<N: Clone + Debug + NetworkingImplementation<SeqTypes>> NodeImplementation<SeqTypes>
-    for Node<N>
-{
-    type Storage = MemoryStorage<SeqTypes>;
-
-    type Networking = N;
-
-    type Election = StaticCommittee<SeqTypes>;
-}
+pub struct Node<C>(std::marker::PhantomData<fn(&C)>);
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
 )]
 pub struct SeqTypes;
 
+type LeafType = SequencingLeaf<SeqTypes>;
+type ProposalType = CommitmentProposal<SeqTypes, LeafType>;
+type MembershipType = GeneralStaticCommittee<SeqTypes, LeafType, SignatureKeyType>;
+type VoteType = QuorumVote<SeqTypes, LeafType>;
+type StorageType = MemoryStorage<SeqTypes, LeafType>;
+
 type Param381 = ark_bls12_381::Parameters;
 pub type SignatureSchemeType = BLSSignatureScheme<Param381>;
 pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
 
-impl NodeTypes for SeqTypes {
+type QuorumExchangeType<C> = QuorumExchange<
+    SeqTypes,
+    LeafType,
+    CommitmentProposal<SeqTypes, LeafType>,
+    GeneralStaticCommittee<SeqTypes, LeafType, SignatureKeyType>,
+    MemoryCommChannel<SeqTypes, Message<SeqTypes, Node<C>>, ProposalType, VoteType, MembershipType>,
+    Message<SeqTypes, Node<C>>,
+>;
+
+type CommitteeExchangeType<C> = CommitteeExchange<
+    SeqTypes,
+    LeafType,
+    GeneralStaticCommittee<SeqTypes, LeafType, SignatureKeyType>,
+    C,
+    Message<SeqTypes, Node<C>>,
+>;
+
+impl<
+        C: Debug
+            + Clone
+            + CommunicationChannel<
+                SeqTypes,
+                Message<SeqTypes, Node<C>>,
+                ProposalType,
+                VoteType,
+                MembershipType,
+            >,
+    > NodeImplementation<SeqTypes> for Node<C>
+{
+    type Leaf = LeafType;
+
+    type Storage = StorageType;
+
+    type QuorumExchange = QuorumExchangeType<C>;
+    type CommitteeExchange = CommitteeExchangeType<C>;
+}
+
+impl NodeType for SeqTypes {
     type Time = ViewNumber;
 
     type BlockType = Block;
@@ -76,6 +114,8 @@ impl NodeTypes for SeqTypes {
     type ElectionConfigType = StaticElectionConfig;
 
     type StateType = State;
+
+    type ConsensusType = SequencingConsensus;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -101,18 +141,23 @@ pub enum Error {
 type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
+// XXX this doesn't work
 async fn init_hotshot<
+    C: Debug
+        + Clone
+        + CommunicationChannel<SeqTypes, Message<SeqTypes, I>, ProposalType, VoteType, MembershipType>,
     I: NodeImplementation<
         SeqTypes,
-        Storage = MemoryStorage<SeqTypes>,
-        Election = StaticCommittee<SeqTypes>,
+        Storage = StorageType,
+        QuorumExchange = QuorumExchangeType<C>,
+        CommitteeExchange = CommitteeExchangeType<C>,
     >,
 >(
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
     private_key: PrivKey,
-    networking: I::Networking,
+    networking: C,
     config: HotShotConfig<PubKey, StaticElectionConfig>,
 ) -> HotShotHandle<SeqTypes, I> {
     // Create public and private keys for the node.
@@ -123,13 +168,26 @@ async fn init_hotshot<
     let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block.clone()).unwrap();
     let metrics = NoMetrics::new();
 
+    // keys: Vec<TYPES::SignatureKey>,
+    // config: TYPES::ElectionConfigType,
+    // network: Self::Networking,
+    // pk: TYPES::SignatureKey,
+    // sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    let quorum_exchange = QuorumExchange::create(
+        nodes_pub_keys,
+        election,
+        networking,
+        public_key,
+        private_key,
+    );
+
     let handle: HotShotHandle<SeqTypes, I> = HotShot::init(
         public_key,
         private_key,
         node_id as u64,
         config,
-        networking,
         storage,
+        quorum_exchange,
         election,
         initializer,
         metrics,
@@ -144,7 +202,8 @@ pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
+) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SignatureKeyType, StaticElectionConfig>>>
+{
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
 
@@ -170,11 +229,14 @@ pub async fn init_node(
         genesis_block,
         config.node_index as usize,
         sk,
-        networking,
+        // networking,
         config.config,
     )
     .await
 }
+
+// #[cfg(any(test, feature = "testing"))]
+// type MsgType = Message<SeqTypes, Node<CentralizedServerNetwork<SeqTypes, LeafType>>>;
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
@@ -190,8 +252,10 @@ pub mod testing {
     use std::sync::Arc;
     use std::time::Duration;
 
-    pub async fn init_hotshot_handles(
-    ) -> Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> {
+    type TestCommChannel<N> =
+        MemoryCommChannel<SeqTypes, N, ProposalType, VoteType, MembershipType>;
+
+    pub async fn init_hotshot_handles<N>() -> Vec<HotShotHandle<SeqTypes, N>> {
         let genesis_block = Block::genesis(Default::default());
 
         let num_nodes = 4;
@@ -246,7 +310,7 @@ pub mod testing {
                 genesis_block.clone(),
                 node_id,
                 private_key,
-                network,
+                // network,
                 config.clone(),
             )
             .await;
@@ -257,8 +321,8 @@ pub mod testing {
     }
 
     // Wait for decide event, make sure it matches submitted transaction
-    pub async fn wait_for_decide_on_handle(
-        mut handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+    pub async fn wait_for_decide_on_handle<N: NodeImplementation<SeqTypes>>(
+        mut handle: HotShotHandle<SeqTypes, N>,
         submitted_txn: SequencerTransaction,
     ) -> Result<(), ()> {
         // Keep getting events until we see a Decide event

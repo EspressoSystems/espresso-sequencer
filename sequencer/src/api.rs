@@ -1,6 +1,6 @@
 use crate::{
     transaction::{SequencerTransaction, Transaction},
-    SeqTypes,
+    LeafType, SeqTypes,
 };
 use async_std::{
     sync::RwLock,
@@ -30,7 +30,7 @@ struct AppState<I: NodeImplementation<SeqTypes>> {
 impl<I: NodeImplementation<SeqTypes>> AppState<I> {
     pub async fn update(
         &mut self,
-        event: &Event<SeqTypes>,
+        event: &Event<SeqTypes, LeafType>,
     ) -> Result<(), <QueryData<SeqTypes, ()> as UpdateDataSource<SeqTypes>>::Error> {
         self.query_state.update(event)?;
         self.query_state.commit_version().await?;
