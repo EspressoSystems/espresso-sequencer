@@ -1,0 +1,9 @@
+[route.submit]
+PATH = ["/submit"]
+METHOD = "POST"
+DOC = "Submit transaction to the Example Rollup."
+
+[route.balance]
+PATH = ["/balance"]
+METHOD = "GET"
+DOC = "Get balance by address."
