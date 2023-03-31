@@ -32,6 +32,10 @@ impl HotShotBlock for Block {
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
         self.transactions.iter().map(|tx| tx.commit()).collect()
     }
+
+    fn new() -> Self {
+        todo!()
+    }
 }
 
 impl Committable for Block {
