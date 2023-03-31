@@ -86,7 +86,7 @@ where
         + Clone
         + CommunicationChannel<
             SeqTypes,
-            Message<SeqTypes, Node<C>>,
+            Message<SeqTypes, Self>,
             ProposalType,
             VoteType,
             MembershipType,
@@ -94,7 +94,7 @@ where
         // TODO: Why is the next trait bound needed?
         + CommunicationChannel<
             SeqTypes,
-            Message<SeqTypes, Node<C>>,
+            Message<SeqTypes, Self>,
             DAProposal<SeqTypes>,
             DAVote<SeqTypes, SequencingLeaf<SeqTypes>>,
             MembershipType,
