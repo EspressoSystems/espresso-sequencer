@@ -3425,11 +3425,13 @@ dependencies = [
  "ethers 2.0.2",
  "ethers-core 2.0.2",
  "futures",
+ "portpicker",
  "rand 0.8.5",
  "sequencer",
  "serde",
  "serde_json",
  "snafu",
+ "surf-disco",
  "tide-disco",
  "toml 0.5.11",
 ]

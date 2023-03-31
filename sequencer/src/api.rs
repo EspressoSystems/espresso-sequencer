@@ -215,6 +215,7 @@ mod test {
     use portpicker::pick_unused_port;
     use std::path::Path;
     use surf_disco::Client;
+
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
 
