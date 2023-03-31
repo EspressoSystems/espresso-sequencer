@@ -75,7 +75,7 @@ impl HotShotState for State {
     type Time = ViewNumber;
 
     fn next_block(&self) -> Self::BlockType {
-        Block::new(self.commit())
+        Block::next(self.commit())
     }
 
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {

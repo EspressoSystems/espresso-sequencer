@@ -8213,6 +8213,7 @@ dependencies = [
  "cld",
  "commit 0.2.2",
  "derive_more",
+ "either",
  "futures",
  "hotshot 0.3.3 (git+https://github.com/EspressoSystems/hotshot?tag=0.4.1)",
  "hotshot-centralized-server 0.1.1 (git+https://github.com/EspressoSystems/hotshot?tag=0.4.1)",

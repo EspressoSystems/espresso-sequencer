@@ -34,7 +34,10 @@ impl HotShotBlock for Block {
     }
 
     fn new() -> Self {
-        todo!()
+        Self {
+            parent_state: State::default().commit(),
+            transactions: vec![],
+        }
     }
 }
 
@@ -55,7 +58,7 @@ impl Committable for Block {
 }
 
 impl Block {
-    pub fn new(parent_state: Commitment<State>) -> Self {
+    pub fn next(parent_state: Commitment<State>) -> Self {
         Self {
             parent_state,
             transactions: Default::default(),
