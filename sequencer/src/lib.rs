@@ -228,7 +228,7 @@ pub mod testing {
     use core::panic;
     use either::Either;
     use hotshot::{
-        traits::implementations::MasterMap,
+        traits::implementations::{MasterMap, MemoryNetwork},
         types::{Event, EventType::Decide},
     };
     use hotshot_types::{traits::network::TestableNetworkingImplementation, ExecutionType};
@@ -257,12 +257,12 @@ pub mod testing {
 
         let mut handles: Vec<HotShotHandle<SeqTypes, Node>> = vec![];
 
-        // let master_map = MasterMap::<Message<SeqTypes, Node>, SignatureKeyType>::new();
+        let master_map = MasterMap::<Message<SeqTypes, Node>, SignatureKeyType>::new();
 
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 1,
+            min_transactions: 0,
             max_transactions: 10000.try_into().unwrap(),
             known_nodes: nodes_pub_keys.clone(),
             next_view_timeout: Duration::from_secs(60).as_millis() as u64,
@@ -275,21 +275,28 @@ pub mod testing {
             election_config: Some(StaticElectionConfig {}),
         };
 
-        let da_channel_gen = MemoryCommChannel::generator(4, 4, 1);
-        let quorum_channel_gen = MemoryCommChannel::generator(4, 4, 2);
-
         // Create HotShot instances.
         for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
-            // TODO: How to get the private key?
             let private_key = (sign_key.clone(), ver_key.clone());
+            let public_key = JfPubKey::from_native(ver_key.clone());
+
+            let network = MemoryNetwork::new(
+                public_key.clone(),
+                NoMetrics::new(),
+                master_map.clone(),
+                None,
+            );
+
+            let da_channel = MemoryCommChannel::new(network.clone());
+            let quorum_channel = MemoryCommChannel::new(network);
 
             let handle = init_hotshot(
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
                 private_key,
-                da_channel_gen(node_id as u64),
-                quorum_channel_gen(node_id as u64),
+                da_channel,
+                quorum_channel,
                 config.clone(),
             )
             .await;

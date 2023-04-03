@@ -41,7 +41,8 @@ snafu = "0.7.4"
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.4.1", features = ["async-std-executor", "channel-async-std"] }
+# hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.4.1", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "191b78dc885a4c6dea59c96a3ba6f73caa479868", features = ["async-std-executor", "channel-async-std"] }
 portpicker = "0.1"
 rand_chacha = "0.3"
 sequencer = { path = "../sequencer", features = ["testing"] }
