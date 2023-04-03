@@ -48,6 +48,7 @@ pub async fn serve(port: u16, state: State) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use async_std::task::spawn;
     use ethers::signers::{LocalWallet, Signer};
     use portpicker::pick_unused_port;
@@ -55,7 +56,6 @@ mod tests {
 
     const GENESIS_BALANCE: u64 = 9999;
 
-    use super::*;
     #[async_std::test]
     async fn query_test() {
         let mut rng = rand::thread_rng();
