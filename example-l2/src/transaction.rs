@@ -24,7 +24,20 @@ impl VmTransaction for Transaction {
     }
 }
 
-#[derive(Clone, Debug)]
+impl VmTransaction for SignedTransaction {
+    fn encode(&self) -> Vec<u8> {
+        serde_json::to_string(&self)
+            .expect("Serialization should not fail")
+            .as_bytes()
+            .to_vec()
+    }
+
+    fn decode(bytes: &[u8]) -> Option<Self> {
+        serde_json::from_slice(bytes).ok()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedTransaction {
     pub transaction: Transaction,
     signature: Signature,

@@ -7,4 +7,4 @@ DOC = "Submit transaction to the Example Rollup."
 PATH = ["/balance/:address"]
 ":address" = "Literal"
 METHOD = "GET"
-DOC = "Get balance by address. The address must be a hex encoded Ethereum address."
+DOC = "Get balance by address. The Address must be a hex encoded Ethereum address."
