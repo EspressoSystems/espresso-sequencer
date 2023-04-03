@@ -1,7 +1,8 @@
 use ethers::abi::Address;
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
-#[derive(Snafu, Debug, Eq, PartialEq)]
+#[derive(Snafu, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RollupError {
     #[snafu(display("Error validating the transaction signature."))]
     SignatureError,

@@ -85,8 +85,11 @@ impl State {
     }
 
     /// Fetch the balance of an address
-    pub fn get_balance(&self, address: &Address) -> Option<Amount> {
-        self.accounts.get(address).map(|account| account.balance)
+    pub fn get_balance(&self, address: &Address) -> Amount {
+        self.accounts
+            .get(address)
+            .map(|account| account.balance)
+            .unwrap_or(0)
     }
 }
 #[cfg(test)]
@@ -128,9 +131,7 @@ mod tests {
         state = state
             .apply_transaction(&signed_transaction)
             .expect("Valid transaction should transition state");
-        let bob_balance = state
-            .get_balance(&bob.address())
-            .expect("Bob should have a balance");
+        let bob_balance = state.get_balance(&bob.address());
         assert_eq!(bob_balance, 150);
 
         // Now try to replay the transaction
