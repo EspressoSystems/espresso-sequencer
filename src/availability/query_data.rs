@@ -34,11 +34,11 @@ pub type TransactionHash<Types> =
 #[serde(bound = "")]
 pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
     leaf: Leaf<Types, I>,
-    qc: QuorumCertificate<Types, I>,
+    qc: QuorumCertificate<Types, I::Leaf>,
 }
 
 impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
-    pub fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
+    pub fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I::Leaf>) -> Self {
         assert_eq!(qc.leaf_commitment(), leaf.commit());
         Self { leaf, qc }
     }
@@ -47,7 +47,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> QuorumCertificate<Types, I> {
+    pub fn qc(&self) -> QuorumCertificate<Types, I::Leaf> {
         self.leaf.get_justify_qc()
     }
 
@@ -81,7 +81,7 @@ pub struct BlockQueryData<Types: NodeType> {
 impl<Types: NodeType> BlockQueryData<Types> {
     pub fn new<I: NodeImplementation<Types>>(
         leaf: Leaf<Types, I>,
-        qc: QuorumCertificate<Types, I>,
+        qc: QuorumCertificate<Types, I::Leaf>,
     ) -> Self
     where
         Types::BlockType: Serialize,

@@ -13,19 +13,26 @@
 use async_std::sync::Arc;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Index, IndexMut};
-use hotshot::traits::{
-    election::static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
-    implementations::{MemoryNetwork, MemoryStorage},
-    Block, NodeImplementation,
+use hotshot::{
+    traits::{
+        election::static_committee::{
+            GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
+        },
+        implementations::{MemoryCommChannel, MemoryStorage},
+        Block, NodeImplementation,
+    },
+    types::Message,
 };
 use hotshot_types::{
     data::{ValidatingLeaf, ValidatingProposal, ViewNumber},
     traits::{
         block_contents::Transaction,
-        node_implementation::{ApplicationMetadata, NodeType},
+        election::QuorumExchange,
+        node_implementation::NodeType,
         signature_key::ed25519::Ed25519Pub,
         state::{State, TestableBlock, TestableState, ValidatingConsensus},
     },
+    vote::QuorumVote,
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -107,7 +114,6 @@ impl MockState {
 }
 
 impl State for MockState {
-    type ConsensusType = ValidatingConsensus;
     type Error = MockError;
     type BlockType = MockBlock;
     type Time = ViewNumber;
@@ -142,14 +148,18 @@ impl State for MockState {
 
 impl TestableState for MockState {
     fn create_random_transaction(
-        &self,
+        state: Option<&Self>,
         rng: &mut dyn RngCore,
+        _padding: u64,
     ) -> <Self::BlockType as Block>::Transaction {
         loop {
             let nonce = rng.next_u64();
-            if !self.spent.contains(&nonce) {
-                break MockTransaction { nonce };
+            if let Some(state) = state {
+                if state.spent.contains(&nonce) {
+                    continue;
+                }
             }
+            break MockTransaction { nonce };
         }
     }
 }
@@ -232,18 +242,21 @@ impl Block for MockBlock {
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
         self.transactions.iter().map(|tx| tx.commit()).collect()
     }
+
+    fn new() -> Self {
+        Self::genesis()
+    }
 }
 
 impl TestableBlock for MockBlock {
     fn genesis() -> Self {
         Self::genesis()
     }
+
+    fn txn_count(&self) -> u64 {
+        self.transactions.len() as u64
+    }
 }
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct MockMetadata;
-
-impl ApplicationMetadata for MockMetadata {}
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -252,7 +265,6 @@ pub struct MockTypes;
 
 impl NodeType for MockTypes {
     type ConsensusType = ValidatingConsensus;
-    type ApplicationMetadataType = MockMetadata;
     type Time = ViewNumber;
     type BlockType = MockBlock;
     type SignatureKey = Ed25519Pub;
@@ -262,6 +274,14 @@ impl NodeType for MockTypes {
     type StateType = MockState;
 }
 
+pub type MockLeaf = ValidatingLeaf<MockTypes>;
+pub type MockMembership =
+    GeneralStaticCommittee<MockTypes, MockLeaf, <MockTypes as NodeType>::SignatureKey>;
+pub type MockNetwork =
+    MemoryCommChannel<MockTypes, MockNodeImpl, MockProposal, MockVote, MockMembership>;
+pub type MockProposal = ValidatingProposal<MockTypes, MockLeaf>;
+pub type MockVote = QuorumVote<MockTypes, MockLeaf>;
+
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
@@ -269,8 +289,14 @@ pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes, Self::Leaf>;
-    type Networking = MemoryNetwork<MockTypes, Self::Leaf, Self::Proposal>;
-    type Election = GeneralStaticCommittee<MockTypes, Self::Leaf, Ed25519Pub>;
-    type Leaf = ValidatingLeaf<MockTypes>;
-    type Proposal = ValidatingProposal<MockTypes, Self::Election>;
+    type Leaf = MockLeaf;
+    type QuorumExchange = QuorumExchange<
+        MockTypes,
+        Self::Leaf,
+        MockProposal,
+        MockMembership,
+        MockNetwork,
+        Message<MockTypes, Self>,
+    >;
+    type CommitteeExchange = Self::QuorumExchange;
 }

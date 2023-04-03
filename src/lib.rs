@@ -395,17 +395,11 @@ pub use error::Error;
 
 use data_source::QueryData;
 use futures::Future;
-use hotshot::types::HotShotHandle;
-use hotshot_types::{
-    data::LeafType,
-    traits::node_implementation::{NodeImplementation, NodeType},
-};
+use hotshot::{certificate::QuorumCertificate, types::HotShotHandle};
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 
 /// Leaf type appended to a chain by consensus.
 pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
-
-/// Certificates used by consensus to justify leaves.
-pub type QuorumCertificate<Types, I> = <Leaf<Types, I> as LeafType>::QuorumCertificate;
 
 #[derive(clap::Args, Default)]
 pub struct Options {
