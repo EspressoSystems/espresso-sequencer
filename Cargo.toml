@@ -30,9 +30,9 @@ commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" 
 custom_debug = "0.5"
 derive_more = "0.99"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "eb038939d6e146e6e7c97887ae58bb962a92bf6b", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "eb038939d6e146e6e7c97887ae58bb962a92bf6b" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "eb038939d6e146e6e7c97887ae58bb962a92bf6b" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.4.1", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.4.1" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.4.1" }
 itertools = "0.10"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
