@@ -2,7 +2,7 @@ pub mod api;
 mod block;
 mod chain_variables;
 mod state;
-mod transaction;
+pub mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
