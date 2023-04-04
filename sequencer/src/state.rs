@@ -87,6 +87,7 @@ impl HotShotState for State {
         block: &Self::BlockType,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
+        tracing::debug!("Appending block to state");
         // Have to save state commitment here if any changes are made
 
         // If there's a validation error, return it here

@@ -24,6 +24,7 @@ use hotshot::{
     types::HotShotHandle,
 };
 use hotshot::{HotShot, HotShotInitializer};
+use hotshot_testing::test_description::GeneralTestDescriptionBuilder; // TODO: use this!
 use hotshot_types::data::{CommitmentProposal, DAProposal, SequencingLeaf};
 use hotshot_types::traits::election::{CommitteeExchange, ConsensusExchange, QuorumExchange};
 use hotshot_types::traits::metrics::Metrics;
@@ -71,27 +72,24 @@ type QuorumChannel<I> = MemoryCommChannel<
 type Param381 = ark_bls12_381::Parameters;
 pub type SignatureSchemeType = BLSSignatureScheme<Param381>;
 pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
+type ElectionConfig = StaticElectionConfig;
 
 type QuorumExchangeType<I> = QuorumExchange<
     SeqTypes,
     Leaf,
     CommitmentProposal<SeqTypes, Leaf>,
-    GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>,
+    Membership,
     QuorumChannel<I>,
     Message<SeqTypes, I>,
 >;
 
-type CommitteeExchangeType<I> = CommitteeExchange<
-    SeqTypes,
-    Leaf,
-    GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>,
-    DAChannel<I>,
-    Message<SeqTypes, I>,
->;
+type CommitteeExchangeType<I> =
+    CommitteeExchange<SeqTypes, Leaf, Membership, DAChannel<I>, Message<SeqTypes, I>>;
 
 impl NodeImplementation<SeqTypes> for Node {
     type Leaf = Leaf;
     type Storage = Storage;
+    // Note: check examples in hotshot tests
     type QuorumExchange = QuorumExchangeType<Self>;
     type CommitteeExchange = CommitteeExchangeType<Self>;
 }
@@ -103,7 +101,7 @@ impl NodeType for SeqTypes {
     type SignatureKey = SignatureKeyType;
     type VoteTokenType = StaticVoteToken<SignatureKeyType>;
     type Transaction = SequencerTransaction;
-    type ElectionConfigType = StaticElectionConfig;
+    type ElectionConfigType = ElectionConfig;
     type StateType = State;
 }
 
@@ -137,7 +135,7 @@ async fn init_hotshot(
     private_key: PrivKey,
     da_channel: DAChannel<Node>,
     quorum_channel: QuorumChannel<Node>,
-    config: HotShotConfig<PubKey, StaticElectionConfig>,
+    config: HotShotConfig<PubKey, ElectionConfig>,
 ) -> HotShotHandle<SeqTypes, Node> {
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&private_key);
@@ -151,7 +149,7 @@ async fn init_hotshot(
 
     let quorum_exchange = QuorumExchangeType::create(
         nodes_pub_keys.clone(),
-        StaticElectionConfig {},
+        ElectionConfig {},
         quorum_channel,
         public_key.clone(),
         private_key.clone(),
@@ -159,7 +157,7 @@ async fn init_hotshot(
 
     let committee_exchange = CommitteeExchangeType::create(
         nodes_pub_keys,
-        StaticElectionConfig {},
+        ElectionConfig {},
         da_channel,
         public_key.clone(),
         private_key.clone(),
@@ -242,7 +240,7 @@ pub mod testing {
 
         let genesis_block = Block::genesis(Default::default());
 
-        let num_nodes = 4;
+        let num_nodes = 5;
 
         // Generate keys for the nodes.
         let nodes_key_pairs = (0..num_nodes)
@@ -262,7 +260,7 @@ pub mod testing {
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
-            min_transactions: 0,
+            min_transactions: 1,
             max_transactions: 10000.try_into().unwrap(),
             known_nodes: nodes_pub_keys.clone(),
             next_view_timeout: Duration::from_secs(60).as_millis() as u64,
@@ -272,7 +270,7 @@ pub mod testing {
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(30),
-            election_config: Some(StaticElectionConfig {}),
+            election_config: Some(ElectionConfig {}),
         };
 
         // Create HotShot instances.
@@ -314,7 +312,7 @@ pub mod testing {
         // Keep getting events until we see a Decide event
         loop {
             let event = handle.next_event().await;
-            println!("Event: {event:?}\n");
+            tracing::info!("Received event from handle: {event:?}");
 
             match event {
                 Ok(Event {
@@ -397,7 +395,7 @@ mod test {
         }
 
         let event = handles[0].next_event().await;
-        println!("Event: {event:?}\n");
+        tracing::info!("Received event from handle: {event:?}");
 
         // Should immediately get genesis block decide event
         match event {
@@ -417,10 +415,12 @@ mod test {
             _ => panic!(),
         }
 
+        std::thread::sleep(std::time::Duration::from_secs(10));
+
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
         let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
-        println!("Submitted: {txn:?}");
+        tracing::info!("Submitted transaction to handle: {txn:?}");
 
         wait_for_decide_on_handle(handles[0].clone(), submitted_txn).await
     }

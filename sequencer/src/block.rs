@@ -24,6 +24,7 @@ impl HotShotBlock for Block {
         &self,
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
+        tracing::debug!("Adding raw transaction to block {tx:?}");
         let mut new = self.clone();
         new.transactions.push(tx.clone());
         Ok(new)
@@ -34,6 +35,7 @@ impl HotShotBlock for Block {
     }
 
     fn new() -> Self {
+        tracing::debug!("Creating new block");
         Self {
             parent_state: State::default().commit(),
             transactions: vec![],
