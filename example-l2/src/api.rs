@@ -47,8 +47,11 @@ pub async fn serve(options: Options, state: Arc<RwLock<State>>) -> io::Result<()
                 .parse()
                 .unwrap();
             let transaction = req
-                .body_auto::<SignedTransaction>()
-                .expect("serialization failed");
+                .body_auto::<SignedTransaction>().
+            map_err(|_| ServerError {
+                status: tide_disco::StatusCode::BadRequest,
+                message: "Malformed transaction. Ensure that the transaction is a JSON serialized SignedTransaction".into()
+            })?;
             submit_transaction(sequencer_url, transaction).await
         }
         .boxed()
@@ -176,9 +179,8 @@ mod tests {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        let vm_id = 1.into();
         let raw_tx = signed_transaction.encode();
-        let txn = SeqTransaction::new(vm_id, raw_tx.to_vec());
+        let txn = SeqTransaction::new(VM_ID.into(), raw_tx.to_vec());
         wait_for_decide_on_handle(
             watch_handle.clone(),
             sequencer::transaction::SequencerTransaction::Wrapped(txn),
