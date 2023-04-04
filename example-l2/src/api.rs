@@ -1,4 +1,5 @@
 use async_std::sync::RwLock;
+use clap::Parser;
 use ethers::abi::Address;
 use futures::FutureExt;
 use sequencer::Transaction;
@@ -13,9 +14,14 @@ use crate::{state::State, transaction::SignedTransaction};
 // The VmID helps Rollups find their transactions in the sequenced block.
 const VM_ID: u64 = 1;
 
+#[derive(Parser, Clone, Debug)]
 pub struct Options {
-    api_port: u16,
-    sequencer_port: u16,
+    /// Port where the Rollup API will be served
+    #[clap(short, long, env = "ESPRESSO_MOCK_ROLLUP_PORT", default_value = "8080")]
+    pub api_port: u16,
+    /// URL of a HotShot sequencer node.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
+    pub sequencer_url: Url,
 }
 
 async fn submit_transaction(
@@ -25,7 +31,11 @@ async fn submit_transaction(
     let raw_tx = transaction.encode();
     let txn = Transaction::new(VM_ID.into(), raw_tx.to_vec());
     let client = surf_disco::Client::<ClientError>::new(submit_url);
-    client.post::<()>("submit").body_json(&txn)?.send().await?;
+    client
+        .post::<()>("submit/submit")
+        .body_json(&txn)?
+        .send()
+        .await?;
     Ok(())
 }
 
@@ -34,7 +44,7 @@ pub async fn serve(options: Options, state: Arc<RwLock<State>>) -> io::Result<()
     let error_mapper = |err| io::Error::new(io::ErrorKind::Other, err);
     let Options {
         api_port,
-        sequencer_port,
+        sequencer_url,
     } = options;
     let mut app = App::<StateType, ServerError>::with_state(state);
     let toml = toml::from_str::<toml::Value>(include_str!("api.toml"))
@@ -42,17 +52,15 @@ pub async fn serve(options: Options, state: Arc<RwLock<State>>) -> io::Result<()
     let mut api = Api::<StateType, ServerError>::new(toml).map_err(error_mapper)?;
 
     api.post("submit", move |req, _| {
+        let url = sequencer_url.clone();
         async move {
-            let sequencer_url: Url = format!("http://localhost:{sequencer_port}/submit")
-                .parse()
-                .unwrap();
             let transaction = req
                 .body_auto::<SignedTransaction>().
             map_err(|_| ServerError {
                 status: tide_disco::StatusCode::BadRequest,
                 message: "Malformed transaction. Ensure that the transaction is a JSON serialized SignedTransaction".into()
             })?;
-            submit_transaction(sequencer_url, transaction).await
+            submit_transaction(url, transaction).await
         }
         .boxed()
     })
@@ -106,11 +114,11 @@ mod tests {
             GENESIS_BALANCE,
         )])));
         let port = pick_unused_port().expect("No ports free");
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
+        let api_url: Url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(api_url.clone());
         let options = Options {
             api_port: port,
-            sequencer_port: port,
+            sequencer_url: api_url,
         };
 
         spawn(serve(options, state));
@@ -146,6 +154,9 @@ mod tests {
 
         // Start the Rollup API
         let api_port = pick_unused_port().unwrap();
+        let sequencer_url = format!("http://localhost:{sequencer_port}")
+            .parse()
+            .unwrap();
         let genesis_wallet = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
         let genesis_address = genesis_wallet.address();
         let state = Arc::new(RwLock::new(State::from_initial_balances([(
@@ -154,7 +165,7 @@ mod tests {
         )])));
         let options = Options {
             api_port,
-            sequencer_port,
+            sequencer_url,
         };
         spawn(async move { serve(options, state).await });
 

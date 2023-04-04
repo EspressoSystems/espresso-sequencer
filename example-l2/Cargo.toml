@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
+clap = "4.2.1"
 ethers = "2.0.1"
 ethers-core = "2.0.1"
 futures = "0.3.28"
