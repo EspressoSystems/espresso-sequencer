@@ -6,6 +6,7 @@ use crate::{
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
+use hotshot_types::traits::state::TestableBlock;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -40,6 +41,17 @@ impl HotShotBlock for Block {
             parent_state: State::default().commit(),
             transactions: vec![],
         }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl TestableBlock for Block {
+    fn genesis() -> Self {
+        Block::genesis(Default::default())
+    }
+
+    fn txn_count(&self) -> u64 {
+        self.transactions.len() as u64
     }
 }
 

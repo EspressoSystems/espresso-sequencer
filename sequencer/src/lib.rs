@@ -6,7 +6,6 @@ mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
-use async_std::task::sleep;
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot::traits::implementations::{
     CentralizedCommChannel, CentralizedServerNetwork, MemoryCommChannel,
@@ -24,7 +23,6 @@ use hotshot::{
     types::HotShotHandle,
 };
 use hotshot::{HotShot, HotShotInitializer};
-use hotshot_testing::test_description::GeneralTestDescriptionBuilder; // TODO: use this!
 use hotshot_types::data::{CommitmentProposal, DAProposal, SequencingLeaf};
 use hotshot_types::traits::election::{CommitteeExchange, ConsensusExchange, QuorumExchange};
 use hotshot_types::traits::metrics::Metrics;
@@ -363,10 +361,8 @@ mod test {
     };
     use core::panic;
     use either::Either;
-    use hotshot::{
-        traits::implementations::MemoryNetwork,
-        types::{Event, EventType::Decide},
-    };
+    use hotshot::types::{Event, EventType::Decide};
+    use hotshot_testing::test_description::GeneralTestDescriptionBuilder;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Submit transaction to given handle, return clone of transaction
@@ -385,6 +381,16 @@ mod test {
             .expect("Failed to submit transaction");
 
         tx
+    }
+
+    // Run a hotshot test with our types
+    #[async_std::test]
+    async fn general_hotshot_test() {
+        let builder = GeneralTestDescriptionBuilder {
+            num_succeeds: 3,
+            ..Default::default()
+        };
+        builder.build::<SeqTypes, Node>().execute().await.unwrap();
     }
 
     #[async_std::test]
@@ -414,8 +420,6 @@ mod test {
             }
             _ => panic!(),
         }
-
-        std::thread::sleep(std::time::Duration::from_secs(10));
 
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);

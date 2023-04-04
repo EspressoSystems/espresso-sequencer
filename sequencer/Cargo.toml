@@ -9,6 +9,7 @@ testing = []
 
 [dev-dependencies]
 portpicker = "0.1.1"
+rand = "0.8.5"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tempfile = "3.4.0"
 
