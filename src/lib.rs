@@ -54,7 +54,7 @@
 //! let status_api = status::define_api(&Default::default())
 //!     .map_err(Error::internal)?;
 //!
-//! // Create app.
+//! // Create app. We wrap `query_data` into an `RwLock` so we can share it with the web server.
 //! let query_data = Arc::new(RwLock::new(query_data));
 //! let mut app = App::<_, Error>::with_state(query_data.clone());
 //! app
@@ -68,7 +68,12 @@
 //!
 //! // Update query data using HotShot events.
 //! while let Ok(event) = hotshot.next_event().await {
-//!     query_data.write().await.update(&event);
+//!     // Re-lock the mutex each time we get a new event.
+//!     let mut query_data = query_data.write().await;
+//!
+//!     // Update the query data based on this event.
+//!     query_data.update(&event);
+//!     query_data.commit_version().await.map_err(Error::internal)?;
 //! }
 //! # Ok(())
 //! # }
@@ -223,7 +228,7 @@
 //! Composing the modules provided by this crate with other, unrelated modules to create a unified
 //! service is fairly simple, as most of the complexity is handled by [tide_disco], which already
 //! provides a mechanism for composing several modules into a single application. In principle, all
-//! you need to do is registe the [availability] and [status] APIs provided by this crate with a
+//! you need to do is register the [availability] and [status] APIs provided by this crate with a
 //! [tide_disco::App], and then register your own API modules with the same app.
 //!
 //! The one wrinkle is that all modules within a [tide_disco] app must share the state type. It is
