@@ -20,7 +20,7 @@ use futures::future::join_all;
 use hotshot::{
     traits::{
         election::static_committee::StaticElectionConfig,
-        implementations::{MemoryCommChannel, MemoryStorage},
+        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
     },
     types::{HotShotHandle, SignatureKey},
     HotShot, HotShotInitializer,
@@ -28,7 +28,6 @@ use hotshot::{
 use hotshot_types::{
     traits::{
         election::{ConsensusExchange, QuorumExchange},
-        network::TestableNetworkingImplementation,
         signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
     },
     ExecutionType, HotShotConfig,
@@ -59,7 +58,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             .iter()
             .map(Ed25519Pub::from_private)
             .collect::<Vec<_>>();
-        // let master_map = MasterMap::new();
+        let master_map = MasterMap::new();
         let config = HotShotConfig {
             total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
             known_nodes: pub_keys.clone(),
@@ -84,23 +83,27 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                     let user_data = user_data.clone();
                     let pub_keys = pub_keys.clone();
                     let config = config.clone();
-                    // let master_map = master_map.clone();
-                    // TODO: this probably won't work because of the randomly
-                    // generated keys.
-                    let channel_gen = MemoryCommChannel::generator(config.total_nodes.into(), 1, 0);
+                    let master_map = master_map.clone();
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();
+                        let channel = MemoryCommChannel::new(MemoryNetwork::new(
+                            pub_keys[node_id],
+                            query_data.metrics(),
+                            master_map,
+                            None,
+                        ));
+
                         let quorum_exchange = QuorumExchange::create(
                             pub_keys.clone(),
                             StaticElectionConfig {},
-                            channel_gen(node_id as u64),
+                            channel.clone(),
                             pub_keys[node_id],
                             priv_key.clone(),
                         );
                         let committee_exchange = QuorumExchange::create(
                             pub_keys.clone(),
                             StaticElectionConfig {},
-                            channel_gen(node_id as u64),
+                            channel,
                             pub_keys[node_id],
                             priv_key.clone(),
                         );
