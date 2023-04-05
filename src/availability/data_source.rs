@@ -11,6 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash};
+use crate::{Block, Deltas, Resolvable};
 use futures::stream::Stream;
 use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
@@ -45,6 +46,8 @@ pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>> 
 
 pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>> {
     type Error: Error + Debug;
-    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>;
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>;
     fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
 }

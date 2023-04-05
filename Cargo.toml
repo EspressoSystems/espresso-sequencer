@@ -29,6 +29,7 @@ clap = { version = "4.0", features = ["derive", "env"] }
 commit = { git = "https://github.com/EspressoSystems/commit.git", tag = "0.2.2" }
 custom_debug = "0.5"
 derive_more = "0.99"
+either = "1.8"
 futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.4.1", features = ["async-std-executor", "channel-async-std"] }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.4.1" }

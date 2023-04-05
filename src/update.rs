@@ -14,7 +14,7 @@
 use crate::status::UpdateStatusData;
 use crate::{
     availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
-    Leaf,
+    Block, Deltas, Leaf, Resolvable,
 };
 use hotshot::types::{Event, EventType};
 use hotshot_types::{
@@ -57,7 +57,9 @@ pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>;
+    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>;
 }
 
 impl<
@@ -72,7 +74,10 @@ impl<
         UpdateStatusData::metrics(self)
     }
 
-    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error> {
+    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
         if let EventType::Decide { leaf_chain, qc } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())
@@ -85,8 +90,19 @@ impl<
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
             for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
+                // The current version of HotShot has a guarantee that the block is available at the
+                // moment the corresponding leaf is sequenced, so for the time being, we can get the
+                // block by resolving the deltas and panicking if the block is not available. This
+                // will change in the future, at which time this will have to be rewritten to spawn
+                // a background task to resolve the block asynchronously and update the query data
+                // when the block becomes available.
+                let block = leaf
+                    .get_deltas()
+                    .try_resolve()
+                    .expect("block was not available at moment leaf was sequenced");
+
                 self.insert_leaf(LeafQueryData::new(leaf.clone(), qc.clone()))?;
-                self.insert_block(BlockQueryData::new::<I>(leaf.clone(), qc.clone()))?;
+                self.insert_block(BlockQueryData::new::<I>(leaf.clone(), qc.clone(), block))?;
             }
         }
         Ok(())

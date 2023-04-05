@@ -316,7 +316,7 @@ mod test {
             AtomicStore::open(loader).unwrap();
             assert_eq!(
                 log.iter().collect::<Vec<_>>(),
-                (0..5).into_iter().map(Some).collect::<Vec<_>>()
+                (0..5).map(Some).collect::<Vec<_>>()
             );
         }
     }
@@ -384,7 +384,7 @@ mod test {
             // `nth` should not only have returned the `n`th element, but also advanced the iterator.
             assert_eq!(
                 iter.collect::<Vec<_>>(),
-                (i + 1..5).into_iter().map(Some).collect::<Vec<_>>()
+                (i + 1..5).map(Some).collect::<Vec<_>>()
             );
         }
         assert_eq!(log.iter().nth(5), None);

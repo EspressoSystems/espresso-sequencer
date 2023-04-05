@@ -2530,6 +2530,7 @@ dependencies = [
  "commit 0.2.2",
  "custom_debug",
  "derive_more",
+ "either",
  "futures",
  "hotshot",
  "hotshot-types",

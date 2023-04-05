@@ -19,8 +19,8 @@ use async_std::{
 use futures::future::join_all;
 use hotshot::{
     traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
+        election::static_committee::StaticElectionConfig,
+        implementations::{MemoryCommChannel, MemoryStorage},
     },
     types::{HotShotHandle, SignatureKey},
     HotShot, HotShotInitializer,
@@ -53,7 +53,6 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
     pub async fn init(user_data: UserData) -> Self {
         let dir = TempDir::new("mock_network").unwrap();
         let priv_keys = (0..MINIMUM_NODES)
-            .into_iter()
             .map(|_| Ed25519Priv::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
