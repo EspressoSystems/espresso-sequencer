@@ -1,12 +1,14 @@
 pub mod api;
 mod block;
 mod chain_variables;
+pub mod hotshot_commitment;
 mod state;
 pub mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
 use async_std::task::sleep;
+use ethers::types::Address;
 use hotshot::traits::implementations::CentralizedServerNetwork;
 use hotshot::traits::NetworkingImplementation;
 use hotshot::types::SignatureKey;
@@ -31,14 +33,64 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 use transaction::SequencerTransaction;
+use url::Url;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
 pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
+
+use clap::Parser;
+
+#[derive(Parser)]
+pub struct Options {
+    /// Unique identifier for this instance of the sequencer network.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    pub chain_id: u16,
+
+    /// Port that the sequencer API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    pub port: u16,
+
+    /// URL of the HotShot CDN.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
+    pub cdn_url: Url,
+
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    pub storage_path: PathBuf,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    pub reset_store: bool,
+
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
+    pub l1_provider: Url,
+
+    /// Chain ID for layer 1 Ethereum.
+    ///
+    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
+    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
+    /// the RPC will be used.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
+    pub l1_chain_id: Option<u64>,
+
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS")]
+    pub hotshot_address: Address,
+
+    /// Mnemonic phrase for the sequencer wallet.
+    ///
+    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
+    /// contract. It must be funded with ETH and MATIC on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC")]
+    pub sequencer_mnemonic: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct Node<N>(std::marker::PhantomData<fn(&N)>);

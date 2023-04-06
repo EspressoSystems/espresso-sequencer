@@ -110,11 +110,7 @@ mod test {
             sequencer_url: format!("http://localhost:{sequencer_port}")
                 .parse()
                 .unwrap(),
-            l1_provider: "http://dummy".parse().unwrap(),
-            l1_chain_id: None,
             l2_chain_id: 1001,
-            hotshot_address: Default::default(),
-            sequencer_mnemonic: Default::default(),
             rpc_port: 0,
             query_port: adaptor_port,
         };

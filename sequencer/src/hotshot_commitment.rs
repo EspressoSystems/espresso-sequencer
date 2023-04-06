@@ -1,4 +1,3 @@
-use crate::Options;
 use async_std::{sync::Arc, task::sleep};
 use contract_bindings::HotShot;
 use ethers::{
@@ -7,18 +6,19 @@ use ethers::{
 };
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_query_service::availability::LeafQueryData;
-use sequencer::SeqTypes;
 use std::time::Duration;
 use surf_disco::Url;
+
+use crate::{Options, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-pub async fn run(opt: &Options) {
+pub async fn run_hotshot_commitment_task(opt: &Options) {
     // Connect to the HotShot query service to stream sequenced blocks.
-    let hotshot = HotShotClient::new(opt.sequencer_url.join("availability").unwrap());
+    let hotshot = HotShotClient::new(opt.cdn_url.join("availability").unwrap());
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
@@ -221,7 +221,7 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::TEST_MNEMONIC;
+    use crate::{transaction::SequencerTransaction, Block, State, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
@@ -231,9 +231,9 @@ mod test {
         data::{Leaf, QuorumCertificate, ViewNumber},
         traits::{block_contents::Block as _, state::ConsensusTime},
     };
-    use sequencer::{Block, State, Vm};
     use sequencer_utils::Anvil;
-    use zkevm::{EvmTransaction, ZkEvm};
+
+    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     #[async_std::test]
     async fn test_sequencer_task() {
@@ -243,11 +243,6 @@ mod test {
         let anvil = Anvil::spawn(None).await;
         let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
 
-        let l2_chain_id = l1.rollup.chain_id().await.unwrap();
-
-        let zkevm = ZkEvm {
-            chain_id: l2_chain_id,
-        };
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
 
@@ -255,39 +250,14 @@ mod test {
             .await
             .unwrap();
 
-        let l2_wallet = Arc::new(
-            MnemonicBuilder::<English>::default()
-                .phrase(TEST_MNEMONIC)
-                .build()
-                .unwrap()
-                .with_chain_id(l2_chain_id),
-        );
-
         // Create a few test batches.
-        let transfer_amount = 1.into();
         let num_batches = 2u64;
-        let nonce = U256::from(0); // arbitrary
         let mut leaves: Vec<LeafQueryData<SeqTypes>> = vec![];
         for i in 0..num_batches {
-            // Generate and L2 transfer.
-            let transfer = TransactionRequest {
-                from: Some(l1.clients.deployer.address()),
-                to: Some(Address::random().into()),
-                value: Some(transfer_amount),
-                nonce: Some(nonce + i),
-                chain_id: Some(l2_chain_id.into()),
-                ..Default::default()
-            }
-            .into();
-            tracing::info!("transfer {}: {:?}", i, transfer);
-            let signature = l2_wallet.sign_transaction(&transfer).await.unwrap();
-            let txn = EvmTransaction::new(transfer, signature);
-            let hash = txn.hash();
-            tracing::info!("transfer hash: {:?}", hash);
+            let txn = SequencerTransaction::Wrapped(Transaction::new(1.into(), vec![]));
 
-            // Add it to a sequencer block.
             let block = Block::new(State::default().commit())
-                .add_transaction_raw(&zkevm.wrap(&txn).into())
+                .add_transaction_raw(&txn)
                 .unwrap();
 
             // Fake a leaf that sequences this block.

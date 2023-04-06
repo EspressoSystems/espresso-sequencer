@@ -11,7 +11,9 @@ required-features = ["testing"]
 testing = ["portpicker"]
 
 [dependencies]
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = ["logging-utils"] }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = [
+    "logging-utils",
+] }
 async-std = "1.12"
 bincode = "1.3"
 clap = { version = "4.1", features = ["derive", "env"] }
@@ -41,7 +43,10 @@ snafu = "0.7.4"
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "a154ee55a97ec9522fc043e9b7f6e47557f7956a", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 portpicker = "0.1"
 rand_chacha = "0.3"
 sequencer = { path = "../sequencer", features = ["testing"] }
