@@ -2398,7 +2398,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -2440,7 +2440,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "surf-disco 0.4.1",
+ "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?branch=main)",
  "tempfile",
  "time 0.3.20",
  "tracing",
@@ -2450,7 +2450,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -2472,7 +2472,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2493,7 +2493,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -2512,6 +2512,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?tag=v0.4.1)",
  "tide-disco 0.4.1",
  "toml 0.5.11",
  "tracing",
@@ -2552,7 +2553,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -2587,7 +2588,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "bincode",
 ]
@@ -2595,8 +2596,9 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
+ "ark-bls12-381",
  "async-compatibility-layer",
  "async-lock",
  "async-trait",
@@ -2606,6 +2608,7 @@ dependencies = [
  "futures",
  "hotshot-types",
  "hotshot-utils",
+ "jf-primitives",
  "libp2p-core 0.37.0",
  "nll",
  "serde",
@@ -3449,7 +3452,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/HotShot.git?rev=191b78dc885a4c6dea59c96a3ba6f73caa479868#191b78dc885a4c6dea59c96a3ba6f73caa479868"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -5959,6 +5962,23 @@ dependencies = [
  "serde_json",
  "surf",
  "tide-disco 0.4.0",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.4.1"
+source = "git+https://github.com/EspressoSystems/surf-disco.git?tag=v0.4.1#3f85fd53b9e5b2c0b801cf8c2252f2397aa80da0"
+dependencies = [
+ "async-std",
+ "async-tungstenite 0.15.0",
+ "bincode",
+ "derivative",
+ "futures",
+ "hex",
+ "serde",
+ "serde_json",
+ "surf",
+ "tide-disco 0.4.1",
 ]
 
 [[package]]

@@ -112,7 +112,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                             priv_key,
                             node_id as u64,
                             config,
-                            MemoryStorage::new(),
+                            MemoryStorage::empty(),
                             quorum_exchange,
                             committee_exchange,
                             HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
