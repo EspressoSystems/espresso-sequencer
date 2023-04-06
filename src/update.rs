@@ -101,8 +101,17 @@ impl<
                     .try_resolve()
                     .expect("block was not available at moment leaf was sequenced");
 
-                self.insert_leaf(LeafQueryData::new(leaf.clone(), qc.clone()))?;
-                self.insert_block(BlockQueryData::new::<I>(leaf.clone(), qc.clone(), block))?;
+                // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
+                // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
+                // guaranteed to correspond, and this should never panic.
+                self.insert_leaf(
+                    LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf"),
+                )?;
+                // For the same reason, this will not panic either.
+                self.insert_block(
+                    BlockQueryData::new::<I>(leaf.clone(), qc.clone(), block)
+                        .expect("inconsistent block"),
+                )?;
             }
         }
         Ok(())

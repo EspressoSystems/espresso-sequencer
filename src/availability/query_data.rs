@@ -24,6 +24,7 @@ use hotshot_types::{
 };
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
+use snafu::{ensure, Snafu};
 
 pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
 pub type BlockHash<Types> = Commitment<Block<Types>>;
@@ -36,10 +37,30 @@ pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
     qc: QuorumCertificate<Types, I>,
 }
 
+#[derive(Clone, Debug, Snafu)]
+#[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
+pub struct InconsistentLeafError<Types: NodeType, I: NodeImplementation<Types>> {
+    pub leaf: Leaf<Types, I>,
+    pub qc: QuorumCertificate<Types, I>,
+}
+
 impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
-    pub(crate) fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
-        assert_eq!(qc.leaf_commitment(), leaf.commit());
-        Self { leaf, qc }
+    /// Collect information about a [`Leaf`].
+    ///
+    /// Returns a new [`LeafQueryData`] object populated from `leaf` and `qc`.
+    ///
+    /// # Errors
+    ///
+    /// Fails with an [`InconsistentLeafError`] if `qc` does not reference `leaf`.
+    pub fn new(
+        leaf: Leaf<Types, I>,
+        qc: QuorumCertificate<Types, I>,
+    ) -> Result<Self, InconsistentLeafError<Types, I>> {
+        ensure!(
+            qc.leaf_commitment() == leaf.commit(),
+            InconsistentLeafSnafu { leaf, qc }
+        );
+        Ok(Self { leaf, qc })
     }
 
     pub fn leaf(&self) -> &Leaf<Types, I> {
@@ -80,25 +101,58 @@ pub struct BlockQueryData<Types: NodeType> {
     txn_hashes: Vec<TransactionHash<Types>>,
 }
 
+#[derive(Clone, Debug, Snafu)]
+pub enum InconsistentBlockError<Types: NodeType, I: NodeImplementation<Types>>
+where
+    Deltas<Types, I>: Resolvable<Block<Types>>,
+    Block<Types>: Serialize,
+{
+    #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
+    InconsistentQc {
+        qc: QuorumCertificate<Types, I>,
+        leaf: Leaf<Types, I>,
+    },
+    #[snafu(display("Leaf {} references block {}, but expected {}",
+        leaf.commit(), block.commit(), leaf.get_deltas().commitment()))]
+    InconsistentBlock {
+        leaf: Leaf<Types, I>,
+        block: Block<Types>,
+    },
+}
+
 impl<Types: NodeType> BlockQueryData<Types> {
-    pub(crate) fn new<I: NodeImplementation<Types>>(
+    /// Collect information about a [`Block`].
+    ///
+    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `block`.
+    ///
+    /// # Errors
+    ///
+    /// Fails with an [`InconsistentBlockError`] if `qc`, `leaf`, and `block` do not all correspond
+    /// to the same block.
+    pub fn new<I: NodeImplementation<Types>>(
         leaf: Leaf<Types, I>,
         qc: QuorumCertificate<Types, I>,
         block: Block<Types>,
-    ) -> Self
+    ) -> Result<Self, InconsistentBlockError<Types, I>>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
         Block<Types>: Serialize,
     {
-        assert_eq!(qc.leaf_commitment(), leaf.commit());
-        assert_eq!(leaf.get_deltas().commitment(), block.commit());
-        Self {
+        ensure!(
+            qc.leaf_commitment() == leaf.commit(),
+            InconsistentQcSnafu { qc, leaf }
+        );
+        ensure!(
+            leaf.get_deltas().commitment() == block.commit(),
+            InconsistentBlockSnafu { leaf, block }
+        );
+        Ok(Self {
             hash: block.commit(),
             height: leaf.get_height(),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
             txn_hashes: block.contained_transactions().into_iter().collect(),
             block,
-        }
+        })
     }
 
     pub fn block(&self) -> &Types::BlockType {
