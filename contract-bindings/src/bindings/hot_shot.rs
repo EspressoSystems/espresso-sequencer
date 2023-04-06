@@ -16,7 +16,7 @@ pub mod hot_shot {
     use ethers::providers::Middleware;
     #[doc = "HotShot was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"InvalidQC\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"TooManyBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"numQCs\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"WrongNumberOfQCs\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false},{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"MAX_BLOCKS\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"blockHeight\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256[]\",\"name\":\"newCommitments\",\"type\":\"uint256[]\",\"components\":[]},{\"internalType\":\"bytes[]\",\"name\":\"qcs\",\"type\":\"bytes[]\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlocks\",\"outputs\":[]}]" ;
+    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"InvalidQC\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"TooManyBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"numQCs\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"WrongNumberOfQCs\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlockNumber\",\"type\":\"uint256\",\"components\":[],\"indexed\":false},{\"internalType\":\"uint256\",\"name\":\"numBlocks\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"NewBlocks\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"MAX_BLOCKS\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"blockHeight\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"commitments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"message\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"pure\",\"type\":\"function\",\"name\":\"keccak\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint256[]\",\"name\":\"newCommitments\",\"type\":\"uint256[]\",\"components\":[]},{\"internalType\":\"bytes[]\",\"name\":\"qcs\",\"type\":\"bytes[]\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"newBlocks\",\"outputs\":[]}]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
     pub static HOTSHOT_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
@@ -25,7 +25,7 @@ pub mod hot_shot {
     #[doc = r" Bytecode of the #name contract"]
     pub static HOTSHOT_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
         ethers::contract::Lazy::new(|| {
-            "0x608060405234801561001057600080fd5b506103c3806100206000396000f3fe608060405234801561001057600080fd5b506004361061004c5760003560e01c806326833dcc1461005157806349ce89971461006c578063676923501461008c578063f44ff712146100a1575b600080fd5b61005a6103e881565b60405190815260200160405180910390f35b61005a61007a366004610217565b60006020819052908152604090205481565b61009f61009a36600461027c565b6100aa565b005b61005a60015481565b8281146100d95760405163638df5d160e11b815260048101849052602481018290526044015b60405180910390fd5b6103e88311156100ff5760405163e082840b60e01b8152600481018490526024016100d0565b60015460005b848110156101d65761015a600154878784818110610125576101256102e8565b9050602002013586868581811061013e5761013e6102e8565b905060200281019061015091906102fe565b6001949350505050565b61017d57600154604051637818671960e01b81526004016100d091815260200190565b85858281811061018f5761018f6102e8565b9050602002013560008060015481526020019081526020016000208190555060018060008282546101c0919061035b565b909155506101cf905081610374565b9050610105565b5060408051828152602081018690527f8203a21e4f95f72e5081d5e0929b1a8c52141e123f9a14e1e74b0260fa5f52f1910160405180910390a15050505050565b60006020828403121561022957600080fd5b5035919050565b60008083601f84011261024257600080fd5b50813567ffffffffffffffff81111561025a57600080fd5b6020830191508360208260051b850101111561027557600080fd5b9250929050565b6000806000806040858703121561029257600080fd5b843567ffffffffffffffff808211156102aa57600080fd5b6102b688838901610230565b909650945060208701359150808211156102cf57600080fd5b506102dc87828801610230565b95989497509550505050565b634e487b7160e01b600052603260045260246000fd5b6000808335601e1984360301811261031557600080fd5b83018035915067ffffffffffffffff82111561033057600080fd5b60200191503681900382131561027557600080fd5b634e487b7160e01b600052601160045260246000fd5b8082018082111561036e5761036e610345565b92915050565b60006001820161038657610386610345565b506001019056fea26469706673582212209927ec0fcf051840499900f943253ed5bf16cfd46f85b9784b1cc55a43530e5864736f6c63430008120033" . parse () . expect ("invalid bytecode")
+            "0x608060405234801561001057600080fd5b50610526806100206000396000f3fe608060405234801561001057600080fd5b50600436106100575760003560e01c806323fc7ef31461005c57806326833dcc1461008157806349ce89971461008a57806367692350146100aa578063f44ff712146100bf575b600080fd5b61006f61006a36600461027b565b6100c8565b60405190815260200160405180910390f35b61006f6103e881565b61006f61009836600461032c565b60006020819052908152604090205481565b6100bd6100b8366004610391565b6100f8565b005b61006f60015481565b6000816040516020016100db91906103fd565b604051602081830303815290604052805190602001209050919050565b8281146101275760405163638df5d160e11b815260048101849052602481018290526044015b60405180910390fd5b6103e883111561014d5760405163e082840b60e01b81526004810184905260240161011e565b60015460005b84811015610224576101a86001548787848181106101735761017361044b565b9050602002013586868581811061018c5761018c61044b565b905060200281019061019e9190610461565b6001949350505050565b6101cb57600154604051637818671960e01b815260040161011e91815260200190565b8585828181106101dd576101dd61044b565b90506020020135600080600154815260200190815260200160002081905550600180600082825461020e91906104be565b9091555061021d9050816104d7565b9050610153565b5060408051828152602081018690527f8203a21e4f95f72e5081d5e0929b1a8c52141e123f9a14e1e74b0260fa5f52f1910160405180910390a15050505050565b634e487b7160e01b600052604160045260246000fd5b60006020828403121561028d57600080fd5b813567ffffffffffffffff808211156102a557600080fd5b818401915084601f8301126102b957600080fd5b8135818111156102cb576102cb610265565b604051601f8201601f19908116603f011681019083821181831017156102f3576102f3610265565b8160405282815287602084870101111561030c57600080fd5b826020860160208301376000928101602001929092525095945050505050565b60006020828403121561033e57600080fd5b5035919050565b60008083601f84011261035757600080fd5b50813567ffffffffffffffff81111561036f57600080fd5b6020830191508360208260051b850101111561038a57600080fd5b9250929050565b600080600080604085870312156103a757600080fd5b843567ffffffffffffffff808211156103bf57600080fd5b6103cb88838901610345565b909650945060208701359150808211156103e457600080fd5b506103f187828801610345565b95989497509550505050565b600060208083528351808285015260005b8181101561042a5785810183015185820160400152820161040e565b506000604082860101526040601f19601f8301168501019250505092915050565b634e487b7160e01b600052603260045260246000fd5b6000808335601e1984360301811261047857600080fd5b83018035915067ffffffffffffffff82111561049357600080fd5b60200191503681900382131561038a57600080fd5b634e487b7160e01b600052601160045260246000fd5b808201808211156104d1576104d16104a8565b92915050565b6000600182016104e9576104e96104a8565b506001019056fea2646970667358221220a49134fe7a1fd5c59afe86898cc6b92c432667a0a6e00c17e78066f2868542df64736f6c63430008120033" . parse () . expect ("invalid bytecode")
         });
     pub struct HotShot<M>(ethers::contract::Contract<M>);
     impl<M> Clone for HotShot<M> {
@@ -118,6 +118,15 @@ pub mod hot_shot {
         ) -> ethers::contract::builders::ContractCall<M, ethers::core::types::U256> {
             self.0
                 .method_hash([73, 206, 137, 151], p0)
+                .expect("method not found (this should never happen)")
+        }
+        #[doc = "Calls the contract's `keccak` (0x23fc7ef3) function"]
+        pub fn keccak(
+            &self,
+            message: ethers::core::types::Bytes,
+        ) -> ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash([35, 252, 126, 243], message)
                 .expect("method not found (this should never happen)")
         }
         #[doc = "Calls the contract's `newBlocks` (0x67692350) function"]
@@ -297,6 +306,20 @@ pub mod hot_shot {
     )]
     #[ethcall(name = "commitments", abi = "commitments(uint256)")]
     pub struct CommitmentsCall(pub ethers::core::types::U256);
+    #[doc = "Container type for all input parameters for the `keccak` function with signature `keccak(bytes)` and selector `[35, 252, 126, 243]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthCall,
+        ethers :: contract :: EthDisplay,
+        Default,
+    )]
+    #[ethcall(name = "keccak", abi = "keccak(bytes)")]
+    pub struct KeccakCall {
+        pub message: ethers::core::types::Bytes,
+    }
     #[doc = "Container type for all input parameters for the `newBlocks` function with signature `newBlocks(uint256[],bytes[])` and selector `[103, 105, 35, 80]`"]
     #[derive(
         Clone,
@@ -317,6 +340,7 @@ pub mod hot_shot {
         MaxBlocks(MaxBlocksCall),
         BlockHeight(BlockHeightCall),
         Commitments(CommitmentsCall),
+        Keccak(KeccakCall),
         NewBlocks(NewBlocksCall),
     }
     impl ethers::core::abi::AbiDecode for HotShotCalls {
@@ -338,6 +362,10 @@ pub mod hot_shot {
             {
                 return Ok(HotShotCalls::Commitments(decoded));
             }
+            if let Ok(decoded) = <KeccakCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            {
+                return Ok(HotShotCalls::Keccak(decoded));
+            }
             if let Ok(decoded) =
                 <NewBlocksCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
             {
@@ -352,6 +380,7 @@ pub mod hot_shot {
                 HotShotCalls::MaxBlocks(element) => element.encode(),
                 HotShotCalls::BlockHeight(element) => element.encode(),
                 HotShotCalls::Commitments(element) => element.encode(),
+                HotShotCalls::Keccak(element) => element.encode(),
                 HotShotCalls::NewBlocks(element) => element.encode(),
             }
         }
@@ -362,6 +391,7 @@ pub mod hot_shot {
                 HotShotCalls::MaxBlocks(element) => element.fmt(f),
                 HotShotCalls::BlockHeight(element) => element.fmt(f),
                 HotShotCalls::Commitments(element) => element.fmt(f),
+                HotShotCalls::Keccak(element) => element.fmt(f),
                 HotShotCalls::NewBlocks(element) => element.fmt(f),
             }
         }
@@ -379,6 +409,11 @@ pub mod hot_shot {
     impl ::std::convert::From<CommitmentsCall> for HotShotCalls {
         fn from(var: CommitmentsCall) -> Self {
             HotShotCalls::Commitments(var)
+        }
+    }
+    impl ::std::convert::From<KeccakCall> for HotShotCalls {
+        fn from(var: KeccakCall) -> Self {
+            HotShotCalls::Keccak(var)
         }
     }
     impl ::std::convert::From<NewBlocksCall> for HotShotCalls {
@@ -419,4 +454,15 @@ pub mod hot_shot {
         Default,
     )]
     pub struct CommitmentsReturn(pub ethers::core::types::U256);
+    #[doc = "Container type for all return fields from the `keccak` function with signature `keccak(bytes)` and selector `[35, 252, 126, 243]`"]
+    #[derive(
+        Clone,
+        Debug,
+        Eq,
+        PartialEq,
+        ethers :: contract :: EthAbiType,
+        ethers :: contract :: EthAbiCodec,
+        Default,
+    )]
+    pub struct KeccakReturn(pub [u8; 32]);
 }

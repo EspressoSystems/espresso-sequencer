@@ -11,5 +11,8 @@ ethers = { version = "1.0.2", features = ["abigen"] }
 ethers-providers = "2.0.0"
 ethers-solc = "1.0.2"
 hex = "0.4.3"
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "546ed712867a7c4da79194eb2370c4e21ef0407f" }
 sequencer-utils = { path = "../../utils" }
+sha3 = { version = "0.10.5", default-features = false }
 tokio = "1.26.0"
+

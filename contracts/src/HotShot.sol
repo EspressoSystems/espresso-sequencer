@@ -43,4 +43,10 @@ contract HotShot {
 
         emit NewBlocks(firstBlockNumber, newCommitments.length);
     }
+
+    ////// BLS signature verification
+
+    function keccak(bytes memory message) public pure returns (bytes32) {
+        return keccak256(abi.encode(message));
+    }
 }

@@ -1,0 +1,902 @@
+{
+  "_format": "ethers-rs-sol-cache-3",
+  "paths": {
+    "artifacts": "contracts/out",
+    "build_infos": "contracts/out/build-info",
+    "sources": "contracts/src",
+    "tests": "contracts/test",
+    "scripts": "script",
+    "libraries": [
+      "contracts/lib"
+    ]
+  },
+  "files": {
+    "contracts/lib/forge-std/lib/ds-test/src/test.sol": {
+      "lastModificationDate": 1680791526080,
+      "contentHash": "962996f0e05d5218857a538a62d7c47e",
+      "sourceName": "contracts/lib/forge-std/lib/ds-test/src/test.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.5.0",
+      "artifacts": {
+        "DSTest": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "test.sol/DSTest.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/Base.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "8f04bbbb2c16f79e14fdc321695a8ec2",
+      "sourceName": "contracts/lib/forge-std/src/Base.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/StdStorage.sol",
+        "contracts/lib/forge-std/src/Vm.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "CommonBase": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Base.sol/CommonBase.json"
+        },
+        "ScriptBase": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Base.sol/ScriptBase.json"
+        },
+        "TestBase": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Base.sol/TestBase.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdAssertions.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "5bc6a90903a666d831370fa46838ed73",
+      "sourceName": "contracts/lib/forge-std/src/StdAssertions.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/lib/ds-test/src/test.sol",
+        "contracts/lib/forge-std/src/StdMath.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "StdAssertions": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdAssertions.sol/StdAssertions.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdChains.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "f73fef006f384b898c755b0e404b84a2",
+      "sourceName": "contracts/lib/forge-std/src/StdChains.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/Vm.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "StdChains": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdChains.sol/StdChains.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdCheats.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "027b46591bff2397c69867fd06ddc0c1",
+      "sourceName": "contracts/lib/forge-std/src/StdCheats.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/StdStorage.sol",
+        "contracts/lib/forge-std/src/Vm.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "StdCheats": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdCheats.sol/StdCheats.json"
+        },
+        "StdCheatsSafe": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdCheats.sol/StdCheatsSafe.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdError.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "64c896e1276a291776e5ea5aecb3870a",
+      "sourceName": "contracts/lib/forge-std/src/StdError.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "stdError": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdError.sol/stdError.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdInvariant.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "12c06010ec43ce935ed209d5aca30828",
+      "sourceName": "contracts/lib/forge-std/src/StdInvariant.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "StdInvariant": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdInvariant.sol/StdInvariant.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdJson.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "2e1d13674e152408867795362d833c24",
+      "sourceName": "contracts/lib/forge-std/src/StdJson.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/Vm.sol"
+      ],
+      "versionRequirement": ">=0.6.0, <0.9.0",
+      "artifacts": {
+        "stdJson": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdJson.sol/stdJson.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdMath.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "9da8f453eba6bb98f3d75bc6822bfb29",
+      "sourceName": "contracts/lib/forge-std/src/StdMath.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "stdMath": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdMath.sol/stdMath.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdStorage.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "3cb9868082df39a53927db09dbc21f23",
+      "sourceName": "contracts/lib/forge-std/src/StdStorage.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/Vm.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "stdStorage": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdStorage.sol/stdStorage.json"
+        },
+        "stdStorageSafe": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdStorage.sol/stdStorageSafe.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/StdUtils.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "45fc08daaa17b7908fa5de7d758d8c86",
+      "sourceName": "contracts/lib/forge-std/src/StdUtils.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/Vm.sol",
+        "contracts/lib/forge-std/src/interfaces/IMulticall3.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "StdUtils": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "StdUtils.sol/StdUtils.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/Test.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "095f745449cb5b6ff27a2e53892b648f",
+      "sourceName": "contracts/lib/forge-std/src/Test.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/lib/ds-test/src/test.sol",
+        "contracts/lib/forge-std/src/Base.sol",
+        "contracts/lib/forge-std/src/StdAssertions.sol",
+        "contracts/lib/forge-std/src/StdChains.sol",
+        "contracts/lib/forge-std/src/StdCheats.sol",
+        "contracts/lib/forge-std/src/StdError.sol",
+        "contracts/lib/forge-std/src/StdInvariant.sol",
+        "contracts/lib/forge-std/src/StdJson.sol",
+        "contracts/lib/forge-std/src/StdMath.sol",
+        "contracts/lib/forge-std/src/StdStorage.sol",
+        "contracts/lib/forge-std/src/StdUtils.sol",
+        "contracts/lib/forge-std/src/Vm.sol",
+        "contracts/lib/forge-std/src/console.sol",
+        "contracts/lib/forge-std/src/console2.sol",
+        "contracts/lib/forge-std/src/interfaces/IMulticall3.sol"
+      ],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "Test": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Test.sol/Test.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/Vm.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "86d01713430fa0877970a6ed8f99dc78",
+      "sourceName": "contracts/lib/forge-std/src/Vm.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "Vm": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Vm.sol/Vm.json"
+        },
+        "VmSafe": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Vm.sol/VmSafe.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/console.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "100b8a33b917da1147740d7ab8b0ded3",
+      "sourceName": "contracts/lib/forge-std/src/console.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.4.22, <0.9.0",
+      "artifacts": {
+        "console": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "console.sol/console.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/console2.sol": {
+      "lastModificationDate": 1680791524980,
+      "contentHash": "2096b4e5f252c5df9909cccbe3d2da2e",
+      "sourceName": "contracts/lib/forge-std/src/console2.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.4.22, <0.9.0",
+      "artifacts": {
+        "console2": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "console2.sol/console2.json"
+        }
+      }
+    },
+    "contracts/lib/forge-std/src/interfaces/IMulticall3.sol": {
+      "lastModificationDate": 1680791524984,
+      "contentHash": "7b131ca1ca32ef6378b7b9ad5488b901",
+      "sourceName": "contracts/lib/forge-std/src/interfaces/IMulticall3.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.2, <0.9.0",
+      "artifacts": {
+        "IMulticall3": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "IMulticall3.sol/IMulticall3.json"
+        }
+      }
+    },
+    "contracts/src/Counter.sol": {
+      "lastModificationDate": 1680791516460,
+      "contentHash": "c576b4e9841046901ba446c3ccb22f45",
+      "sourceName": "contracts/src/Counter.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "Counter": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Counter.sol/Counter.json"
+        }
+      }
+    },
+    "contracts/src/HotShot.sol": {
+      "lastModificationDate": 1680801653807,
+      "contentHash": "2412c75ab9107cbda3e4d917412c452c",
+      "sourceName": "contracts/src/HotShot.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/src/console.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "HotShot": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "HotShot.sol/HotShot.json"
+        }
+      }
+    },
+    "contracts/test/Counter.t.sol": {
+      "lastModificationDate": 1680791516460,
+      "contentHash": "b1a6521ba9c61d5266bab1fc9a057d68",
+      "sourceName": "contracts/test/Counter.t.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/lib/ds-test/src/test.sol",
+        "contracts/lib/forge-std/src/Base.sol",
+        "contracts/lib/forge-std/src/StdAssertions.sol",
+        "contracts/lib/forge-std/src/StdChains.sol",
+        "contracts/lib/forge-std/src/StdCheats.sol",
+        "contracts/lib/forge-std/src/StdError.sol",
+        "contracts/lib/forge-std/src/StdInvariant.sol",
+        "contracts/lib/forge-std/src/StdJson.sol",
+        "contracts/lib/forge-std/src/StdMath.sol",
+        "contracts/lib/forge-std/src/StdStorage.sol",
+        "contracts/lib/forge-std/src/StdUtils.sol",
+        "contracts/lib/forge-std/src/Test.sol",
+        "contracts/lib/forge-std/src/Vm.sol",
+        "contracts/lib/forge-std/src/console.sol",
+        "contracts/lib/forge-std/src/console2.sol",
+        "contracts/lib/forge-std/src/interfaces/IMulticall3.sol",
+        "contracts/src/Counter.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "CounterTest": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Counter.t.sol/CounterTest.json"
+        }
+      }
+    },
+    "contracts/test/HotShot.t.sol": {
+      "lastModificationDate": 1680791516460,
+      "contentHash": "789a7d53e3fcc02697e432826f18a779",
+      "sourceName": "contracts/test/HotShot.t.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/lib/forge-std/lib/ds-test/src/test.sol",
+        "contracts/lib/forge-std/src/Base.sol",
+        "contracts/lib/forge-std/src/StdAssertions.sol",
+        "contracts/lib/forge-std/src/StdChains.sol",
+        "contracts/lib/forge-std/src/StdCheats.sol",
+        "contracts/lib/forge-std/src/StdError.sol",
+        "contracts/lib/forge-std/src/StdInvariant.sol",
+        "contracts/lib/forge-std/src/StdJson.sol",
+        "contracts/lib/forge-std/src/StdMath.sol",
+        "contracts/lib/forge-std/src/StdStorage.sol",
+        "contracts/lib/forge-std/src/StdUtils.sol",
+        "contracts/lib/forge-std/src/Test.sol",
+        "contracts/lib/forge-std/src/Vm.sol",
+        "contracts/lib/forge-std/src/console.sol",
+        "contracts/lib/forge-std/src/console2.sol",
+        "contracts/lib/forge-std/src/interfaces/IMulticall3.sol",
+        "contracts/src/HotShot.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "HotShotTest": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "HotShot.t.sol/HotShotTest.json"
+        }
+      }
+    }
+  }
+}
