@@ -9,9 +9,5 @@ async fn main() {
     setup_backtrace();
 
     let opt = Options::parse();
-    join!(
-        json_rpc::serve(&opt),
-        query_service::serve(&opt),
-        //sequencer::run(&opt)
-    );
+    join!(json_rpc::serve(&opt), query_service::serve(&opt),);
 }
