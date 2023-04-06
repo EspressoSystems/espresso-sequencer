@@ -1,4 +1,4 @@
-// pub mod api;
+pub mod api;
 mod block;
 mod chain_variables;
 mod state;
@@ -6,6 +6,7 @@ mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
+use async_std::task::sleep;
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot::traits::implementations::{
     CentralizedCommChannel, CentralizedServerNetwork, MemoryCommChannel,
@@ -138,12 +139,12 @@ async fn init_hotshot(
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&private_key);
 
-    let storage = Storage::new();
+    let storage = Storage::empty();
     let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
         genesis_block.clone(),
     )
     .unwrap();
-    let metrics = NoMetrics::new();
+    let metrics = Box::<NoMetrics>::default();
 
     let quorum_exchange = QuorumExchangeType::create(
         nodes_pub_keys.clone(),
@@ -178,44 +179,44 @@ async fn init_hotshot(
     handle
 }
 
-// pub async fn init_node(
-//     addr: SocketAddr,
-//     genesis_block: Block,
-//     metrics: Box<dyn Metrics>,
-// ) -> HotShotHandle<SeqTypes, Node> {
-//     let (config, _, networking) =
-//         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
-//     let da_channel = CentralizedCommChannel::new(networking.clone());
-//     let quorum_channel = CentralizedCommChannel::new(networking.clone());
+pub async fn init_node(
+    addr: SocketAddr,
+    genesis_block: Block,
+    metrics: Box<dyn Metrics>,
+) -> HotShotHandle<SeqTypes, Node> {
+    let (config, _, networking) =
+        CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
+    let da_channel = CentralizedCommChannel::new(networking.clone());
+    let quorum_channel = CentralizedCommChannel::new(networking.clone());
 
-//     // Generate public keys and this node's private key.
-//     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
-//         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
-//         .unzip();
-//     let sk = priv_keys[config.node_index as usize].clone();
+    // Generate public keys and this node's private key.
+    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
+        .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
+        .unzip();
+    let sk = priv_keys[config.node_index as usize].clone();
 
-//     // Wait for other nodes to connect.
-//     while !networking.run_ready() {
-//         let connected = networking.get_connected_client_count().await;
-//         tracing::info!(
-//             "waiting for start signal ({}/{} connected)",
-//             connected,
-//             config.config.total_nodes,
-//         );
-//         sleep(Duration::from_secs(1)).await;
-//     }
+    // Wait for other nodes to connect.
+    while !networking.run_ready() {
+        let connected = networking.get_connected_client_count().await;
+        tracing::info!(
+            "waiting for start signal ({}/{} connected)",
+            connected,
+            config.config.total_nodes,
+        );
+        sleep(Duration::from_secs(1)).await;
+    }
 
-//     init_hotshot(
-//         pub_keys,
-//         genesis_block,
-//         config.node_index as usize,
-//         sk,
-//         da_channel,
-//         quorum_channel,
-//         config.config,
-//     )
-//     .await
-// }
+    init_hotshot(
+        pub_keys,
+        genesis_block,
+        config.node_index as usize,
+        sk,
+        da_channel,
+        quorum_channel,
+        config.config,
+    )
+    .await
+}
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
@@ -278,7 +279,7 @@ pub mod testing {
 
             let network = MemoryNetwork::new(
                 public_key.clone(),
-                NoMetrics::new(),
+                Box::<NoMetrics>::default(),
                 master_map.clone(),
                 None,
             );

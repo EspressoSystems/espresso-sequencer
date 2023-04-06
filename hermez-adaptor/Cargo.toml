@@ -20,7 +20,7 @@ dotenvy = "0.15.6"
 escargot = "0.5.7"
 ethers = "1.0"
 futures = "0.3"
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.3" }
 http-types = "2.12.0"
 jsonrpc-v2 = "0.11.0"
 sequencer = { path = "../sequencer" }
@@ -41,8 +41,7 @@ snafu = "0.7.4"
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
-# hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.4.1", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "df1b868503537aa9add254a5a29fa3aadc36de7f", features = ["async-std-executor", "channel-async-std"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.4.12", features = ["async-std-executor", "channel-async-std"] }
 portpicker = "0.1"
 rand_chacha = "0.3"
 sequencer = { path = "../sequencer", features = ["testing"] }

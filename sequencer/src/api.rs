@@ -1,6 +1,6 @@
 use crate::{
     transaction::{SequencerTransaction, Transaction},
-    LeafType, SeqTypes,
+    Leaf, SeqTypes,
 };
 use async_std::{
     sync::RwLock,
@@ -24,33 +24,33 @@ pub type HandleFromMetrics<I> =
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: HotShotHandle<SeqTypes, I>,
-    pub query_state: QueryData<SeqTypes, ()>,
+    pub query_state: QueryData<SeqTypes, I, ()>,
 }
 
-impl<I: NodeImplementation<SeqTypes>> AppState<I> {
+impl<I: NodeImplementation<SeqTypes, Leaf = Leaf>> AppState<I> {
     pub async fn update(
         &mut self,
-        event: &Event<SeqTypes, LeafType>,
-    ) -> Result<(), <QueryData<SeqTypes, ()> as UpdateDataSource<SeqTypes>>::Error> {
+        event: &Event<SeqTypes, Leaf>,
+    ) -> Result<(), <QueryData<SeqTypes, I, ()> as UpdateDataSource<SeqTypes, I>>::Error> {
         self.query_state.update(event)?;
         self.query_state.commit_version().await?;
         Ok(())
     }
 }
 
-impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppState<I> {
-    type Error = <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::Error;
+impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes, I> for AppState<I> {
+    type Error = <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::Error;
 
     type LeafIterType<'a> =
-        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafIterType<'a>;
+        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::LeafIterType<'a>;
 
     type BlockIterType<'a> =
-        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::BlockIterType<'a>;
+        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::BlockIterType<'a>;
 
     type LeafStreamType =
-        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::LeafStreamType;
+        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::LeafStreamType;
     type BlockStreamType =
-        <QueryData<SeqTypes, ()> as AvailabilityDataSource<SeqTypes>>::BlockStreamType;
+        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::BlockStreamType;
 
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
         self.query_state.get_nth_leaf_iter(n)
@@ -62,7 +62,7 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppSt
 
     fn get_leaf_index_by_hash(
         &self,
-        hash: hotshot_query_service::availability::LeafHash<SeqTypes>,
+        hash: hotshot_query_service::availability::LeafHash<SeqTypes, I>,
     ) -> Option<u64> {
         self.query_state.get_leaf_index_by_hash(hash)
     }
@@ -98,7 +98,7 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes> for AppSt
 }
 
 impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
-    type Error = <QueryData<SeqTypes, ()> as StatusDataSource>::Error;
+    type Error = <QueryData<SeqTypes, I, ()> as StatusDataSource>::Error;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
         self.query_state.block_height()
@@ -117,8 +117,8 @@ impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
     }
 }
 
-pub async fn serve<I: NodeImplementation<SeqTypes>>(
-    query_state: QueryData<SeqTypes, ()>,
+pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+    query_state: QueryData<SeqTypes, I, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
 ) -> io::Result<(HotShotHandle<SeqTypes, I>, JoinHandle<io::Result<()>>)> {
@@ -165,8 +165,9 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     // Initialize availability and status APIs
-    let availability_api = availability::define_api::<StateType<I>, SeqTypes>(&Default::default())
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let availability_api =
+        availability::define_api::<StateType<I>, SeqTypes, I>(&Default::default())
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     let status_api = status::define_api::<StateType<I>>(&Default::default())
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -235,7 +236,7 @@ mod test {
             handle.start().await;
         }
 
-        let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
+        let init_handle: HandleFromMetrics<Node> =
             Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
 
         let tmp_dir = TempDir::new().unwrap();

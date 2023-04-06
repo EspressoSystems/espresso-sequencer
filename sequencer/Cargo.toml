@@ -27,21 +27,12 @@ derive_more = "0.99.17"
 either = "1.8.1"
 futures = "0.3"
 
-# hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.1" }
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "df1b868503537aa9add254a5a29fa3aadc36de7f" }
-# hotshot = { path = "../../hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
 
-# hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.1" }
-hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "df1b868503537aa9add254a5a29fa3aadc36de7f" }
-# hotshot-centralized-server = { path = "../../hotshot/centralized_server", features = ["async-std-executor", "channel-async-std"] }
-
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
-
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "df1b868503537aa9add254a5a29fa3aadc36de7f" }
-
-# hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.1" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], rev = "df1b868503537aa9add254a5a29fa3aadc36de7f" }
-# hotshot-types = { path = "../../hotshot/types", features = ["async-std-executor", "channel-async-std"] }
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.3" }
 
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
 nll = { git = "https://github.com/EspressoSystems/nll" }
