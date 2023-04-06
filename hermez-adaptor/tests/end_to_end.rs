@@ -91,7 +91,7 @@ async fn test_end_to_end() {
         chain_id: Default::default(),
         port: Default::default(),
         storage_path: Default::default(),
-        cdn_url: "dummy.com".parse::<Url>().unwrap(),
+        cdn_url: "https:///dummy.com".parse::<Url>().unwrap(),
         reset_store: Default::default(),
     };
     spawn_local(async move {
