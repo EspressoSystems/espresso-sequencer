@@ -23,7 +23,7 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
 
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt).await else {
-        tracing::error!("unable to connect to L1, sequencer task exiting");
+        tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
     tracing::info!("connected to l1 at {}", opt.l1_provider);
@@ -34,7 +34,7 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
         Ok(from) => from.as_u64(),
         Err(err) => {
             tracing::error!("unable to read block_height from contract: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
@@ -45,7 +45,7 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
         Ok(max) => max.as_u64(),
         Err(err) => {
             tracing::error!("unable to read max_blocks from contract: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
@@ -67,7 +67,7 @@ async fn sequence(
         Ok(leaves) => Box::pin(leaves.peekable()),
         Err(err) => {
             tracing::error!("unable to subscribe to HotShot query service: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
@@ -81,7 +81,7 @@ async fn sequence(
                 continue;
             }
             None => {
-                tracing::error!("HotShot leaf stream ended, sequencer task will exit");
+                tracing::error!("HotShot leaf stream ended, hotshot commitment task will exit");
                 return;
             }
         };
