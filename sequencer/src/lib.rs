@@ -90,6 +90,11 @@ pub struct Options {
     /// contract. It must be funded with ETH and MATIC on layer 1.
     #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC")]
     pub sequencer_mnemonic: String,
+
+    /// URL of HotShot Query Service
+    ///
+    /// If unspecified, defaults to the query service internal to the sequencer process.
+    pub query_service_url: Option<Url>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,7 +201,10 @@ pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
+) -> (
+    HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>>,
+    u64,
+) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
 
@@ -217,15 +225,18 @@ pub async fn init_node(
         sleep(Duration::from_secs(1)).await;
     }
 
-    init_hotshot(
-        pub_keys,
-        genesis_block,
-        config.node_index as usize,
-        sk,
-        networking,
-        config.config,
+    (
+        init_hotshot(
+            pub_keys,
+            genesis_block,
+            config.node_index as usize,
+            sk,
+            networking,
+            config.config,
+        )
+        .await,
+        config.node_index,
     )
-    .await
 }
 
 #[cfg(any(test, feature = "testing"))]

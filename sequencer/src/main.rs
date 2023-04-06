@@ -9,7 +9,13 @@ use sequencer::{
 };
 use std::{net::ToSocketAddrs, path::Path};
 
-async fn serve_sequencer(opt: &Options) {
+#[async_std::main]
+async fn main() {
+    setup_logging();
+    setup_backtrace();
+
+    let opt = Options::parse();
+
     // Create genesis block.
     let genesis = Block::genesis(GenesisTransaction {
         chain_variables: ChainVariables::new(
@@ -41,22 +47,21 @@ async fn serve_sequencer(opt: &Options) {
     }
     .expect("Failed to initialize query data storage");
 
-    let (handle, task) = serve(query_data, init_handle, opt.port)
+    let (handle, task, node_index) = serve(query_data, init_handle, opt.port)
         .await
         .expect("Failed to initialize API");
 
-    // Start doing consensus.
-    handle.start().await;
+    let run_sequencer = async {
+        // Start doing consensus.
+        handle.start().await;
 
-    // Block on the API server.
-    task.await.expect("Error in API server");
-}
+        // Block on the API server.
+        task.await.expect("Error in API server");
+    };
 
-#[async_std::main]
-async fn main() {
-    setup_logging();
-    setup_backtrace();
-
-    let opt = Options::parse();
-    join!(serve_sequencer(&opt), run_hotshot_commitment_task(&opt));
+    if node_index == 0 {
+        join!(run_sequencer, run_hotshot_commitment_task(&opt));
+    } else {
+        run_sequencer.await;
+    }
 }

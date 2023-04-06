@@ -18,7 +18,12 @@ type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 pub async fn run_hotshot_commitment_task(opt: &Options) {
     // Connect to the HotShot query service to stream sequenced blocks.
-    let hotshot = HotShotClient::new(opt.cdn_url.join("availability").unwrap());
+    let query_service_url = opt.query_service_url.clone().unwrap_or(
+        format!("http://localhost:{}/availability", opt.port)
+            .parse::<Url>()
+            .unwrap(),
+    );
+    let hotshot = HotShotClient::new(query_service_url);
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.

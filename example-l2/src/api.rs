@@ -143,9 +143,9 @@ mod tests {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
-        let init_handle = Box::new(move |_| ready(api_node).boxed());
+        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
         let query_data = QueryData::create(storage_path, ()).unwrap();
-        let (watch_handle, _) = sequencer::api::serve(query_data, init_handle, sequencer_port)
+        let (watch_handle, _, _) = sequencer::api::serve(query_data, init_handle, sequencer_port)
             .await
             .unwrap();
         for node in &nodes {

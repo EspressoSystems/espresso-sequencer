@@ -96,7 +96,7 @@ mod test {
         let sequencer_store = TempDir::new().unwrap();
         sequencer::api::serve(
             QueryData::create(sequencer_store.path(), ()).unwrap(),
-            Box::new(move |_| ready(api_node).boxed()),
+            Box::new(move |_| ready((api_node, 0)).boxed()),
             sequencer_port,
         )
         .await

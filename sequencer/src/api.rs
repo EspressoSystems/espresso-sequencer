@@ -19,8 +19,11 @@ use hotshot_types::traits::metrics::Metrics;
 use std::{io, sync::Arc};
 use tide_disco::{Api, App};
 
-pub type HandleFromMetrics<I> =
-    Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
+type NodeIndex = u64;
+
+pub type HandleFromMetrics<I> = Box<
+    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
+>;
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: HotShotHandle<SeqTypes, I>,
@@ -121,13 +124,17 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-) -> io::Result<(HotShotHandle<SeqTypes, I>, JoinHandle<io::Result<()>>)> {
+) -> io::Result<(
+    HotShotHandle<SeqTypes, I>,
+    JoinHandle<io::Result<()>>,
+    NodeIndex,
+)> {
     type StateType<I> = Arc<RwLock<AppState<I>>>;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
 
     // Start up handle
-    let handle = init_handle(metrics).await.clone();
+    let (handle, node_index) = init_handle(metrics).await;
     handle.start().await;
 
     let mut watch_handle = handle.clone();
@@ -197,7 +204,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         })
         .0
     });
-    Ok((handle, task))
+    Ok((handle, task, node_index))
 }
 
 #[cfg(test)]
@@ -237,14 +244,14 @@ mod test {
         }
 
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
-            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
+            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { (handles[0].clone(), 0) }));
 
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
 
         let query_data = QueryData::create(storage_path, ()).unwrap();
 
-        let (watch_handle, _) = serve(query_data, init_handle, port).await.unwrap();
+        let (watch_handle, _, _) = serve(query_data, init_handle, port).await.unwrap();
 
         client.connect(None).await;
 

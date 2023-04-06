@@ -67,7 +67,7 @@ async fn test_end_to_end() {
     let sequencer_store = TempDir::new().unwrap();
     sequencer::api::serve(
         QueryData::create(sequencer_store.path(), ()).unwrap(),
-        Box::new(move |_| ready(api_node).boxed()),
+        Box::new(move |_| ready((api_node, 0)).boxed()),
         env.sequencer_port(),
     )
     .await
@@ -93,6 +93,7 @@ async fn test_end_to_end() {
         storage_path: Default::default(),
         cdn_url: "https:///dummy.com".parse::<Url>().unwrap(),
         reset_store: Default::default(),
+        query_service_url: None,
     };
     spawn_local(async move {
         join!(
