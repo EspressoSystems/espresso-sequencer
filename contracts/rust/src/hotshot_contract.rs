@@ -68,6 +68,9 @@ mod test {
 
     mod bls_signature {
         use super::*;
+        use crate::hash_to_curve_helpers::Expander;
+        // use ark_bn254::Fq as BaseField;
+        // use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
@@ -75,6 +78,30 @@ mod test {
         async fn test_hash_to_curve() {
             let msg_input = [44u8, 65u8];
             let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
+        }
+
+        #[async_std::test]
+        async fn test_expander() {
+            // We can fix the constants in our case
+            let len_per_base_elem = 48;
+            let dst = [1u8];
+
+            let expander = crate::hash_to_curve_helpers::ExpanderXmd {
+                hasher: Keccak256::default(),
+                dst: dst.to_vec(),
+                block_size: len_per_base_elem,
+            };
+
+            // Simplification in our case: see https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/field_hashers/mod.rs#L70
+            let len_in_bytes = len_per_base_elem;
+            let message = [1u8; 16];
+            let _uniform_bytes = expander.expand(&message, len_in_bytes);
+        }
+
+        #[async_std::test]
+        async fn test_hash_to_field() {
+            // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
+            // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
         }
 
         #[async_std::test]

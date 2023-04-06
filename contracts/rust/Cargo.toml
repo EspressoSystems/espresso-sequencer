@@ -5,6 +5,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ark-bn254 = "0.4.0"
+ark-ff = "0.4.2"
+ark-std = { version = "0.4.0", default-features = false }
 async-std = "1.12.0"
 contract-bindings = { path = "../../contract-bindings" }
 ethers = { version = "1.0.2", features = ["abigen"] }
@@ -14,5 +17,10 @@ hex = "0.4.3"
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "546ed712867a7c4da79194eb2370c4e21ef0407f" }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.5", default-features = false }
+
+digest = { version = "0.10", default-features = false, features = ["alloc"] }
+
+#ark-bn254 = { path = "../../../../others/curves/bn254" } # TODO change
+#ark-ff = { path = "../../../../others/algebra/ff" } # TODO change
 tokio = "1.26.0"
 

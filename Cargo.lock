@@ -4548,8 +4548,12 @@ dependencies = [
 name = "hotshot_contract"
 version = "0.1.0"
 dependencies = [
+ "ark-bn254 0.4.0",
+ "ark-ff 0.4.2",
+ "ark-std 0.4.0",
  "async-std",
  "contract-bindings",
+ "digest 0.10.6",
  "ethers 1.0.2",
  "ethers-providers 2.0.2",
  "ethers-solc 1.0.2",
