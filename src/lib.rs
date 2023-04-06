@@ -392,25 +392,35 @@ pub mod data_source;
 mod error;
 mod ledger_log;
 mod metrics;
+mod resolvable;
 pub mod status;
 pub mod testing;
 mod update;
 
 pub use error::Error;
+pub use resolvable::Resolvable;
 
 use data_source::QueryData;
 use futures::Future;
-use hotshot::types::HotShotHandle;
+use hotshot::{certificate, types::HotShotHandle};
 use hotshot_types::{
     data::LeafType,
-    traits::node_implementation::{NodeImplementation, NodeType},
+    traits::{
+        block_contents,
+        node_implementation::{NodeImplementation, NodeType},
+    },
 };
 
 /// Leaf type appended to a chain by consensus.
 pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
-
-/// Certificates used by consensus to justify leaves.
-pub type QuorumCertificate<Types, I> = <Leaf<Types, I> as LeafType>::QuorumCertificate;
+/// Certificate justifying a [`Leaf`].
+pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
+/// State change indicated by a [`Leaf`].
+pub type Deltas<Types, I> = <Leaf<Types, I> as LeafType>::DeltasType;
+/// Block of data appened to a chain by consensus.
+pub type Block<Types> = <Types as NodeType>::BlockType;
+/// Item within a [`Block`].
+pub type Transaction<Types> = <Block<Types> as block_contents::Block>::Transaction;
 
 #[derive(clap::Args, Default)]
 pub struct Options {

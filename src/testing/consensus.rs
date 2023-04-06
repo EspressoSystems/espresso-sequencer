@@ -19,14 +19,17 @@ use async_std::{
 use futures::future::join_all;
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{MasterMap, MemoryNetwork, MemoryStorage},
+        election::static_committee::StaticElectionConfig,
+        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
     },
     types::{HotShotHandle, SignatureKey},
     HotShot, HotShotInitializer,
 };
 use hotshot_types::{
-    traits::signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
+    traits::{
+        election::{ConsensusExchange, QuorumExchange},
+        signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
+    },
     ExecutionType, HotShotConfig,
 };
 use std::num::NonZeroUsize;
@@ -49,7 +52,6 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
     pub async fn init(user_data: UserData) -> Self {
         let dir = TempDir::new("mock_network").unwrap();
         let priv_keys = (0..MINIMUM_NODES)
-            .into_iter()
             .map(|_| Ed25519Priv::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
@@ -84,19 +86,35 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                     let master_map = master_map.clone();
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();
+                        let channel = MemoryCommChannel::new(MemoryNetwork::new(
+                            pub_keys[node_id],
+                            query_data.metrics(),
+                            master_map,
+                            None,
+                        ));
+
+                        let quorum_exchange = QuorumExchange::create(
+                            pub_keys.clone(),
+                            StaticElectionConfig {},
+                            channel.clone(),
+                            pub_keys[node_id],
+                            priv_key.clone(),
+                        );
+                        let committee_exchange = QuorumExchange::create(
+                            pub_keys.clone(),
+                            StaticElectionConfig {},
+                            channel,
+                            pub_keys[node_id],
+                            priv_key.clone(),
+                        );
                         let hotshot = HotShot::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
                             config,
-                            MemoryNetwork::new(
-                                pub_keys[node_id],
-                                query_data.metrics(),
-                                master_map,
-                                None,
-                            ),
-                            MemoryStorage::new(),
-                            GeneralStaticCommittee::new(pub_keys),
+                            MemoryStorage::empty(),
+                            quorum_exchange,
+                            committee_exchange,
                             HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
                             query_data.metrics(),
                         )

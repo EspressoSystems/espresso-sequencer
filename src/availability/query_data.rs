@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Leaf, QuorumCertificate};
+use crate::{Block, Deltas, Leaf, QuorumCertificate, Resolvable, Transaction};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot_types::{
@@ -19,16 +19,15 @@ use hotshot_types::{
         election::SignedCertificate,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::EncodedPublicKey,
-        Block,
+        Block as _,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
 
 pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
-pub type BlockHash<Types> = Commitment<<Types as NodeType>::BlockType>;
-pub type TransactionHash<Types> =
-    Commitment<<<Types as NodeType>::BlockType as Block>::Transaction>;
+pub type BlockHash<Types> = Commitment<Block<Types>>;
+pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
@@ -38,7 +37,7 @@ pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
 }
 
 impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
-    pub fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
+    pub(crate) fn new(leaf: Leaf<Types, I>, qc: QuorumCertificate<Types, I>) -> Self {
         assert_eq!(qc.leaf_commitment(), leaf.commit());
         Self { leaf, qc }
     }
@@ -59,8 +58,11 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         self.leaf.commit()
     }
 
-    pub fn block_hash(&self) -> BlockHash<Types> {
-        self.leaf.get_deltas().commit()
+    pub fn block_hash(&self) -> BlockHash<Types>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
+        self.leaf.get_deltas().commitment()
     }
 
     pub fn proposer(&self) -> EncodedPublicKey {
@@ -71,7 +73,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct BlockQueryData<Types: NodeType> {
-    block: Types::BlockType,
+    block: Block<Types>,
     hash: BlockHash<Types>,
     height: u64,
     size: u64,
@@ -79,15 +81,17 @@ pub struct BlockQueryData<Types: NodeType> {
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
-    pub fn new<I: NodeImplementation<Types>>(
+    pub(crate) fn new<I: NodeImplementation<Types>>(
         leaf: Leaf<Types, I>,
         qc: QuorumCertificate<Types, I>,
+        block: Block<Types>,
     ) -> Self
     where
-        Types::BlockType: Serialize,
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+        Block<Types>: Serialize,
     {
         assert_eq!(qc.leaf_commitment(), leaf.commit());
-        let block = leaf.get_deltas();
+        assert_eq!(leaf.get_deltas().commitment(), block.commit());
         Self {
             hash: block.commit(),
             height: leaf.get_height(),
@@ -160,14 +164,14 @@ impl<'a, Types: NodeType> IntoIterator for &'a BlockQueryData<Types> {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct TransactionQueryData<Types: NodeType> {
-    transaction: <Types::BlockType as Block>::Transaction,
+    transaction: Transaction<Types>,
     height: u64,
     index: u64,
     hash: TransactionHash<Types>,
 }
 
 impl<Types: NodeType> TransactionQueryData<Types> {
-    pub fn transaction(&self) -> &<Types::BlockType as Block>::Transaction {
+    pub fn transaction(&self) -> &Transaction<Types> {
         &self.transaction
     }
 

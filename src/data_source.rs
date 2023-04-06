@@ -21,6 +21,7 @@ use crate::{
         data_source::{StatusDataSource, UpdateStatusData},
         query_data::MempoolQueryData,
     },
+    Block, Deltas, Resolvable,
 };
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use futures::stream::BoxStream;
@@ -97,7 +98,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [QueryData] will manage its own persistence synchronization.
-    pub fn open(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
+    pub fn open(path: &Path, user_data: UserData) -> Result<Self, PersistenceError>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_query_data")?;
         let mut query_data = Self::open_with_store(&mut loader, user_data)?;
         query_data.top_storage = Some(AtomicStore::open(loader)?);
@@ -140,7 +144,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I
     pub fn open_with_store(
         loader: &mut AtomicStoreLoader,
         user_data: UserData,
-    ) -> Result<Self, PersistenceError> {
+    ) -> Result<Self, PersistenceError>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
         let leaf_storage =
             LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
@@ -297,7 +304,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailability
 {
     type Error = PersistenceError;
 
-    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
+    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
