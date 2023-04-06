@@ -6,8 +6,9 @@ use ethers::{
     signers::coins_bip39::English,
 };
 use futures::{future::FutureExt, stream::StreamExt};
-use hotshot_query_service::availability::LeafQueryData;
-use sequencer::SeqTypes;
+use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
+use hotshot_types::traits::node_implementation::NodeImplementation;
+use sequencer::{network, Node, SeqTypes};
 use std::time::Duration;
 use surf_disco::Url;
 
@@ -50,15 +51,17 @@ pub async fn run(opt: &Options) {
         }
     };
 
-    sequence(from, max, hotshot, contract).await;
+    sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
 }
 
-async fn sequence(
+async fn sequence<I: NodeImplementation<SeqTypes>>(
     from: u64,
     max_blocks: u64,
     hotshot: HotShotClient,
     contract: HotShot<Middleware>,
-) {
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let mut leaves = match hotshot
         .socket(&format!("stream/leaves/{from}"))
         .subscribe()
@@ -74,7 +77,7 @@ async fn sequence(
 
     loop {
         // Wait for HotShot to sequence a block.
-        let leaf: LeafQueryData<SeqTypes> = match leaves.next().await {
+        let leaf: LeafQueryData<SeqTypes, I> = match leaves.next().await {
             Some(Ok(leaf)) => leaf,
             Some(Err(err)) => {
                 tracing::error!("error from HotShot, retrying: {}", err);
@@ -114,10 +117,12 @@ async fn sequence(
     }
 }
 
-async fn sequence_batches(
+async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     contract: &HotShot<Middleware>,
-    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes>>,
-) {
+    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
         .into_iter()
         .map(|leaf| {
@@ -227,11 +232,11 @@ mod test {
     use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use hotshot_types::{
-        constants::genesis_proposer_id,
-        data::{Leaf, QuorumCertificate, ViewNumber},
-        traits::{block_contents::Block as _, state::ConsensusTime},
+        certificate::QuorumCertificate,
+        data::{LeafType, ViewNumber},
+        traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
     };
-    use sequencer::{Block, State, Vm};
+    use sequencer::{network, Block, Leaf, Node, Vm};
     use sequencer_utils::Anvil;
     use zkevm::{EvmTransaction, ZkEvm};
 
@@ -267,7 +272,7 @@ mod test {
         let transfer_amount = 1.into();
         let num_batches = 2u64;
         let nonce = U256::from(0); // arbitrary
-        let mut leaves: Vec<LeafQueryData<SeqTypes>> = vec![];
+        let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
         for i in 0..num_batches {
             // Generate and L2 transfer.
             let transfer = TransactionRequest {
@@ -286,24 +291,13 @@ mod test {
             tracing::info!("transfer hash: {:?}", hash);
 
             // Add it to a sequencer block.
-            let block = Block::new(State::default().commit())
+            let block = Block::new()
                 .add_transaction_raw(&zkevm.wrap(&txn).into())
                 .unwrap();
 
             // Fake a leaf that sequences this block.
             let mut qc = QuorumCertificate::genesis();
-            let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
-            let leaf = Leaf::new(
-                Default::default(),
-                block,
-                parent_leaf,
-                qc.clone(),
-                ViewNumber::genesis(),
-                i,
-                vec![],
-                0,
-                genesis_proposer_id(),
-            );
+            let leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
             qc.leaf_commitment = leaf.commit();
             leaves.push(LeafQueryData::new(leaf, qc));
         }

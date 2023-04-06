@@ -8,8 +8,6 @@ use hotshot_types::{
     data::ViewNumber,
     traits::state::{ConsensusTime, TestableState},
 };
-use rand::Rng;
-#[allow(deprecated)]
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 

@@ -7523,6 +7523,7 @@ dependencies = [
  "clap 4.2.1",
  "cld",
  "commit 0.2.2",
+ "derivative",
  "derive_more",
  "either",
  "futures",

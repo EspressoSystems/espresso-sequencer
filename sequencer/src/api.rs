@@ -208,9 +208,8 @@ mod test {
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
-        Node, SeqTypes,
     };
-    use hotshot::traits::implementations::MemoryNetwork;
+    use futures::FutureExt;
     use hotshot_query_service::data_source::QueryData;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
@@ -218,8 +217,6 @@ mod test {
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
-
-    use super::HandleFromMetrics;
 
     #[async_std::test]
     async fn submit_test() {
@@ -236,8 +233,7 @@ mod test {
             handle.start().await;
         }
 
-        let init_handle: HandleFromMetrics<Node> =
-            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
+        let init_handle = Box::new(|_: Box<dyn Metrics>| async move { handles[0].clone() }.boxed());
 
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
