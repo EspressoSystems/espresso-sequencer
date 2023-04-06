@@ -3,7 +3,7 @@ use clap::Parser;
 use futures::join;
 use hotshot_query_service::data_source::QueryData;
 use sequencer::{
-    api::{serve, HandleFromMetrics},
+    api::{serve, HandleFromMetrics, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
     init_node, Block, ChainVariables, GenesisTransaction, Options,
 };
@@ -47,7 +47,11 @@ async fn main() {
     }
     .expect("Failed to initialize query data storage");
 
-    let (handle, task, node_index) = serve(query_data, init_handle, opt.port)
+    let SequencerNode {
+        handle,
+        update_task,
+        node_index,
+    } = serve(query_data, init_handle, opt.port)
         .await
         .expect("Failed to initialize API");
 
@@ -56,7 +60,7 @@ async fn main() {
         handle.start().await;
 
         // Block on the API server.
-        task.await.expect("Error in API server");
+        update_task.await.expect("Error in API server");
     };
 
     if node_index == 0 {
