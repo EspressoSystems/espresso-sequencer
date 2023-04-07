@@ -93,7 +93,7 @@ async fn test_end_to_end() {
         storage_path: Default::default(),
         cdn_url: "https:///dummy.com".parse::<Url>().unwrap(),
         reset_store: Default::default(),
-        query_service_url: None,
+        query_service_url: Some(env.sequencer()),
     };
     spawn_local(async move {
         join!(
