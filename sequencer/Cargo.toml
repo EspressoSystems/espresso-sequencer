@@ -33,7 +33,7 @@ hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
 
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.3" }
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.4" }
 
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
 nll = { git = "https://github.com/EspressoSystems/nll" }

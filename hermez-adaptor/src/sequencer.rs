@@ -299,7 +299,7 @@ mod test {
             let mut qc = QuorumCertificate::genesis();
             let leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
             qc.leaf_commitment = leaf.commit();
-            leaves.push(LeafQueryData::new(leaf, qc));
+            leaves.push(LeafQueryData::new(leaf, qc).unwrap());
         }
         tracing::info!("sequencing batches: {:?}", leaves);
 
