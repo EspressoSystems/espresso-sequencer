@@ -15,12 +15,21 @@ use hotshot_query_service::{
     status::{self, StatusDataSource},
     Error,
 };
-use hotshot_types::traits::metrics::Metrics;
+use hotshot_types::traits::{metrics::Metrics, node_implementation::NodeTypes};
 use std::{io, sync::Arc};
 use tide_disco::{Api, App};
 
-pub type HandleFromMetrics<I> =
-    Box<dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, HotShotHandle<SeqTypes, I>>>;
+type NodeIndex = u64;
+
+pub struct SequencerNode<SeqTypes: NodeTypes, I: NodeImplementation<SeqTypes>> {
+    pub handle: HotShotHandle<SeqTypes, I>,
+    pub update_task: JoinHandle<io::Result<()>>,
+    pub node_index: NodeIndex,
+}
+
+pub type HandleFromMetrics<I> = Box<
+    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
+>;
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: HotShotHandle<SeqTypes, I>,
@@ -121,13 +130,13 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
     query_state: QueryData<SeqTypes, ()>,
     init_handle: HandleFromMetrics<I>,
     port: u16,
-) -> io::Result<(HotShotHandle<SeqTypes, I>, JoinHandle<io::Result<()>>)> {
+) -> io::Result<SequencerNode<SeqTypes, I>> {
     type StateType<I> = Arc<RwLock<AppState<I>>>;
 
     let metrics: Box<dyn Metrics> = query_state.metrics();
 
     // Start up handle
-    let handle = init_handle(metrics).await.clone();
+    let (handle, node_index) = init_handle(metrics).await;
     handle.start().await;
 
     let mut watch_handle = handle.clone();
@@ -178,7 +187,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         .register_module("status", status_api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
-    let task = spawn(async move {
+    let update_task = spawn(async move {
         futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
             tracing::debug!("waiting for event");
             while let Ok(event) = watch_handle.next_event().await {
@@ -197,7 +206,11 @@ pub async fn serve<I: NodeImplementation<SeqTypes>>(
         })
         .0
     });
-    Ok((handle, task))
+    Ok(SequencerNode {
+        handle,
+        update_task,
+        node_index,
+    })
 }
 
 #[cfg(test)]
@@ -219,7 +232,7 @@ mod test {
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
 
-    use super::HandleFromMetrics;
+    use super::{HandleFromMetrics, SequencerNode};
 
     #[async_std::test]
     async fn submit_test() {
@@ -237,14 +250,14 @@ mod test {
         }
 
         let init_handle: HandleFromMetrics<Node<MemoryNetwork<SeqTypes>>> =
-            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { handles[0].clone() }));
+            Box::new(|_: Box<dyn Metrics>| Box::pin(async move { (handles[0].clone(), 0) }));
 
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
 
         let query_data = QueryData::create(storage_path, ()).unwrap();
 
-        let (watch_handle, _) = serve(query_data, init_handle, port).await.unwrap();
+        let SequencerNode { handle, .. } = serve(query_data, init_handle, port).await.unwrap();
 
         client.connect(None).await;
 
@@ -257,7 +270,7 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(watch_handle.clone(), SequencerTransaction::Wrapped(txn))
+        wait_for_decide_on_handle(handle.clone(), SequencerTransaction::Wrapped(txn))
             .await
             .unwrap()
     }
