@@ -1,13 +1,16 @@
 pub mod api;
 mod block;
 mod chain_variables;
+pub mod hotshot_commitment;
 mod state;
-mod transaction;
+pub mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
 use async_std::task::sleep;
+use clap::Parser;
 use derivative::Derivative;
+use ethers::types::Address;
 use hotshot::{
     traits::{
         election::{
@@ -40,14 +43,67 @@ use snafu::Snafu;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 use transaction::SequencerTransaction;
+use url::Url;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
 pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
+
+#[derive(Parser)]
+pub struct Options {
+    /// Unique identifier for this instance of the sequencer network.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    pub chain_id: u16,
+
+    /// Port that the sequencer API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    pub port: u16,
+
+    /// URL of the HotShot CDN.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
+    pub cdn_url: Url,
+
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    pub storage_path: PathBuf,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    pub reset_store: bool,
+
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
+    pub l1_provider: Url,
+
+    /// Chain ID for layer 1 Ethereum.
+    ///
+    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
+    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
+    /// the RPC will be used.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
+    pub l1_chain_id: Option<u64>,
+
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS")]
+    pub hotshot_address: Address,
+
+    /// Mnemonic phrase for the sequencer wallet.
+    ///
+    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
+    /// contract. It must be funded with ETH and MATIC on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC")]
+    pub sequencer_mnemonic: String,
+
+    /// URL of HotShot Query Service
+    ///
+    /// If unspecified, defaults to the query service internal to the sequencer process.
+    pub query_service_url: Option<Url>,
+}
 
 pub mod network {
     use super::*;
@@ -237,7 +293,7 @@ pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> HotShotHandle<SeqTypes, Node<network::Centralized>> {
+) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
     let da_channel = CentralizedCommChannel::new(networking.clone());
@@ -260,16 +316,19 @@ pub async fn init_node(
         sleep(Duration::from_secs(1)).await;
     }
 
-    init_hotshot(
-        pub_keys,
-        genesis_block,
-        config.node_index as usize,
-        sk,
-        da_channel,
-        quorum_channel,
-        config.config,
+    (
+        init_hotshot(
+            pub_keys,
+            genesis_block,
+            config.node_index as usize,
+            sk,
+            da_channel,
+            quorum_channel,
+            config.config,
+        )
+        .await,
+        config.node_index,
     )
-    .await
 }
 
 #[cfg(any(test, feature = "testing"))]

@@ -10,7 +10,6 @@ testing = []
 [dev-dependencies]
 portpicker = "0.1.1"
 rand = "0.8.5"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tempfile = "3.4.0"
 
 [dependencies]
@@ -23,9 +22,11 @@ bincode = "1.3.3"
 clap = { version = "4.1", features = ["derive", "env"] }
 cld = "0.5"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = "0.99.17"
 either = "1.8.1"
+ethers = "1.0"
 futures = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.12" }
@@ -38,8 +39,10 @@ hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-qu
 jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
+sequencer-utils = { path = "../utils" }
 serde = { version = "1.0.152", features = ["derive"] }
 snafu = "0.7.4"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 toml = "0.5"
 tracing = "0.1"
