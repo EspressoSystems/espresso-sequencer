@@ -84,9 +84,9 @@ async fn test_end_to_end() {
         query_port: env.l2_adaptor_query_port(),
     };
     let sequencer_opt = sequencer::Options {
-        l1_provider: env.l1_provider(),
-        sequencer_mnemonic: mnemonic.to_string(),
-        hotshot_address,
+        l1_provider: Some(env.l1_provider()),
+        sequencer_mnemonic: Some(mnemonic.to_string()),
+        hotshot_address: Some(hotshot_address),
         l1_chain_id: None,
         chain_id: Default::default(),
         port: Default::default(),

@@ -63,7 +63,9 @@ async fn main() {
         update_task.await.expect("Error in API server");
     };
 
-    if node_index == 0 {
+    let should_run_task =
+        opt.hotshot_address.is_some() && opt.l1_provider.is_some() && opt.l1_chain_id.is_some();
+    if node_index == 0 && should_run_task {
         join!(run_sequencer, run_hotshot_commitment_task(&opt));
     } else {
         run_sequencer.await;

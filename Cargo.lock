@@ -3483,6 +3483,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "clap 4.2.1",
+ "contract-bindings",
  "ethers 2.0.2",
  "ethers-core 2.0.2",
  "futures",
@@ -3491,6 +3492,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sequencer",
+ "sequencer-utils",
  "serde",
  "serde_json",
  "snafu",
@@ -3498,6 +3500,7 @@ dependencies = [
  "tempfile",
  "tide-disco",
  "toml 0.5.11",
+ "tracing",
 ]
 
 [[package]]

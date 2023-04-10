@@ -46,7 +46,7 @@ pub use vm::{Vm, VmId, VmTransaction};
 
 use clap::Parser;
 
-#[derive(Parser)]
+#[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
@@ -70,7 +70,7 @@ pub struct Options {
 
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
-    pub l1_provider: Url,
+    pub l1_provider: Option<Url>,
 
     /// Chain ID for layer 1 Ethereum.
     ///
@@ -81,15 +81,15 @@ pub struct Options {
     pub l1_chain_id: Option<u64>,
 
     /// Address of HotShot contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS")]
-    pub hotshot_address: Address,
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
+    pub hotshot_address: Option<Address>,
 
     /// Mnemonic phrase for the sequencer wallet.
     ///
     /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
     /// contract. It must be funded with ETH and MATIC on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC")]
-    pub sequencer_mnemonic: String,
+    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
+    pub sequencer_mnemonic: Option<String>,
 
     /// URL of HotShot Query Service
     ///

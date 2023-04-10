@@ -32,8 +32,7 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
-    tracing::info!("connected to l1 at {}", opt.l1_provider);
-    let contract = HotShot::new(opt.hotshot_address, l1.clone());
+    let contract = HotShot::new(opt.hotshot_address.unwrap(), l1.clone());
 
     // Get the last block number sequenced.
     let from = match contract.block_height().call().await {
@@ -180,8 +179,13 @@ async fn send<T: Detokenize>(
     Some((receipt, block_number.as_u64()))
 }
 
-async fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
-    connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
+pub async fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
+    connect_rpc(
+        &opt.l1_provider.clone().unwrap(),
+        &opt.sequencer_mnemonic.clone().unwrap(),
+        opt.l1_chain_id,
+    )
+    .await
 }
 
 async fn connect_rpc(
