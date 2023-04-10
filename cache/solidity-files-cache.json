@@ -701,7 +701,7 @@
       }
     },
     "contracts/src/Counter.sol": {
-      "lastModificationDate": 1680791516460,
+      "lastModificationDate": 1680820420060,
       "contentHash": "c576b4e9841046901ba446c3ccb22f45",
       "sourceName": "contracts/src/Counter.sol",
       "solcConfig": {
@@ -741,8 +741,8 @@
       }
     },
     "contracts/src/HotShot.sol": {
-      "lastModificationDate": 1680801653807,
-      "contentHash": "2412c75ab9107cbda3e4d917412c452c",
+      "lastModificationDate": 1681143786674,
+      "contentHash": "08cf408d6e192efed6c040697e2ca2e4",
       "sourceName": "contracts/src/HotShot.sol",
       "solcConfig": {
         "settings": {
@@ -783,7 +783,7 @@
       }
     },
     "contracts/test/Counter.t.sol": {
-      "lastModificationDate": 1680791516460,
+      "lastModificationDate": 1680820420060,
       "contentHash": "b1a6521ba9c61d5266bab1fc9a057d68",
       "sourceName": "contracts/test/Counter.t.sol",
       "solcConfig": {
@@ -841,7 +841,7 @@
       }
     },
     "contracts/test/HotShot.t.sol": {
-      "lastModificationDate": 1680791516460,
+      "lastModificationDate": 1680820420060,
       "contentHash": "789a7d53e3fcc02697e432826f18a779",
       "sourceName": "contracts/test/HotShot.t.sol",
       "solcConfig": {

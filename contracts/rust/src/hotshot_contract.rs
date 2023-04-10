@@ -1,34 +1,20 @@
 #[cfg(test)]
 
 mod test {
-    use contract_bindings::hot_shot::{HotShot, NewBlocksCall};
-    use contract_bindings::TestClients;
+    use contract_bindings::hot_shot::NewBlocksCall;
     use ethers::types::Bytes;
     use ethers::utils::keccak256;
     use ethers::{
         abi::{AbiDecode, AbiEncode},
-        providers::{Middleware, Provider},
+        providers::Middleware,
         types::U256,
     };
 
-    use sequencer_utils::Anvil;
-    use std::time::Duration;
+    use crate::helpers::get_hotshot_contract_and_provider;
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
-        let anvil = Anvil::spawn(None).await;
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
-
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
-
-        let hotshot = HotShot::deploy(deployer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        let (hotshot, provider) = get_hotshot_contract_and_provider().await;
 
         let block_num = U256::from(0);
         let commitment = U256::from(1234);
@@ -78,6 +64,7 @@ mod test {
         async fn test_hash_to_curve() {
             let msg_input = [44u8, 65u8];
             let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
+            // TODO
         }
 
         #[async_std::test]
@@ -106,29 +93,14 @@ mod test {
 
         #[async_std::test]
         async fn test_hash_to_curve_internals() {
-            // TODO extract function for deploying the Hotshot contract
-            let anvil = Anvil::spawn(None).await;
-            let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-            provider.set_interval(Duration::from_millis(10));
-
-            let chain_id = provider.get_chainid().await.unwrap().as_u64();
-            let clients = TestClients::new(&provider, chain_id);
-            let deployer = clients.deployer.clone();
-
-            let hotshot = HotShot::deploy(deployer.clone(), ())
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
-
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
             // Compute Keccak(m) in both rust and solidity code and compare the result
 
-            let m = vec![54u8, 56u8]; // TODO try with more values (in a loop)?
+            let m = vec![3u8, 156u8]; // TODO try with more values (in a loop)?
             let m_encoded = m.clone().encode();
             let res_rust = U256::from(keccak256(m_encoded.as_slice()));
 
             let m_bytes = Bytes::from(m_encoded);
-
             let res_contract: U256 = hotshot.keccak(m_bytes).call().await.unwrap().into();
 
             assert_eq!(res_rust, res_contract);
