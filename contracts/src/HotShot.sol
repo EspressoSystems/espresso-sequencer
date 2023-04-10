@@ -46,7 +46,13 @@ contract HotShot {
 
     ////// BLS signature verification
 
+    // Helpers
     function keccak(bytes memory message) public pure returns (bytes32) {
         return keccak256(message);
+    }
+
+    function expand(bytes memory message) public pure returns (bytes memory) {
+        bytes memory b = "545d4s";
+        return b;
     }
 }
