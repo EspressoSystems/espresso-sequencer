@@ -3498,7 +3498,6 @@ dependencies = [
  "serde_json",
  "snafu",
  "surf-disco",
- "tagged-base64 0.2.0 (git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.1)",
  "tempfile",
  "tide-disco",
  "toml 0.5.11",
@@ -4787,7 +4786,7 @@ dependencies = [
  "serde",
  "sha2 0.10.6",
  "snafu",
- "tagged-base64 0.2.0 (git+https://github.com/EspressoSystems/tagged-base64?tag=0.2.0)",
+ "tagged-base64 0.2.0",
 ]
 
 [[package]]
@@ -8426,22 +8425,6 @@ dependencies = [
  "futures-channel",
  "js-sys",
  "structopt",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "tagged-base64"
-version = "0.2.0"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.1#4ba55dd2f9aaa63601db03a621ea2a1b50d18292"
-dependencies = [
- "base64 0.13.1",
- "clap 4.2.1",
- "console_error_panic_hook",
- "crc-any",
- "futures-channel",
- "js-sys",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
