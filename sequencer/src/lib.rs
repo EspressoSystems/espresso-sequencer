@@ -8,7 +8,6 @@ mod vm;
 
 use ark_bls12_381::Parameters;
 use async_std::task::sleep;
-use ethers::types::Address;
 use hotshot::traits::implementations::CentralizedServerNetwork;
 use hotshot::traits::NetworkingImplementation;
 use hotshot::types::SignatureKey;
@@ -24,6 +23,7 @@ use hotshot::{
     types::HotShotHandle,
 };
 use hotshot::{HotShot, HotShotInitializer};
+use hotshot_commitment::HotShotContractOptions;
 use hotshot_types::traits::metrics::Metrics;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
 use hotshot_types::{traits::metrics::NoMetrics, HotShotConfig};
@@ -44,7 +44,7 @@ pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
@@ -68,33 +68,14 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
     pub reset_store: bool,
 
-    /// URL of layer 1 Ethereum JSON-RPC provider.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
-    pub l1_provider: Option<Url>,
+    /// If specified, the sequencer will post hotshot commitments to the L1
+    #[command(subcommand)]
+    pub hotshot_contract_options: Option<HotShotContractCommand>,
+}
 
-    /// Chain ID for layer 1 Ethereum.
-    ///
-    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
-    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
-    /// the RPC will be used.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
-    pub l1_chain_id: Option<u64>,
-
-    /// Address of HotShot contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
-    pub hotshot_address: Option<Address>,
-
-    /// Mnemonic phrase for the sequencer wallet.
-    ///
-    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
-    /// contract. It must be funded with ETH and MATIC on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
-    pub sequencer_mnemonic: Option<String>,
-
-    /// URL of HotShot Query Service
-    ///
-    /// If unspecified, defaults to the query service internal to the sequencer process.
-    pub query_service_url: Option<Url>,
+#[derive(Subcommand, Clone, Debug)]
+pub enum HotShotContractCommand {
+    HotShotContractOptions(HotShotContractOptions),
 }
 
 #[derive(Debug, Clone)]

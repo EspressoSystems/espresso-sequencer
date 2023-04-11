@@ -3,11 +3,9 @@ use std::sync::Arc;
 use async_std::sync::RwLock;
 use contract_bindings::HotShot;
 use hotshot_query_service::availability::BlockQueryData;
+use sequencer::hotshot_commitment::HotShotContractOptions;
 use sequencer::VmTransaction;
-use sequencer::{
-    hotshot_commitment::connect_l1, transaction::SequencerTransaction, Options, SeqTypes,
-};
-use surf_disco::Url;
+use sequencer::{hotshot_commitment::connect_l1, transaction::SequencerTransaction, SeqTypes};
 
 use crate::api::VM_ID;
 use crate::state::State;
@@ -40,13 +38,8 @@ async fn execute_block(block: &BlockQueryData<SeqTypes>, state: Arc<RwLock<State
     }
 }
 
-pub async fn execute(opt: &Options, state: Arc<RwLock<State>>) {
-    let mut query_service_url = opt.query_service_url.clone().unwrap_or(
-        format!("http://localhost:{}", opt.port)
-            .parse::<Url>()
-            .unwrap(),
-    );
-    query_service_url = query_service_url.join("availability").unwrap();
+pub async fn execute(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
+    let query_service_url = opt.query_service_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url.clone());
     hotshot.connect(None).await;
 
@@ -55,7 +48,7 @@ pub async fn execute(opt: &Options, state: Arc<RwLock<State>>) {
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
-    let contract = HotShot::new(opt.hotshot_address.unwrap(), l1.clone());
+    let contract = HotShot::new(opt.hotshot_address, l1.clone());
 
     let mut block_height = 0;
     // TODO: improve polling method by waiting on contract event
@@ -112,7 +105,7 @@ mod test {
     use sequencer_utils::Anvil;
     use std::path::Path;
     use std::time::{Duration, Instant};
-    use surf_disco::Client;
+    use surf_disco::{Client, Url};
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
 
@@ -169,22 +162,16 @@ mod test {
             .unwrap();
 
         // Spawn hotshot commitment and executor tasks
-        // TODO: break these options apartment by turning commitment task into a subcommand
-        let sequencer_opt = sequencer::Options {
-            l1_provider: Some(anvil.url()),
-            sequencer_mnemonic: Some(TEST_MNEMONIC.to_string()),
-            hotshot_address: Some(l1.hotshot.address()),
+        let hotshot_opt = HotShotContractOptions {
+            l1_provider: anvil.url(),
+            sequencer_mnemonic: TEST_MNEMONIC.to_string(),
+            hotshot_address: l1.hotshot.address(),
             l1_chain_id: None,
-            chain_id: Default::default(),
-            port: Default::default(),
-            storage_path: Default::default(),
-            cdn_url: "https:///dummy.com".parse::<Url>().unwrap(),
-            reset_store: Default::default(),
-            query_service_url: Some(sequencer_url),
+            query_service_url: sequencer_url,
         };
-        let options = sequencer_opt.clone();
+        let options = hotshot_opt.clone();
         let state_lock = state.clone();
-        spawn(async move { run_hotshot_commitment_task(&sequencer_opt).await });
+        spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
         spawn(async move { execute(&options, state_lock).await });
 
         // Loop until the Rollup executes our transaction
