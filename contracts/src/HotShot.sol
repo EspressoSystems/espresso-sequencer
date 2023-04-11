@@ -46,24 +46,35 @@ contract HotShot {
 
     ////// BLS signature verification
 
+    // TODO gas optimization
+    function bytes32ToUint8Array(bytes32 input) public pure returns (uint8[] memory output) {
+        output = new uint8[](32);
+        for (uint256 i = 0; i < 32; i++) {
+            output[i] = uint8(uint256(input) / (2 ** (8 * (31 - i))));
+        }
+    }
+
     // Helpers
-    function expand(uint8[] memory message) public pure returns (bytes32) {
+    function expand(uint8[] memory message) public pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
-        uint256 ell = 2; // n+(b_len-1))/b_len where n=48
+        uint8 ell = 2; // (n+(b_len-1))/b_len where n=48
 
         // Final value of buffer must be: z_pad || message || lib_str || 0 || dst_prime
 
         uint8 zero_u8 = 0;
         uint8 one_u8 = 1;
 
-        bytes memory buffer = abi.encodePacked(zero_u8);
+        bytes memory buffer;
 
         // TODO optimize gas?
         // z_pad
-        for (uint256 i = 0; i < block_size - 1; i++) {
-            // block_size -1 because we already have a 0
-            buffer = abi.encodePacked(buffer, zero_u8);
+        for (uint256 i = 0; i < block_size; i++) {
+            if (i == 0) {
+                buffer = abi.encodePacked(zero_u8);
+            } else {
+                buffer = abi.encodePacked(buffer, zero_u8);
+            }
         }
 
         // message
@@ -92,6 +103,40 @@ contract HotShot {
 
         bytes32 bi = keccak256(buffer);
 
-        return bi;
+        // Building uniform_bytes
+        uint8[] memory uniform_bytes = new uint8[](block_size);
+
+        // TODO gas optimizations
+        // Copy bi into uniform_bytes
+        uint8[] memory bi_u8arr = bytes32ToUint8Array(bi);
+        for (uint256 i = 0; i < bi_u8arr.length; i++) {
+            uniform_bytes[i] = bi_u8arr[i];
+        }
+
+        uint8[] memory b0_u8arr = bytes32ToUint8Array(b0);
+
+        // In our case ell=2 so we do not have an outer loop
+        // https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L100
+
+        for (uint256 j = 0; j < b_len; j++) {
+            // uint8 v = b0_u8arr[i] ^ bi_u8arr[i];
+            if (j == 0) {
+                buffer = abi.encodePacked(b0_u8arr[j] ^ bi_u8arr[j]); // v
+            } else {
+                buffer = abi.encodePacked(buffer, b0_u8arr[j] ^ bi_u8arr[j]); // buffer,v
+            }
+        }
+        buffer = abi.encodePacked(buffer, ell);
+        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]); // TODO refactor?
+
+        bi = keccak256(buffer);
+        bi_u8arr = bytes32ToUint8Array(bi);
+
+        //uint256 number_of_extra_elements = block_size - b_len; // Complete until block_size elements
+        for (uint256 i = 0; i < block_size - b_len; i++) {
+            uniform_bytes[b_len + i] = bi_u8arr[i];
+        }
+
+        return uniform_bytes;
     }
 }

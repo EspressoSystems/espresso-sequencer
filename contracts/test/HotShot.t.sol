@@ -33,7 +33,7 @@ contract HotShotTest is Test {
         assertEq(hotshot.commitments(2), 0);
     }
 
-    function testExpander() public {
+    function testExpander() public view {
         uint8[] memory expander_input = new uint8[](2);
         expander_input[0] = 1;
         expander_input[1] = 2;

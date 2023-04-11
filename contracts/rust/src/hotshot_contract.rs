@@ -74,13 +74,14 @@ mod test {
                 block_size: len_per_base_elem,
             };
 
-            // Simplification in our case: see https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/field_hashers/mod.rs#L70
+            // Simplification in our case:
+            // see https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/field_hashers/mod.rs#L70
             let len_in_bytes = len_per_base_elem;
-            let message: Vec<u8> = vec![1u8, 2u8, 5u8];
+            let message: Vec<u8> = vec![1u8, 2u8, 5u8, 45u8];
             let rust_uniform_bytes = expander.expand(&message, len_in_bytes);
             let contract_uniform_bytes = hotshot.expand(message).call().await.unwrap();
 
-            assert_eq!(rust_uniform_bytes, contract_uniform_bytes.to_vec());
+            assert_eq!(rust_uniform_bytes, contract_uniform_bytes);
         }
 
         #[async_std::test]
