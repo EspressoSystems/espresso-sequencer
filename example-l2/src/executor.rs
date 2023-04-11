@@ -2,22 +2,45 @@ use std::sync::Arc;
 
 use async_std::sync::RwLock;
 use contract_bindings::HotShot;
-use ethers::types::U256;
-use futures::stream::StreamExt;
 use hotshot_query_service::availability::BlockQueryData;
-use sequencer::{hotshot_commitment::connect_l1, Options, SeqTypes};
+use sequencer::VmTransaction;
+use sequencer::{
+    hotshot_commitment::connect_l1, transaction::SequencerTransaction, Options, SeqTypes,
+};
 use surf_disco::Url;
 
+use crate::api::VM_ID;
 use crate::state::State;
+use crate::transaction::SignedTransaction;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-pub fn execute_block(_block: &BlockQueryData<SeqTypes>, _state: Arc<RwLock<State>>) {
-    dbg!("executing block");
+async fn execute_block(block: &BlockQueryData<SeqTypes>, state: Arc<RwLock<State>>) {
+    let transactions = block.block().transactions();
+    for txn in transactions {
+        if let SequencerTransaction::Wrapped(txn) = txn {
+            if txn.vm() != VM_ID.into() {
+                // Ignore transactions that do not apply to our Rollup
+                continue;
+            }
+            let txn = SignedTransaction::decode(txn.payload());
+
+            if let Some(txn) = txn {
+                let res = state.write().await.apply_transaction(&txn);
+                if let Err(err) = res {
+                    // TODO: more informative logging
+                    tracing::error!("Transaction invalid: {}", err)
+                } else {
+                    tracing::info!("Transaction applied")
+                }
+            } else {
+                tracing::error!("Transaction encoding invalid")
+            }
+        }
+    }
 }
 
 pub async fn execute(opt: &Options, state: Arc<RwLock<State>>) {
-    // Connect to the HotShot query service to stream sequenced blocks.
     let mut query_service_url = opt.query_service_url.clone().unwrap_or(
         format!("http://localhost:{}", opt.port)
             .parse::<Url>()
@@ -34,53 +57,45 @@ pub async fn execute(opt: &Options, state: Arc<RwLock<State>>) {
     };
     let contract = HotShot::new(opt.hotshot_address.unwrap(), l1.clone());
 
-    // Get commitments
-    let block_height = contract.block_height().await.unwrap().as_u64();
-    for i in 0..block_height {
-        // TODO fetch by commitment
-        let _commitment = contract.commitments(U256::from(i)).await;
-        let block = hotshot
-            .get::<BlockQueryData<SeqTypes>>("block/0")
-            .send()
-            .await
-            .unwrap();
-        execute_block(&block, state.clone());
-    }
-
-    let mut blocks = match hotshot
-        .socket(&format!("stream/blocks/{block_height}"))
-        .subscribe()
-        .await
-    {
-        Ok(leaves) => Box::pin(leaves.peekable()),
-        Err(err) => {
-            tracing::error!("unable to subscribe to HotShot query service: {}", err);
-            tracing::error!("hotshot commitment task will exit");
-            dbg!("error here");
-            dbg!(err);
-            return;
-        }
-    };
+    let mut block_height = 0;
+    // TODO: improve polling method by waiting on contract event
     loop {
-        // Wait for HotShot to sequence a block.
-        let block: BlockQueryData<SeqTypes> = match blocks.next().await {
-            Some(Ok(block)) => block,
-            Some(Err(err)) => {
-                tracing::error!("error from HotShot, retrying: {}", err);
-                continue;
-            }
-            None => {
-                tracing::error!("HotShot leaf stream ended, hotshot commitment task will exit");
+        let current_block_height = match contract.block_height().call().await {
+            Ok(from) => from.as_u64(),
+            Err(err) => {
+                tracing::error!("Unable to read block_height from contract: {}", err);
+                tracing::error!("Executor task will exit");
                 return;
             }
         };
-
-        execute_block(&block, state.clone());
+        // Get commitments
+        for i in block_height..current_block_height {
+            // TODO: verify commitment
+            // let mut commit_bytes = [0; 32];
+            // let commitment = contract.commitments(U256::from(i)).await.unwrap();
+            // commitment.to_little_endian(&mut commit_bytes);
+            let block = match hotshot
+                .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", i))
+                .send()
+                .await
+            {
+                Ok(block) => block,
+                Err(err) => {
+                    tracing::error!("Unable to query block from hotshot client: {}", err);
+                    tracing::error!("Executor task will exit");
+                    return;
+                }
+            };
+            execute_block(&block, state.clone()).await;
+        }
+        block_height = current_block_height;
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::transaction::Transaction;
+
     use super::*;
     use async_std::task::spawn;
     use contract_bindings::TestHermezContracts;
@@ -93,9 +108,10 @@ mod test {
     use rand_chacha::ChaChaRng;
     use sequencer::api::SequencerNode;
     use sequencer::hotshot_commitment::run_hotshot_commitment_task;
-    use sequencer::Transaction;
+    use sequencer::transaction::Transaction as SequencerTransaction;
     use sequencer_utils::Anvil;
     use std::path::Path;
+    use std::time::{Duration, Instant};
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
@@ -107,8 +123,6 @@ mod test {
         // Startup test contracts
         let anvil = Anvil::spawn(None).await;
         let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
-        let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
-        dbg!(initial_batch_num);
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -128,6 +142,34 @@ mod test {
             .parse()
             .unwrap();
 
+        // Create mock rollup state
+        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
+        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
+        let state = Arc::new(RwLock::new(State::from_initial_balances([(
+            alice.address(),
+            9999,
+        )])));
+
+        // Submit transaction to sequencer
+        let txn = Transaction {
+            amount: 100,
+            destination: bob.address(),
+            nonce: 1,
+        };
+        let txn = SignedTransaction::new(txn, &alice).await;
+        let txn = SequencerTransaction::new(VM_ID.into(), txn.encode());
+        let client: Client<ServerError> = Client::new(sequencer_url.clone());
+        client.connect(None).await;
+        client
+            .post::<()>("submit/submit")
+            .body_json(&txn)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        // Spawn hotshot commitment and executor tasks
+        // TODO: break these options apartment by turning commitment task into a subcommand
         let sequencer_opt = sequencer::Options {
             l1_provider: Some(anvil.url()),
             sequencer_mnemonic: Some(TEST_MNEMONIC.to_string()),
@@ -138,30 +180,26 @@ mod test {
             storage_path: Default::default(),
             cdn_url: "https:///dummy.com".parse::<Url>().unwrap(),
             reset_store: Default::default(),
-            query_service_url: Some(sequencer_url.clone()),
+            query_service_url: Some(sequencer_url),
         };
-
-        // Submit transaction to sequencer
-        let txn = Transaction::new(1.into(), vec![1, 2, 3, 4]);
-        let client: Client<ServerError> = Client::new(sequencer_url);
-        client.connect(None).await;
-        client
-            .post::<()>("submit/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-
-        let genesis_wallet = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
-        let genesis_address = genesis_wallet.address();
-        let state = Arc::new(RwLock::new(State::from_initial_balances([(
-            genesis_address,
-            9999,
-        )])));
-
         let options = sequencer_opt.clone();
+        let state_lock = state.clone();
         spawn(async move { run_hotshot_commitment_task(&sequencer_opt).await });
-        execute(&options, state.clone()).await;
+        spawn(async move { execute(&options, state_lock).await });
+
+        // Loop until the Rollup executes our transaction
+        let max_time = Duration::from_secs(75);
+        let mut time_elapsed;
+        let start_time = Instant::now();
+        loop {
+            time_elapsed = Instant::now() - start_time;
+            if time_elapsed > max_time {
+                panic!("Transaction not sequenced in time");
+            }
+            let bob_balance = state.read().await.get_balance(&bob.address());
+            if bob_balance == 100 {
+                break;
+            }
+        }
     }
 }

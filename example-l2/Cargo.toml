@@ -7,6 +7,9 @@ edition = "2021"
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.2.1"
+commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2", features = [
+    "ark-serialize",
+] }
 contract-bindings = { path = "../contract-bindings" }
 ethers = "2.0.1"
 ethers-core = "2.0.1"
@@ -18,6 +21,7 @@ serde = "1.0.159"
 serde_json = "1.0.95"
 snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
+tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64.git", tag = "0.2.1" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 toml = "0.5"
 tracing = "0.1"

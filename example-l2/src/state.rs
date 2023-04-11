@@ -43,7 +43,7 @@ impl State {
     /// 2) The nonce of the transaction is greater than the sender nonce (this prevent replay attacks)
     /// 3) The sender has a high enough balance to cover the transfer amount
     pub fn apply_transaction(
-        mut self,
+        &mut self,
         transaction: &SignedTransaction,
     ) -> Result<State, RollupError> {
         // 1)
@@ -81,7 +81,7 @@ impl State {
             .or_insert(Account::default());
         *destination_balance += transfer_amount;
 
-        Ok(self)
+        Ok(self.clone())
     }
 
     /// Fetch the balance of an address
