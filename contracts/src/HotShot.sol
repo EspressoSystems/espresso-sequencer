@@ -47,7 +47,6 @@ contract HotShot {
     ////// BLS signature verification
 
     // Helpers
-
     function expand(uint8[] memory message) public pure returns (bytes32) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
@@ -81,12 +80,18 @@ contract HotShot {
         buffer = abi.encodePacked(buffer, single_zero);
 
         // dst_prime = [1,1]
-        buffer = abi.encodePacked(buffer, one_u8);
-        buffer = abi.encodePacked(buffer, one_u8);
+        uint8[2] memory dst_prime = [1, 1]; // TODO how to pass dst_prime directly to abi.encodePacked?
+
+        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]);
 
         bytes32 b0 = keccak256(buffer);
 
-        // bytes memory b = abi.encodePacked(bi);
-        return b0;
+        buffer = abi.encodePacked(b0);
+        buffer = abi.encodePacked(buffer, one_u8);
+        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]);
+
+        bytes32 bi = keccak256(buffer);
+
+        return bi;
     }
 }

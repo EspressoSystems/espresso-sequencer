@@ -64,10 +64,10 @@ impl<T: DynDigest + Clone> Expander for ExpanderXmd<T> {
 
         let b0 = hasher.finalize_reset();
 
-        // hasher.update(&b0);
-        // hasher.update(&[1u8]);
-        // hasher.update(&dst_prime);
-        // let mut bi = hasher.finalize_reset();
+        hasher.update(&b0);
+        hasher.update(&[1u8]);
+        hasher.update(&dst_prime);
+        let bi = hasher.finalize_reset();
         //
         // let mut uniform_bytes: Vec<u8> = Vec::with_capacity(n);
         // uniform_bytes.extend_from_slice(&bi);
@@ -83,6 +83,6 @@ impl<T: DynDigest + Clone> Expander for ExpanderXmd<T> {
         // }
         // uniform_bytes[0..n].to_vec()
 
-        b0.to_vec()
+        bi.to_vec()
     }
 }
