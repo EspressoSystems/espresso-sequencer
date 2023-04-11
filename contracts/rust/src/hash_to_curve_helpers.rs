@@ -61,25 +61,28 @@ impl<T: DynDigest + Clone> Expander for ExpanderXmd<T> {
         hasher.update(&lib_str);
         hasher.update(&[0u8]);
         hasher.update(&dst_prime);
+
         let b0 = hasher.finalize_reset();
 
-        hasher.update(&b0);
-        hasher.update(&[1u8]);
-        hasher.update(&dst_prime);
-        let mut bi = hasher.finalize_reset();
+        // hasher.update(&b0);
+        // hasher.update(&[1u8]);
+        // hasher.update(&dst_prime);
+        // let mut bi = hasher.finalize_reset();
+        //
+        // let mut uniform_bytes: Vec<u8> = Vec::with_capacity(n);
+        // uniform_bytes.extend_from_slice(&bi);
+        // for i in 2..=ell {
+        //     // update the hasher with xor of b_0 and b_i elements
+        //     for (l, r) in b0.iter().zip(bi.iter()) {
+        //         hasher.update(&[*l ^ *r]);
+        //     }
+        //     hasher.update(&[i as u8]);
+        //     hasher.update(&dst_prime);
+        //     bi = hasher.finalize_reset();
+        //     uniform_bytes.extend_from_slice(&bi);
+        // }
+        // uniform_bytes[0..n].to_vec()
 
-        let mut uniform_bytes: Vec<u8> = Vec::with_capacity(n);
-        uniform_bytes.extend_from_slice(&bi);
-        for i in 2..=ell {
-            // update the hasher with xor of b_0 and b_i elements
-            for (l, r) in b0.iter().zip(bi.iter()) {
-                hasher.update(&[*l ^ *r]);
-            }
-            hasher.update(&[i as u8]);
-            hasher.update(&dst_prime);
-            bi = hasher.finalize_reset();
-            uniform_bytes.extend_from_slice(&bi);
-        }
-        uniform_bytes[0..n].to_vec()
+        b0.to_vec()
     }
 }

@@ -741,8 +741,8 @@
       }
     },
     "contracts/src/HotShot.sol": {
-      "lastModificationDate": 1681161799237,
-      "contentHash": "e9c549814d7af4e1dcca183ce858d0bf",
+      "lastModificationDate": 1681231359444,
+      "contentHash": "a9359cab858a5b317c06175b9bd4af0c",
       "sourceName": "contracts/src/HotShot.sol",
       "solcConfig": {
         "settings": {
@@ -775,7 +775,7 @@
       "imports": [
         "contracts/lib/forge-std/src/console.sol"
       ],
-      "versionRequirement": "^0.8.13",
+      "versionRequirement": "^0.8.16",
       "artifacts": {
         "HotShot": {
           "0.8.18+commit.87f61d96.Linux.gcc": "HotShot.sol/HotShot.json"
@@ -841,8 +841,8 @@
       }
     },
     "contracts/test/HotShot.t.sol": {
-      "lastModificationDate": 1681144056113,
-      "contentHash": "789a7d53e3fcc02697e432826f18a779",
+      "lastModificationDate": 1681165256729,
+      "contentHash": "f7441218c9d874fe606b2b893dfecd8d",
       "sourceName": "contracts/test/HotShot.t.sol",
       "solcConfig": {
         "settings": {

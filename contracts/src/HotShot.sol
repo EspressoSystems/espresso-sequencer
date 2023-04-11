@@ -1,4 +1,4 @@
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.16;
 
 import "forge-std/console.sol";
 
@@ -47,12 +47,46 @@ contract HotShot {
     ////// BLS signature verification
 
     // Helpers
-    function keccak(bytes memory message) public pure returns (bytes32) {
-        return keccak256(message);
-    }
 
-    function expand(bytes memory message) public pure returns (bytes memory) {
-        bytes memory b = "545d4s";
-        return b;
+    function expand(uint8[] memory message) public pure returns (bytes32) {
+        uint8 block_size = 48;
+        uint256 b_len = 32; // Output length of sha256 in number of bytes
+        uint256 ell = 2; // n+(b_len-1))/b_len where n=48
+
+        // Final value of buffer must be: z_pad || message || lib_str || 0 || dst_prime
+
+        uint8 zero_u8 = 0;
+        uint8 one_u8 = 1;
+
+        bytes memory buffer = abi.encodePacked(zero_u8);
+
+        // TODO optimize gas?
+        // z_pad
+        for (uint256 i = 0; i < block_size - 1; i++) {
+            // block_size -1 because we already have a 0
+            buffer = abi.encodePacked(buffer, zero_u8);
+        }
+
+        // message
+        for (uint256 i = 0; i < message.length; i++) {
+            buffer = abi.encodePacked(buffer, message[i]);
+        }
+
+        // lib_str
+        buffer = abi.encodePacked(buffer, zero_u8);
+        buffer = abi.encodePacked(buffer, block_size);
+
+        // 0 separator
+        uint8 single_zero = zero_u8; //
+        buffer = abi.encodePacked(buffer, single_zero);
+
+        // dst_prime = [1,1]
+        buffer = abi.encodePacked(buffer, one_u8);
+        buffer = abi.encodePacked(buffer, one_u8);
+
+        bytes32 b0 = keccak256(buffer);
+
+        // bytes memory b = abi.encodePacked(bi);
+        return b0;
     }
 }
