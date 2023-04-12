@@ -9,10 +9,8 @@ use std::sync::Arc;
 use surf_disco::{error::ClientError, Url};
 use tide_disco::{error::ServerError, Api, App};
 
+use crate::VM_ID;
 use crate::{state::State, transaction::SignedTransaction};
-
-// The VmID helps Rollups find their transactions in the sequenced block.
-const VM_ID: u64 = 1;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
