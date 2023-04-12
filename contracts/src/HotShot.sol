@@ -139,4 +139,12 @@ contract HotShot {
 
         return uniform_bytes;
     }
+
+    function hash_to_field(uint8[] memory message) public pure returns (uint256) {
+        // uint8 m = 1; // fixed: field extension degree
+        uint8[] memory uniform_bytes = expand(message);
+
+        uint256 res = 22;
+        return res;
+    }
 }
