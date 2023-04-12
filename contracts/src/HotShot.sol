@@ -141,9 +141,29 @@ contract HotShot {
     }
 
     function hash_to_field(uint8[] memory message) public pure returns (uint256) {
-        // uint8 m = 1; // fixed: field extension degree
         uint8[] memory uniform_bytes = expand(message);
 
+        // Reverse uniform_bytes
+        // TODO improve gas
+        uint256 n = uniform_bytes.length;
+        uint8[] memory uniform_bytes_reverted = new uint8[](n);
+        for (uint256 i = 0; i < n; i++) {
+            uniform_bytes_reverted[i] = uniform_bytes[n - i - 1];
+        }
+
+        // Following https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
+
+        // Do the split
+
+        // Create the initial field elements
+
+        // Update the field element with the extra bytes
+
+        uint256 res = 22;
+        return res;
+    }
+
+    function field_from_le_bytes_mod_order(uint8[] memory input) public pure returns (uint256) {
         uint256 res = 22;
         return res;
     }
