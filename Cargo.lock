@@ -4165,7 +4165,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4217,7 +4217,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -4239,7 +4239,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -4248,6 +4248,7 @@ dependencies = [
  "bincode",
  "commit 0.2.2",
  "custom_debug",
+ "derivative",
  "either",
  "futures",
  "hotshot-types",
@@ -4260,7 +4261,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -4287,8 +4288,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.0.4"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git?tag=0.0.4#687c68fac992a9b5fe13a44fb62d3cf90a1b97f5"
+version = "0.0.5"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git?tag=0.0.5#4c111993851b3247e73977a785a5fc30c6170d1b"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -4316,7 +4317,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "ark-bls12-381",
  "async-compatibility-layer",
@@ -4340,7 +4341,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -4375,7 +4376,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "bincode",
 ]
@@ -4383,7 +4384,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "ark-bls12-381",
  "async-compatibility-layer",
@@ -4398,6 +4399,7 @@ dependencies = [
  "jf-primitives",
  "libp2p-core 0.37.0",
  "nll",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "snafu",
@@ -5451,7 +5453,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.12#2473917371ca3a33631c1da422a899dce4ae9b9a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.13#e5082a76ce5f4678b4b38d3cbc6088b01baf8eaf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -7887,9 +7889,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.159"
+version = "1.0.160"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c04e8343c3daeec41f58990b9d77068df31209f2af111e059e9fe9646693065"
+checksum = "bb2f3770c8bce3bcda7e149193a069a0f4365bda1fa5cd88e03bca26afc1216c"
 dependencies = [
  "serde_derive",
 ]
@@ -7924,9 +7926,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.159"
+version = "1.0.160"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c614d17805b093df4b147b51339e7e44bf05ef59fba1e45d83500bcfb4d8585"
+checksum = "291a097c63d8497e00160b166a967a4a79c64f3facdd01cbd7502231688d77df"
 dependencies = [
  "proc-macro2",
  "quote",
