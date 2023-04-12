@@ -1,44 +1,30 @@
 use std::sync::Arc;
+use std::time::Duration;
 
-use async_std::sync::RwLock;
+use async_std::{sync::RwLock, task::sleep};
 use contract_bindings::HotShot;
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::hotshot_commitment::HotShotContractOptions;
-use sequencer::VmTransaction;
-use sequencer::{hotshot_commitment::connect_l1, transaction::SequencerTransaction, SeqTypes};
+use sequencer::{hotshot_commitment::connect_l1, SeqTypes};
 
-use crate::api::VM_ID;
 use crate::state::State;
-use crate::transaction::SignedTransaction;
+use crate::RollupVM;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-async fn execute_block(block: &BlockQueryData<SeqTypes>, state: Arc<RwLock<State>>) {
-    let transactions = block.block().transactions();
-    for txn in transactions {
-        if let SequencerTransaction::Wrapped(txn) = txn {
-            if txn.vm() != VM_ID.into() {
-                // Ignore transactions that do not apply to our Rollup
-                continue;
-            }
-            let txn = SignedTransaction::decode(txn.payload());
-
-            if let Some(txn) = txn {
-                let res = state.write().await.apply_transaction(&txn);
-                if let Err(err) = res {
-                    // TODO: more informative logging
-                    tracing::error!("Transaction invalid: {}", err)
-                } else {
-                    tracing::info!("Transaction applied")
-                }
-            } else {
-                tracing::error!("Transaction encoding invalid")
-            }
+async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
+    for txn in block.block().vm_transactions(&RollupVM) {
+        let res = state.apply_transaction(&txn);
+        if let Err(err) = res {
+            // TODO: more informative logging
+            tracing::error!("Transaction invalid: {}", err)
+        } else {
+            tracing::info!("Transaction applied")
         }
     }
 }
 
-pub async fn execute(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
+pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
     let query_service_url = opt.query_service_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url.clone());
     hotshot.connect(None).await;
@@ -79,7 +65,11 @@ pub async fn execute(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
                     return;
                 }
             };
-            execute_block(&block, state.clone()).await;
+            let mut state_lock = state.write().await;
+            execute_block(&block, &mut state_lock).await;
+        }
+        if block_height == current_block_height {
+            sleep(Duration::from_secs(5)).await;
         }
         block_height = current_block_height;
     }
@@ -87,11 +77,13 @@ pub async fn execute(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
 
 #[cfg(test)]
 mod test {
-    use crate::transaction::Transaction;
+    use crate::transaction::{SignedTransaction, Transaction};
+    use crate::VM_ID;
 
     use super::*;
     use async_std::task::spawn;
-    use contract_bindings::TestHermezContracts;
+    use contract_bindings::TestClients;
+    use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
@@ -102,6 +94,7 @@ mod test {
     use sequencer::api::SequencerNode;
     use sequencer::hotshot_commitment::run_hotshot_commitment_task;
     use sequencer::transaction::Transaction as SequencerTransaction;
+    use sequencer::VmTransaction;
     use sequencer_utils::Anvil;
     use std::path::Path;
     use std::time::{Duration, Instant};
@@ -113,9 +106,18 @@ mod test {
 
     #[async_std::test]
     async fn test_execute() {
-        // Startup test contracts
+        // Start a test HotShot contract
         let anvil = Anvil::spawn(None).await;
-        let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
+        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
+        provider.set_interval(Duration::from_millis(10));
+        let chain_id = provider.get_chainid().await.unwrap().as_u64();
+        let clients = TestClients::new(&provider, chain_id);
+        let deployer = clients.deployer.clone();
+        let hotshot = HotShot::deploy(deployer.clone(), ())
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -165,14 +167,14 @@ mod test {
         let hotshot_opt = HotShotContractOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
-            hotshot_address: l1.hotshot.address(),
+            hotshot_address: hotshot.address(),
             l1_chain_id: None,
             query_service_url: sequencer_url,
         };
         let options = hotshot_opt.clone();
         let state_lock = state.clone();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
-        spawn(async move { execute(&options, state_lock).await });
+        spawn(async move { run_executor(&options, state_lock).await });
 
         // Loop until the Rollup executes our transaction
         let max_time = Duration::from_secs(75);
