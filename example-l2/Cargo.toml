@@ -7,9 +7,11 @@ edition = "2021"
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.2.1"
-ethers = "2.0.1"
-ethers-core = "2.0.1"
+commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+contract-bindings = { path = "../contract-bindings" }
+ethers = "1.0.2"
 futures = "0.3.28"
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
 serde = "1.0.159"
@@ -18,9 +20,10 @@ snafu = "0.7.4"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
 toml = "0.5"
+tracing = "0.1"
 
 [dev-dependencies]
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 portpicker = "0.1.1"
 rand_chacha = "0.3"
+sequencer-utils = { path = "../utils" }
 tempfile = "3.4.0"

@@ -1,5 +1,7 @@
 use async_std::{sync::Arc, task::sleep};
+use clap::Args;
 use contract_bindings::HotShot;
+use ethers::types::Address;
 use ethers::{
     abi::Detokenize, contract::builders::ContractCall, prelude::*, providers::Middleware as _,
     signers::coins_bip39::English,
@@ -10,21 +12,46 @@ use hotshot_types::traits::node_implementation::NodeImplementation;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::{network, Node, Options, SeqTypes};
+use crate::{network, Node, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-pub async fn run_hotshot_commitment_task(opt: &Options) {
-    // Connect to the HotShot query service to stream sequenced blocks.
-    let mut query_service_url = opt.query_service_url.clone().unwrap_or(
-        format!("http://localhost:{}", opt.port)
-            .parse::<Url>()
-            .unwrap(),
-    );
-    query_service_url = query_service_url.join("availability").unwrap();
+#[derive(Args, Clone, Debug)]
+pub struct HotShotContractOptions {
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
+    pub l1_provider: Url,
+
+    /// Chain ID for layer 1 Ethereum.
+    ///
+    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
+    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
+    /// the RPC will be used.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
+    pub l1_chain_id: Option<u64>,
+
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
+    pub hotshot_address: Address,
+
+    /// Mnemonic phrase for the sequencer wallet.
+    ///
+    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
+    /// contract. It must be funded with ETH and MATIC on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
+    pub sequencer_mnemonic: String,
+
+    /// URL of HotShot Query Service
+    ///
+    /// If unspecified, defaults to the query service internal to the sequencer process.
+    pub query_service_url: Url,
+}
+
+pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
+    let query_service_url = opt.query_service_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url);
     hotshot.connect(None).await;
 
@@ -33,7 +60,6 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
-    tracing::info!("connected to l1 at {}", opt.l1_provider);
     let contract = HotShot::new(opt.hotshot_address, l1.clone());
 
     // Get the last block number sequenced.
@@ -56,7 +82,6 @@ pub async fn run_hotshot_commitment_task(opt: &Options) {
             return;
         }
     };
-
     sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
 }
 
@@ -185,7 +210,7 @@ async fn send<T: Detokenize>(
     Some((receipt, block_number.as_u64()))
 }
 
-async fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
+pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>> {
     connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
 }
 

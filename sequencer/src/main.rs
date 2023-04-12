@@ -5,7 +5,7 @@ use hotshot_query_service::data_source::QueryData;
 use sequencer::{
     api::{serve, HandleFromMetrics, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, ChainVariables, GenesisTransaction, Options,
+    init_node, Block, ChainVariables, GenesisTransaction, HotShotContractCommand, Options,
 };
 use std::{net::ToSocketAddrs, path::Path};
 
@@ -63,8 +63,13 @@ async fn main() {
         update_task.await.expect("Error in API server");
     };
 
-    if node_index == 0 {
-        join!(run_sequencer, run_hotshot_commitment_task(&opt));
+    if let (Some(HotShotContractCommand::HotShotContractOptions(hotshot_contract_options)), 0) =
+        (opt.hotshot_contract_options, node_index)
+    {
+        join!(
+            run_sequencer,
+            run_hotshot_commitment_task(&hotshot_contract_options)
+        );
     } else {
         run_sequencer.await;
     }
