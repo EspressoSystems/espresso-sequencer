@@ -58,6 +58,8 @@ mod test {
 
         #[async_std::test]
         async fn test_hash_to_curve() {
+            // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
+            // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
             let msg_input = [44u8, 65u8];
             let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
             // TODO
@@ -104,32 +106,14 @@ mod test {
             assert_eq!(x_rust_big_int, x_contract_big_int);
         }
 
-        // #[async_std::test]
-        // async fn test_bytes_to_field() {
-        //     let bytes = [1u8, 2u8, 3u8];
-        //     let f_elem = Fq::from_le_bytes_mod_order(&bytes);
-        //     let (hotshot, _) = get_hotshot_contract_and_provider().await;
-        //     let f_elem_contract = hotshot
-        //         .field_from_le_bytes_mod_order(bytes.to_vec())
-        //         .call()
-        //         .await
-        //         .unwrap();
-        //
-        //     let x_rust_big_int = f_elem.0;
-        //     let x_contract_big_int = BigInt::new(f_elem_contract.0);
-        //
-        //     assert_eq!(x_rust_big_int, x_contract_big_int);
-        // }
-
         #[async_std::test]
         async fn test_hash_to_field() {
-            // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
-            // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
 
             let hasher_init = &[1u8]; // TODO make it clear that this is the dst vector
             let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
-            let message: Vec<u8> = vec![1u8, 2u8, 5u8, 45u8];
+
+            let message: Vec<u8> = vec![1u8, 2u8, 3u8, 45u8];
 
             let x_rust: Fq = hasher.hash_to_field(&message, 1)[0];
             let x_contract = hotshot.hash_to_field(message).call().await.unwrap();

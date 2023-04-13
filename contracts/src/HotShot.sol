@@ -149,7 +149,9 @@ contract HotShot {
         // Reverse uniform_bytes
         // TODO improve gas
         uint256 n = uniform_bytes.length;
+        assert(n == 48);
         uint8[] memory uniform_bytes_reverted = new uint8[](n);
+
         for (uint256 i = 0; i < n; i++) {
             uniform_bytes_reverted[i] = uniform_bytes[n - i - 1];
         }
@@ -157,13 +159,114 @@ contract HotShot {
         // Following https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
 
         // Do the split
+        // TODO make a constant
+        uint256 num_bytes_directly_to_convert = 31; // Fixed for Fq
 
-        // Create the initial field elements
+        // Create the initial field element
+        uint256 res = 0;
 
-        // Update the field element with the extra bytes
+        // Process the second slice
+        // TODO use Bytes library
+        uint8[] memory second_slice = new uint8[](num_bytes_directly_to_convert);
+        for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
+            second_slice[i] = uniform_bytes_reverted[n - num_bytes_directly_to_convert + i];
+        }
 
-        uint256 res = 22;
+        // TODO remove
+        uint8[31] memory test_second_slice = [
+            236,
+            74,
+            4,
+            15,
+            2,
+            195,
+            247,
+            101,
+            203,
+            46,
+            39,
+            230,
+            233,
+            44,
+            191,
+            9,
+            204,
+            107,
+            143,
+            35,
+            13,
+            145,
+            22,
+            24,
+            120,
+            102,
+            0,
+            108,
+            42,
+            109,
+            45
+        ];
+        for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
+            assert(test_second_slice[i] == second_slice[i]);
+        }
+
+        // TODO remove
+        uint8[17] memory test_first_slice = [191, 4, 240, 192, 86, 43, 245, 37, 72, 68, 100, 110, 177, 74, 90, 228, 193];
+        for (uint256 i = 0; i < n - num_bytes_directly_to_convert; i++) {
+            assert(uniform_bytes_reverted[i] == test_first_slice[i]);
+        }
+
+        res = field_from_random_bytes(second_slice);
+
+        // TODO remove
+        assert(
+            big_int_from_bytes(second_slice)
+                == 80261551958479648338488717926501115270885660255171449074419643746368113388
+        );
+
+        // TODO hardcode
+        uint256 window_size = from_big_int(256);
+        assert(window_size == 6093996282567377512538783145753940342310767422731154820184196676124901402234);
+
+        // Handle the first slice
+        uint256 arr_size = n - num_bytes_directly_to_convert;
+        for (uint256 i = 0; i < arr_size; i++) {
+            // Compute field element from a single byte
+            uint256 field_elem = from_big_int(uint256(uniform_bytes_reverted[arr_size - i - 1])); // In reverse
+
+            assembly {
+                res := mulmod(res, window_size, PRIME_FIELD_MODULUS)
+                res := addmod(res, field_elem, PRIME_FIELD_MODULUS)
+            }
+        }
         return res;
+    }
+
+    function from_big_int(uint256 input) private pure returns (uint256) {
+        // TODO optimize
+        assert(input != PRIME_FIELD_MODULUS);
+
+        // TODO hardcode value
+        // TODO document, reference to arkwors
+        uint256 v = 15230403791020821917 + 2 ** 64 * 754611498739239741 + 2 ** 128 * 7381016538464732716
+            + 2 ** 192 * 1011752739694698287;
+
+        uint256 res;
+        assembly {
+            res := mulmod(input, v, PRIME_FIELD_MODULUS)
+        }
+
+        return res;
+    }
+
+    function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
+        // TODO Optimize
+        uint256 r = 0;
+        for (uint256 i = 0; i < input.length; i++) {
+            r += 2 ** (8 * i) * input[i];
+        }
+
+        return r;
     }
 
     function field_from_random_bytes(uint8[] memory input) public pure returns (uint256) {
@@ -174,24 +277,8 @@ contract HotShot {
         // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
         // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
 
-        // TODO hardcode value
-        // TODO document, reference to arkwors
-        uint256 v = 15230403791020821917 + 2 ** 64 * 754611498739239741 + 2 ** 128 * 7381016538464732716
-            + 2 ** 192 * 1011752739694698287;
+        uint256 r = big_int_from_bytes(input);
 
-        // TODO optimize
-        uint256 r = 0;
-        for (uint256 i = 0; i < input.length; i++) {
-            r += 2 ** (8 * i) * input[i];
-        }
-
-        assert(r != PRIME_FIELD_MODULUS);
-
-        uint256 res;
-        assembly {
-            res := mulmod(r, v, PRIME_FIELD_MODULUS)
-        }
-
-        return res;
+        return from_big_int(r);
     }
 }
