@@ -46,8 +46,8 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
     let socket_provider = match Provider::<Ws>::connect(ws_url).await {
         Ok(socket_provider) => socket_provider,
         Err(err) => {
-            tracing::error!("unable to make websocket connection with L1, executor task exiting");
-            tracing::error!("failed with err: {}", err);
+            tracing::error!("Unable to make websocket connection to L1: {}", err);
+            tracing::error!("Executor task will exit");
             return;
         }
     };
@@ -57,8 +57,8 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
     let mut stream = match socket_provider.subscribe_logs(&blocks_filter).await {
         Ok(stream) => stream,
         Err(err) => {
-            tracing::error!("unable to subscribe to L1 log stream, executor task exiting");
-            tracing::error!("failed with err: {}", err);
+            tracing::error!("Unable to subscribe to L1 log stream: {}", err);
+            tracing::error!("Executor task will exit");
             return;
         }
     };
