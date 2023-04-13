@@ -12,7 +12,7 @@ commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 contract-bindings = { path = "../contract-bindings" }
 ethers = { version = "1.0.2", features = ["ws"] }
 futures = "0.3.28"
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
+hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
 serde = "1.0.159"
@@ -24,7 +24,6 @@ toml = "0.5"
 tracing = "0.1"
 
 [dev-dependencies]
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
 portpicker = "0.1.1"
 rand_chacha = "0.3"
 sequencer-utils = { path = "../utils" }

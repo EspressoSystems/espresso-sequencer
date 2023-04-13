@@ -6,6 +6,7 @@ use crate::{
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
+use hotshot_types::traits::state::TestableBlock;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -24,6 +25,7 @@ impl HotShotBlock for Block {
         &self,
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
+        tracing::debug!("Adding raw transaction to block {tx:?}");
         let mut new = self.clone();
         new.transactions.push(tx.clone());
         Ok(new)
@@ -31,6 +33,25 @@ impl HotShotBlock for Block {
 
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
         self.transactions.iter().map(|tx| tx.commit()).collect()
+    }
+
+    fn new() -> Self {
+        tracing::debug!("Creating new block");
+        Self {
+            parent_state: State::default().commit(),
+            transactions: vec![],
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl TestableBlock for Block {
+    fn genesis() -> Self {
+        Block::genesis(Default::default())
+    }
+
+    fn txn_count(&self) -> u64 {
+        self.transactions.len() as u64
     }
 }
 
@@ -51,7 +72,7 @@ impl Committable for Block {
 }
 
 impl Block {
-    pub fn new(parent_state: Commitment<State>) -> Self {
+    pub fn next(parent_state: Commitment<State>) -> Self {
         Self {
             parent_state,
             transactions: Default::default(),
