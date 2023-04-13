@@ -3,6 +3,9 @@ pragma solidity ^0.8.16;
 import "forge-std/console.sol";
 
 contract HotShot {
+    // TODO comment
+    uint256 constant PRIME_FIELD_MODULUS = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
+
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
     uint256 public blockHeight;
@@ -163,8 +166,32 @@ contract HotShot {
         return res;
     }
 
-    function field_from_le_bytes_mod_order(uint8[] memory input) public pure returns (uint256) {
-        uint256 res = 22;
+    function field_from_random_bytes(uint8[] memory input) public pure returns (uint256) {
+        // Adapted from https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/mod.rs#L246
+        // Note that we do not need the serde logic.
+
+        // constant field element to multiply the input with
+        // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
+        // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
+
+        // TODO hardcode value
+        // TODO document, reference to arkwors
+        uint256 v = 15230403791020821917 + 2 ** 64 * 754611498739239741 + 2 ** 128 * 7381016538464732716
+            + 2 ** 192 * 1011752739694698287;
+
+        // TODO optimize
+        uint256 r = 0;
+        for (uint256 i = 0; i < input.length; i++) {
+            r += 2 ** (8 * i) * input[i];
+        }
+
+        assert(r != PRIME_FIELD_MODULUS);
+
+        uint256 res;
+        assembly {
+            res := mulmod(r, v, PRIME_FIELD_MODULUS)
+        }
+
         return res;
     }
 }

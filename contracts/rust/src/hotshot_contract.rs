@@ -52,7 +52,7 @@ mod test {
         use crate::hash_to_curve_helpers::Expander;
         use ark_bn254::Fq;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-        use ark_ff::{BigInt, PrimeField};
+        use ark_ff::{BigInt, Field};
         use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
@@ -88,12 +88,12 @@ mod test {
         }
 
         #[async_std::test]
-        async fn test_bytes_to_field() {
-            let bytes = [1u8, 2u8, 3u8];
-            let f_elem = Fq::from_le_bytes_mod_order(&bytes);
+        async fn test_field_elem_from_random_bytes() {
+            let bytes = [1u8, 2u8, 56, 124, 3, 3, 4, 87];
+            let f_elem = Fq::from_random_bytes(&bytes).unwrap();
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
             let f_elem_contract = hotshot
-                .field_from_le_bytes_mod_order(bytes.to_vec())
+                .field_from_random_bytes(bytes.to_vec())
                 .call()
                 .await
                 .unwrap();
@@ -101,9 +101,25 @@ mod test {
             let x_rust_big_int = f_elem.0;
             let x_contract_big_int = BigInt::new(f_elem_contract.0);
 
-            // TODO change
-            assert_ne!(x_rust_big_int, x_contract_big_int);
+            assert_eq!(x_rust_big_int, x_contract_big_int);
         }
+
+        // #[async_std::test]
+        // async fn test_bytes_to_field() {
+        //     let bytes = [1u8, 2u8, 3u8];
+        //     let f_elem = Fq::from_le_bytes_mod_order(&bytes);
+        //     let (hotshot, _) = get_hotshot_contract_and_provider().await;
+        //     let f_elem_contract = hotshot
+        //         .field_from_le_bytes_mod_order(bytes.to_vec())
+        //         .call()
+        //         .await
+        //         .unwrap();
+        //
+        //     let x_rust_big_int = f_elem.0;
+        //     let x_contract_big_int = BigInt::new(f_elem_contract.0);
+        //
+        //     assert_eq!(x_rust_big_int, x_contract_big_int);
+        // }
 
         #[async_std::test]
         async fn test_hash_to_field() {
