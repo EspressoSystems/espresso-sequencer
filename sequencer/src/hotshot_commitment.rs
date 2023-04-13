@@ -7,11 +7,12 @@ use ethers::{
     signers::coins_bip39::English,
 };
 use futures::{future::FutureExt, stream::StreamExt};
-use hotshot_query_service::availability::LeafQueryData;
+use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
+use hotshot_types::traits::node_implementation::NodeImplementation;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::SeqTypes;
+use crate::{network, Node, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -81,15 +82,17 @@ pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
             return;
         }
     };
-    sequence(from, max, hotshot, contract).await;
+    sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
 }
 
-async fn sequence(
+async fn sequence<I: NodeImplementation<SeqTypes>>(
     from: u64,
     max_blocks: u64,
     hotshot: HotShotClient,
     contract: HotShot<Middleware>,
-) {
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let mut leaves = match hotshot
         .socket(&format!("stream/leaves/{from}"))
         .subscribe()
@@ -105,7 +108,7 @@ async fn sequence(
 
     loop {
         // Wait for HotShot to sequence a block.
-        let leaf: LeafQueryData<SeqTypes> = match leaves.next().await {
+        let leaf: LeafQueryData<SeqTypes, I> = match leaves.next().await {
             Some(Ok(leaf)) => leaf,
             Some(Err(err)) => {
                 tracing::error!("error from HotShot, retrying: {}", err);
@@ -145,10 +148,12 @@ async fn sequence(
     }
 }
 
-async fn sequence_batches(
+async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     contract: &HotShot<Middleware>,
-    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes>>,
-) {
+    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
         .into_iter()
         .map(|leaf| {
@@ -252,15 +257,15 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{transaction::SequencerTransaction, Block, State, Transaction};
+    use crate::{transaction::SequencerTransaction, Block, Leaf, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use hotshot_types::{
-        constants::genesis_proposer_id,
-        data::{Leaf, QuorumCertificate, ViewNumber},
-        traits::{block_contents::Block as _, state::ConsensusTime},
+        certificate::QuorumCertificate,
+        data::{LeafType, ViewNumber},
+        traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
     };
     use sequencer_utils::Anvil;
 
@@ -283,30 +288,16 @@ mod test {
 
         // Create a few test batches.
         let num_batches = 2u64;
-        let mut leaves: Vec<LeafQueryData<SeqTypes>> = vec![];
-        for i in 0..num_batches {
+        let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
+        for _ in 0..num_batches {
             let txn = SequencerTransaction::Wrapped(Transaction::new(1.into(), vec![]));
-
-            let block = Block::new(State::default().commit())
-                .add_transaction_raw(&txn)
-                .unwrap();
+            let block = Block::new().add_transaction_raw(&txn).unwrap();
 
             // Fake a leaf that sequences this block.
             let mut qc = QuorumCertificate::genesis();
-            let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
-            let leaf = Leaf::new(
-                Default::default(),
-                block,
-                parent_leaf,
-                qc.clone(),
-                ViewNumber::genesis(),
-                i,
-                vec![],
-                0,
-                genesis_proposer_id(),
-            );
+            let leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
             qc.leaf_commitment = leaf.commit();
-            leaves.push(LeafQueryData::new(leaf, qc));
+            leaves.push(LeafQueryData::new(leaf, qc).unwrap());
         }
         tracing::info!("sequencing batches: {:?}", leaves);
 
