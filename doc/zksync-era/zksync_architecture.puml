@@ -1,0 +1,30 @@
+@startuml
+skinparam componentStyle rectangle
+
+component "zkSync Smart Contract" as SmartContract
+component "eth_sender" as EthSender
+component "L1" as L1
+component "eth_watch" as EthWatch
+
+component "Sequencer" as Sequencer
+component "VM" as VM
+component "Mempool" as Mempool
+
+component "Witness Generator" as WitnessGenerator
+
+EthSender -> SmartContract: txn
+EthWatch -> L1: data requests
+L1 -> EthWatch: data
+
+Mempool --> Sequencer: pending txn
+Sequencer -> VM: txn for execution
+Sequencer <- VM: block-ready txn
+
+Sequencer --> WitnessGenerator: sealed blocks
+
+package "Prover" as Prover {
+  component "Prover application" as ProverApp
+}
+
+WitnessGenerator -> ProverApp: witness
+@enduml
