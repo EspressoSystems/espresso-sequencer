@@ -1,9 +1,12 @@
 use std::sync::Arc;
-use std::time::Duration;
 
-use async_std::{sync::RwLock, task::sleep};
+use ark_serialize::CanonicalDeserialize;
+use async_std::sync::RwLock;
+use commit::Committable;
 use contract_bindings::HotShot;
-use hotshot_query_service::availability::BlockQueryData;
+use ethers::prelude::*;
+use hotshot_query_service::availability::{BlockHash, BlockQueryData};
+
 use sequencer::hotshot_commitment::HotShotContractOptions;
 use sequencer::{hotshot_commitment::connect_l1, SeqTypes};
 
@@ -30,14 +33,37 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
-    let Some(l1) = connect_l1(opt).await else {
+    let Some(l1) = connect_l1(opt)
+    .await else {
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
+
+    // Create a socket connection to the L1 to subscribe to contract events
+    // This assumes that the L1 node supports both HTTP and Websocket connections
+    let mut ws_url = opt.l1_provider.clone();
+    ws_url.set_scheme("ws").unwrap();
+    let socket_provider = match Provider::<Ws>::connect(ws_url).await {
+        Ok(socket_provider) => socket_provider,
+        Err(err) => {
+            tracing::error!("unable to make websocket connection with L1, executor task exiting");
+            tracing::error!("failed with err: {}", err);
+            return;
+        }
+    };
+
     let contract = HotShot::new(opt.hotshot_address, l1.clone());
+    let blocks_filter = contract.new_blocks_filter().filter;
+    let mut stream = match socket_provider.subscribe_logs(&blocks_filter).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::error!("unable to subscribe to L1 log stream, executor task exiting");
+            tracing::error!("failed with err: {}", err);
+            return;
+        }
+    };
 
     let mut block_height = 0;
-    // TODO: improve polling method by waiting on contract event
     loop {
         let current_block_height = match contract.block_height().call().await {
             Ok(from) => from.as_u64(),
@@ -49,10 +75,26 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
         };
         // Get commitments
         for i in block_height..current_block_height {
-            // TODO: verify commitment
-            // let mut commit_bytes = [0; 32];
-            // let commitment = contract.commitments(U256::from(i)).await.unwrap();
-            // commitment.to_little_endian(&mut commit_bytes);
+            let mut commit_bytes = [0; 32];
+            let commitment = match contract.commitments(U256::from(i)).call().await {
+                // TODO: Replace these with typed errors
+                Ok(commitment) => commitment,
+                Err(err) => {
+                    tracing::error!("Unable to read commitment from contract: {}", err);
+                    tracing::error!("Executor task will exit");
+                    return;
+                }
+            };
+            commitment.to_little_endian(&mut commit_bytes);
+            let commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec()) {
+                Ok(commitment) => commitment,
+                Err(err) => {
+                    tracing::error!("Unable to deserialize commitment: {}", err);
+                    tracing::error!("Executor task will exit");
+                    return;
+                }
+            };
+
             let block = match hotshot
                 .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", i))
                 .send()
@@ -65,13 +107,17 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
                     return;
                 }
             };
+
+            if block.block().commit() != commitment {
+                tracing::error!("Block commitment does not match hash of recieved block, the executor cannot continue");
+                return;
+            }
+
             let mut state_lock = state.write().await;
             execute_block(&block, &mut state_lock).await;
         }
-        if block_height == current_block_height {
-            sleep(Duration::from_secs(5)).await;
-        }
         block_height = current_block_height;
+        stream.next().await;
     }
 }
 

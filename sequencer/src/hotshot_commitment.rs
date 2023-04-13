@@ -1,3 +1,4 @@
+use ark_serialize::CanonicalSerialize;
 use async_std::{sync::Arc, task::sleep};
 use clap::Args;
 use contract_bindings::HotShot;
@@ -152,8 +153,11 @@ async fn sequence_batches(
     let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
         .into_iter()
         .map(|leaf| {
+            let mut buf = vec![];
+            leaf.block_hash().serialize(&mut buf).unwrap();
+            let hash_buf: [u8; 32] = buf.try_into().unwrap();
             (
-                U256::from_little_endian(&<[u8; 32]>::from(leaf.block_hash())),
+                U256::from_little_endian(&hash_buf),
                 Bytes::from(bincode::serialize(&leaf.qc()).unwrap()),
             )
         })

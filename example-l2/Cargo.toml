@@ -5,11 +5,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ark-serialize = { version = "0.3.0", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.2.1"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 contract-bindings = { path = "../contract-bindings" }
-ethers = "1.0.2"
+ethers = { version = "1.0.2", features = ["ws"] }
 futures = "0.3.28"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.2" }
 rand = "0.8.5"
