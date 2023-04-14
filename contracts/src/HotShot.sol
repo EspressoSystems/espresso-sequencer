@@ -144,6 +144,8 @@ contract HotShot {
     }
 
     function hash_to_field(uint8[] memory message) public pure returns (uint256) {
+        // TODO use from_le_bytes_mod_order
+
         uint8[] memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes
@@ -172,57 +174,7 @@ contract HotShot {
             second_slice[i] = uniform_bytes_reverted[n - num_bytes_directly_to_convert + i];
         }
 
-        // TODO remove
-        uint8[31] memory test_second_slice = [
-            236,
-            74,
-            4,
-            15,
-            2,
-            195,
-            247,
-            101,
-            203,
-            46,
-            39,
-            230,
-            233,
-            44,
-            191,
-            9,
-            204,
-            107,
-            143,
-            35,
-            13,
-            145,
-            22,
-            24,
-            120,
-            102,
-            0,
-            108,
-            42,
-            109,
-            45
-        ];
-        for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
-            assert(test_second_slice[i] == second_slice[i]);
-        }
-
-        // TODO remove
-        uint8[17] memory test_first_slice = [191, 4, 240, 192, 86, 43, 245, 37, 72, 68, 100, 110, 177, 74, 90, 228, 193];
-        for (uint256 i = 0; i < n - num_bytes_directly_to_convert; i++) {
-            assert(uniform_bytes_reverted[i] == test_first_slice[i]);
-        }
-
         res = field_from_random_bytes(second_slice);
-
-        // TODO remove
-        assert(
-            big_int_from_bytes(second_slice)
-                == 80261551958479648338488717926501115270885660255171449074419643746368113388
-        );
 
         // TODO hardcode
         uint256 window_size = from_big_int(256);
