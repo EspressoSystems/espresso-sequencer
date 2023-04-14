@@ -6,17 +6,16 @@ import "./HotShot.sol";
 contract ExampleRollup {
     HotShot hotshot;
     uint256 public stateCommitment;
-    uint256 public blockHeight;
+    uint256 public verifiedBlocks;
 
-    error IncorrectBlockHeight(uint256 blockHeight);
-    error InvalidProof(uint256 blockHeight, bytes[] proof);
+    error InvalidProof(uint256 blockHeight, bytes proof);
 
     event StateUpdate(uint256 blockHeight);
 
     constructor(address hotshotAddress) {
         hotshot = HotShot(hotshotAddress);
         stateCommitment = 0;
-        blockHeight = 0;
+        verifiedBlocks = 0;
     }
 
     // For demonstration purposes, this always returns true.
@@ -25,26 +24,22 @@ contract ExampleRollup {
     function verifyProof(
         uint256, /* next block commitment*/
         uint256, /* next state commitment*/
-        bytes[] calldata /*proof*/
+        uint256, /* current state commitment*/
+        bytes calldata /*proof*/
     ) private pure returns (bool) {
         return true;
     }
 
-    function newBlock(uint256 nextStateCommitment, uint256 nextBlockHeight, bytes[] calldata proof) external {
-        // State updates must be calculated sequentially
-        if (nextBlockHeight != blockHeight + 1) {
-            revert IncorrectBlockHeight(nextBlockHeight);
+    function newBlock(uint256 nextStateCommitment, bytes calldata proof) external {
+        uint256 nextBlockCommitment = hotshot.commitments(verifiedBlocks + 1);
+
+        if (!verifyProof(nextBlockCommitment, nextStateCommitment, stateCommitment, proof)) {
+            revert InvalidProof(verifiedBlocks + 1, proof);
         }
 
-        uint256 nextBlockCommitment = hotshot.commitments(nextBlockHeight);
-
-        if (!verifyProof(nextBlockCommitment, nextStateCommitment, proof)) {
-            revert InvalidProof(nextBlockHeight, proof);
-        }
-
-        blockHeight = nextBlockHeight;
+        verifiedBlocks += 1;
         stateCommitment = nextStateCommitment;
 
-        emit StateUpdate(blockHeight);
+        emit StateUpdate(verifiedBlocks);
     }
 }

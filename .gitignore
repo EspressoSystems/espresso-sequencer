@@ -17,3 +17,6 @@ target/
 
 # vscode stuff
 .vscode
+
+# solidity files cache
+cache/

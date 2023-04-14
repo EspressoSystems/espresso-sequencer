@@ -30,20 +30,15 @@ contract ExampleRollupTest is Test {
         hotshot.newBlocks(comms, qcs);
 
         // Send a state update to the rollup
-        bytes[] memory proof = new bytes[](1);
+        bytes memory proof = "0x0000";
         uint256 nextStateCommitment = 523123;
-        uint256 nextBlockHeight = 1;
 
         vm.expectEmit(false, false, false, true, address(rollup));
-        emit StateUpdate(nextBlockHeight);
+        emit StateUpdate(1);
 
-        rollup.newBlock(nextStateCommitment, nextBlockHeight, proof);
+        rollup.newBlock(nextStateCommitment, proof);
 
         assertEq(rollup.stateCommitment(), nextStateCommitment);
-        assertEq(rollup.blockHeight(), nextBlockHeight);
-
-        // Check that contract enforces sequential updates
-        vm.expectRevert();
-        rollup.newBlock(nextStateCommitment, 5, proof);
+        assertEq(rollup.verifiedBlocks(), 1);
     }
 }
