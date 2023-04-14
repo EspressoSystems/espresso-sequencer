@@ -250,7 +250,7 @@ contract HotShot {
 
         for (uint256 i = 0; i < arr_size; i++) {
             // Compute field element from a single byte
-            field_elem = from_big_int(input[arr_size - i - 1]); // In reverse
+            field_elem = field_from_byte(input[arr_size - i - 1]); // In reverse
 
             res = mulmod(res, window_size, PRIME_FIELD_MODULUS);
             res = addmod(res, field_elem, PRIME_FIELD_MODULUS);
@@ -267,7 +267,20 @@ contract HotShot {
         // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
 
         uint256 r = big_int_from_bytes(input);
-
         return from_big_int(r);
+    }
+
+    function field_from_byte(uint8 input) public pure returns (uint256) {
+        return from_big_int(input);
+    }
+
+    function mul(uint8[] memory _a, uint8[] memory _b) public pure returns (uint256) {
+        uint256 a = field_from_random_bytes(_a);
+        uint256 b = field_from_random_bytes(_b);
+
+        uint256 res;
+        res = mulmod(a, b, PRIME_FIELD_MODULUS);
+
+        return res;
     }
 }

@@ -146,12 +146,29 @@ mod test {
             compare_field_elems(x_rust, x_contract);
         }
 
-        // #[async_std::test]
-        // async fn test_field_from_byte() {
-        //     let (hotshot, _) = get_hotshot_contract_and_provider().await;
-        //     let val = 58u8;
-        //     let f = Fq::from(val);
-        //     let f_contract = hotshot.field_from_byte(val).call().await.unwrap();
-        // }
+        #[async_std::test]
+        async fn test_field_from_byte() {
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
+            let val = 58u8;
+            let f = Fq::from(val);
+            let f_contract = hotshot.field_from_byte(val).call().await.unwrap();
+            compare_field_elems(f, f_contract);
+        }
+
+        #[async_std::test]
+        async fn test_mul() {
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
+            let a = [23u8; 31];
+            let b = [41u8; 31];
+
+            let a_field = Fq::from_random_bytes(&a).unwrap();
+            let b_field = Fq::from_random_bytes(&b).unwrap();
+
+            let res = a_field * b_field;
+
+            let f_contract = hotshot.mul(a.into(), b.into()).call().await.unwrap();
+
+            compare_field_elems(res, f_contract);
+        }
     }
 }
