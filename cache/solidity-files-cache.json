@@ -741,8 +741,8 @@
       }
     },
     "contracts/src/HotShot.sol": {
-      "lastModificationDate": 1681479580094,
-      "contentHash": "ca3503f73214be103bea9ac525e1bafe",
+      "lastModificationDate": 1681480480528,
+      "contentHash": "0932ac816fb5e95ca753f7771b8d57e8",
       "sourceName": "contracts/src/HotShot.sol",
       "solcConfig": {
         "settings": {
@@ -773,12 +773,95 @@
         }
       },
       "imports": [
-        "contracts/lib/forge-std/src/console.sol"
+        "contracts/src/libraries/BN254.sol",
+        "contracts/src/libraries/Utils.sol"
       ],
-      "versionRequirement": "^0.8.18",
+      "versionRequirement": "^0.8.0",
       "artifacts": {
         "HotShot": {
           "0.8.18+commit.87f61d96.Linux.gcc": "HotShot.sol/HotShot.json"
+        }
+      }
+    },
+    "contracts/src/libraries/BN254.sol": {
+      "lastModificationDate": 1681480419820,
+      "contentHash": "0a42282826024dce225977a03054ac73",
+      "sourceName": "contracts/src/libraries/BN254.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "contracts/src/libraries/Utils.sol"
+      ],
+      "versionRequirement": "^0.8.0",
+      "artifacts": {
+        "BN254": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "BN254.sol/BN254.json"
+        }
+      }
+    },
+    "contracts/src/libraries/Utils.sol": {
+      "lastModificationDate": 1681480419812,
+      "contentHash": "c211f8bea5a7ea95869bce8fb8cc2619",
+      "sourceName": "contracts/src/libraries/Utils.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": "^0.8.0",
+      "artifacts": {
+        "Utils": {
+          "0.8.18+commit.87f61d96.Linux.gcc": "Utils.sol/Utils.json"
         }
       }
     },
@@ -841,7 +924,7 @@
       }
     },
     "contracts/test/HotShot.t.sol": {
-      "lastModificationDate": 1681479580086,
+      "lastModificationDate": 1681480419816,
       "contentHash": "f8107e87c823d61f2d195ed0ae73ef52",
       "sourceName": "contracts/test/HotShot.t.sol",
       "solcConfig": {
@@ -889,7 +972,9 @@
         "contracts/lib/forge-std/src/console.sol",
         "contracts/lib/forge-std/src/console2.sol",
         "contracts/lib/forge-std/src/interfaces/IMulticall3.sol",
-        "contracts/src/HotShot.sol"
+        "contracts/src/HotShot.sol",
+        "contracts/src/libraries/BN254.sol",
+        "contracts/src/libraries/Utils.sol"
       ],
       "versionRequirement": "^0.8.13",
       "artifacts": {

@@ -1,11 +1,8 @@
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.0;
 
-import "forge-std/console.sol";
+import {BN254} from "./libraries/BN254.sol";
 
 contract HotShot {
-    // TODO comment
-    uint256 constant PRIME_FIELD_MODULUS = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
-
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
     uint256 public blockHeight;
@@ -175,33 +172,29 @@ contract HotShot {
         res = field_from_random_bytes(second_slice);
 
         uint256 window_size = 256;
-
+        uint256 p = BN254.P_MOD;
         // Handle the first slice
         uint256 arr_size = n - num_bytes_directly_to_convert;
         for (uint256 i = 0; i < arr_size; i++) {
             // Compute field element from a single byte
             uint256 field_elem = from_big_int(uint256(uniform_bytes_reverted[arr_size - i - 1])); // In reverse
 
-            assembly {
-                res := mulmod(res, window_size, PRIME_FIELD_MODULUS)
-                res := addmod(res, field_elem, PRIME_FIELD_MODULUS)
-            }
+            res = mulmod(res, window_size, p);
+            res = addmod(res, field_elem, p);
         }
         return res;
     }
 
     function from_big_int(uint256 input) private pure returns (uint256) {
-        assert(input != PRIME_FIELD_MODULUS);
+        assert(input != BN254.P_MOD);
         // constant field element to multiply the input with
         // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
         // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
 
         uint256 v = 6350874878119819312338956282401532409788428879151445726012394534686998597021;
+        uint256 p = BN254.P_MOD;
 
-        uint256 res;
-        assembly {
-            res := mulmod(input, v, PRIME_FIELD_MODULUS)
-        }
+        uint256 res = mulmod(input, v, p);
 
         return res;
     }
