@@ -54,6 +54,7 @@ mod test {
         use ark_bn254::Fq;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use ark_ff::{BigInt, Field};
+        use ethers::types::Bytes;
         use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
@@ -83,7 +84,7 @@ mod test {
             let len_in_bytes = len_per_base_elem;
             let message: Vec<u8> = vec![1u8, 2u8, 5u8, 45u8];
             let rust_uniform_bytes = expander.expand(&message, len_in_bytes);
-            let contract_uniform_bytes = hotshot.expand(message).call().await.unwrap();
+            let contract_uniform_bytes = hotshot.expand(Bytes::from(message)).call().await.unwrap();
 
             assert_eq!(rust_uniform_bytes, contract_uniform_bytes);
         }
@@ -112,7 +113,11 @@ mod test {
             let message: Vec<u8> = vec![1u8, 2u8, 3u8, 45u8];
 
             let x_rust: Fq = hasher.hash_to_field(&message, 1)[0];
-            let x_contract = hotshot.hash_to_field(message).call().await.unwrap();
+            let x_contract = hotshot
+                .hash_to_field(Bytes::from(message))
+                .call()
+                .await
+                .unwrap();
 
             compare_field_elems(x_rust, x_contract);
         }

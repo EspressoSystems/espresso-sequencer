@@ -55,7 +55,7 @@ contract HotShot {
     }
 
     // Helpers
-    function expand(uint8[] memory message) public pure returns (uint8[] memory) {
+    function expand(bytes memory message) public pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
         uint8 ell = 2; // (n+(b_len-1))/b_len where n=48
@@ -78,9 +78,7 @@ contract HotShot {
         }
 
         // message
-        for (uint256 i = 0; i < message.length; i++) {
-            buffer = abi.encodePacked(buffer, message[i]);
-        }
+        buffer = abi.encodePacked(buffer, message);
 
         // lib_str
         buffer = abi.encodePacked(buffer, zero_u8);
@@ -140,7 +138,7 @@ contract HotShot {
         return uniform_bytes;
     }
 
-    function hash_to_field(uint8[] memory message) public pure returns (uint256) {
+    function hash_to_field(bytes memory message) public pure returns (uint256) {
         uint8[] memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes

@@ -1,3 +1,18 @@
+#[doc = "`PackedHotShotParams(bytes32,bytes32,bytes)`"]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    ethers :: contract :: EthAbiType,
+    ethers :: contract :: EthAbiCodec,
+)]
+pub struct PackedHotShotParams {
+    pub old_acc_input_hash: [u8; 32],
+    pub new_acc_input_hash: [u8; 32],
+    pub comm_proof: ethers::core::types::Bytes,
+}
 #[doc = "`InitializePackedParameters(address,address,uint64,address,uint64)`"]
 #[derive(
     Clone,
@@ -14,19 +29,4 @@ pub struct InitializePackedParameters {
     pub pending_state_timeout: u64,
     pub trusted_aggregator: ethers::core::types::Address,
     pub trusted_aggregator_timeout: u64,
-}
-#[doc = "`PackedHotShotParams(bytes32,bytes32,bytes)`"]
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    Eq,
-    PartialEq,
-    ethers :: contract :: EthAbiType,
-    ethers :: contract :: EthAbiCodec,
-)]
-pub struct PackedHotShotParams {
-    pub old_acc_input_hash: [u8; 32],
-    pub new_acc_input_hash: [u8; 32],
-    pub comm_proof: ethers::core::types::Bytes,
 }
