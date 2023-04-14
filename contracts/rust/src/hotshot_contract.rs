@@ -4,7 +4,6 @@ mod test {
 
     use contract_bindings::hot_shot::NewBlocksCall;
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
-    use sha3::Digest;
 
     use crate::helpers::hotshot_contract::get_hotshot_contract_and_provider;
 
@@ -50,48 +49,21 @@ mod test {
 
     mod bls_signature {
         use super::*;
-        use crate::hash_to_curve_helpers::Expander;
         use ark_bn254::{Fq, G1Affine};
-        use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use ark_ff::{BigInt, Field};
-        use ethers::types::Bytes;
-        use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
+        //use std::println;
+        use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, hash_to_field};
         use sha3::Keccak256;
 
         fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256) {
             let x_rust_big_int = field_elem_rust.0;
             let x_contract_big_int = BigInt::new(field_elem_contract.0);
-
             assert_eq!(x_rust_big_int, x_contract_big_int);
         }
 
         fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: (U256, U256)) {
             compare_field_elems(group_elem_rust.x, group_elem_contract.0);
             compare_field_elems(group_elem_rust.y, group_elem_contract.1);
-        }
-
-        #[async_std::test]
-        async fn test_expander() {
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-
-            // We can fix the constants in our case
-            let len_per_base_elem = 48;
-            let dst = [1u8];
-
-            let expander = crate::hash_to_curve_helpers::ExpanderXmd {
-                hasher: Keccak256::new(),
-                dst: dst.to_vec(),
-                block_size: len_per_base_elem,
-            };
-
-            // Simplification in our case:
-            // see https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/field_hashers/mod.rs#L70
-            let len_in_bytes = len_per_base_elem;
-            let message: Vec<u8> = vec![1u8, 2u8, 5u8, 45u8];
-            let rust_uniform_bytes = expander.expand(&message, len_in_bytes);
-            let contract_uniform_bytes = hotshot.expand(Bytes::from(message)).call().await.unwrap();
-
-            assert_eq!(rust_uniform_bytes, contract_uniform_bytes);
         }
 
         #[async_std::test]
@@ -111,18 +83,10 @@ mod test {
         #[async_std::test]
         async fn test_hash_to_field() {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
-
-            let hasher_init = &[1u8]; // TODO make it clear that this is the dst vector
-            let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
-
             let message: Vec<u8> = vec![1u8, 2u8, 3u8, 45u8];
 
-            let x_rust: Fq = hasher.hash_to_field(&message, 1)[0];
-            let x_contract = hotshot
-                .hash_to_field(Bytes::from(message))
-                .call()
-                .await
-                .unwrap();
+            let x_rust: Fq = hash_to_field::<Keccak256>(&message);
+            let x_contract = hotshot.hash_to_field(message).call().await.unwrap();
 
             compare_field_elems(x_rust, x_contract);
         }
@@ -134,11 +98,7 @@ mod test {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
             let msg_input = vec![1u8, 2u8, 3u8, 45u8];
             let group_elem = hash_to_curve::<Keccak256>(&msg_input);
-            let group_elem_contract = hotshot
-                .hash_to_curve(Bytes::from(msg_input))
-                .call()
-                .await
-                .unwrap();
+            let group_elem_contract = hotshot.hash_to_curve(msg_input).call().await.unwrap();
 
             compare_group_elems(group_elem.into(), group_elem_contract);
         }

@@ -10,6 +10,8 @@ pub mod deposit_contract;
 pub mod deposit_contract_mock;
 pub mod emergency_manager;
 pub mod erc20_permit_mock;
+pub mod example_rollup;
+pub mod example_rollup_test;
 pub mod hot_shot;
 pub mod hot_shot_test;
 pub mod i_bridge_message_receiver;

@@ -55,7 +55,7 @@ contract HotShot {
     }
 
     // Helpers
-    function expand(bytes memory message) public pure returns (uint8[] memory) {
+    function expand(uint8[] memory message) public pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
         uint8 ell = 2; // (n+(b_len-1))/b_len where n=48
@@ -77,8 +77,11 @@ contract HotShot {
             }
         }
 
+        // TODO improve?
         // message
-        buffer = abi.encodePacked(buffer, message);
+        for (uint256 i = 0; i < message.length; i++) {
+            buffer = abi.encodePacked(buffer, message[i]);
+        }
 
         // lib_str
         buffer = abi.encodePacked(buffer, zero_u8);
@@ -138,7 +141,7 @@ contract HotShot {
         return uniform_bytes;
     }
 
-    function hash_to_field(bytes memory message) public pure returns (uint256) {
+    function hash_to_field(uint8[] memory message) public pure returns (uint256) {
         uint8[] memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes
@@ -183,16 +186,18 @@ contract HotShot {
         return res;
     }
 
-    function hash_to_curve(bytes memory input) public view returns (uint256, uint256) {
+    function hash_to_curve(uint8[] memory input) public view returns (uint256, uint256) {
         uint256 x = hash_to_field(input);
-
+        assert(x == 14487691758606852765846190298448046244670997600208969809851665994945834068178);
         uint256 p = BN254.P_MOD;
-        uint256 b = 3; // TODO document
+
+        uint256 b = 3;
 
         uint256 Y = mulmod(x, x, p);
         Y = mulmod(Y, x, p);
         Y = addmod(Y, b, p);
 
+        assert(Y == 14459468897005109112359444549921468688605969388756525164515131417937128421171);
         // Check Y is a quadratic residue
         uint256 y;
         bool is_qr;
