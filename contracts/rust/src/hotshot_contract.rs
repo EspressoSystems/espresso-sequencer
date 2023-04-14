@@ -52,7 +52,7 @@ mod test {
         use crate::hash_to_curve_helpers::Expander;
         use ark_bn254::Fq;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-        use ark_ff::{BigInt, Field};
+        use ark_ff::{BigInt, Field, PrimeField};
         use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
@@ -117,6 +117,34 @@ mod test {
 
             let x_rust: Fq = hasher.hash_to_field(&message, 1)[0];
             let x_contract = hotshot.hash_to_field(message).call().await.unwrap();
+
+            // Convert to BigInt so that we can compare results
+            let x_rust_big_int = x_rust.0;
+            let x_contract_big_int = BigInt::new(x_contract.0);
+
+            assert_eq!(x_rust_big_int, x_contract_big_int);
+        }
+
+        #[async_std::test]
+        async fn test_from_le_bytes_mod_order() {
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
+
+            // Small input, less than 31 bytes
+            let input = vec![1u8; 31];
+            let x_rust: Fq = Fq::from_le_bytes_mod_order(&input);
+            let x_contract = hotshot.from_le_bytes_mod_order(input).call().await.unwrap();
+
+            // Convert to BigInt so that we can compare results
+            let x_rust_big_int = x_rust.0;
+            let x_contract_big_int = BigInt::new(x_contract.0);
+
+            assert_eq!(x_rust_big_int, x_contract_big_int);
+
+            // Large input, more than 31 bytes
+            let input = vec![1u8; 32];
+
+            let x_rust: Fq = Fq::from_le_bytes_mod_order(&input);
+            let x_contract = hotshot.from_le_bytes_mod_order(input).call().await.unwrap();
 
             // Convert to BigInt so that we can compare results
             let x_rust_big_int = x_rust.0;
