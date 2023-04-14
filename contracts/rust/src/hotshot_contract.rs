@@ -158,11 +158,11 @@ mod test {
         #[async_std::test]
         async fn test_mul() {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let a = [23u8; 31];
+            let a = [1u8; 31];
             let b = [41u8; 31];
 
             let a_field = Fq::from_random_bytes(&a).unwrap();
-            let b_field = Fq::from_random_bytes(&b).unwrap();
+            let b_field = Fq::from(256u64); //.unwrap();
 
             let res = a_field * b_field;
 

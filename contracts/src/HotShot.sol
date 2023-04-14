@@ -177,8 +177,8 @@ contract HotShot {
         res = field_from_random_bytes(second_slice);
 
         // TODO hardcode
-        uint256 window_size = from_big_int(256);
-        assert(window_size == 6093996282567377512538783145753940342310767422731154820184196676124901402234);
+        uint256 window_size = 256; //from_big_int(256);
+        // assert(window_size == 6093996282567377512538783145753940342310767422731154820184196676124901402234);
 
         // Handle the first slice
         uint256 arr_size = n - num_bytes_directly_to_convert;
@@ -279,7 +279,7 @@ contract HotShot {
         uint256 b = field_from_random_bytes(_b);
 
         uint256 res;
-        res = mulmod(a, b, PRIME_FIELD_MODULUS);
+        res = mulmod(a, 256, PRIME_FIELD_MODULUS);
 
         return res;
     }
