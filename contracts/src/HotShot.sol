@@ -221,43 +221,6 @@ contract HotShot {
         return r;
     }
 
-    function from_le_bytes_mod_order(uint8[] memory input) public pure returns (uint256) {
-        // Do the split
-        // TODO make a constant
-        uint256 num_bytes_directly_to_convert = 31; // Fixed for Fq
-
-        // Create the initial field element
-        uint256 res = 0;
-
-        uint256 n = input.length;
-
-        // Process the second slice
-        // TODO use Bytes library
-        uint8[] memory second_slice = new uint8[](num_bytes_directly_to_convert);
-        for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
-            second_slice[i] = input[n - num_bytes_directly_to_convert + i];
-        }
-
-        res = field_from_random_bytes(second_slice);
-
-        // TODO hardcode
-        uint256 window_size = from_big_int(256);
-        assert(window_size == 6093996282567377512538783145753940342310767422731154820184196676124901402234);
-
-        // Handle the first slice
-        uint256 arr_size = n - num_bytes_directly_to_convert;
-        uint256 field_elem;
-
-        for (uint256 i = 0; i < arr_size; i++) {
-            // Compute field element from a single byte
-            field_elem = field_from_byte(input[arr_size - i - 1]); // In reverse
-
-            res = mulmod(res, window_size, PRIME_FIELD_MODULUS);
-            res = addmod(res, field_elem, PRIME_FIELD_MODULUS);
-        }
-        return res;
-    }
-
     function field_from_random_bytes(uint8[] memory input) public pure returns (uint256) {
         // Adapted from https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/mod.rs#L246
         // Note that we do not need the serde logic.
@@ -268,19 +231,5 @@ contract HotShot {
 
         uint256 r = big_int_from_bytes(input);
         return from_big_int(r);
-    }
-
-    function field_from_byte(uint8 input) public pure returns (uint256) {
-        return from_big_int(input);
-    }
-
-    function mul(uint8[] memory _a, uint8[] memory _b) public pure returns (uint256) {
-        uint256 a = field_from_random_bytes(_a);
-        uint256 b = field_from_random_bytes(_b);
-
-        uint256 res;
-        res = mulmod(a, 256, PRIME_FIELD_MODULUS);
-
-        return res;
     }
 }

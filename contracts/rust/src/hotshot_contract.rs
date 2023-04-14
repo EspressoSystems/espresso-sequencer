@@ -53,7 +53,7 @@ mod test {
         use crate::hash_to_curve_helpers::Expander;
         use ark_bn254::Fq;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-        use ark_ff::{BigInt, Field, PrimeField};
+        use ark_ff::{BigInt, Field};
         use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
@@ -62,15 +62,6 @@ mod test {
             let x_contract_big_int = BigInt::new(field_elem_contract.0);
 
             assert_eq!(x_rust_big_int, x_contract_big_int);
-        }
-
-        #[async_std::test]
-        async fn test_hash_to_curve() {
-            // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
-            // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
-            let msg_input = [44u8, 65u8];
-            let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
-            // TODO
         }
 
         #[async_std::test]
@@ -127,48 +118,12 @@ mod test {
         }
 
         #[async_std::test]
-        async fn test_from_le_bytes_mod_order() {
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-
-            // Small input, less than 31 bytes
-            let input = vec![1u8; 31];
-            let x_rust: Fq = Fq::from_le_bytes_mod_order(&input);
-            let x_contract = hotshot.from_le_bytes_mod_order(input).call().await.unwrap();
-
-            compare_field_elems(x_rust, x_contract);
-
-            // Large input, more than 31 bytes
-            let input = vec![1u8; 32];
-
-            let x_rust: Fq = Fq::from_le_bytes_mod_order(&input);
-            let x_contract = hotshot.from_le_bytes_mod_order(input).call().await.unwrap();
-
-            compare_field_elems(x_rust, x_contract);
-        }
-
-        #[async_std::test]
-        async fn test_field_from_byte() {
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let val = 58u8;
-            let f = Fq::from(val);
-            let f_contract = hotshot.field_from_byte(val).call().await.unwrap();
-            compare_field_elems(f, f_contract);
-        }
-
-        #[async_std::test]
-        async fn test_mul() {
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let a = [1u8; 31];
-            let b = [41u8; 31];
-
-            let a_field = Fq::from_random_bytes(&a).unwrap();
-            let b_field = Fq::from(256u64); //.unwrap();
-
-            let res = a_field * b_field;
-
-            let f_contract = hotshot.mul(a.into(), b.into()).call().await.unwrap();
-
-            compare_field_elems(res, f_contract);
+        async fn test_hash_to_curve() {
+            // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
+            // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
+            let msg_input = [44u8, 65u8];
+            let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
+            // TODO
         }
     }
 }
