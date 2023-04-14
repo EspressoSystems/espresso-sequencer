@@ -144,8 +144,6 @@ contract HotShot {
     }
 
     function hash_to_field(uint8[] memory message) public pure returns (uint256) {
-        // TODO use from_le_bytes_mod_order
-
         uint8[] memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes
@@ -176,9 +174,7 @@ contract HotShot {
 
         res = field_from_random_bytes(second_slice);
 
-        // TODO hardcode
-        uint256 window_size = 256; //from_big_int(256);
-        // assert(window_size == 6093996282567377512538783145753940342310767422731154820184196676124901402234);
+        uint256 window_size = 256;
 
         // Handle the first slice
         uint256 arr_size = n - num_bytes_directly_to_convert;
@@ -195,13 +191,12 @@ contract HotShot {
     }
 
     function from_big_int(uint256 input) private pure returns (uint256) {
-        // TODO optimize
         assert(input != PRIME_FIELD_MODULUS);
+        // constant field element to multiply the input with
+        // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
+        // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
 
-        // TODO hardcode value
-        // TODO document, reference to arkwors
-        uint256 v = 15230403791020821917 + 2 ** 64 * 754611498739239741 + 2 ** 128 * 7381016538464732716
-            + 2 ** 192 * 1011752739694698287;
+        uint256 v = 6350874878119819312338956282401532409788428879151445726012394534686998597021;
 
         uint256 res;
         assembly {
@@ -224,10 +219,6 @@ contract HotShot {
     function field_from_random_bytes(uint8[] memory input) public pure returns (uint256) {
         // Adapted from https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/mod.rs#L246
         // Note that we do not need the serde logic.
-
-        // constant field element to multiply the input with
-        // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
-        // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
 
         uint256 r = big_int_from_bytes(input);
         return from_big_int(r);
