@@ -51,7 +51,7 @@ mod test {
     mod bls_signature {
         use super::*;
         use crate::hash_to_curve_helpers::Expander;
-        use ark_bn254::Fq;
+        use ark_bn254::{Fq, G1Affine};
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use ark_ff::{BigInt, Field};
         use ethers::types::Bytes;
@@ -63,6 +63,11 @@ mod test {
             let x_contract_big_int = BigInt::new(field_elem_contract.0);
 
             assert_eq!(x_rust_big_int, x_contract_big_int);
+        }
+
+        fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: (U256, U256)) {
+            compare_field_elems(group_elem_rust.x, group_elem_contract.0);
+            compare_field_elems(group_elem_rust.y, group_elem_contract.1);
         }
 
         #[async_std::test]
@@ -126,9 +131,16 @@ mod test {
         async fn test_hash_to_curve() {
             // https://geometry.xyz/notebook/Optimized-BLS-multisignatures-on-EVM
             // https://github.com/thehubbleproject/hubble-contracts/blob/master/contracts/libs/BLS.sol
-            let msg_input = [44u8, 65u8];
-            let _group_elem = hash_to_curve::<Keccak256>(&msg_input);
-            // TODO
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
+            let msg_input = vec![1u8, 2u8, 3u8, 45u8];
+            let group_elem = hash_to_curve::<Keccak256>(&msg_input);
+            let group_elem_contract = hotshot
+                .hash_to_curve(Bytes::from(msg_input))
+                .call()
+                .await
+                .unwrap();
+
+            compare_group_elems(group_elem.into(), group_elem_contract);
         }
     }
 }

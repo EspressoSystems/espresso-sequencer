@@ -183,6 +183,32 @@ contract HotShot {
         return res;
     }
 
+    function hash_to_curve(bytes memory input) public view returns (uint256, uint256) {
+        uint256 x = hash_to_field(input);
+
+        uint256 p = BN254.P_MOD;
+        uint256 b = 3; // TODO document
+
+        uint256 Y = mulmod(x, x, p);
+        Y = mulmod(Y, x, p);
+        Y = addmod(Y, b, p);
+
+        // Check Y is a quadratic residue
+        uint256 y;
+        bool is_qr;
+        (is_qr, y) = BN254.quadraticResidue(Y);
+
+        while (!is_qr) {
+            x = addmod(x, 1, p);
+            Y = mulmod(x, x, p);
+            Y = mulmod(Y, x, p);
+            Y = addmod(Y, b, p);
+            (is_qr, y) = BN254.quadraticResidue(Y);
+        }
+
+        return (x, y);
+    }
+
     function from_big_int(uint256 input) private pure returns (uint256) {
         assert(input != BN254.P_MOD);
         // constant field element to multiply the input with
