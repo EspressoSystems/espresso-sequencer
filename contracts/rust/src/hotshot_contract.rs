@@ -6,7 +6,7 @@ mod test {
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
     use sha3::Digest;
 
-    use crate::helpers::get_hotshot_contract_and_provider;
+    use crate::helpers::hotshot_contract::get_hotshot_contract_and_provider;
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {

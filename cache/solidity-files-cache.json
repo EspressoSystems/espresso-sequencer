@@ -741,8 +741,8 @@
       }
     },
     "contracts/src/HotShot.sol": {
-      "lastModificationDate": 1681480480528,
-      "contentHash": "0932ac816fb5e95ca753f7771b8d57e8",
+      "lastModificationDate": 1681480624955,
+      "contentHash": "7743d6fa33f34ef9ef8126e91f2b6a38",
       "sourceName": "contracts/src/HotShot.sol",
       "solcConfig": {
         "settings": {
@@ -924,7 +924,7 @@
       }
     },
     "contracts/test/HotShot.t.sol": {
-      "lastModificationDate": 1681480419816,
+      "lastModificationDate": 1681480624955,
       "contentHash": "f8107e87c823d61f2d195ed0ae73ef52",
       "sourceName": "contracts/test/HotShot.t.sol",
       "solcConfig": {
