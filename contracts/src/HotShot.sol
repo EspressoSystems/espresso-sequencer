@@ -178,7 +178,7 @@ contract HotShot {
         uint256 arr_size = n - num_bytes_directly_to_convert;
         for (uint256 i = 0; i < arr_size; i++) {
             // Compute field element from a single byte
-            uint256 field_elem = from_big_int(uint256(uniform_bytes_reverted[arr_size - i - 1])); // In reverse
+            uint256 field_elem = uint256(uniform_bytes_reverted[arr_size - i - 1]); // In reverse
 
             res = mulmod(res, window_size, p);
             res = addmod(res, field_elem, p);
@@ -188,7 +188,7 @@ contract HotShot {
 
     function hash_to_curve(uint8[] memory input) public view returns (uint256, uint256) {
         uint256 x = hash_to_field(input);
-        assert(x == 14487691758606852765846190298448046244670997600208969809851665994945834068178);
+
         uint256 p = BN254.P_MOD;
 
         uint256 b = 3;
@@ -197,7 +197,6 @@ contract HotShot {
         Y = mulmod(Y, x, p);
         Y = addmod(Y, b, p);
 
-        assert(Y == 14459468897005109112359444549921468688605969388756525164515131417937128421171);
         // Check Y is a quadratic residue
         uint256 y;
         bool is_qr;
@@ -214,20 +213,6 @@ contract HotShot {
         return (x, y);
     }
 
-    function from_big_int(uint256 input) private pure returns (uint256) {
-        assert(input != BN254.P_MOD);
-        // constant field element to multiply the input with
-        // See https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/montgomery_backend.rs#L23
-        // Represented as BigInt in little endian, [u64;4]: v = [15230403791020821917, 754611498739239741, 7381016538464732716,  1011752739694698287]
-
-        uint256 v = 6350874878119819312338956282401532409788428879151445726012394534686998597021;
-        uint256 p = BN254.P_MOD;
-
-        uint256 res = mulmod(input, v, p);
-
-        return res;
-    }
-
     function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
         // TODO Optimize
         uint256 r = 0;
@@ -242,7 +227,12 @@ contract HotShot {
         // Adapted from https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/mod.rs#L246
         // Note that we do not need the serde logic.
 
-        uint256 r = big_int_from_bytes(input);
-        return from_big_int(r);
+        return big_int_from_bytes(input);
+    }
+
+    function field_square(uint256 x) public pure returns (uint256) {
+        uint256 p = BN254.P_MOD;
+        uint256 res = mulmod(x, x, p);
+        return res;
     }
 }
