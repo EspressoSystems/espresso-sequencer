@@ -8,13 +8,17 @@ component "eth_watch" as EthWatch
 
 component "Sequencer" as Sequencer
 component "VM" as VM
-component "Mempool" as Mempool
+database "Mempool" as Mempool
 
 component "Witness Generator" as WitnessGenerator
 
-EthSender -> SmartContract: txn
-EthWatch -> L1: data requests
-L1 -> EthWatch: data
+component "API Server" as APIServer
+
+APIServer --> Mempool: txn for submission
+
+EthSender --> SmartContract: txn
+
+L1 --> EthWatch: priority requests
 
 Mempool --> Sequencer: pending txn
 Sequencer -> VM: txn for execution
