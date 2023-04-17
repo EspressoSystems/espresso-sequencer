@@ -1,4 +1,7 @@
+use commit::{Commitment, Committable};
 use ethers::abi::Address;
+use hotshot_query_service::availability::BlockHash;
+use sequencer::SeqTypes;
 use std::collections::HashMap;
 
 use crate::error::RollupError;
@@ -13,10 +16,30 @@ pub struct Account {
     nonce: Nonce,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct State {
     accounts: HashMap<Address, Account>,
+    block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
+    prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
 }
+
+impl Committable for State {
+    fn commit(&self) -> Commitment<State> {
+        let mut builder = commit::RawCommitmentBuilder::new("State Commitment");
+
+        if let Some(hash) = self.block_hash {
+            builder = builder.var_size_field("block_hash", hash.as_ref());
+        }
+
+        if let Some(prev_comm) = self.prev_state_commitment {
+            builder = builder.var_size_field("prev_state_commitment", prev_comm.as_ref());
+        }
+
+        builder.finalize()
+    }
+}
+
+pub type StateCommitment = Commitment<(Commitment<BlockHash<SeqTypes>>, BlockHash<SeqTypes>)>;
 
 impl State {
     /// Create new VM state seeded with some initial balances
@@ -33,7 +56,11 @@ impl State {
                 },
             );
         }
-        State { accounts }
+        State {
+            accounts,
+            block_hash: None,
+            prev_state_commitment: None,
+        }
     }
 
     /// If the transaction is valid, transition the state and return the new state with updated balances.
@@ -90,6 +117,14 @@ impl State {
             .get(address)
             .map(|account| account.balance)
             .unwrap_or(0)
+    }
+
+    pub fn set_block_hash(&mut self, hash: BlockHash<SeqTypes>) {
+        self.block_hash = Some(hash);
+    }
+
+    pub fn set_prev_state_commitment(&mut self, commitment: Commitment<Self>) {
+        self.prev_state_commitment = Some(commitment);
     }
 }
 #[cfg(test)]

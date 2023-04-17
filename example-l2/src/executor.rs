@@ -25,6 +25,7 @@ async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
             tracing::info!("Transaction applied")
         }
     }
+    state.set_block_hash(block.hash());
 }
 
 pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
@@ -86,7 +87,8 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
                 }
             };
             commitment.to_little_endian(&mut commit_bytes);
-            let commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec()) {
+            let block_commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec())
+            {
                 Ok(commitment) => commitment,
                 Err(err) => {
                     tracing::error!("Unable to deserialize commitment: {}", err);
@@ -108,13 +110,18 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
                 }
             };
 
-            if block.block().commit() != commitment {
+            if block.block().commit() != block_commitment {
                 tracing::error!("Block commitment does not match hash of recieved block, the executor cannot continue");
                 return;
             }
 
             let mut state_lock = state.write().await;
             execute_block(&block, &mut state_lock).await;
+
+            // Update the state commitment
+            // TODO: forward state commitment to Rollup alongside mock proof
+            let state_commitment = state_lock.commit();
+            state_lock.set_prev_state_commitment(state_commitment);
         }
         block_height = current_block_height;
         stream.next().await;
