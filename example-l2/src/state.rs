@@ -35,7 +35,7 @@ impl Committable for State {
             builder = builder.var_size_field("prev_state_commitment", prev_comm.as_ref());
         }
 
-        // In a live rollup, the state commitment would also likely include a Merkle root of a tree representing the account balances
+        // A real rollup would also include a commitment to the account state (e.g. the Merkle root of an account merkle tree)
 
         builder.finalize()
     }
