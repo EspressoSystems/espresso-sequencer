@@ -5031,7 +5031,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/missing-public-function-for-bls#aedd28735a1cecb5288e82550d2248d6306aff4e"
+source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5072,7 +5072,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/missing-public-function-for-bls#aedd28735a1cecb5288e82550d2248d6306aff4e"
+source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5140,7 +5140,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/missing-public-function-for-bls#aedd28735a1cecb5288e82550d2248d6306aff4e"
+source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",

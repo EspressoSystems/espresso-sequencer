@@ -170,7 +170,7 @@ contract HotShot {
             second_slice[i] = uniform_bytes_reverted[n - num_bytes_directly_to_convert + i];
         }
 
-        res = field_from_random_bytes(second_slice);
+        res = big_int_from_bytes(second_slice);
 
         uint256 window_size = 256;
         uint256 p = BN254.P_MOD;
@@ -221,13 +221,6 @@ contract HotShot {
         }
 
         return r;
-    }
-
-    function field_from_random_bytes(uint8[] memory input) public pure returns (uint256) {
-        // Adapted from https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/models/fp/mod.rs#L246
-        // Note that we do not need the serde logic.
-
-        return big_int_from_bytes(input);
     }
 
     function field_square(uint256 x) public pure returns (uint256) {

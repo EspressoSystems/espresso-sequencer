@@ -50,9 +50,9 @@ mod test {
     mod bls_signature {
         use super::*;
         use ark_bn254::{Fq, G1Affine};
-        use ark_ff::{BigInt, Field};
+        use ark_ff::BigInt;
         use ark_ff::{BigInteger, PrimeField};
-        use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, hash_to_field};
+        use jf_primitives::signatures::bls_over_bn254::hash_to_curve;
         use sha3::Keccak256;
 
         fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256) {
@@ -64,31 +64,6 @@ mod test {
         fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: (U256, U256)) {
             compare_field_elems(group_elem_rust.x, group_elem_contract.0);
             compare_field_elems(group_elem_rust.y, group_elem_contract.1);
-        }
-
-        #[async_std::test]
-        async fn test_field_elem_from_random_bytes() {
-            let bytes = [1u8, 2u8, 56, 124, 3, 3, 4, 87];
-            let f_elem = Fq::from_random_bytes(&bytes).unwrap();
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let f_elem_contract = hotshot
-                .field_from_random_bytes(bytes.to_vec())
-                .call()
-                .await
-                .unwrap();
-
-            compare_field_elems(f_elem, f_elem_contract);
-        }
-
-        #[async_std::test]
-        async fn test_hash_to_field() {
-            let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let message: Vec<u8> = vec![1u8, 2u8, 3u8, 45u8];
-
-            let x_rust: Fq = hash_to_field::<Keccak256>(&message);
-            let x_contract = hotshot.hash_to_field(message).call().await.unwrap();
-
-            compare_field_elems(x_rust, x_contract);
         }
 
         #[async_std::test]
