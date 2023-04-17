@@ -4550,7 +4550,9 @@ name = "hotshot_contract"
 version = "0.1.0"
 dependencies = [
  "ark-bn254 0.4.0",
+ "ark-ec 0.4.2",
  "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "async-std",
  "contract-bindings",
@@ -4560,6 +4562,7 @@ dependencies = [
  "ethers-solc 1.0.2",
  "hex",
  "jf-primitives 0.3.0",
+ "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish)",
  "sequencer-utils",
  "sha3",
  "tokio",
@@ -5031,7 +5034,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5055,7 +5058,7 @@ dependencies = [
  "generic-array 0.14.7",
  "itertools 0.10.5",
  "jf-relation",
- "jf-utils 0.3.0",
+ "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public)",
  "merlin",
  "num-bigint",
  "num-traits",
@@ -5072,7 +5075,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5088,7 +5091,7 @@ dependencies = [
  "downcast-rs",
  "dyn-clone",
  "hashbrown 0.13.2",
- "jf-utils 0.3.0",
+ "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public)",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
@@ -5140,7 +5143,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -5148,6 +5151,21 @@ dependencies = [
  "ark-std 0.4.0",
  "digest 0.10.6",
  "rayon",
+ "serde",
+ "sha2 0.10.6",
+ "tagged-base64 0.3.0",
+]
+
+[[package]]
+name = "jf-utils"
+version = "0.3.0"
+source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
+dependencies = [
+ "ark-ec 0.4.2",
+ "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "digest 0.10.6",
  "serde",
  "sha2 0.10.6",
  "tagged-base64 0.3.0",
@@ -6542,18 +6560,18 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0fa9d8a04aa0af7b5845b514a828f829ae3f0ec3f60d9842e1dfaeb49a0e68b"
+checksum = "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
 dependencies = [
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e51dcc6bafb7f3ac88b65d2ad21f4b53d878e496712060e23011862ebd2d2d1"
+checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -7766,9 +7784,9 @@ dependencies = [
 
 [[package]]
 name = "rustc-demangle"
-version = "0.1.22"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4a36c42d1873f9a77c53bde094f9664d9891bc604a45b4798fd2c389ed12e5b"
+checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
 
 [[package]]
 name = "rustc-hash"

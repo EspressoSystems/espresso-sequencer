@@ -223,9 +223,20 @@ contract HotShot {
         return r;
     }
 
-    function field_square(uint256 x) public pure returns (uint256) {
-        uint256 p = BN254.P_MOD;
-        uint256 res = mulmod(x, x, p);
+    function verify_bls_sig(uint8[] memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
+        public
+        view
+        returns (bool)
+    {
+        uint256 x;
+        uint256 y;
+        (x, y) = hash_to_curve(message);
+        BN254.G1Point memory hash = BN254.G1Point(x, y);
+        BN254.validateG1Point(sig);
+
+        // TODO check pk belong to G2
+        //bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());
+        bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
         return res;
     }
 }
