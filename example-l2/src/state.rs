@@ -41,8 +41,6 @@ impl Committable for State {
     }
 }
 
-pub type StateCommitment = Commitment<(Commitment<BlockHash<SeqTypes>>, BlockHash<SeqTypes>)>;
-
 impl State {
     /// Create new VM state seeded with some initial balances
     pub fn from_initial_balances(
