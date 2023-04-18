@@ -2,7 +2,8 @@ use commit::{Commitment, Committable};
 use ethers::abi::Address;
 use hotshot_query_service::availability::BlockHash;
 use sequencer::SeqTypes;
-use std::collections::HashMap;
+use serde::Serialize;
+use std::collections::BTreeMap;
 
 use crate::error::RollupError;
 use crate::transaction::SignedTransaction;
@@ -10,7 +11,7 @@ use crate::transaction::SignedTransaction;
 pub type Amount = u64;
 pub type Nonce = u64;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct Account {
     balance: Amount,
     nonce: Nonce,
@@ -18,7 +19,7 @@ pub struct Account {
 
 #[derive(Debug, Clone)]
 pub struct State {
-    accounts: HashMap<Address, Account>,
+    accounts: BTreeMap<Address, Account>,
     block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
     prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
 }
@@ -28,16 +29,23 @@ impl Committable for State {
         let mut builder = commit::RawCommitmentBuilder::new("State Commitment");
 
         if let Some(hash) = self.block_hash {
-            builder = builder.var_size_field("block_hash", hash.as_ref());
+            builder = builder.field("block_hash", hash);
         }
 
         if let Some(prev_comm) = self.prev_state_commitment {
-            builder = builder.var_size_field("prev_state_commitment", prev_comm.as_ref());
+            builder = builder.field("prev_state_commitment", prev_comm);
         }
 
-        // A real rollup would also include a commitment to the account state (e.g. the Merkle root of an account merkle tree)
+        // A live rollup would likely represent accounts as a Sparse Merkle Tree instead of a BTreeMap.
+        // Rollup clients would then be able to use merkle proofs to authenticate a subset of user balances
+        // without knowledge of the entire account state. Such "light clients" would be far more storage efficient
+        // than the rollup presented in this example.
+        let serialized_accounts =
+            serde_json::to_string(&self.accounts).expect("Serialization should not fail");
 
-        builder.finalize()
+        builder
+            .var_size_field("accounts", serialized_accounts.as_bytes())
+            .finalize()
     }
 }
 
@@ -46,7 +54,7 @@ impl State {
     pub fn from_initial_balances(
         initial_balances: impl IntoIterator<Item = (Address, Amount)>,
     ) -> Self {
-        let mut accounts = HashMap::new();
+        let mut accounts = BTreeMap::new();
         for (addr, amount) in initial_balances.into_iter() {
             accounts.insert(
                 addr,
@@ -119,11 +127,11 @@ impl State {
             .unwrap_or(0)
     }
 
-    pub fn set_block_hash(&mut self, hash: BlockHash<SeqTypes>) {
+    pub(crate) fn set_block_hash(&mut self, hash: BlockHash<SeqTypes>) {
         self.block_hash = Some(hash);
     }
 
-    pub fn set_prev_state_commitment(&mut self, commitment: Commitment<Self>) {
+    pub(crate) fn set_prev_state_commitment(&mut self, commitment: Commitment<Self>) {
         self.prev_state_commitment = Some(commitment);
     }
 }

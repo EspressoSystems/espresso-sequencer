@@ -16,6 +16,7 @@ use crate::RollupVM;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
+    let state_commitment = state.commit();
     for txn in block.block().vm_transactions(&RollupVM) {
         let res = state.apply_transaction(&txn);
         if let Err(err) = res {
@@ -26,6 +27,7 @@ async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
         }
     }
     state.set_block_hash(block.hash());
+    state.set_prev_state_commitment(state_commitment);
 }
 
 pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
@@ -116,12 +118,8 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
             }
 
             let mut state_lock = state.write().await;
+            // TODO: forward state commitment to Rollup alongside mock proof, possibly return updated state commitment/proof from execute_block
             execute_block(&block, &mut state_lock).await;
-
-            // Update the state commitment
-            // TODO: forward state commitment to Rollup alongside mock proof
-            let state_commitment = state_lock.commit();
-            state_lock.set_prev_state_commitment(state_commitment);
         }
         block_height = current_block_height;
         stream.next().await;
