@@ -1,10 +1,13 @@
 use crate::{
     block::Block, chain_variables::ChainVariables, transaction::SequencerTransaction, Error,
+    Transaction,
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
-use hotshot_types::{data::ViewNumber, traits::state::ConsensusTime};
-#[allow(deprecated)]
+use hotshot_types::{
+    data::ViewNumber,
+    traits::state::{ConsensusTime, TestableState},
+};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Deref};
 
@@ -75,7 +78,7 @@ impl HotShotState for State {
     type Time = ViewNumber;
 
     fn next_block(&self) -> Self::BlockType {
-        Block::new(self.commit())
+        Block::next(self.commit())
     }
 
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
@@ -87,6 +90,7 @@ impl HotShotState for State {
         block: &Self::BlockType,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
+        tracing::debug!("Appending block to state");
         // Have to save state commitment here if any changes are made
 
         // If there's a validation error, return it here
@@ -101,6 +105,17 @@ impl HotShotState for State {
     }
 
     fn on_commit(&self) {}
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl TestableState for State {
+    fn create_random_transaction(
+        _state: Option<&Self>,
+        rng: &mut dyn rand::RngCore,
+        _padding: u64,
+    ) -> <Self::BlockType as hotshot::traits::Block>::Transaction {
+        SequencerTransaction::Wrapped(Transaction::random(rng))
+    }
 }
 
 impl Committable for State {

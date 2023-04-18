@@ -1,38 +1,53 @@
 pub mod api;
 mod block;
 mod chain_variables;
+pub mod hotshot_commitment;
 mod state;
 pub mod transaction;
 mod vm;
 
 use ark_bls12_381::Parameters;
 use async_std::task::sleep;
-use hotshot::traits::implementations::CentralizedServerNetwork;
-use hotshot::traits::NetworkingImplementation;
-use hotshot::types::SignatureKey;
+use clap::{Parser, Subcommand};
+use derivative::Derivative;
 use hotshot::{
     traits::{
         election::{
-            static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
+            static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
             vrf::JfPubKey,
         },
-        implementations::MemoryStorage,
+        implementations::{
+            CentralizedCommChannel, CentralizedServerNetwork, MemoryCommChannel, MemoryStorage,
+        },
         NodeImplementation,
     },
-    types::HotShotHandle,
+    types::{HotShotHandle, Message, SignatureKey},
+    HotShot, HotShotInitializer,
 };
-use hotshot::{HotShot, HotShotInitializer};
-use hotshot_types::traits::metrics::Metrics;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeTypes};
-use hotshot_types::{traits::metrics::NoMetrics, HotShotConfig};
+use hotshot_commitment::HotShotContractOptions;
+use hotshot_types::{
+    data::{CommitmentProposal, DAProposal, SequencingLeaf, ViewNumber},
+    traits::{
+        election::{CommitteeExchange, ConsensusExchange, QuorumExchange},
+        metrics::{Metrics, NoMetrics},
+        network::CommunicationChannel,
+        node_implementation::NodeType,
+        state::SequencingConsensus,
+    },
+    vote::{DAVote, QuorumVote},
+    HotShotConfig,
+};
 
 use jf_primitives::signatures::BLSSignatureScheme;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 use transaction::SequencerTransaction;
+use url::Url;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
@@ -40,41 +55,146 @@ pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
 
-#[derive(Debug, Clone)]
-pub struct Node<N>(std::marker::PhantomData<fn(&N)>);
+#[derive(Parser, Clone, Debug)]
+pub struct Options {
+    /// Unique identifier for this instance of the sequencer network.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    pub chain_id: u16,
 
-impl<N: Clone + Debug + NetworkingImplementation<SeqTypes>> NodeImplementation<SeqTypes>
-    for Node<N>
-{
-    type Storage = MemoryStorage<SeqTypes>;
+    /// Port that the sequencer API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    pub port: u16,
 
-    type Networking = N;
+    /// URL of the HotShot CDN.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
+    pub cdn_url: Url,
 
-    type Election = StaticCommittee<SeqTypes>;
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    pub storage_path: PathBuf,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    pub reset_store: bool,
+
+    /// If specified, the sequencer will post hotshot commitments to the L1
+    #[command(subcommand)]
+    pub hotshot_contract_options: Option<HotShotContractCommand>,
 }
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum HotShotContractCommand {
+    HotShotContractOptions(HotShotContractOptions),
+}
+
+pub mod network {
+    use super::*;
+
+    pub trait Type: 'static {
+        type DAChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
+            SeqTypes,
+            Message<SeqTypes, I>,
+            DAProposal<SeqTypes>,
+            DAVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+        type QuorumChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
+            SeqTypes,
+            Message<SeqTypes, I>,
+            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Centralized;
+
+    impl Type for Centralized {
+        type DAChannel<I: NodeImplementation<SeqTypes>> = CentralizedCommChannel<
+            SeqTypes,
+            I,
+            DAProposal<SeqTypes>,
+            DAVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+        type QuorumChannel<I: NodeImplementation<SeqTypes>> = CentralizedCommChannel<
+            SeqTypes,
+            I,
+            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Memory;
+
+    impl Type for Memory {
+        type DAChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
+            SeqTypes,
+            I,
+            DAProposal<SeqTypes>,
+            DAVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+        type QuorumChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
+            SeqTypes,
+            I,
+            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+    }
+}
+
+/// The Sequencer node is generic over the hotshot CommChannel.
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Copy(bound = ""),
+    Debug(bound = ""),
+    Default(bound = "")
+)]
+pub struct Node<N: network::Type>(PhantomData<fn(&N)>);
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
 )]
 pub struct SeqTypes;
 
+pub type Leaf = SequencingLeaf<SeqTypes>;
+pub type Membership = GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>;
+pub type Storage = MemoryStorage<SeqTypes, Leaf>;
+
 type Param381 = ark_bls12_381::Parameters;
 pub type SignatureSchemeType = BLSSignatureScheme<Param381>;
 pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
+type ElectionConfig = StaticElectionConfig;
 
-impl NodeTypes for SeqTypes {
+impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
+    type Leaf = Leaf;
+    type Storage = Storage;
+    type QuorumExchange = QuorumExchange<
+        SeqTypes,
+        Leaf,
+        CommitmentProposal<SeqTypes, Leaf>,
+        Membership,
+        N::QuorumChannel<Self>,
+        Message<SeqTypes, Self>,
+    >;
+    type CommitteeExchange =
+        CommitteeExchange<SeqTypes, Leaf, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>;
+}
+
+impl NodeType for SeqTypes {
+    type ConsensusType = SequencingConsensus;
     type Time = ViewNumber;
-
     type BlockType = Block;
-
     type SignatureKey = SignatureKeyType;
-
     type VoteTokenType = StaticVoteToken<SignatureKeyType>;
-
     type Transaction = SequencerTransaction;
-
-    type ElectionConfigType = StaticElectionConfig;
-
+    type ElectionConfigType = ElectionConfig;
     type StateType = State;
 }
 
@@ -101,52 +221,65 @@ pub enum Error {
 type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-async fn init_hotshot<
-    I: NodeImplementation<
-        SeqTypes,
-        Storage = MemoryStorage<SeqTypes>,
-        Election = StaticCommittee<SeqTypes>,
-    >,
->(
+async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
     private_key: PrivKey,
-    networking: I::Networking,
-    config: HotShotConfig<PubKey, StaticElectionConfig>,
-) -> HotShotHandle<SeqTypes, I> {
+    da_channel: N::DAChannel<Node<N>>,
+    quorum_channel: N::QuorumChannel<Node<N>>,
+    config: HotShotConfig<PubKey, ElectionConfig>,
+) -> HotShotHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&private_key);
 
-    let storage = MemoryStorage::<SeqTypes>::new();
-    let election = StaticCommittee::<SeqTypes>::new(nodes_pub_keys.clone());
-    let initializer = HotShotInitializer::<SeqTypes>::from_genesis(genesis_block.clone()).unwrap();
-    let metrics = NoMetrics::new();
+    let storage = Storage::empty();
+    let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
+        genesis_block.clone(),
+    )
+    .unwrap();
+    let metrics = Box::<NoMetrics>::default();
 
-    let handle: HotShotHandle<SeqTypes, I> = HotShot::init(
+    let quorum_exchange = QuorumExchange::create(
+        nodes_pub_keys.clone(),
+        ElectionConfig {},
+        quorum_channel,
+        public_key.clone(),
+        private_key.clone(),
+    );
+
+    let committee_exchange = CommitteeExchange::create(
+        nodes_pub_keys,
+        ElectionConfig {},
+        da_channel,
+        public_key.clone(),
+        private_key.clone(),
+    );
+
+    HotShot::init(
         public_key,
         private_key,
         node_id as u64,
         config,
-        networking,
         storage,
-        election,
+        quorum_exchange,
+        committee_exchange,
         initializer,
         metrics,
     )
     .await
-    .unwrap();
-
-    handle
+    .unwrap()
 }
 
 pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> HotShotHandle<SeqTypes, Node<CentralizedServerNetwork<SeqTypes>>> {
+) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
+    let da_channel = CentralizedCommChannel::new(networking.clone());
+    let quorum_channel = CentralizedCommChannel::new(networking.clone());
 
     // Generate public keys and this node's private key.
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
@@ -165,36 +298,43 @@ pub async fn init_node(
         sleep(Duration::from_secs(1)).await;
     }
 
-    init_hotshot(
-        pub_keys,
-        genesis_block,
-        config.node_index as usize,
-        sk,
-        networking,
-        config.config,
+    (
+        init_hotshot(
+            pub_keys,
+            genesis_block,
+            config.node_index as usize,
+            sk,
+            da_channel,
+            quorum_channel,
+            config.config,
+        )
+        .await,
+        config.node_index,
     )
-    .await
 }
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use core::panic;
+    use either::Either;
     use hotshot::{
         traits::implementations::{MasterMap, MemoryNetwork},
         types::{Event, EventType::Decide},
     };
-    use hotshot_types::ExecutionType;
+    use hotshot_types::{data::LeafType, ExecutionType};
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-    use std::sync::Arc;
     use std::time::Duration;
 
-    pub async fn init_hotshot_handles(
-    ) -> Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> {
+    pub async fn init_hotshot_handles() -> Vec<HotShotHandle<SeqTypes, Node<network::Memory>>> {
+        setup_logging();
+        setup_backtrace();
+
         let genesis_block = Block::genesis(Default::default());
 
-        let num_nodes = 4;
+        let num_nodes = 5;
 
         // Generate keys for the nodes.
         let nodes_key_pairs = (0..num_nodes)
@@ -207,9 +347,9 @@ pub mod testing {
             .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
             .collect::<Vec<_>>();
 
-        let mut handles: Vec<HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>> = vec![];
+        let mut handles = vec![];
 
-        let master_map: Arc<MasterMap<SeqTypes>> = MasterMap::new();
+        let master_map = MasterMap::new();
 
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
@@ -224,29 +364,31 @@ pub mod testing {
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(30),
-            election_config: Some(StaticElectionConfig {}),
+            election_config: Some(ElectionConfig {}),
         };
 
         // Create HotShot instances.
         for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
-            // Create public and private keys for the node.
+            let private_key = (sign_key.clone(), ver_key.clone());
             let public_key = JfPubKey::from_native(ver_key.clone());
 
-            let network = MemoryNetwork::<SeqTypes>::new(
+            let network = MemoryNetwork::new(
                 public_key.clone(),
-                NoMetrics::new(),
+                Box::<NoMetrics>::default(),
                 master_map.clone(),
                 None,
             );
 
-            let private_key = (sign_key.clone(), ver_key.clone());
+            let da_channel = MemoryCommChannel::new(network.clone());
+            let quorum_channel = MemoryCommChannel::new(network);
 
             let handle = init_hotshot(
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
                 private_key,
-                network,
+                da_channel,
+                quorum_channel,
                 config.clone(),
             )
             .await;
@@ -257,14 +399,14 @@ pub mod testing {
     }
 
     // Wait for decide event, make sure it matches submitted transaction
-    pub async fn wait_for_decide_on_handle(
-        mut handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+    pub async fn wait_for_decide_on_handle<N: network::Type>(
+        mut handle: HotShotHandle<SeqTypes, Node<N>>,
         submitted_txn: SequencerTransaction,
     ) -> Result<(), ()> {
         // Keep getting events until we see a Decide event
         loop {
             let event = handle.next_event().await;
-            println!("Event: {event:?}\n");
+            tracing::info!("Received event from handle: {event:?}");
 
             match event {
                 Ok(Event {
@@ -274,12 +416,20 @@ pub mod testing {
                         },
                     ..
                 }) => {
-                    if let Some(non_empty_leaf) = leaf
-                        .iter()
-                        .find(|leaf| !leaf.deltas.transactions.is_empty())
+                    if let Some(transactions) =
+                        leaf.iter().find_map(|leaf| match leaf.get_deltas() {
+                            Either::Left(block) => {
+                                if !block.transactions.is_empty() {
+                                    Some(block.transactions)
+                                } else {
+                                    None
+                                }
+                            }
+                            Either::Right(_) => None,
+                        })
                     {
                         // When we find a non-empty Decide, check that it only contains the target transaction
-                        assert!(non_empty_leaf.deltas.transactions == vec![submitted_txn]);
+                        assert_eq!(transactions, vec![submitted_txn]);
                         return Ok(());
                     } else {
                         // Empty Decide event
@@ -308,15 +458,14 @@ mod test {
         vm::{TestVm, Vm},
     };
     use core::panic;
-    use hotshot::{
-        traits::implementations::MemoryNetwork,
-        types::{Event, EventType::Decide},
-    };
+    use either::Either;
+    use hotshot::types::{Event, EventType::Decide};
+    use hotshot_testing::test_description::GeneralTestDescriptionBuilder;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Submit transaction to given handle, return clone of transaction
-    async fn submit_txn_to_handle(
-        handle: HotShotHandle<SeqTypes, Node<MemoryNetwork<SeqTypes>>>,
+    async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
+        handle: HotShotHandle<SeqTypes, I>,
         txn: &ApplicationTransaction,
     ) -> SequencerTransaction {
         let tx = SequencerTransaction::Wrapped(Transaction::new(
@@ -332,6 +481,20 @@ mod test {
         tx
     }
 
+    // Run a hotshot test with our types
+    #[async_std::test]
+    async fn general_hotshot_test() {
+        let builder = GeneralTestDescriptionBuilder {
+            num_succeeds: 3,
+            ..Default::default()
+        };
+        builder
+            .build::<SeqTypes, Node<network::Memory>>()
+            .execute()
+            .await
+            .unwrap();
+    }
+
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
         let mut handles = init_hotshot_handles().await;
@@ -340,7 +503,7 @@ mod test {
         }
 
         let event = handles[0].next_event().await;
-        println!("Event: {event:?}\n");
+        tracing::info!("Received event from handle: {event:?}");
 
         // Should immediately get genesis block decide event
         match event {
@@ -351,7 +514,11 @@ mod test {
                 ..
             }) => {
                 // Exactly one leaf, and it contains the genesis block
-                assert!(leaf.len() == 1 && leaf[0].deltas == Block::genesis(Default::default()))
+                assert_eq!(leaf.len(), 1);
+                assert_eq!(
+                    leaf[0].deltas,
+                    Either::Left(Block::genesis(Default::default()))
+                );
             }
             _ => panic!(),
         }
@@ -359,7 +526,7 @@ mod test {
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
         let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
-        println!("Submitted: {txn:?}");
+        tracing::info!("Submitted transaction to handle: {txn:?}");
 
         wait_for_decide_on_handle(handles[0].clone(), submitted_txn).await
     }

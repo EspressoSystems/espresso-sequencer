@@ -34,6 +34,16 @@ impl Transaction {
             None
         }
     }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn random(rng: &mut dyn rand::RngCore) -> Self {
+        use rand::Rng;
+        let len = rng.gen_range(0..100);
+        Self::new(
+            VmId(rng.gen_range(0..10)),
+            (0..len).map(|_| rand::random::<u8>()).collect(),
+        )
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]

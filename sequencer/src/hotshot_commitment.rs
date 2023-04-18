@@ -1,32 +1,66 @@
-use crate::Options;
+use ark_serialize::CanonicalSerialize;
 use async_std::{sync::Arc, task::sleep};
+use clap::Args;
 use contract_bindings::HotShot;
+use ethers::types::Address;
 use ethers::{
     abi::Detokenize, contract::builders::ContractCall, prelude::*, providers::Middleware as _,
     signers::coins_bip39::English,
 };
 use futures::{future::FutureExt, stream::StreamExt};
-use hotshot_query_service::availability::LeafQueryData;
-use sequencer::SeqTypes;
+use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
+use hotshot_types::traits::node_implementation::NodeImplementation;
 use std::time::Duration;
 use surf_disco::Url;
+
+use crate::{network, Node, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-pub async fn run(opt: &Options) {
-    // Connect to the HotShot query service to stream sequenced blocks.
-    let hotshot = HotShotClient::new(opt.sequencer_url.join("availability").unwrap());
+#[derive(Args, Clone, Debug)]
+pub struct HotShotContractOptions {
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
+    pub l1_provider: Url,
+
+    /// Chain ID for layer 1 Ethereum.
+    ///
+    /// This can be specified explicitly as a sanity check. No transactions will be executed if the
+    /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
+    /// the RPC will be used.
+    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
+    pub l1_chain_id: Option<u64>,
+
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
+    pub hotshot_address: Address,
+
+    /// Mnemonic phrase for the sequencer wallet.
+    ///
+    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
+    /// contract. It must be funded with ETH and MATIC on layer 1.
+    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
+    pub sequencer_mnemonic: String,
+
+    /// URL of HotShot Query Service
+    ///
+    /// If unspecified, defaults to the query service internal to the sequencer process.
+    pub query_service_url: Url,
+}
+
+pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
+    let query_service_url = opt.query_service_url.join("availability").unwrap();
+    let hotshot = HotShotClient::new(query_service_url);
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt).await else {
-        tracing::error!("unable to connect to L1, sequencer task exiting");
+        tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
-    tracing::info!("connected to l1 at {}", opt.l1_provider);
     let contract = HotShot::new(opt.hotshot_address, l1.clone());
 
     // Get the last block number sequenced.
@@ -34,7 +68,7 @@ pub async fn run(opt: &Options) {
         Ok(from) => from.as_u64(),
         Err(err) => {
             tracing::error!("unable to read block_height from contract: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
@@ -45,20 +79,21 @@ pub async fn run(opt: &Options) {
         Ok(max) => max.as_u64(),
         Err(err) => {
             tracing::error!("unable to read max_blocks from contract: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
-
-    sequence(from, max, hotshot, contract).await;
+    sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
 }
 
-async fn sequence(
+async fn sequence<I: NodeImplementation<SeqTypes>>(
     from: u64,
     max_blocks: u64,
     hotshot: HotShotClient,
     contract: HotShot<Middleware>,
-) {
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let mut leaves = match hotshot
         .socket(&format!("stream/leaves/{from}"))
         .subscribe()
@@ -67,21 +102,21 @@ async fn sequence(
         Ok(leaves) => Box::pin(leaves.peekable()),
         Err(err) => {
             tracing::error!("unable to subscribe to HotShot query service: {}", err);
-            tracing::error!("sequencer task will exit");
+            tracing::error!("hotshot commitment task will exit");
             return;
         }
     };
 
     loop {
         // Wait for HotShot to sequence a block.
-        let leaf: LeafQueryData<SeqTypes> = match leaves.next().await {
+        let leaf: LeafQueryData<SeqTypes, I> = match leaves.next().await {
             Some(Ok(leaf)) => leaf,
             Some(Err(err)) => {
                 tracing::error!("error from HotShot, retrying: {}", err);
                 continue;
             }
             None => {
-                tracing::error!("HotShot leaf stream ended, sequencer task will exit");
+                tracing::error!("HotShot leaf stream ended, hotshot commitment task will exit");
                 return;
             }
         };
@@ -114,15 +149,20 @@ async fn sequence(
     }
 }
 
-async fn sequence_batches(
+async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     contract: &HotShot<Middleware>,
-    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes>>,
-) {
+    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
+) where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
     let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
         .into_iter()
         .map(|leaf| {
+            let mut buf = vec![];
+            leaf.block_hash().serialize(&mut buf).unwrap();
+            let hash_buf: [u8; 32] = buf.try_into().unwrap();
             (
-                U256::from_little_endian(&<[u8; 32]>::from(leaf.block_hash())),
+                U256::from_little_endian(&hash_buf),
                 Bytes::from(bincode::serialize(&leaf.qc()).unwrap()),
             )
         })
@@ -174,7 +214,7 @@ async fn send<T: Detokenize>(
     Some((receipt, block_number.as_u64()))
 }
 
-async fn connect_l1(opt: &Options) -> Option<Arc<Middleware>> {
+pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>> {
     connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
 }
 
@@ -221,19 +261,19 @@ async fn connect_rpc(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::TEST_MNEMONIC;
+    use crate::{transaction::SequencerTransaction, Block, Leaf, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use hotshot_types::{
-        constants::genesis_proposer_id,
-        data::{Leaf, QuorumCertificate, ViewNumber},
-        traits::{block_contents::Block as _, state::ConsensusTime},
+        certificate::QuorumCertificate,
+        data::{LeafType, ViewNumber},
+        traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
     };
-    use sequencer::{Block, State, Vm};
     use sequencer_utils::Anvil;
-    use zkevm::{EvmTransaction, ZkEvm};
+
+    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     #[async_std::test]
     async fn test_sequencer_task() {
@@ -243,11 +283,6 @@ mod test {
         let anvil = Anvil::spawn(None).await;
         let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
 
-        let l2_chain_id = l1.rollup.chain_id().await.unwrap();
-
-        let zkevm = ZkEvm {
-            chain_id: l2_chain_id,
-        };
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
 
@@ -255,57 +290,18 @@ mod test {
             .await
             .unwrap();
 
-        let l2_wallet = Arc::new(
-            MnemonicBuilder::<English>::default()
-                .phrase(TEST_MNEMONIC)
-                .build()
-                .unwrap()
-                .with_chain_id(l2_chain_id),
-        );
-
         // Create a few test batches.
-        let transfer_amount = 1.into();
         let num_batches = 2u64;
-        let nonce = U256::from(0); // arbitrary
-        let mut leaves: Vec<LeafQueryData<SeqTypes>> = vec![];
-        for i in 0..num_batches {
-            // Generate and L2 transfer.
-            let transfer = TransactionRequest {
-                from: Some(l1.clients.deployer.address()),
-                to: Some(Address::random().into()),
-                value: Some(transfer_amount),
-                nonce: Some(nonce + i),
-                chain_id: Some(l2_chain_id.into()),
-                ..Default::default()
-            }
-            .into();
-            tracing::info!("transfer {}: {:?}", i, transfer);
-            let signature = l2_wallet.sign_transaction(&transfer).await.unwrap();
-            let txn = EvmTransaction::new(transfer, signature);
-            let hash = txn.hash();
-            tracing::info!("transfer hash: {:?}", hash);
-
-            // Add it to a sequencer block.
-            let block = Block::new(State::default().commit())
-                .add_transaction_raw(&zkevm.wrap(&txn).into())
-                .unwrap();
+        let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
+        for _ in 0..num_batches {
+            let txn = SequencerTransaction::Wrapped(Transaction::new(1.into(), vec![]));
+            let block = Block::new().add_transaction_raw(&txn).unwrap();
 
             // Fake a leaf that sequences this block.
             let mut qc = QuorumCertificate::genesis();
-            let parent_leaf = Leaf::genesis(Block::genesis(Default::default())).commit();
-            let leaf = Leaf::new(
-                Default::default(),
-                block,
-                parent_leaf,
-                qc.clone(),
-                ViewNumber::genesis(),
-                i,
-                vec![],
-                0,
-                genesis_proposer_id(),
-            );
+            let leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
             qc.leaf_commitment = leaf.commit();
-            leaves.push(LeafQueryData::new(leaf, qc));
+            leaves.push(LeafQueryData::new(leaf, qc).unwrap());
         }
         tracing::info!("sequencing batches: {:?}", leaves);
 

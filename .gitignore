@@ -18,6 +18,5 @@ target/
 # vscode stuff
 .vscode
 
-
-# misc
-helper.py
+# solidity files cache
+cache/

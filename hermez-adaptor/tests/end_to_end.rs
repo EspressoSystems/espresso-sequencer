@@ -15,6 +15,7 @@ use futures::{
 };
 use hermez_adaptor::{Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
+use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
 use sequencer::SeqTypes;
 use sequencer_utils::wait_for_http;
 use std::time::Duration;
@@ -66,7 +67,7 @@ async fn test_end_to_end() {
     let sequencer_store = TempDir::new().unwrap();
     sequencer::api::serve(
         QueryData::create(sequencer_store.path(), ()).unwrap(),
-        Box::new(move |_| ready(api_node).boxed()),
+        Box::new(move |_| ready((api_node, 0)).boxed()),
         env.sequencer_port(),
     )
     .await
@@ -78,19 +79,22 @@ async fn test_end_to_end() {
     // Start a Hermez adaptor.
     let adaptor_opt = hermez_adaptor::Options {
         sequencer_url: env.sequencer(),
-        l1_provider: env.l1_provider(),
-        l1_chain_id: None,
-        l2_chain_id: zkevm.chain_id,
-        hotshot_address,
-        sequencer_mnemonic: mnemonic.to_string(),
         rpc_port: env.l2_adaptor_rpc_port(),
+        l2_chain_id: zkevm.chain_id,
         query_port: env.l2_adaptor_query_port(),
+    };
+    let hotshot_contract_opt = HotShotContractOptions {
+        l1_provider: env.l1_provider(),
+        sequencer_mnemonic: mnemonic.to_string(),
+        hotshot_address,
+        l1_chain_id: None,
+        query_service_url: env.sequencer(),
     };
     spawn_local(async move {
         join!(
             hermez_adaptor::json_rpc::serve(&adaptor_opt),
-            hermez_adaptor::sequencer::run(&adaptor_opt),
             hermez_adaptor::query_service::serve(&adaptor_opt),
+            run_hotshot_commitment_task(&hotshot_contract_opt)
         );
     });
 

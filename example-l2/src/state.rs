@@ -43,9 +43,9 @@ impl State {
     /// 2) The nonce of the transaction is greater than the sender nonce (this prevent replay attacks)
     /// 3) The sender has a high enough balance to cover the transfer amount
     pub fn apply_transaction(
-        mut self,
+        &mut self,
         transaction: &SignedTransaction,
-    ) -> Result<State, RollupError> {
+    ) -> Result<(), RollupError> {
         // 1)
         let sender = transaction.recover()?;
         let destination = transaction.transaction.destination;
@@ -81,7 +81,7 @@ impl State {
             .or_insert(Account::default());
         *destination_balance += transfer_amount;
 
-        Ok(self)
+        Ok(())
     }
 
     /// Fetch the balance of an address
@@ -128,7 +128,7 @@ mod tests {
         // Now spend an valid amount
         transaction.amount = 50;
         signed_transaction = SignedTransaction::new(transaction, &alice).await;
-        state = state
+        state
             .apply_transaction(&signed_transaction)
             .expect("Valid transaction should transition state");
         let bob_balance = state.get_balance(&bob.address());

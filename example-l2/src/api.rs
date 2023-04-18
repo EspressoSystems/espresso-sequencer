@@ -9,10 +9,8 @@ use std::sync::Arc;
 use surf_disco::{error::ClientError, Url};
 use tide_disco::{error::ServerError, Api, App};
 
+use crate::VM_ID;
 use crate::{state::State, transaction::SignedTransaction};
-
-// The VmID helps Rollups find their transactions in the sequenced block.
-const VM_ID: u64 = 1;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
@@ -97,7 +95,9 @@ mod tests {
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use sequencer::{testing::wait_for_decide_on_handle, Transaction as SeqTransaction};
+    use sequencer::{
+        api::SequencerNode, testing::wait_for_decide_on_handle, Transaction as SeqTransaction,
+    };
     use std::path::Path;
     use surf_disco::Client;
     use tempfile::TempDir;
@@ -143,11 +143,12 @@ mod tests {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
-        let init_handle = Box::new(move |_| ready(api_node).boxed());
+        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
         let query_data = QueryData::create(storage_path, ()).unwrap();
-        let (watch_handle, _) = sequencer::api::serve(query_data, init_handle, sequencer_port)
-            .await
-            .unwrap();
+        let SequencerNode { handle, .. } =
+            sequencer::api::serve(query_data, init_handle, sequencer_port)
+                .await
+                .unwrap();
         for node in &nodes {
             node.start().await;
         }
@@ -193,7 +194,7 @@ mod tests {
         let raw_tx = signed_transaction.encode();
         let txn = SeqTransaction::new(VM_ID.into(), raw_tx.to_vec());
         wait_for_decide_on_handle(
-            watch_handle.clone(),
+            handle.clone(),
             sequencer::transaction::SequencerTransaction::Wrapped(txn),
         )
         .await
