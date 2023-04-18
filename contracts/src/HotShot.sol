@@ -235,8 +235,8 @@ contract HotShot {
         BN254.validateG1Point(sig);
 
         // TODO check pk belong to G2
-        bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.P1(), BN254.P2());
-        //bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
+        bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());
+        // bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
         return res;
     }
 }
