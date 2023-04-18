@@ -1869,9 +1869,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.2.2"
+version = "4.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b802d85aaf3a1cdb02b224ba472ebdea62014fccfcb269b95a4d76443b5ee5a"
+checksum = "49f9152d70e42172fdb87de2efd7327160beee37886027cf86f30a233d5b30b4"
 dependencies = [
  "clap_builder",
  "clap_derive 4.2.0",
@@ -1880,9 +1880,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.2.2"
+version = "4.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14a1a858f532119338887a4b8e1af9c60de8249cd7bafd68036a489e261e37b6"
+checksum = "e067b220911598876eb55d52725ddcc201ffe3f0904018195973bc5b012ea2ca"
 dependencies = [
  "anstream",
  "anstyle",
@@ -3752,7 +3752,7 @@ name = "example-l2"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "clap 4.2.2",
+ "clap 4.2.3",
  "ethers 2.0.3",
  "ethers-core 2.0.3",
  "futures",
@@ -4183,9 +4183,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.17"
+version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66b91535aa35fea1523ad1b86cb6b53c28e0ae566ba4a460f4457e936cad7c6f"
+checksum = "17f8a914c2987b688368b5138aa05321db91f4090cf26118185672ad588bce21"
 dependencies = [
  "bytes 1.4.0",
  "fnv",
@@ -4258,7 +4258,7 @@ dependencies = [
  "async-compatibility-layer",
  "async-std",
  "bincode",
- "clap 4.2.2",
+ "clap 4.2.3",
  "commit",
  "contract-bindings",
  "dotenvy",
@@ -4487,7 +4487,7 @@ dependencies = [
  "async-std",
  "atomic_store",
  "bincode",
- "clap 4.2.2",
+ "clap 4.2.3",
  "commit",
  "custom_debug",
  "derive_more",
@@ -5034,7 +5034,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#edc07ef2966044b619e5c2b05d44f62989ec1f21"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5075,7 +5075,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#edc07ef2966044b619e5c2b05d44f62989ec1f21"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5143,7 +5143,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#03830e417de8068f78ae6846fba38a477e7d0ee1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#edc07ef2966044b619e5c2b05d44f62989ec1f21"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -5159,7 +5159,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#3967921f5afcff0a5af5edc06e5f8a78e0d26cd7"
+source = "git+https://github.com/EspressoSystems/jellyfish#e8e464495f10a502926634efc04bd5769f775142"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -6053,9 +6053,9 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59d8c75012853d2e872fb56bc8a2e53718e2cafe1a4c823143141c6d90c322f"
+checksum = "3f508063cc7bb32987c71511216bd5a32be15bccb6a80b52df8b9d7f01fc3aa2"
 
 [[package]]
 name = "local-channel"
@@ -7838,9 +7838,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.37.11"
+version = "0.37.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85597d61f83914ddeba6a47b3b8ffe7365107221c2e557ed94426489fefb5f77"
+checksum = "722529a737f5a942fdbac3a46cee213053196737c5eaa3386d52e85b786f2659"
 dependencies = [
  "bitflags",
  "errno",
@@ -8071,7 +8071,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bincode",
- "clap 4.2.2",
+ "clap 4.2.3",
  "cld",
  "commit",
  "derive_more",
@@ -9089,7 +9089,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bincode",
- "clap 4.2.2",
+ "clap 4.2.3",
  "config",
  "derive_more",
  "dirs",
@@ -10395,7 +10395,7 @@ version = "0.1.0"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
- "clap 4.2.2",
+ "clap 4.2.3",
  "contract-bindings",
  "ethers 1.0.2",
  "sequencer",

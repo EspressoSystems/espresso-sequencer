@@ -75,6 +75,7 @@ mod test {
             let message3 = vec![33u8; 1000];
 
             let res = vec![message1, message2, message3];
+
             res
         }
 
@@ -169,16 +170,13 @@ mod test {
         #[async_std::test]
         async fn test_hash_to_curve() {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let mut msg_input = vec![1u8, 2u8, 3u8, 45u8, 88u8];
-            let csid = [
-                66, 76, 83, 95, 83, 73, 71, 95, 66, 78, 50, 53, 52, 71, 49, 95, 88, 77, 68, 58, 75,
-                69, 67, 67, 65, 75, 95, 78, 67, 84, 72, 95, 78, 85, 76, 95,
-            ];
-            msg_input.extend(csid);
-            let group_elem = hash_to_curve::<Keccak256>(&msg_input);
-            let group_elem_contract = hotshot.hash_to_curve(msg_input).call().await.unwrap();
 
-            compare_group_elems(group_elem.into(), group_elem_contract);
+            let msgs = test_inputs();
+            for msg in msgs.iter() {
+                let group_elem = hash_to_curve::<Keccak256>(msg);
+                let group_elem_contract = hotshot.hash_to_curve(msg.clone()).call().await.unwrap();
+                compare_group_elems(group_elem.into(), group_elem_contract);
+            }
         }
     }
 }
