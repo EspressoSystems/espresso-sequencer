@@ -11,24 +11,8 @@ use sequencer::hotshot_commitment::HotShotContractOptions;
 use sequencer::{hotshot_commitment::connect_l1, SeqTypes};
 
 use crate::state::State;
-use crate::RollupVM;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
-
-async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
-    let state_commitment = state.commit();
-    for txn in block.block().vm_transactions(&RollupVM) {
-        let res = state.apply_transaction(&txn);
-        if let Err(err) = res {
-            // TODO: more informative logging
-            tracing::error!("Transaction invalid: {}", err)
-        } else {
-            tracing::info!("Transaction applied")
-        }
-    }
-    state.set_block_hash(block.hash());
-    state.set_prev_state_commitment(state_commitment);
-}
 
 pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
     let query_service_url = opt.query_service_url.join("availability").unwrap();
@@ -38,6 +22,7 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt)
     .await else {
+        // TODO: Switch these over to panics
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
@@ -119,7 +104,7 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
 
             let mut state_lock = state.write().await;
             // TODO: forward state commitment to Rollup alongside mock proof, possibly return updated state commitment/proof from execute_block
-            execute_block(&block, &mut state_lock).await;
+            state_lock.execute_block(&block).await;
         }
         block_height = current_block_height;
         stream.next().await;

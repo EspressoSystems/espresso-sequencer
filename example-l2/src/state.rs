@@ -1,12 +1,13 @@
 use commit::{Commitment, Committable};
 use ethers::abi::Address;
-use hotshot_query_service::availability::BlockHash;
+use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 use sequencer::SeqTypes;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
 use crate::error::RollupError;
 use crate::transaction::SignedTransaction;
+use crate::RollupVM;
 
 pub type Amount = u64;
 pub type Nonce = u64;
@@ -19,7 +20,7 @@ pub struct Account {
 
 #[derive(Debug, Clone)]
 pub struct State {
-    accounts: BTreeMap<Address, Account>,
+    accounts: BTreeMap<Address, Account>, // Account state, represented as a BTreeMap so that we can obtain a canonical serialization of the data structure for the state commitment
     block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
     prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
 }
@@ -127,12 +128,19 @@ impl State {
             .unwrap_or(0)
     }
 
-    pub(crate) fn set_block_hash(&mut self, hash: BlockHash<SeqTypes>) {
-        self.block_hash = Some(hash);
-    }
-
-    pub(crate) fn set_prev_state_commitment(&mut self, commitment: Commitment<Self>) {
-        self.prev_state_commitment = Some(commitment);
+    pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) {
+        let state_commitment = self.commit();
+        for txn in block.block().vm_transactions(&RollupVM) {
+            let res = self.apply_transaction(&txn);
+            if let Err(err) = res {
+                // TODO: more informative logging
+                tracing::error!("Transaction invalid: {}", err)
+            } else {
+                tracing::info!("Transaction applied")
+            }
+        }
+        self.block_hash = Some(block.hash());
+        self.prev_state_commitment = Some(state_commitment);
     }
 }
 #[cfg(test)]
