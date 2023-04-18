@@ -234,9 +234,64 @@ contract HotShot {
         BN254.G1Point memory hash = BN254.G1Point(x, y);
         BN254.validateG1Point(sig);
 
-        // TODO check pk belong to G2
-        bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());
-        // bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
+        // TODO convert to hex
+        // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_"
+        uint8[36] memory csid_suffix = [
+            66,
+            76,
+            83,
+            95,
+            83,
+            73,
+            71,
+            95,
+            66,
+            78,
+            50,
+            53,
+            52,
+            71,
+            49,
+            95,
+            88,
+            77,
+            68,
+            58,
+            75,
+            69,
+            67,
+            67,
+            65,
+            75,
+            95,
+            78,
+            67,
+            84,
+            72,
+            95,
+            78,
+            85,
+            76,
+            95
+        ];
+
+        // TODO optimize
+        uint8[] memory input = new uint8[](message.length + csid_suffix.length);
+        for (uint256 i = 0; i < message.length; i++) {
+            input[i] = message[i];
+        }
+
+        for (uint256 i = 0; i < csid_suffix.length; i++) {
+            input[i + message.length] = csid_suffix[i];
+        }
+
+        // TODO check pk belong to G2? Not possible apparently https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
+        //bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());
+        bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
+
+        //  BN254.G2Point memory g2 = BN254.P2();
+        //  bool res = (g2.x0 == pk.x0);
+        // bool res = (hash.x == hash_ext.x) && (hash.y == hash_ext.y);
         return res;
     }
 }

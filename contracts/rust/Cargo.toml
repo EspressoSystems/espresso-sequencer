@@ -17,6 +17,7 @@ ethers = { version = "1.0.2", features = ["abigen"] }
 ethers-providers = "2.0.0"
 ethers-solc = "1.0.2"
 hex = "0.4.3"
+# TODO change to jellyfish main. Merge the jellyfish branch
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", branch = "fix/set-sigma-attribute-public" }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish" }
 sequencer-utils = { path = "../../utils" }

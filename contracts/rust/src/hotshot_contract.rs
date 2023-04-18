@@ -52,6 +52,7 @@ mod test {
         use crate::helpers::{MyG1Point, MyG2Point};
         use ark_bn254::{Fq, G1Affine};
         use ark_ec::CurveGroup;
+        use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use ark_ff::BigInt;
         use ark_ff::PrimeField;
         use ark_std::vec;
@@ -61,6 +62,21 @@ mod test {
         use jf_primitives::signatures::SignatureScheme;
         use jf_utils::test_rng;
         use sha3::Keccak256;
+
+        fn test_inputs() -> Vec<Vec<u8>> {
+            let message1 = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+            let mut message2 = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+            let csid = [
+                66, 76, 83, 95, 83, 73, 71, 95, 66, 78, 50, 53, 52, 71, 49, 95, 88, 77, 68, 58, 75,
+                69, 67, 67, 65, 75, 95, 78, 67, 84, 72, 95, 78, 85, 76, 95,
+            ];
+            message2.extend(csid);
+
+            let message3 = vec![33u8; 1000];
+
+            let res = vec![message1, message2, message3];
+            res
+        }
 
         fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256) {
             let x_rust_big_int = field_elem_rust.into_bigint();
@@ -76,7 +92,7 @@ mod test {
         #[async_std::test]
         async fn test_full_sig_scheme() {
             let rng = &mut test_rng();
-            let message = vec![33u8; 20];
+            let message = vec![1u8, 2u8, 3u8, 45u8, 88u8];
 
             // TODO why can't we write let parameters = (); ? cargo clippy complains
             let (sk, pk) = BLSOverBN254CurveSignatureScheme::key_gen(&(), rng).unwrap();
@@ -84,7 +100,9 @@ mod test {
             assert!(BLSOverBN254CurveSignatureScheme::verify(&(), &pk, &message, &sig).is_ok());
 
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
+
             let sig_value: MyG1Point = sig.sigma.into_affine().into();
+
             let pk_affine = pk.to_affine();
             let pk_value: MyG2Point = pk_affine.into();
 
@@ -133,9 +151,30 @@ mod test {
         }
 
         #[async_std::test]
+        async fn test_hash_to_field() {
+            let (hotshot, _) = get_hotshot_contract_and_provider().await;
+
+            let hasher_init = &[1u8]; // TODO make it clear that this is the dst vector
+            let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
+
+            let msgs = test_inputs();
+
+            for msg in msgs.iter() {
+                let x_rust: Fq = hasher.hash_to_field(msg.as_slice(), 1)[0];
+                let x_contract = hotshot.hash_to_field(msg.clone()).call().await.unwrap();
+                compare_field_elems(x_rust, x_contract);
+            }
+        }
+
+        #[async_std::test]
         async fn test_hash_to_curve() {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
-            let msg_input = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+            let mut msg_input = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+            let csid = [
+                66, 76, 83, 95, 83, 73, 71, 95, 66, 78, 50, 53, 52, 71, 49, 95, 88, 77, 68, 58, 75,
+                69, 67, 67, 65, 75, 95, 78, 67, 84, 72, 95, 78, 85, 76, 95,
+            ];
+            msg_input.extend(csid);
             let group_elem = hash_to_curve::<Keccak256>(&msg_input);
             let group_elem_contract = hotshot.hash_to_curve(msg_input).call().await.unwrap();
 

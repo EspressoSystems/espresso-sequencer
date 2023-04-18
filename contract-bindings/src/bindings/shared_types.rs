@@ -1,17 +1,3 @@
-#[doc = "`FuzzSelector(address,bytes4[])`"]
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    Eq,
-    PartialEq,
-    ethers :: contract :: EthAbiType,
-    ethers :: contract :: EthAbiCodec,
-)]
-pub struct FuzzSelector {
-    pub addr: ethers::core::types::Address,
-    pub selectors: Vec<[u8; 4]>,
-}
 #[doc = "`PackedHotShotParams(bytes32,bytes32,bytes)`"]
 #[derive(
     Clone,
@@ -43,4 +29,18 @@ pub struct InitializePackedParameters {
     pub pending_state_timeout: u64,
     pub trusted_aggregator: ethers::core::types::Address,
     pub trusted_aggregator_timeout: u64,
+}
+#[doc = "`FuzzSelector(address,bytes4[])`"]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    ethers :: contract :: EthAbiType,
+    ethers :: contract :: EthAbiCodec,
+)]
+pub struct FuzzSelector {
+    pub addr: ethers::core::types::Address,
+    pub selectors: Vec<[u8; 4]>,
 }
