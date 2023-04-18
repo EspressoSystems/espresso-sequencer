@@ -230,8 +230,7 @@ contract HotShot {
     {
         uint256 x;
         uint256 y;
-        (x, y) = hash_to_curve(message);
-        BN254.G1Point memory hash = BN254.G1Point(x, y);
+
         BN254.validateG1Point(sig);
 
         // TODO convert to hex
@@ -284,6 +283,9 @@ contract HotShot {
         for (uint256 i = 0; i < csid_suffix.length; i++) {
             input[i + message.length] = csid_suffix[i];
         }
+
+        (x, y) = hash_to_curve(input);
+        BN254.G1Point memory hash = BN254.G1Point(x, y);
 
         // TODO check pk belong to G2? Not possible apparently https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         //bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());

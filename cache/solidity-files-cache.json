@@ -741,8 +741,8 @@
       }
     },
     "contracts/src/HotShot.sol": {
-      "lastModificationDate": 1681852569454,
-      "contentHash": "918222b15ac02c7afde5fd3cce36070d",
+      "lastModificationDate": 1681855650460,
+      "contentHash": "2b9e89e22f8130ec93661b2771c4614b",
       "sourceName": "contracts/src/HotShot.sol",
       "solcConfig": {
         "settings": {
@@ -784,8 +784,8 @@
       }
     },
     "contracts/src/libraries/BN254.sol": {
-      "lastModificationDate": 1681854796669,
-      "contentHash": "43d32a1aa154c2f1bea83c8033fca12e",
+      "lastModificationDate": 1681855166705,
+      "contentHash": "a3e18eaa6ee1f87f04ec6d3bbef4bc56",
       "sourceName": "contracts/src/libraries/BN254.sol",
       "solcConfig": {
         "settings": {
@@ -924,7 +924,7 @@
       }
     },
     "contracts/test/HotShot.t.sol": {
-      "lastModificationDate": 1681852569450,
+      "lastModificationDate": 1681855166701,
       "contentHash": "789a7d53e3fcc02697e432826f18a779",
       "sourceName": "contracts/test/HotShot.t.sol",
       "solcConfig": {

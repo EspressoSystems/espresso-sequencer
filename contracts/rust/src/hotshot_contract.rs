@@ -118,37 +118,37 @@ mod test {
                 .unwrap();
             assert!(is_sig_valid_contract);
 
-            // let wrong_message = vec![10u8; 3];
-            // assert!(BLSOverBN254CurveSignatureScheme::verify(
-            //     &(),
-            //     &pk,
-            //     wrong_message.clone(),
-            //     &sig
-            // )
-            // .is_err());
-            // let is_sig_valid_contract = hotshot
-            //     .verify_bls_sig(
-            //         wrong_message.clone(),
-            //         sig_value.clone().into(),
-            //         pk_value.clone().into(),
-            //     )
-            //     .call()
-            //     .await
-            //     .unwrap();
-            // assert!(!is_sig_valid_contract);
-            //
-            // let (_, wrong_pk) = BLSOverBN254CurveSignatureScheme::key_gen(&(), rng).unwrap();
-            // assert!(
-            //     BLSOverBN254CurveSignatureScheme::verify(&(), &wrong_pk, &message, &sig).is_err()
-            // );
-            //
-            // let wrong_pk_value: MyG2Point = wrong_pk.to_affine().into();
-            // let is_sig_valid_contract = hotshot
-            //     .verify_bls_sig(message.clone(), sig_value.into(), wrong_pk_value.into())
-            //     .call()
-            //     .await
-            //     .unwrap();
-            // assert!(!is_sig_valid_contract);
+            let wrong_message = vec![10u8; 3];
+            assert!(BLSOverBN254CurveSignatureScheme::verify(
+                &(),
+                &pk,
+                wrong_message.clone(),
+                &sig
+            )
+            .is_err());
+            let is_sig_valid_contract = hotshot
+                .verify_bls_sig(
+                    wrong_message.clone(),
+                    sig_value.clone().into(),
+                    pk_value.clone().into(),
+                )
+                .call()
+                .await
+                .unwrap();
+            assert!(!is_sig_valid_contract);
+
+            let (_, wrong_pk) = BLSOverBN254CurveSignatureScheme::key_gen(&(), rng).unwrap();
+            assert!(
+                BLSOverBN254CurveSignatureScheme::verify(&(), &wrong_pk, &message, &sig).is_err()
+            );
+
+            let wrong_pk_value: MyG2Point = wrong_pk.to_affine().into();
+            let is_sig_valid_contract = hotshot
+                .verify_bls_sig(message.clone(), sig_value.into(), wrong_pk_value.into())
+                .call()
+                .await
+                .unwrap();
+            assert!(!is_sig_valid_contract);
         }
 
         #[async_std::test]
