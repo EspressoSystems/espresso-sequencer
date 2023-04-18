@@ -2,7 +2,7 @@ use commit::{Commitment, Committable};
 use ethers::abi::Address;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 use sequencer::SeqTypes;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::error::RollupError;
@@ -12,7 +12,7 @@ use crate::RollupVM;
 pub type Amount = u64;
 pub type Nonce = u64;
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Account {
     balance: Amount,
     nonce: Nonce,
@@ -20,31 +20,41 @@ pub struct Account {
 
 #[derive(Debug, Clone)]
 pub struct State {
-    accounts: BTreeMap<Address, Account>, // Account state, represented as a BTreeMap so that we can obtain a canonical serialization of the data structure for the state commitment
+    // Account state, represented as a BTreeMap so that we can obtain a canonical serialization of the data structure for the state commitment
+    //
+    // A live rollup would likely represent accounts as a Sparse Merkle Tree instead of a BTreeMap.
+    // Rollup clients would then be able to use merkle proofs to authenticate a subset of user balances
+    // without knowledge of the entire account state. Such "light clients" are less constrained by bandwidth
+    // because they do not need to constantly sync up with a full node.
+    accounts: BTreeMap<Address, Account>,
     block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
     prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
 }
 
 impl Committable for State {
     fn commit(&self) -> Commitment<State> {
-        let mut builder = commit::RawCommitmentBuilder::new("State Commitment");
-
-        if let Some(hash) = self.block_hash {
-            builder = builder.field("block_hash", hash);
-        }
-
-        if let Some(prev_comm) = self.prev_state_commitment {
-            builder = builder.field("prev_state_commitment", prev_comm);
-        }
-
-        // A live rollup would likely represent accounts as a Sparse Merkle Tree instead of a BTreeMap.
-        // Rollup clients would then be able to use merkle proofs to authenticate a subset of user balances
-        // without knowledge of the entire account state. Such "light clients" would be far more storage efficient
-        // than the rollup presented in this example.
         let serialized_accounts =
             serde_json::to_string(&self.accounts).expect("Serialization should not fail");
 
-        builder
+        commit::RawCommitmentBuilder::new("State Commitment")
+            .array_field(
+                "block_hash",
+                &self
+                    .block_hash
+                    .iter()
+                    .cloned()
+                    .map(BlockHash::<SeqTypes>::from)
+                    .collect::<Vec<_>>(),
+            )
+            .array_field(
+                "prev_state_commitment",
+                &self
+                    .prev_state_commitment
+                    .iter()
+                    .cloned()
+                    .map(Commitment::<State>::from)
+                    .collect::<Vec<_>>(),
+            )
             .var_size_field("accounts", serialized_accounts.as_bytes())
             .finalize()
     }
