@@ -1,7 +1,8 @@
 #![cfg(any(test, feature = "testing"))]
 
 use ark_ec::AffineRepr;
-use ark_serialize::{CanonicalSerialize, Compress};
+use ark_ff::PrimeField;
+// use ark_serialize::{CanonicalSerialize, Compress};
 pub use contract_bindings::hot_shot::{G1Point, G2Point};
 use ethers::types::U256;
 
@@ -86,11 +87,13 @@ impl From<ark_bn254::G1Affine> for MyG1Point {
                 y: U256::from(0),
             }
         } else {
-            let x_bytes = serialize_field_element(p.x);
-            let y_bytes = serialize_field_element(p.y);
+            // let x_bytes = serialize_field_element(p.x);
+            // let y_bytes = serialize_field_element(p.y);
             Self {
-                x: U256::from_little_endian(&x_bytes),
-                y: U256::from_little_endian(&y_bytes),
+                // x: U256::from_little_endian(&x_bytes),
+                // y: U256::from_little_endian(&y_bytes),
+                x: convert_fq_to_u256(p.x),
+                y: convert_fq_to_u256(p.y),
             }
         }
     }
@@ -98,11 +101,16 @@ impl From<ark_bn254::G1Affine> for MyG1Point {
 
 // TODO put somewhere else, like jellyfish?
 // TODO is it correct?
-fn serialize_field_element(f: ark_bn254::Fq) -> Vec<u8> {
-    let mut f_bytes = vec![0u8; f.serialized_size(Compress::Yes)];
-    let res = f.serialize_compressed(&mut f_bytes);
-    assert!(res.is_ok());
-    f_bytes[32..].to_vec() // TODO why are the first 32 set to 0?
+// fn serialize_field_element(f: ark_bn254::Fq) -> Vec<u8> {
+//     let mut f_bytes = vec![0u8; f.serialized_size(Compress::Yes)];
+//     let res = f.serialize_compressed(&mut f_bytes);
+//     assert!(res.is_ok());
+//     f_bytes[32..].to_vec() // TODO why are the first 32 set to 0?
+// }
+
+fn convert_fq_to_u256(f: ark_bn254::Fq) -> U256 {
+    let b_int = f.into_bigint();
+    U256([b_int.0[0], b_int.0[1], b_int.0[2], b_int.0[3]])
 }
 
 impl From<(ark_bn254::Fq, ark_bn254::Fq)> for MyG1Point {
@@ -115,11 +123,13 @@ impl From<(ark_bn254::Fq, ark_bn254::Fq)> for MyG1Point {
                 y: U256::from(0),
             }
         } else {
-            let x_bytes = serialize_field_element(p.0);
-            let y_bytes = serialize_field_element(p.1);
+            // let x_bytes = serialize_field_element(p.0);
+            // let y_bytes = serialize_field_element(p.1);
             Self {
-                x: U256::from_little_endian(&x_bytes),
-                y: U256::from_little_endian(&y_bytes),
+                // x: U256::from_little_endian(&x_bytes),
+                // y: U256::from_little_endian(&y_bytes),
+                x: convert_fq_to_u256(p.0),
+                y: convert_fq_to_u256(p.1),
             }
         }
     }
@@ -139,16 +149,20 @@ impl From<ark_bn254::G2Affine> for MyG2Point {
     fn from(p: ark_bn254::G2Affine) -> Self {
         // NOTE: in contract, x = x0 * z + x1, whereas in arkwork x = c0 + c1 * X.
 
-        let p_x_c1_bytes = serialize_field_element(p.x.c1);
-        let p_x_c0_bytes = serialize_field_element(p.x.c0);
-        let p_y_c1_bytes = serialize_field_element(p.y.c1);
-        let p_y_c0_bytes = serialize_field_element(p.y.c0);
+        // let p_x_c1_bytes = serialize_field_element(p.x.c1);
+        // let p_x_c0_bytes = serialize_field_element(p.x.c0);
+        // let p_y_c1_bytes = serialize_field_element(p.y.c1);
+        // let p_y_c0_bytes = serialize_field_element(p.y.c0);
 
         Self {
-            x_0: U256::from_little_endian(&p_x_c1_bytes),
-            x_1: U256::from_little_endian(&p_x_c0_bytes),
-            y_0: U256::from_little_endian(&p_y_c1_bytes),
-            y_1: U256::from_little_endian(&p_y_c0_bytes),
+            x_0: convert_fq_to_u256(p.x.c1),
+            x_1: convert_fq_to_u256(p.x.c0),
+            y_0: convert_fq_to_u256(p.y.c1),
+            y_1: convert_fq_to_u256(p.y.c0),
+            // x_0: U256::from_little_endian(&p_x_c1_bytes),
+            // x_1: U256::from_little_endian(&p_x_c0_bytes),
+            // y_0: U256::from_little_endian(&p_y_c1_bytes),
+            // y_1: U256::from_little_endian(&p_y_c0_bytes)
         }
     }
 }
