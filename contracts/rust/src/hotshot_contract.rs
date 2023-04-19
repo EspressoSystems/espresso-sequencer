@@ -102,7 +102,7 @@ mod test {
 
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
 
-            let sig_value: MyG1Point = sig.sigma.into_affine().into();
+            let sig_value: MyG1Point = sig.clone().get_sig_value().into_affine().into();
 
             let pk_affine = pk.to_affine();
             let pk_value: MyG2Point = pk_affine.into();
