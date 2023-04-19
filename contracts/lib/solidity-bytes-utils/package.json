@@ -1,0 +1,34 @@
+{
+  "name": "solidity-bytes-utils",
+  "version": "0.8.0",
+  "description": "Solidity bytes tightly packed arrays utility library.",
+  "main": "truffle.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:GNSPS/solidity-bytes-utils.git"
+  },
+  "files": [
+    "contracts",
+    "test"
+  ],
+  "keywords": [
+    "ethereum",
+    "bytes",
+    "solidity",
+    "library"
+  ],
+  "authors": [
+    "Gonçalo Sá <goncalo.sa@consensys.net>"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/GNSPS/solidity-bytes-utils/issues"
+  },
+  "homepage": "https://github.com/GNSPS/solidity-bytes-utils#readme",
+  "dependencies": {
+    "@truffle/hdwallet-provider": "latest"
+  },
+  "devDependencies": {
+    "truffle": "latest"
+  }
+}

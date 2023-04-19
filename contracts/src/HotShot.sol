@@ -47,6 +47,8 @@ contract HotShot {
 
     ////// BLS signature verification
 
+    // Helpers
+
     // TODO gas optimization
     function bytes32ToUint8Array(bytes32 input) public pure returns (uint8[] memory output) {
         output = new uint8[](32);
@@ -55,8 +57,16 @@ contract HotShot {
         }
     }
 
-    // Helpers
-    function expand(uint8[] memory message) public pure returns (uint8[] memory) {
+    // TODO gas optimization
+    function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
+        uint256 r = 0;
+        for (uint256 i = 0; i < input.length; i++) {
+            r += 2 ** (8 * i) * input[i];
+        }
+        return r;
+    }
+
+    function expand(bytes memory message) public pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
         uint8 ell = 2; // (n+(b_len-1))/b_len where n=48
@@ -69,11 +79,8 @@ contract HotShot {
         // z_pad
         bytes memory buffer = new bytes(block_size);
 
-        // TODO improve?
         // message
-        for (uint256 i = 0; i < message.length; i++) {
-            buffer = abi.encodePacked(buffer, message[i]);
-        }
+        buffer = abi.encodePacked(buffer, message);
 
         // lib_str
         buffer = abi.encodePacked(buffer, zero_u8);
@@ -99,7 +106,6 @@ contract HotShot {
         // Building uniform_bytes
         uint8[] memory uniform_bytes = new uint8[](block_size);
 
-        // TODO gas optimizations
         // Copy bi into uniform_bytes
         uint8[] memory bi_u8arr = bytes32ToUint8Array(bi);
         for (uint256 i = 0; i < bi_u8arr.length; i++) {
@@ -133,11 +139,10 @@ contract HotShot {
         return uniform_bytes;
     }
 
-    function hash_to_field(uint8[] memory message) public pure returns (uint256) {
+    function hash_to_field(bytes memory message) public pure returns (uint256) {
         uint8[] memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes
-        // TODO improve gas
         uint256 n = uniform_bytes.length;
         assert(n == 48);
         uint8[] memory uniform_bytes_reverted = new uint8[](n);
@@ -149,15 +154,14 @@ contract HotShot {
         // Following https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
 
         // Do the split
-        // TODO make a constant
         uint256 num_bytes_directly_to_convert = 31; // Fixed for Fq
 
         // Create the initial field element
         uint256 res = 0;
 
         // Process the second slice
-        // TODO use Bytes library
         uint8[] memory second_slice = new uint8[](num_bytes_directly_to_convert);
+
         for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
             second_slice[i] = uniform_bytes_reverted[n - num_bytes_directly_to_convert + i];
         }
@@ -178,7 +182,7 @@ contract HotShot {
         return res;
     }
 
-    function hash_to_curve(uint8[] memory input) public view returns (uint256, uint256) {
+    function hash_to_curve(bytes memory input) public view returns (uint256, uint256) {
         uint256 x = hash_to_field(input);
 
         uint256 p = BN254.P_MOD;
@@ -205,17 +209,7 @@ contract HotShot {
         return (x, y);
     }
 
-    function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
-        // TODO Optimize
-        uint256 r = 0;
-        for (uint256 i = 0; i < input.length; i++) {
-            r += 2 ** (8 * i) * input[i];
-        }
-
-        return r;
-    }
-
-    function verify_bls_sig(uint8[] memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
+    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
         public
         view
         returns (bool)
@@ -223,69 +217,20 @@ contract HotShot {
         uint256 x;
         uint256 y;
 
+        // Check the signature is a valid G1 point
+        // Note: checking pk belong to G2 is not possible in practice https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         BN254.validateG1Point(sig);
 
-        // TODO convert to hex
         // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_"
-        uint8[36] memory csid_suffix = [
-            66,
-            76,
-            83,
-            95,
-            83,
-            73,
-            71,
-            95,
-            66,
-            78,
-            50,
-            53,
-            52,
-            71,
-            49,
-            95,
-            88,
-            77,
-            68,
-            58,
-            75,
-            69,
-            67,
-            67,
-            65,
-            75,
-            95,
-            78,
-            67,
-            84,
-            72,
-            95,
-            78,
-            85,
-            76,
-            95
-        ];
+        bytes memory csid_suffix = hex"424c535f5349475f424e32353447315f584d443a4b454343414b5f4e4354485f4e554c5f";
 
-        // TODO optimize
-        uint8[] memory input = new uint8[](message.length + csid_suffix.length);
-        for (uint256 i = 0; i < message.length; i++) {
-            input[i] = message[i];
-        }
-
-        for (uint256 i = 0; i < csid_suffix.length; i++) {
-            input[i + message.length] = csid_suffix[i];
-        }
+        bytes memory input = BytesLib.concat(message, csid_suffix);
 
         (x, y) = hash_to_curve(input);
         BN254.G1Point memory hash = BN254.G1Point(x, y);
 
-        // TODO check pk belong to G2? Not possible apparently https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
-        //bool res = BN254.pairingProd2(BN254.P1(), BN254.P2(), BN254.negate(BN254.P1()), BN254.P2());
         bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
 
-        //  BN254.G2Point memory g2 = BN254.P2();
-        //  bool res = (g2.x0 == pk.x0);
-        // bool res = (hash.x == hash_ext.x) && (hash.y == hash_ext.y);
         return res;
     }
 }

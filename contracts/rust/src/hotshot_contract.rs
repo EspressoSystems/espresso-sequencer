@@ -54,6 +54,7 @@ mod test {
         use ark_ec::CurveGroup;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
         use ark_std::vec;
+        use ethers::types::Bytes;
         use jf_primitives::signatures::bls_over_bn254::{
             hash_to_curve, BLSOverBN254CurveSignatureScheme,
         };
@@ -61,16 +62,17 @@ mod test {
         use jf_utils::test_rng;
         use sha3::Keccak256;
 
-        fn test_inputs() -> Vec<Vec<u8>> {
-            let message1 = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+        fn test_inputs() -> Vec<Bytes> {
+            let message1 = Bytes::from(vec![1u8, 2u8, 3u8, 45u8, 88u8]);
             let mut message2 = vec![1u8, 2u8, 3u8, 45u8, 88u8];
             let csid = [
                 66, 76, 83, 95, 83, 73, 71, 95, 66, 78, 50, 53, 52, 71, 49, 95, 88, 77, 68, 58, 75,
                 69, 67, 67, 65, 75, 95, 78, 67, 84, 72, 95, 78, 85, 76, 95,
             ];
             message2.extend(csid);
+            let message2 = Bytes::from(message2);
 
-            let message3 = vec![33u8; 1000];
+            let message3 = Bytes::from(vec![33u8; 1000]);
 
             let res = vec![message1, message2, message3];
 
@@ -80,7 +82,7 @@ mod test {
         #[async_std::test]
         async fn test_full_sig_scheme() {
             let rng = &mut test_rng();
-            let message = vec![1u8, 2u8, 3u8, 45u8, 88u8];
+            let message = Bytes::from(vec![1u8, 2u8, 3u8, 45u8, 88u8]);
 
             // TODO why can't we write let parameters = (); ? cargo clippy complains
             let (sk, pk) = BLSOverBN254CurveSignatureScheme::key_gen(&(), rng).unwrap();
@@ -105,7 +107,7 @@ mod test {
                 .unwrap();
             assert!(is_sig_valid_contract);
 
-            let wrong_message = vec![10u8; 3];
+            let wrong_message = Bytes::from(vec![10u8; 3]);
             assert!(BLSOverBN254CurveSignatureScheme::verify(
                 &(),
                 &pk,
@@ -148,7 +150,7 @@ mod test {
             let msgs = test_inputs();
 
             for msg in msgs.iter() {
-                let x_rust: Fq = hasher.hash_to_field(msg.as_slice(), 1)[0];
+                let x_rust: Fq = hasher.hash_to_field(msg, 1)[0];
                 let x_contract = hotshot.hash_to_field(msg.clone()).call().await.unwrap();
                 compare_field_elems(x_rust, x_contract);
             }
