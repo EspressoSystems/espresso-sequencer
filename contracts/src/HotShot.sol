@@ -1,6 +1,7 @@
 pragma solidity ^0.8.0;
 
 import {BN254} from "./libraries/BN254.sol";
+import {BytesLib} from "../lib/solidity-bytes-utils/contracts/BytesLib.sol";
 
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
@@ -111,11 +112,11 @@ contract HotShot {
         // https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L100
 
         for (uint256 j = 0; j < b_len; j++) {
-            // uint8 v = b0_u8arr[i] ^ bi_u8arr[i];
+            uint8 v = b0_u8arr[j] ^ bi_u8arr[j];
             if (j == 0) {
-                buffer = abi.encodePacked(b0_u8arr[j] ^ bi_u8arr[j]); // v
+                buffer = abi.encodePacked(v); // v
             } else {
-                buffer = abi.encodePacked(buffer, b0_u8arr[j] ^ bi_u8arr[j]); // buffer,v
+                buffer = abi.encodePacked(buffer, v); // buffer,v
             }
         }
         buffer = abi.encodePacked(buffer, ell);
