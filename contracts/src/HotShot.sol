@@ -83,15 +83,15 @@ contract HotShot {
         buffer = abi.encodePacked(buffer, single_zero);
 
         // dst_prime = [1,1]
-        uint8[2] memory dst_prime = [1, 1]; // TODO how to pass dst_prime directly to abi.encodePacked?
+        bytes2 dst_prime = 0x0101;
 
-        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]);
+        buffer = abi.encodePacked(buffer, dst_prime);
 
         bytes32 b0 = keccak256(buffer);
 
         buffer = abi.encodePacked(b0);
         buffer = abi.encodePacked(buffer, one_u8);
-        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]);
+        buffer = abi.encodePacked(buffer, dst_prime);
 
         bytes32 bi = keccak256(buffer);
 
@@ -119,7 +119,7 @@ contract HotShot {
             }
         }
         buffer = abi.encodePacked(buffer, ell);
-        buffer = abi.encodePacked(buffer, dst_prime[0], dst_prime[1]); // TODO refactor?
+        buffer = abi.encodePacked(buffer, dst_prime);
 
         bi = keccak256(buffer);
         bi_u8arr = bytes32ToUint8Array(bi);
