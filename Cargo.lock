@@ -4903,7 +4903,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#b4f795d224c30614899b68a4faf82faf31e92d3d"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -4944,7 +4944,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#b4f795d224c30614899b68a4faf82faf31e92d3d"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -5012,7 +5012,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#b4f795d224c30614899b68a4faf82faf31e92d3d"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",

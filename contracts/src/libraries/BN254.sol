@@ -340,11 +340,10 @@ library BN254 {
         }
         require(success, "pow precompile call failed!");
 
-        // TODO this has been commented because arkworks by default does not perform the operation below in case a<p/2
         // ensure a < p/2
-        //        if (a << 1 > p) {
-        //            a = p - a;
-        //        }
+        if (a << 1 > p) {
+            a = p - a;
+        }
 
         // check if a^2 = x, if not x is not a quadratic residue
         e = mulmod(a, a, p);
