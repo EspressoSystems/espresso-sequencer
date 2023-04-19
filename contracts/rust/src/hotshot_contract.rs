@@ -49,12 +49,10 @@ mod test {
 
     mod bls_signature {
         use super::*;
-        use crate::helpers::{MyG1Point, MyG2Point};
-        use ark_bn254::{Fq, G1Affine};
+        use crate::helpers::{compare_field_elems, compare_group_elems, MyG1Point, MyG2Point};
+        use ark_bn254::Fq;
         use ark_ec::CurveGroup;
         use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-        use ark_ff::BigInt;
-        use ark_ff::PrimeField;
         use ark_std::vec;
         use jf_primitives::signatures::bls_over_bn254::{
             hash_to_curve, BLSOverBN254CurveSignatureScheme,
@@ -77,17 +75,6 @@ mod test {
             let res = vec![message1, message2, message3];
 
             res
-        }
-
-        fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256) {
-            let x_rust_big_int = field_elem_rust.into_bigint();
-            let x_contract_big_int = BigInt::new(field_elem_contract.0);
-            assert_eq!(x_rust_big_int, x_contract_big_int);
-        }
-
-        fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: (U256, U256)) {
-            compare_field_elems(group_elem_rust.x, group_elem_contract.0);
-            compare_field_elems(group_elem_rust.y, group_elem_contract.1);
         }
 
         #[async_std::test]

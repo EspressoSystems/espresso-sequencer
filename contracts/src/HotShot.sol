@@ -65,17 +65,8 @@ contract HotShot {
         uint8 zero_u8 = 0;
         uint8 one_u8 = 1;
 
-        bytes memory buffer;
-
-        // TODO optimize gas?
         // z_pad
-        for (uint256 i = 0; i < block_size; i++) {
-            if (i == 0) {
-                buffer = abi.encodePacked(zero_u8);
-            } else {
-                buffer = abi.encodePacked(buffer, zero_u8);
-            }
-        }
+        bytes memory buffer = new bytes(block_size);
 
         // TODO improve?
         // message
