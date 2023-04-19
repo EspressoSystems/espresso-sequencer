@@ -8,16 +8,8 @@
  */
 pragma solidity >=0.8.0 <0.9.0;
 
-
 library BytesLib {
-    function concat(
-        bytes memory _preBytes,
-        bytes memory _postBytes
-    )
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function concat(bytes memory _preBytes, bytes memory _postBytes) internal pure returns (bytes memory) {
         bytes memory tempBytes;
 
         assembly {
@@ -65,24 +57,23 @@ library BytesLib {
             // length of the arrays.
             end := add(mc, length)
 
-            for {
-                let cc := add(_postBytes, 0x20)
-            } lt(mc, end) {
+            for { let cc := add(_postBytes, 0x20) } lt(mc, end) {
                 mc := add(mc, 0x20)
                 cc := add(cc, 0x20)
-            } {
-                mstore(mc, mload(cc))
-            }
+            } { mstore(mc, mload(cc)) }
 
             // Update the free-memory pointer by padding our last write location
             // to 32 bytes: add 31 bytes to the end of tempBytes to move to the
             // next 32 byte block, then round down to the nearest multiple of
             // 32. If the sum of the length of the two arrays is zero then add
             // one before rounding down to leave a blank 32 bytes (the length block with 0).
-            mstore(0x40, and(
-              add(add(end, iszero(add(length, mload(_preBytes)))), 31),
-              not(31) // Round down to the nearest 32 bytes.
-            ))
+            mstore(
+                0x40,
+                and(
+                    add(add(end, iszero(add(length, mload(_preBytes)))), 31),
+                    not(31) // Round down to the nearest 32 bytes.
+                )
+            )
         }
 
         return tempBytes;
@@ -166,10 +157,7 @@ library BytesLib {
                 sstore(
                     sc,
                     add(
-                        and(
-                            fslot,
-                            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00
-                        ),
+                        and(fslot, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00),
                         and(mload(mc), mask)
                     )
                 )
@@ -180,9 +168,7 @@ library BytesLib {
                 } lt(mc, end) {
                     sc := add(sc, 1)
                     mc := add(mc, 0x20)
-                } {
-                    sstore(sc, mload(mc))
-                }
+                } { sstore(sc, mload(mc)) }
 
                 mask := exp(0x100, sub(mc, end))
 
@@ -214,9 +200,7 @@ library BytesLib {
                 } lt(mc, end) {
                     sc := add(sc, 1)
                     mc := add(mc, 0x20)
-                } {
-                    sstore(sc, mload(mc))
-                }
+                } { sstore(sc, mload(mc)) }
 
                 mask := exp(0x100, sub(mc, end))
 
@@ -225,15 +209,7 @@ library BytesLib {
         }
     }
 
-    function slice(
-        bytes memory _bytes,
-        uint256 _start,
-        uint256 _length
-    )
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function slice(bytes memory _bytes, uint256 _start, uint256 _length) internal pure returns (bytes memory) {
         require(_length + 31 >= _length, "slice_overflow");
         require(_bytes.length >= _start + _length, "slice_outOfBounds");
 
@@ -270,9 +246,7 @@ library BytesLib {
                 } lt(mc, end) {
                     mc := add(mc, 0x20)
                     cc := add(cc, 0x20)
-                } {
-                    mstore(mc, mload(cc))
-                }
+                } { mstore(mc, mload(cc)) }
 
                 mstore(tempBytes, _length)
 
@@ -306,7 +280,7 @@ library BytesLib {
     }
 
     function toUint8(bytes memory _bytes, uint256 _start) internal pure returns (uint8) {
-        require(_bytes.length >= _start + 1 , "toUint8_outOfBounds");
+        require(_bytes.length >= _start + 1, "toUint8_outOfBounds");
         uint8 tempUint;
 
         assembly {
@@ -411,11 +385,10 @@ library BytesLib {
                 let mc := add(_preBytes, 0x20)
                 let end := add(mc, length)
 
-                for {
-                    let cc := add(_postBytes, 0x20)
+                for { let cc := add(_postBytes, 0x20) }
                 // the next line is the loop condition:
                 // while(uint256(mc < end) + cb == 2)
-                } eq(add(lt(mc, end), cb), 2) {
+                eq(add(lt(mc, end), cb), 2) {
                     mc := add(mc, 0x20)
                     cc := add(cc, 0x20)
                 } {
@@ -436,14 +409,7 @@ library BytesLib {
         return success;
     }
 
-    function equalStorage(
-        bytes storage _preBytes,
-        bytes memory _postBytes
-    )
-        internal
-        view
-        returns (bool)
-    {
+    function equalStorage(bytes storage _preBytes, bytes memory _postBytes) internal view returns (bool) {
         bool success = true;
 
         assembly {
