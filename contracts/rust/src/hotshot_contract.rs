@@ -144,7 +144,9 @@ mod test {
         async fn test_hash_to_field() {
             let (hotshot, _) = get_hotshot_contract_and_provider().await;
 
-            let hasher_init = &[1u8]; // TODO make it clear that this is the dst vector
+            // Same as in the hash_to_curve function
+            // See https://github.com/EspressoSystems/jellyfish/blob/6c2c08f4e966fd1d454d48bcf30bd41a952f9f76/primitives/src/signatures/bls_over_bn254.rs#L310
+            let hasher_init = &[1u8];
             let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
 
             let msgs = test_inputs();

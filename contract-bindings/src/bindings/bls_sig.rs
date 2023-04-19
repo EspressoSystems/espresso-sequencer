@@ -1,6 +1,6 @@
-pub use bytes_lib::*;
+pub use bls_sig::*;
 #[allow(clippy::too_many_arguments, non_camel_case_types)]
-pub mod bytes_lib {
+pub mod bls_sig {
     #![allow(clippy::enum_variant_names)]
     #![allow(dead_code)]
     #![allow(clippy::type_complexity)]
@@ -14,39 +14,39 @@ pub mod bytes_lib {
         types::*,
     };
     use ethers::providers::Middleware;
-    #[doc = "BytesLib was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
+    #[doc = "BLSSig was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
     use std::sync::Arc;
     # [rustfmt :: skip] const __ABI : & str = "[]" ;
     #[doc = r" The parsed JSON-ABI of the contract."]
-    pub static BYTESLIB_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
+    pub static BLSSIG_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
         ethers::contract::Lazy::new(|| {
             ethers::core::utils::__serde_json::from_str(__ABI).expect("invalid abi")
         });
     #[doc = r" Bytecode of the #name contract"]
-    pub static BYTESLIB_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
+    pub static BLSSIG_BYTECODE: ethers::contract::Lazy<ethers::core::types::Bytes> =
         ethers::contract::Lazy::new(|| {
-            "0x60566037600b82828239805160001a607314602a57634e487b7160e01b600052600060045260246000fd5b30600052607381538281f3fe73000000000000000000000000000000000000000030146080604052600080fdfea2646970667358221220025450b89ebf04a605a7ec9476d0959e492ce3a5e4df4ae580cc2908e5d5e21e64736f6c63430008120033" . parse () . expect ("invalid bytecode")
+            "0x60566037600b82828239805160001a607314602a57634e487b7160e01b600052600060045260246000fd5b30600052607381538281f3fe73000000000000000000000000000000000000000030146080604052600080fdfea2646970667358221220e36d920915cf20b259a33fd3345ec8ebcd5e22a5c87b2a85c350bea3ba305b3c64736f6c63430008120033" . parse () . expect ("invalid bytecode")
         });
-    pub struct BytesLib<M>(ethers::contract::Contract<M>);
-    impl<M> Clone for BytesLib<M> {
+    pub struct BLSSig<M>(ethers::contract::Contract<M>);
+    impl<M> Clone for BLSSig<M> {
         fn clone(&self) -> Self {
-            BytesLib(self.0.clone())
+            BLSSig(self.0.clone())
         }
     }
-    impl<M> std::ops::Deref for BytesLib<M> {
+    impl<M> std::ops::Deref for BLSSig<M> {
         type Target = ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> std::fmt::Debug for BytesLib<M> {
+    impl<M> std::fmt::Debug for BLSSig<M> {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.debug_tuple(stringify!(BytesLib))
+            f.debug_tuple(stringify!(BLSSig))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ethers::providers::Middleware> BytesLib<M> {
+    impl<M: ethers::providers::Middleware> BLSSig<M> {
         #[doc = r" Creates a new contract instance with the specified `ethers`"]
         #[doc = r" client at the given `Address`. The contract derefs to a `ethers::Contract`"]
         #[doc = r" object"]
@@ -54,7 +54,7 @@ pub mod bytes_lib {
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            ethers::contract::Contract::new(address.into(), BYTESLIB_ABI.clone(), client).into()
+            ethers::contract::Contract::new(address.into(), BLSSIG_ABI.clone(), client).into()
         }
         #[doc = r" Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it."]
         #[doc = r" Returns a new instance of a deployer that returns an instance of this contract after sending the transaction"]
@@ -87,8 +87,8 @@ pub mod bytes_lib {
             ethers::contract::ContractError<M>,
         > {
             let factory = ethers::contract::ContractFactory::new(
-                BYTESLIB_ABI.clone(),
-                BYTESLIB_BYTECODE.clone().into(),
+                BLSSIG_ABI.clone(),
+                BLSSIG_BYTECODE.clone().into(),
                 client,
             );
             let deployer = factory.deploy(constructor_args)?;
@@ -96,7 +96,7 @@ pub mod bytes_lib {
             Ok(deployer)
         }
     }
-    impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>> for BytesLib<M> {
+    impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>> for BLSSig<M> {
         fn from(contract: ethers::contract::Contract<M>) -> Self {
             Self(contract)
         }
