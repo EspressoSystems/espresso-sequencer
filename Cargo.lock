@@ -4431,7 +4431,7 @@ dependencies = [
  "ethers-solc",
  "hex",
  "jf-primitives 0.3.0",
- "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish)",
+ "jf-utils 0.3.0",
  "sequencer-utils",
  "sha3",
  "tokio",
@@ -4903,7 +4903,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
+source = "git+https://github.com/EspressoSystems/jellyfish#e1e683c287f20160738e6e737295dd8f9e70577a"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -4927,7 +4927,7 @@ dependencies = [
  "generic-array 0.14.7",
  "itertools 0.10.5",
  "jf-relation",
- "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public)",
+ "jf-utils 0.3.0",
  "merlin",
  "num-bigint",
  "num-traits",
@@ -4944,7 +4944,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
+source = "git+https://github.com/EspressoSystems/jellyfish#e1e683c287f20160738e6e737295dd8f9e70577a"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -4960,7 +4960,7 @@ dependencies = [
  "downcast-rs",
  "dyn-clone",
  "hashbrown 0.13.2",
- "jf-utils 0.3.0 (git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public)",
+ "jf-utils 0.3.0",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
@@ -5012,7 +5012,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=fix/set-sigma-attribute-public#46796d628c713c0e498125fa67a6ce57072d388e"
+source = "git+https://github.com/EspressoSystems/jellyfish#e1e683c287f20160738e6e737295dd8f9e70577a"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -5020,21 +5020,6 @@ dependencies = [
  "ark-std 0.4.0",
  "digest 0.10.6",
  "rayon",
- "serde",
- "sha2 0.10.6",
- "tagged-base64 0.3.0",
-]
-
-[[package]]
-name = "jf-utils"
-version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#e75e02745615e9545677e277351c948d22d20720"
-dependencies = [
- "ark-ec 0.4.2",
- "ark-ff 0.4.2",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
- "digest 0.10.6",
  "serde",
  "sha2 0.10.6",
  "tagged-base64 0.3.0",
@@ -5950,9 +5935,9 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f508063cc7bb32987c71511216bd5a32be15bccb6a80b52df8b9d7f01fc3aa2"
+checksum = "9b085a4f2cde5781fc4b1717f2e86c62f5cda49de7ba99a7c2eae02b61c9064c"
 
 [[package]]
 name = "local-channel"
