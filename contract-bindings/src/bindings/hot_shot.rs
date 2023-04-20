@@ -5,6 +5,7 @@ pub mod hot_shot {
     #![allow(dead_code)]
     #![allow(clippy::type_complexity)]
     #![allow(unused_imports)]
+    pub use super::super::shared_types::*;
     use ethers::contract::{
         builders::{ContractCall, Event},
         Contract, Lazy,
@@ -570,34 +571,4 @@ pub mod hot_shot {
         Default,
     )]
     pub struct VerifyBlsSigReturn(pub bool);
-    #[doc = "`G1Point(uint256,uint256)`"]
-    #[derive(
-        Clone,
-        Debug,
-        Default,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
-    )]
-    pub struct G1Point {
-        pub x: ethers::core::types::U256,
-        pub y: ethers::core::types::U256,
-    }
-    #[doc = "`G2Point(uint256,uint256,uint256,uint256)`"]
-    #[derive(
-        Clone,
-        Debug,
-        Default,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
-    )]
-    pub struct G2Point {
-        pub x_0: ethers::core::types::U256,
-        pub x_1: ethers::core::types::U256,
-        pub y_0: ethers::core::types::U256,
-        pub y_1: ethers::core::types::U256,
-    }
 }
