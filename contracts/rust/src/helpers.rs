@@ -29,7 +29,7 @@ pub(crate) mod hotshot_contract {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
+        let deployer = clients.deployer;
 
         let hotshot = HotShot::deploy(deployer.clone(), ())
             .unwrap()
@@ -42,7 +42,6 @@ pub(crate) mod hotshot_contract {
 }
 
 // TODO put somewhere else, like jellyfish?
-#[allow(dead_code)]
 fn convert_fq_to_u256(f: ark_bn254::Fq) -> U256 {
     let b_int = f.into_bigint();
     U256([b_int.0[0], b_int.0[1], b_int.0[2], b_int.0[3]])
