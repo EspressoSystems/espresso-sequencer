@@ -3,7 +3,7 @@
 use ark_bn254::{Fq, G1Affine};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInt, PrimeField};
-pub use contract_bindings::hot_shot::{G1Point, G2Point};
+pub use contract_bindings::bls_test::{G1Point, G2Point};
 use ethers::types::U256;
 
 pub(crate) mod hotshot_contract {

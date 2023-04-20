@@ -1,8 +1,5 @@
 pragma solidity ^0.8.0;
 
-import {BN254} from "./libraries/BN254.sol";
-import {BLSSig} from "./libraries/BLSSig.sol";
-
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
@@ -43,29 +40,5 @@ contract HotShot {
         }
 
         emit NewBlocks(firstBlockNumber, newCommitments.length);
-    }
-
-    ////// BLS signature verification
-
-    // For testing purposes only
-    // TODO make another contract ?
-    function hash_to_field(bytes memory message) public pure returns (uint256) {
-        return BLSSig.hash_to_field(message);
-    }
-
-    // For testing purposes only
-    // TODO make another contract ?
-    function hash_to_curve(bytes memory input) public view returns (uint256, uint256) {
-        return BLSSig.hash_to_curve(input);
-    }
-
-    // For testing purposes only
-    // TODO make another contract ?
-    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
-        public
-        view
-        returns (bool)
-    {
-        return BLSSig.verify_bls_sig(message, sig, pk);
     }
 }
