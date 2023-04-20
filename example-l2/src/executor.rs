@@ -11,21 +11,8 @@ use sequencer::hotshot_commitment::HotShotContractOptions;
 use sequencer::{hotshot_commitment::connect_l1, SeqTypes};
 
 use crate::state::State;
-use crate::RollupVM;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
-
-async fn execute_block(block: &BlockQueryData<SeqTypes>, state: &mut State) {
-    for txn in block.block().vm_transactions(&RollupVM) {
-        let res = state.apply_transaction(&txn);
-        if let Err(err) = res {
-            // TODO: more informative logging
-            tracing::error!("Transaction invalid: {}", err)
-        } else {
-            tracing::info!("Transaction applied")
-        }
-    }
-}
 
 pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
     let query_service_url = opt.query_service_url.join("availability").unwrap();
@@ -35,6 +22,7 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt)
     .await else {
+        // TODO: Switch these over to panics
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
         return;
     };
@@ -86,7 +74,8 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
                 }
             };
             commitment.to_little_endian(&mut commit_bytes);
-            let commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec()) {
+            let block_commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec())
+            {
                 Ok(commitment) => commitment,
                 Err(err) => {
                     tracing::error!("Unable to deserialize commitment: {}", err);
@@ -108,13 +97,14 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
                 }
             };
 
-            if block.block().commit() != commitment {
+            if block.block().commit() != block_commitment {
                 tracing::error!("Block commitment does not match hash of recieved block, the executor cannot continue");
                 return;
             }
 
             let mut state_lock = state.write().await;
-            execute_block(&block, &mut state_lock).await;
+            // TODO: forward state commitment to Rollup alongside mock proof, possibly return updated state commitment/proof from execute_block
+            state_lock.execute_block(&block).await;
         }
         block_height = current_block_height;
         stream.next().await;
