@@ -10,7 +10,7 @@
 pragma solidity ^0.8.0;
 
 import {BN254} from "./BN254.sol";
-import {BytesLib} from "./BytesLib.sol";
+import {BytesLib} from "solidity-bytes-utils/BytesLib.sol";
 
 library BLSSig {
     // This library implements the verification of the BLS signature scheme over the BN254 curve
