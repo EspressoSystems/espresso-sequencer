@@ -51,7 +51,7 @@ library BLSSig {
         bytes memory buffer = new bytes(block_size);
 
         // message
-        buffer = abi.encodePacked(buffer, message);
+        buffer = BytesLib.concat(buffer, message);
 
         // lib_str
         buffer = abi.encodePacked(buffer, zero_u8);
