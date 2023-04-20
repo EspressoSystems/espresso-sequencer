@@ -14,8 +14,9 @@ import {BytesLib} from "./BytesLib.sol";
 
 library BLSSig {
     // This library implements the verification of the BLS signature scheme over the BN254 curve
-    // following the rust implementation at ... TODO add url once https://github.com/EspressoSystems/jellyfish/pull/242 is merged
+    // following the rust implementation at https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
 
+    // Helper functions
     // TODO gas optimization
     function bytes32ToUint8Array(bytes32 input) internal pure returns (uint8[] memory output) {
         output = new uint8[](32);
@@ -33,6 +34,9 @@ library BLSSig {
         return r;
     }
 
+    /// @dev Takes a sequence of bytes and turn in into another sequence of bytes with fixed size. Equivalent of https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L37
+    /// @param message message to be "expanded"
+    /// @return fixed size array of bytes
     function expand(bytes memory message) internal pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
@@ -106,6 +110,9 @@ library BLSSig {
         return uniform_bytes;
     }
 
+    /// @dev Hash a sequence of bytes to a field element in Fq. Equivalent of https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/mod.rs#L65
+    /// @param message input message to be hashed
+    /// @return field element in Fq
     function hash_to_field(bytes memory message) internal pure returns (uint256) {
         uint8[] memory uniform_bytes = expand(message);
 
@@ -149,6 +156,9 @@ library BLSSig {
         return res;
     }
 
+    /// @dev Hash a sequence of bytes to a group element in BN254.G_1. We use the hash-and-pray algorithm for now. Rust implementation can be found at https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs#L318
+    /// @param input message to be hashed
+    /// @return group element in G_1
     function hash_to_curve(bytes memory input) internal view returns (uint256, uint256) {
         uint256 x = hash_to_field(input);
 
@@ -176,6 +186,11 @@ library BLSSig {
         return (x, y);
     }
 
+    /// @dev Verify a bls signature
+    /// @param message message to check the signature against
+    /// @param sig signature represented as a point in BN254.G_1
+    /// @param pk public key represented as a point in BN254.G_2
+    /// @return true if the signature is valid, false otherwise.
     function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
         internal
         view
@@ -188,7 +203,7 @@ library BLSSig {
         // Note: checking pk belong to G2 is not possible in practice https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         BN254.validateG1Point(sig);
 
-        // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_"
+        // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_" See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
         bytes memory csid_suffix = hex"424c535f5349475f424e32353447315f584d443a4b454343414b5f4e4354485f4e554c5f";
 
         bytes memory input = BytesLib.concat(message, csid_suffix);
