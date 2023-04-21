@@ -19,10 +19,7 @@ mod test {
     fn test_inputs() -> Vec<Bytes> {
         let message1 = Bytes::from(vec![1u8, 2u8, 3u8, 45u8, 88u8]);
         let mut message2 = vec![1u8, 2u8, 3u8, 45u8, 88u8];
-        let csid = [
-            66, 76, 83, 95, 83, 73, 71, 95, 66, 78, 50, 53, 52, 71, 49, 95, 88, 77, 68, 58, 75, 69,
-            67, 67, 65, 75, 95, 78, 67, 84, 72, 95, 78, 85, 76, 95,
-        ];
+        let csid = b"BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
         message2.extend(csid);
         let message2 = Bytes::from(message2);
 
