@@ -1,15 +1,12 @@
-use ark_serialize::CanonicalSerialize;
 use async_std::{sync::Arc, task::sleep};
 use clap::Args;
 use contract_bindings::HotShot;
 use ethers::types::Address;
-use ethers::{
-    abi::Detokenize, contract::builders::ContractCall, prelude::*, providers::Middleware as _,
-    signers::coins_bip39::English,
-};
+use ethers::{prelude::*, providers::Middleware as _, signers::coins_bip39::English};
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
 use hotshot_types::traits::node_implementation::NodeImplementation;
+use sequencer_utils::{commitment_to_u256, contract_send, Middleware};
 use std::time::Duration;
 use surf_disco::Url;
 
@@ -17,7 +14,6 @@ use crate::{network, Node, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 #[derive(Args, Clone, Debug)]
@@ -158,11 +154,8 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
         .into_iter()
         .map(|leaf| {
-            let mut buf = vec![];
-            leaf.block_hash().serialize(&mut buf).unwrap();
-            let hash_buf: [u8; 32] = buf.try_into().unwrap();
             (
-                U256::from_little_endian(&hash_buf),
+                commitment_to_u256(leaf.block_hash()),
                 Bytes::from(bincode::serialize(&leaf.qc()).unwrap()),
             )
         })
@@ -171,47 +164,13 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     // Send teh block commitments and QCs to L1. This operation must succeed before we go any
     // further, because sequencing the next batch will depend on having successfully sequenced this
     // one. Thus we will retry until it succeeds.
-    while send(contract.new_blocks(block_comms.clone(), qcs.clone()))
+    while contract_send(contract.new_blocks(block_comms.clone(), qcs.clone()))
         .await
         .is_none()
     {
         tracing::warn!("failed to sequence batches, retrying");
         sleep(RETRY_DELAY).await;
     }
-}
-
-pub async fn send<T: Detokenize>(
-    call: ContractCall<Middleware, T>,
-) -> Option<(TransactionReceipt, u64)> {
-    let pending = match call.send().await {
-        Ok(pending) => pending,
-        Err(err) => {
-            tracing::error!("error sending transaction: {}", err);
-            return None;
-        }
-    };
-    let receipt = match pending.await {
-        Ok(Some(receipt)) => receipt,
-        Ok(None) => {
-            tracing::error!("transaction not mined");
-            return None;
-        }
-        Err(err) => {
-            tracing::error!("error waiting for transaction to be mined: {}", err);
-            return None;
-        }
-    };
-    if receipt.status != Some(1.into()) {
-        tracing::error!("transaction reverted");
-        return None;
-    }
-
-    // If a transaction is mined and we get a receipt for it, the block number should _always_ be
-    // set. If it is not, something has gone horribly wrong with the RPC.
-    let block_number = receipt
-        .block_number
-        .expect("transaction mined but block number not set");
-    Some((receipt, block_number.as_u64()))
 }
 
 pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>> {

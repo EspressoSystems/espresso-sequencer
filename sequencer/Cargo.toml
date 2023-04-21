@@ -14,7 +14,6 @@ tempfile = "3.4.0"
 
 [dependencies]
 ark-bls12-381 = "0.3.0"
-ark-serialize = { version = "0.3.0", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1" }
 async-std = "1.12.0"
 async-trait = "0.1.61"
@@ -29,14 +28,28 @@ either = "1.8.1"
 ethers = "1.0"
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.13" }
-hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.13" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.13" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"], tag = "0.4.13" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+], tag = "0.4.13" }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+], tag = "0.4.13" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+], tag = "0.4.13" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+], tag = "0.4.13" }
 
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 
-jf-primitives = { features = ["std"], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
+jf-primitives = { features = [
+    "std",
+], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }

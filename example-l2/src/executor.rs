@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::CanonicalDeserialize;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
 use commit::Committable;
-use contract_bindings::example_rollup::ExampleRollup;
-use contract_bindings::HotShot;
+use contract_bindings::{example_rollup::ExampleRollup, HotShot};
 use ethers::prelude::*;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 
-use sequencer::hotshot_commitment::HotShotContractOptions;
-use sequencer::{hotshot_commitment::connect_l1, SeqTypes};
+use sequencer::{
+    hotshot_commitment::{connect_l1, HotShotContractOptions},
+    SeqTypes,
+};
+use sequencer_utils::{commitment_to_u256, contract_send};
 
 use crate::state::State;
 
@@ -109,25 +111,24 @@ pub async fn run_executor(
                 return;
             }
 
-            let mut state_lock = state.write().await;
-            let proof = state_lock.execute_block(&block).await;
+            let (proof, state_comm) = {
+                let mut state_lock = state.write().await;
+                let proof = state_lock.execute_block(&block).await;
+                (
+                    Bytes::from(proof.0),
+                    commitment_to_u256(state_lock.commit()),
+                )
+            };
 
-            let mut buf = vec![];
-            state_lock.commit().serialize(&mut buf).unwrap();
-            let state_comm: [u8; 32] = buf.try_into().unwrap();
-            let state_comm = U256::from_little_endian(&state_comm);
-            let proof = Bytes::from(proof.0);
-
-            dbg!("Submitting rollup proof");
-            while sequencer::hotshot_commitment::send(
-                rollup_contract.new_block(state_comm, proof.clone()),
-            )
-            .await
-            .is_none()
+            while contract_send(rollup_contract.new_block(state_comm, proof.clone()))
+                .await
+                .is_none()
             {
-                tracing::warn!("failed to sequence batches, retrying");
+                tracing::warn!("Failed to submit proof to contract, retrying");
                 sleep(std::time::Duration::from_secs(1)).await;
             }
+
+            dbg!("SUBMITTED A PROOF");
         }
         block_height = current_block_height;
         stream.next().await;
@@ -155,7 +156,7 @@ mod test {
     use sequencer::hotshot_commitment::run_hotshot_commitment_task;
     use sequencer::transaction::Transaction as SequencerTransaction;
     use sequencer::VmTransaction;
-    use sequencer_utils::Anvil;
+    use sequencer_utils::{commitment_to_u256, Anvil};
     use std::path::Path;
     use std::time::{Duration, Instant};
     use surf_disco::{Client, Url};
@@ -166,7 +167,7 @@ mod test {
 
     #[async_std::test]
     async fn test_execute() {
-        // Start a test HotShota and Rollup contract
+        // Start a test HotShot and Rollup contract
         let anvil = Anvil::spawn(None).await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
@@ -242,7 +243,7 @@ mod test {
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
         spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
-        // Loop until the Rollup executes our transaction
+        // Loop until the rollup executes our transaction
         let max_time = Duration::from_secs(75);
         let mut time_elapsed;
         let start_time = Instant::now();
@@ -257,13 +258,11 @@ mod test {
             }
         }
 
-        let mut buf = vec![];
-        state.write().await.commit().serialize(&mut buf).unwrap();
-        let state_comm: [u8; 32] = buf.try_into().unwrap();
-        let state_comm = U256::from_little_endian(&state_comm);
-
-        let state_commitment = rollup_contract.state_commitment().call().await.unwrap();
-        assert_eq!(state_commitment, state_comm);
-        // assert_eq!(test, U256::from(1));
+        // Wait for the rollup contract to catch up to the rollup state
+        std::thread::sleep(Duration::from_secs(5));
+        let state_comm = state.write().await.commit();
+        let state_comm = commitment_to_u256(state_comm);
+        let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
+        assert_eq!(state_comm, contract_state_comm);
     }
 }
