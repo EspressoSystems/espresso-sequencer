@@ -13,3 +13,7 @@
 	path = contracts/lib/solidity-bytes-utils
 	url = https://github.com/GNSPS/solidity-bytes-utils
 	branch = v0.8.0
+[submodule "contracts/lib/bn254"]
+	path = contracts/lib/bn254
+	url = https://github.com/EspressoSystems/solidity-bn254
+	branch = v0.1.0
