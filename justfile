@@ -21,7 +21,7 @@ pull:
 hardhat *args:
     cd zkevm-contracts && nix develop -c bash -c "npx hardhat {{args}}"
 
-update-contract-bindings:
+update-contract-bindings: (hardhat "compile")
     forge build
     cargo run --bin gen-bindings
 

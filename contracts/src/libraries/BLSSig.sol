@@ -57,7 +57,7 @@ library BLSSig {
         buffer = bytes.concat(buffer, zero_u8, bytes1(block_size));
 
         // 0 separator
-        bytes1 single_zero = zero_u8; //
+        bytes1 single_zero = zero_u8;
         buffer = bytes.concat(buffer, single_zero);
 
         // dst_prime = [1,1]
