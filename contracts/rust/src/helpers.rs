@@ -9,7 +9,6 @@ use ethers::types::U256;
 pub(crate) mod hotshot_contract {
     use async_std::sync::Arc;
     use contract_bindings::bls_test::BLSTest;
-    use contract_bindings::hot_shot::HotShot;
     use contract_bindings::TestClients;
     use ethers::middleware::SignerMiddleware;
     use ethers::prelude::Wallet;
@@ -17,7 +16,7 @@ pub(crate) mod hotshot_contract {
     use sequencer_utils::Anvil;
     use std::time::Duration;
 
-    async fn get_provider_and_deployer() -> (
+    pub(crate) async fn get_provider_and_deployer() -> (
         Provider<Http>,
         Arc<
             SignerMiddleware<
@@ -37,42 +36,18 @@ pub(crate) mod hotshot_contract {
         (provider, deployer)
     }
 
-    pub(crate) async fn get_bls_test_contract_and_provider() -> (
-        BLSTest<
-            SignerMiddleware<
-                ethers::providers::Provider<Http>,
-                Wallet<ethers::core::k256::ecdsa::SigningKey>,
-            >,
+    pub(crate) async fn get_bls_test_contract() -> BLSTest<
+        SignerMiddleware<
+            ethers::providers::Provider<Http>,
+            Wallet<ethers::core::k256::ecdsa::SigningKey>,
         >,
-        Provider<Http>,
-    ) {
-        let (provider, deployer) = get_provider_and_deployer().await;
-        let contract = BLSTest::deploy(deployer.clone(), ())
+    > {
+        let (_, deployer) = get_provider_and_deployer().await;
+        BLSTest::deploy(deployer.clone(), ())
             .unwrap()
             .send()
             .await
-            .unwrap();
-
-        (contract, provider)
-    }
-
-    pub(crate) async fn get_hotshot_contract_and_provider() -> (
-        HotShot<
-            SignerMiddleware<
-                ethers::providers::Provider<Http>,
-                Wallet<ethers::core::k256::ecdsa::SigningKey>,
-            >,
-        >,
-        Provider<Http>,
-    ) {
-        let (provider, deployer) = get_provider_and_deployer().await;
-        let hotshot = HotShot::deploy(deployer.clone(), ())
             .unwrap()
-            .send()
-            .await
-            .unwrap();
-
-        (hotshot, provider)
     }
 }
 

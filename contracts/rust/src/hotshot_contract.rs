@@ -2,14 +2,19 @@
 
 mod test {
 
+    use crate::helpers::hotshot_contract::get_provider_and_deployer;
     use contract_bindings::hot_shot::NewBlocksCall;
+    use contract_bindings::HotShot;
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
-
-    use crate::helpers::hotshot_contract::get_hotshot_contract_and_provider;
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
-        let (hotshot, provider) = get_hotshot_contract_and_provider().await;
+        let (provider, deployer) = get_provider_and_deployer().await;
+        let hotshot = HotShot::deploy(deployer.clone(), ())
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
 
         let block_num = U256::from(0);
         let commitment = U256::from(1234);

@@ -2,7 +2,7 @@
 
 mod test {
 
-    use crate::helpers::hotshot_contract::get_bls_test_contract_and_provider;
+    use crate::helpers::hotshot_contract::get_bls_test_contract;
     use crate::helpers::{compare_field_elems, compare_group_elems, MyG1Point, MyG2Point};
     use ark_bn254::Fq;
     use ark_ec::CurveGroup;
@@ -38,7 +38,7 @@ mod test {
         let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
         assert!(BLSOverBN254CurveSignatureScheme::verify(&(), &pk, &message, &sig).is_ok());
 
-        let (bls, _) = get_bls_test_contract_and_provider().await;
+        let bls = get_bls_test_contract().await;
 
         let sig_value: MyG1Point = sig.clone().get_sig_value().into_affine().into();
 
@@ -84,7 +84,7 @@ mod test {
 
     #[async_std::test]
     async fn test_hash_to_field() {
-        let (hotshot, _) = get_bls_test_contract_and_provider().await;
+        let bls = get_bls_test_contract().await;
 
         // Same as in the hash_to_curve function
         // See https://github.com/EspressoSystems/jellyfish/blob/6c2c08f4e966fd1d454d48bcf30bd41a952f9f76/primitives/src/signatures/bls_over_bn254.rs#L310
@@ -95,19 +95,19 @@ mod test {
 
         for msg in msgs.iter() {
             let x_rust: Fq = hasher.hash_to_field(msg, 1)[0];
-            let x_contract = hotshot.hash_to_field(msg.clone()).call().await.unwrap();
+            let x_contract = bls.hash_to_field(msg.clone()).call().await.unwrap();
             compare_field_elems(x_rust, x_contract);
         }
     }
 
     #[async_std::test]
     async fn test_hash_to_curve() {
-        let (hotshot, _) = get_bls_test_contract_and_provider().await;
+        let bls = get_bls_test_contract().await;
 
         let msgs = test_inputs();
         for msg in msgs.iter() {
             let group_elem = hash_to_curve::<Keccak256>(msg);
-            let group_elem_contract = hotshot.hash_to_curve(msg.clone()).call().await.unwrap();
+            let group_elem_contract = bls.hash_to_curve(msg.clone()).call().await.unwrap();
             compare_group_elems(group_elem.into(), group_elem_contract);
         }
     }
