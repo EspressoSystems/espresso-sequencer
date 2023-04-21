@@ -16,15 +16,6 @@ library BLSSig {
     // This library implements the verification of the BLS signature scheme over the BN254 curve
     // following the rust implementation at https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
 
-    // Helper functions
-    // TODO gas optimization
-    function bytes32ToUint8Array(bytes32 input) internal pure returns (uint8[] memory output) {
-        output = new uint8[](32);
-        for (uint256 i = 0; i < 32; i++) {
-            output[i] = uint8(uint256(input) / (2 ** (8 * (31 - i))));
-        }
-    }
-
     // TODO gas optimization
     function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
         uint256 r = 0;
@@ -37,7 +28,7 @@ library BLSSig {
     /// @dev Takes a sequence of bytes and turn in into another sequence of bytes with fixed size. Equivalent of https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L37
     /// @param message message to be "expanded"
     /// @return fixed size array of bytes
-    function expand(bytes memory message) internal pure returns (uint8[] memory) {
+    function expand(bytes memory message) internal pure returns (bytes memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
         bytes1 ell = 0x02; // (n+(b_len-1))/b_len where n=48
@@ -72,32 +63,32 @@ library BLSSig {
         bytes32 bi = keccak256(buffer);
 
         // Building uniform_bytes
-        uint8[] memory uniform_bytes = new uint8[](block_size);
+        bytes memory uniform_bytes = new bytes(block_size);
 
         // Copy bi into uniform_bytes
-        uint8[] memory bi_u8arr = bytes32ToUint8Array(bi);
-        for (uint256 i = 0; i < bi_u8arr.length; i++) {
-            uniform_bytes[i] = bi_u8arr[i];
+        bytes memory bi_bytes = bytes.concat(bi);
+        for (uint256 i = 0; i < bi_bytes.length; i++) {
+            uniform_bytes[i] = bi_bytes[i];
         }
 
-        uint8[] memory b0_u8arr = bytes32ToUint8Array(b0);
+        bytes memory b0_bytes = bytes.concat(b0);
 
         // In our case ell=2 so we do not have an outer loop
         // https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L100
 
         buffer = "";
         for (uint256 j = 0; j < b_len; j++) {
-            bytes1 v = bytes1(b0_u8arr[j] ^ bi_u8arr[j]);
+            bytes1 v = bytes1(b0_bytes[j] ^ bi_bytes[j]);
             buffer = bytes.concat(buffer, v);
         }
         buffer = bytes.concat(buffer, ell, dst_prime);
 
         bi = keccak256(buffer);
-        bi_u8arr = bytes32ToUint8Array(bi);
+        bi_bytes = bytes.concat(bi);
 
         //uint256 number_of_extra_elements = block_size - b_len; // Complete until block_size elements
         for (uint256 i = 0; i < block_size - b_len; i++) {
-            uniform_bytes[b_len + i] = bi_u8arr[i];
+            uniform_bytes[b_len + i] = bi_bytes[i];
         }
 
         return uniform_bytes;
@@ -107,12 +98,12 @@ library BLSSig {
     /// @param message input message to be hashed
     /// @return field element in Fq
     function hash_to_field(bytes memory message) internal pure returns (uint256) {
-        uint8[] memory uniform_bytes = expand(message);
+        bytes memory uniform_bytes = expand(message);
 
         // Reverse uniform_bytes
         uint256 n = uniform_bytes.length;
         assert(n == 48);
-        uint8[] memory uniform_bytes_reverted = new uint8[](n);
+        bytes memory uniform_bytes_reverted = new bytes(n);
 
         for (uint256 i = 0; i < n; i++) {
             uniform_bytes_reverted[i] = uniform_bytes[n - i - 1];
@@ -130,7 +121,7 @@ library BLSSig {
         uint8[] memory second_slice = new uint8[](num_bytes_directly_to_convert);
 
         for (uint256 i = 0; i < num_bytes_directly_to_convert; i++) {
-            second_slice[i] = uniform_bytes_reverted[n - num_bytes_directly_to_convert + i];
+            second_slice[i] = uint8(uniform_bytes_reverted[n - num_bytes_directly_to_convert + i]);
         }
 
         res = big_int_from_bytes(second_slice);
@@ -141,7 +132,7 @@ library BLSSig {
         uint256 arr_size = n - num_bytes_directly_to_convert;
         for (uint256 i = 0; i < arr_size; i++) {
             // Compute field element from a single byte
-            uint256 field_elem = uint256(uniform_bytes_reverted[arr_size - i - 1]); // In reverse
+            uint256 field_elem = uint256(uint8(uniform_bytes_reverted[arr_size - i - 1])); // In reverse
 
             res = mulmod(res, window_size, p);
             res = addmod(res, field_elem, p);
