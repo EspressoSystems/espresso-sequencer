@@ -28,7 +28,7 @@ pub struct State {
     // because they do not need to constantly sync up with a full node.
     accounts: BTreeMap<Address, Account>,
     block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
-    pub prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
+    prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
 }
 
 impl Committable for State {
@@ -151,7 +151,6 @@ impl State {
         }
         self.block_hash = Some(block.hash());
         self.prev_state_commitment = Some(state_commitment);
-        dbg!("MIGRATE STATE");
 
         Proof::generate(
             self.block_hash.unwrap(),

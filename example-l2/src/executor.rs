@@ -127,8 +127,6 @@ pub async fn run_executor(
                 tracing::warn!("Failed to submit proof to contract, retrying");
                 sleep(std::time::Duration::from_secs(1)).await;
             }
-
-            dbg!("SUBMITTED A PROOF");
         }
         block_height = current_block_height;
         stream.next().await;
