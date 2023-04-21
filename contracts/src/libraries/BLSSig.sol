@@ -40,37 +40,34 @@ library BLSSig {
     function expand(bytes memory message) internal pure returns (uint8[] memory) {
         uint8 block_size = 48;
         uint256 b_len = 32; // Output length of sha256 in number of bytes
-        uint8 ell = 2; // (n+(b_len-1))/b_len where n=48
+        bytes1 ell = 0x02; // (n+(b_len-1))/b_len where n=48
 
         // Final value of buffer must be: z_pad || message || lib_str || 0 || dst_prime
 
-        uint8 zero_u8 = 0;
-        uint8 one_u8 = 1;
+        bytes1 zero_u8 = 0x00;
+        bytes1 one_u8 = 0x01;
 
         // z_pad
         bytes memory buffer = new bytes(block_size);
 
         // message
-        buffer = BytesLib.concat(buffer, message);
+        buffer = bytes.concat(buffer, message);
 
         // lib_str
-        buffer = abi.encodePacked(buffer, zero_u8);
-        buffer = abi.encodePacked(buffer, block_size);
+        buffer = bytes.concat(buffer, zero_u8, bytes1(block_size));
 
         // 0 separator
-        uint8 single_zero = zero_u8; //
-        buffer = abi.encodePacked(buffer, single_zero);
+        bytes1 single_zero = zero_u8; //
+        buffer = bytes.concat(buffer, single_zero);
 
         // dst_prime = [1,1]
         bytes2 dst_prime = 0x0101;
 
-        buffer = abi.encodePacked(buffer, dst_prime);
+        buffer = bytes.concat(buffer, dst_prime);
 
         bytes32 b0 = keccak256(buffer);
 
-        buffer = abi.encodePacked(b0);
-        buffer = abi.encodePacked(buffer, one_u8);
-        buffer = abi.encodePacked(buffer, dst_prime);
+        buffer = bytes.concat(b0, one_u8, dst_prime);
 
         bytes32 bi = keccak256(buffer);
 
@@ -88,16 +85,12 @@ library BLSSig {
         // In our case ell=2 so we do not have an outer loop
         // https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L100
 
+        buffer = "";
         for (uint256 j = 0; j < b_len; j++) {
-            uint8 v = b0_u8arr[j] ^ bi_u8arr[j];
-            if (j == 0) {
-                buffer = abi.encodePacked(v); // v
-            } else {
-                buffer = abi.encodePacked(buffer, v); // buffer,v
-            }
+            bytes1 v = bytes1(b0_u8arr[j] ^ bi_u8arr[j]);
+            buffer = bytes.concat(buffer, v);
         }
-        buffer = abi.encodePacked(buffer, ell);
-        buffer = abi.encodePacked(buffer, dst_prime);
+        buffer = bytes.concat(buffer, ell, dst_prime);
 
         bi = keccak256(buffer);
         bi_u8arr = bytes32ToUint8Array(bi);
