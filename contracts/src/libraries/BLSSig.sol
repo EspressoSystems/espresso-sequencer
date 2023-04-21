@@ -176,9 +176,6 @@ library BLSSig {
         view
         returns (bool)
     {
-        uint256 x;
-        uint256 y;
-
         // Check the signature is a valid G1 point
         // Note: checking pk belong to G2 is not possible in practice https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         BN254.validateG1Point(sig);
@@ -188,7 +185,7 @@ library BLSSig {
 
         bytes memory input = bytes.concat(message, csid_suffix);
 
-        (x, y) = hash_to_curve(input);
+        (uint256 x, uint256 y) = hash_to_curve(input);
         BN254.G1Point memory hash = BN254.G1Point(x, y);
 
         bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
