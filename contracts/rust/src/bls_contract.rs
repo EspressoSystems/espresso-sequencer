@@ -50,7 +50,7 @@ mod test {
         let pk_affine = pk.to_affine();
         let pk_value: MyG2Point = pk_affine.into();
 
-        let is_sig_valid_contract: bool = hotshot
+        let is_sig_valid_contract: bool = bls
             .verify_bls_sig(
                 message.clone(),
                 sig_value.clone().into(),
@@ -66,7 +66,7 @@ mod test {
             BLSOverBN254CurveSignatureScheme::verify(&(), &pk, wrong_message.clone(), &sig)
                 .is_err()
         );
-        let is_sig_valid_contract = hotshot
+        let is_sig_valid_contract = bls
             .verify_bls_sig(
                 wrong_message.clone(),
                 sig_value.clone().into(),
@@ -81,7 +81,7 @@ mod test {
         assert!(BLSOverBN254CurveSignatureScheme::verify(&(), &wrong_pk, &message, &sig).is_err());
 
         let wrong_pk_value: MyG2Point = wrong_pk.to_affine().into();
-        let is_sig_valid_contract = hotshot
+        let is_sig_valid_contract = bls
             .verify_bls_sig(message.clone(), sig_value.into(), wrong_pk_value.into())
             .call()
             .await
