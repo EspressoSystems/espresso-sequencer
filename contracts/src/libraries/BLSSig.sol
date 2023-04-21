@@ -186,7 +186,7 @@ library BLSSig {
         // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_" See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
         bytes memory csid_suffix = "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
 
-        bytes memory input = BytesLib.concat(message, csid_suffix);
+        bytes memory input = bytes.concat(message, csid_suffix);
 
         (x, y) = hash_to_curve(input);
         BN254.G1Point memory hash = BN254.G1Point(x, y);
