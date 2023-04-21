@@ -14,11 +14,7 @@ contract BLSTest {
         return BLSSig.hash_to_curve(input);
     }
 
-    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
-        public
-        view
-        returns (bool)
-    {
-        return BLSSig.verify_bls_sig(message, sig, pk);
+    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk) public view {
+        BLSSig.verify_bls_sig(message, sig, pk);
     }
 }

@@ -166,16 +166,11 @@ library BLSSig {
         return (x, y);
     }
 
-    /// @dev Verify a bls signature
+    /// @dev Verify a bls signature. Reverts if the signature is invalid
     /// @param message message to check the signature against
     /// @param sig signature represented as a point in BN254.G_1
     /// @param pk public key represented as a point in BN254.G_2
-    /// @return true if the signature is valid, false otherwise.
-    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
-        internal
-        view
-        returns (bool)
-    {
+    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk) internal view {
         // Check the signature is a valid G1 point
         // Note: checking pk belong to G2 is not possible in practice https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         BN254.validateG1Point(sig);
@@ -190,6 +185,6 @@ library BLSSig {
 
         bool res = BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2());
 
-        return res;
+        require(res, "BLS signature verification failed.");
     }
 }
