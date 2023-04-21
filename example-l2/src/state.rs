@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::error::RollupError;
+use crate::prover::Proof;
 use crate::transaction::SignedTransaction;
 use crate::RollupVM;
 
@@ -21,7 +22,6 @@ pub struct Account {
 #[derive(Debug, Clone)]
 pub struct State {
     // Account state, represented as a BTreeMap so that we can obtain a canonical serialization of the data structure for the state commitment
-    //
     // A live rollup would likely represent accounts as a Sparse Merkle Tree instead of a BTreeMap.
     // Rollup clients would then be able to use merkle proofs to authenticate a subset of user balances
     // without knowledge of the entire account state. Such "light clients" are less constrained by bandwidth
@@ -138,7 +138,7 @@ impl State {
             .unwrap_or(0)
     }
 
-    pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) {
+    pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
         let state_commitment = self.commit();
         for txn in block.block().vm_transactions(&RollupVM) {
             let res = self.apply_transaction(&txn);
@@ -151,6 +151,12 @@ impl State {
         }
         self.block_hash = Some(block.hash());
         self.prev_state_commitment = Some(state_commitment);
+
+        Proof::generate(
+            self.block_hash.unwrap(),
+            self.commit(),
+            self.prev_state_commitment.unwrap(),
+        )
     }
 }
 #[cfg(test)]

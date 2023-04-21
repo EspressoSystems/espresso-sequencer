@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use ark_serialize::CanonicalDeserialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_std::sync::RwLock;
+use async_std::task::sleep;
 use commit::Committable;
+use contract_bindings::example_rollup::ExampleRollup;
 use contract_bindings::HotShot;
 use ethers::prelude::*;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
@@ -14,7 +16,11 @@ use crate::state::State;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>>) {
+pub async fn run_executor(
+    rollup_address: Address,
+    opt: &HotShotContractOptions,
+    state: Arc<RwLock<State>>,
+) {
     let query_service_url = opt.query_service_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url.clone());
     hotshot.connect(None).await;
@@ -40,8 +46,9 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
         }
     };
 
-    let contract = HotShot::new(opt.hotshot_address, l1.clone());
-    let blocks_filter = contract.new_blocks_filter().filter;
+    let rollup_contract = ExampleRollup::new(rollup_address, l1.clone());
+    let hotshot_contract = HotShot::new(opt.hotshot_address, l1.clone());
+    let blocks_filter = hotshot_contract.new_blocks_filter().filter;
     let mut stream = match socket_provider.subscribe_logs(&blocks_filter).await {
         Ok(stream) => stream,
         Err(err) => {
@@ -53,7 +60,7 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
 
     let mut block_height = 0;
     loop {
-        let current_block_height = match contract.block_height().call().await {
+        let current_block_height = match hotshot_contract.block_height().call().await {
             Ok(from) => from.as_u64(),
             Err(err) => {
                 tracing::error!("Unable to read block_height from contract: {}", err);
@@ -64,7 +71,7 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
         // Get commitments
         for i in block_height..current_block_height {
             let mut commit_bytes = [0; 32];
-            let commitment = match contract.commitments(U256::from(i)).call().await {
+            let commitment = match hotshot_contract.commitments(U256::from(i)).call().await {
                 // TODO: Replace these with typed errors
                 Ok(commitment) => commitment,
                 Err(err) => {
@@ -103,8 +110,24 @@ pub async fn run_executor(opt: &HotShotContractOptions, state: Arc<RwLock<State>
             }
 
             let mut state_lock = state.write().await;
-            // TODO: forward state commitment to Rollup alongside mock proof, possibly return updated state commitment/proof from execute_block
-            state_lock.execute_block(&block).await;
+            let proof = state_lock.execute_block(&block).await;
+
+            let mut buf = vec![];
+            state_lock.commit().serialize(&mut buf).unwrap();
+            let state_comm: [u8; 32] = buf.try_into().unwrap();
+            let state_comm = U256::from_little_endian(&state_comm);
+            let proof = Bytes::from(proof.0);
+
+            dbg!("Submitting rollup proof");
+            while sequencer::hotshot_commitment::send(
+                rollup_contract.new_block(state_comm, proof.clone()),
+            )
+            .await
+            .is_none()
+            {
+                tracing::warn!("failed to sequence batches, retrying");
+                sleep(std::time::Duration::from_secs(1)).await;
+            }
         }
         block_height = current_block_height;
         stream.next().await;
@@ -118,6 +141,7 @@ mod test {
 
     use super::*;
     use async_std::task::spawn;
+    use contract_bindings::example_rollup::ExampleRollup;
     use contract_bindings::TestClients;
     use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
@@ -142,14 +166,19 @@ mod test {
 
     #[async_std::test]
     async fn test_execute() {
-        // Start a test HotShot contract
+        // Start a test HotShota and Rollup contract
         let anvil = Anvil::spawn(None).await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer.clone();
-        let hotshot = HotShot::deploy(deployer.clone(), ())
+        let hotshot_contract = HotShot::deploy(deployer.clone(), ())
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        let rollup_contract = ExampleRollup::deploy(deployer.clone(), hotshot_contract.address())
             .unwrap()
             .send()
             .await
@@ -203,14 +232,15 @@ mod test {
         let hotshot_opt = HotShotContractOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
-            hotshot_address: hotshot.address(),
+            hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
             query_service_url: sequencer_url,
         };
         let options = hotshot_opt.clone();
         let state_lock = state.clone();
+        let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
-        spawn(async move { run_executor(&options, state_lock).await });
+        spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
         // Loop until the Rollup executes our transaction
         let max_time = Duration::from_secs(75);
@@ -226,5 +256,14 @@ mod test {
                 break;
             }
         }
+
+        let mut buf = vec![];
+        state.write().await.commit().serialize(&mut buf).unwrap();
+        let state_comm: [u8; 32] = buf.try_into().unwrap();
+        let state_comm = U256::from_little_endian(&state_comm);
+
+        let state_commitment = rollup_contract.state_commitment().call().await.unwrap();
+        assert_eq!(state_commitment, state_comm);
+        // assert_eq!(test, U256::from(1));
     }
 }

@@ -180,7 +180,7 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     }
 }
 
-async fn send<T: Detokenize>(
+pub async fn send<T: Detokenize>(
     call: ContractCall<Middleware, T>,
 ) -> Option<(TransactionReceipt, u64)> {
     let pending = match call.send().await {

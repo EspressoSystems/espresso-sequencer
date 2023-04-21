@@ -4,6 +4,7 @@ use transaction::SignedTransaction;
 pub mod api;
 pub mod error;
 pub mod executor;
+mod prover;
 pub mod state;
 pub mod transaction;
 
