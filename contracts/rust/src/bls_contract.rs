@@ -43,7 +43,7 @@ mod test {
         let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
         assert!(BLSOverBN254CurveSignatureScheme::verify(&(), &pk, &message, &sig).is_ok());
 
-        let (hotshot, _) = get_bls_test_contract_and_provider().await;
+        let (bls, _) = get_bls_test_contract_and_provider().await;
 
         let sig_value: MyG1Point = sig.clone().get_sig_value().into_affine().into();
 
