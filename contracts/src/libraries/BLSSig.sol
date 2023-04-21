@@ -17,7 +17,7 @@ library BLSSig {
     // following the rust implementation at https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
 
     // TODO gas optimization
-    function big_int_from_bytes(uint8[] memory input) private pure returns (uint256) {
+    function uint8ArrayToBytes(uint8[] memory input) private pure returns (uint256) {
         uint256 r = 0;
         for (uint256 i = 0; i < input.length; i++) {
             r += 2 ** (8 * i) * input[i];
@@ -86,7 +86,6 @@ library BLSSig {
         bi = keccak256(buffer);
         bi_bytes = bytes.concat(bi);
 
-        //uint256 number_of_extra_elements = block_size - b_len; // Complete until block_size elements
         for (uint256 i = 0; i < block_size - b_len; i++) {
             uniform_bytes[b_len + i] = bi_bytes[i];
         }
@@ -114,9 +113,6 @@ library BLSSig {
         // Do the split
         uint256 num_bytes_directly_to_convert = 31; // Fixed for Fq
 
-        // Create the initial field element
-        uint256 res = 0;
-
         // Process the second slice
         uint8[] memory second_slice = new uint8[](num_bytes_directly_to_convert);
 
@@ -124,7 +120,7 @@ library BLSSig {
             second_slice[i] = uint8(uniform_bytes_reverted[n - num_bytes_directly_to_convert + i]);
         }
 
-        res = big_int_from_bytes(second_slice);
+        uint256 res = uint8ArrayToBytes(second_slice);
 
         uint256 window_size = 256;
         uint256 p = BN254.P_MOD;

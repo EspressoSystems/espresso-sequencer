@@ -28,9 +28,7 @@ mod test {
 
         let message3 = Bytes::from(vec![33u8; 1000]);
 
-        let res = vec![message1, message2, message3];
-
-        res
+        vec![message1, message2, message3]
     }
 
     #[async_std::test]
