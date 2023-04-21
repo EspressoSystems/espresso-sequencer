@@ -45,8 +45,7 @@ mod test {
 
         let sig_value: MyG1Point = sig.clone().get_sig_value().into_affine().into();
 
-        let pk_affine = pk.to_affine();
-        let pk_value: MyG2Point = pk_affine.into();
+        let pk_value: MyG2Point = pk.to_affine().into();
 
         let is_sig_valid_contract: bool = bls
             .verify_bls_sig(
