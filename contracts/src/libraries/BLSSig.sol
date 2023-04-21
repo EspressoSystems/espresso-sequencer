@@ -184,7 +184,7 @@ library BLSSig {
         BN254.validateG1Point(sig);
 
         // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_" See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
-        bytes memory csid_suffix = hex"424c535f5349475f424e32353447315f584d443a4b454343414b5f4e4354485f4e554c5f";
+        bytes memory csid_suffix = "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
 
         bytes memory input = BytesLib.concat(message, csid_suffix);
 
