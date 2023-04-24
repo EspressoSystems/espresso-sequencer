@@ -1,9 +1,15 @@
 pragma solidity ^0.8.0;
 
+import {BN254} from "bn254/BN254.sol";
+
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
     uint256 public blockHeight;
+
+    // Stake table related data structures
+    mapping(uint256 => uint256) private stakeAmounts;
+    BN254.G2Point[] private stakingKeys;
 
     event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
@@ -40,5 +46,16 @@ contract HotShot {
         }
 
         emit NewBlocks(firstBlockNumber, newCommitments.length);
+    }
+
+    // Stake table related functions
+    function addNewStakingKey(BN254.G2Point memory staking_key, uint256 amount) public {
+        uint256 index = stakingKeys.length;
+        stakeAmounts[index] = amount;
+        stakingKeys.push(staking_key);
+    }
+
+    function getStakingKey(uint256 index) public view returns (BN254.G2Point memory, uint256) {
+        return (stakingKeys[index], stakeAmounts[index]);
     }
 }
