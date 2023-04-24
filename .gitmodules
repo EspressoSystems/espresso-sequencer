@@ -17,3 +17,6 @@
 	path = contracts/lib/bn254
 	url = https://github.com/EspressoSystems/solidity-bn254
 	branch = v0.1.0
+[submodule "contracts/lib/solidity-BN256G2"]
+	path = contracts/lib/solidity-BN256G2
+	url = https://github.com/musalbas/solidity-BN256G2
