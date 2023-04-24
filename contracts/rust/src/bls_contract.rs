@@ -40,7 +40,7 @@ mod test {
 
         let bls = get_bls_test_contract().await;
 
-        let sig_value: MyG1Point = sig.clone().get_sig_value().into_affine().into();
+        let sig_value: MyG1Point = sig.clone().sigma.into_affine().into();
 
         let pk_value: MyG2Point = pk.to_affine().into();
 
