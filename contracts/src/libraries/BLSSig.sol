@@ -175,7 +175,7 @@ library BLSSig {
         // Note: checking pk belong to G2 is not possible in practice https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
         BN254.validateG1Point(sig);
 
-        // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_" See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
+        // Hardcoded suffix See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
         bytes memory csid_suffix = "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
 
         bytes memory input = bytes.concat(message, csid_suffix);
