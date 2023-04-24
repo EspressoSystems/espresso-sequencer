@@ -1,5 +1,5 @@
 use commit::Commitment;
-use hotshot_query_service::availability::BlockHash;
+use hotshot_query_service::availability::BlockQueryData;
 use sequencer::SeqTypes;
 
 use crate::state::State;
@@ -11,7 +11,7 @@ pub(crate) struct Proof(pub Vec<u8>);
 
 impl Proof {
     pub fn generate(
-        _block_commitment: BlockHash<SeqTypes>,
+        _block: &BlockQueryData<SeqTypes>, // A real prover would use the block commitment and transaction set to construct the state transition proof
         _state_commitment: Commitment<State>,
         _previous_state_commitment: Commitment<State>,
     ) -> Self {

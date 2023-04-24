@@ -152,11 +152,7 @@ impl State {
         self.block_hash = Some(block.hash());
         self.prev_state_commitment = Some(state_commitment);
 
-        Proof::generate(
-            self.block_hash.unwrap(),
-            self.commit(),
-            self.prev_state_commitment.unwrap(),
-        )
+        Proof::generate(block, self.commit(), self.prev_state_commitment.unwrap())
     }
 }
 #[cfg(test)]

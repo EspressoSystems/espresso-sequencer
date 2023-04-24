@@ -18,6 +18,9 @@ use crate::state::State;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
+/// Runs the executor service, which is responsible for:
+/// 1) Fetching blocks of ordered transactions from HotShot and applying them to the Rollup State.
+/// 2) Submitting mock proofs to the Rollup Contract.
 pub async fn run_executor(
     rollup_address: Address,
     opt: &HotShotContractOptions,
@@ -156,7 +159,7 @@ mod test {
     use sequencer::VmTransaction;
     use sequencer_utils::{commitment_to_u256, Anvil};
     use std::path::Path;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
     use surf_disco::{Client, Url};
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
@@ -182,6 +185,18 @@ mod test {
             .send()
             .await
             .unwrap();
+
+        // Setup a WS connection to the rollup contract and subscribe to state updates
+        let max_updates = 5;
+        let mut ws_url = anvil.url();
+        ws_url.set_scheme("ws").unwrap();
+        let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
+        let state_update_filter = rollup_contract.state_update_filter().filter;
+        let mut stream = socket_provider
+            .subscribe_logs(&state_update_filter)
+            .await
+            .unwrap()
+            .take(max_updates);
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -241,26 +256,21 @@ mod test {
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
         spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
-        // Loop until the rollup executes our transaction
-        let max_time = Duration::from_secs(75);
-        let mut time_elapsed;
-        let start_time = Instant::now();
-        loop {
-            time_elapsed = Instant::now() - start_time;
-            if time_elapsed > max_time {
-                panic!("Transaction not sequenced in time");
-            }
+        // Wait for the rollup contract to process all state updates
+        let mut num_updates = 0;
+        while stream.next().await.is_none() {
+            num_updates += 1;
+            let state_comm = state.read().await.commit();
             let bob_balance = state.read().await.get_balance(&bob.address());
-            if bob_balance == 100 {
+            let state_comm = commitment_to_u256(state_comm);
+            let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
+            // Ensure that the state commitments match AND that Bob's balance updates as expected
+            if state_comm == contract_state_comm && bob_balance == 100 {
                 break;
+            } else if num_updates == max_updates {
+                // Panic if the rollup contract never catches up to the rollup
+                panic!("Rollup contract failed to process state update");
             }
         }
-
-        // Wait for the rollup contract to catch up to the rollup state
-        std::thread::sleep(Duration::from_secs(5));
-        let state_comm = state.write().await.commit();
-        let state_comm = commitment_to_u256(state_comm);
-        let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
-        assert_eq!(state_comm, contract_state_comm);
     }
 }
