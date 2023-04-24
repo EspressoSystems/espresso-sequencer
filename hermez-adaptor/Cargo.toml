@@ -20,7 +20,7 @@ clap = { version = "4.1", features = ["derive", "env"] }
 contract-bindings = { path = "../contract-bindings" }
 dotenvy = "0.15.6"
 escargot = "0.5.7"
-ethers = "1.0"
+ethers = "2.0"
 futures = "0.3"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.4.13", features = ["async-std-executor", "channel-async-std"] }

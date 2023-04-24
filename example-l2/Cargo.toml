@@ -10,7 +10,7 @@ async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.2.1"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 contract-bindings = { path = "../contract-bindings" }
-ethers = { version = "1.0.2", features = ["ws"] }
+ethers = { version = "2.0.3", features = ["ws"] }
 futures = "0.3.28"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git", tag = "0.0.5" }
 rand = "0.8.5"
