@@ -13,9 +13,9 @@ ark-std = { version = "0.4.0", default-features = false }
 async-std = "1.12.0"
 contract-bindings = { path = "../../contract-bindings" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
-ethers = { version = "1.0.2", features = ["abigen"] }
+ethers = { version = "2.0.3", features = ["abigen"] }
 ethers-providers = "2.0.0"
-ethers-solc = "1.0.2"
+ethers-solc = "2.0.3"
 hex = "0.4.3"
 
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish" }
