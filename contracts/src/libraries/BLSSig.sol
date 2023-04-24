@@ -17,7 +17,7 @@ library BLSSig {
     // following the rust implementation at https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
 
     // TODO gas optimization
-    function uint256FromBytes(uint8[] memory input) private pure returns (uint256) {
+    function uint256FromBytesLittleEndian(uint8[] memory input) private pure returns (uint256) {
         uint256 r = 0;
         for (uint256 i = 0; i < input.length; i++) {
             r += 2 ** (8 * i) * input[i];
@@ -120,7 +120,7 @@ library BLSSig {
             second_slice[i] = uint8(uniform_bytes_reverted[n - num_bytes_directly_to_convert + i]);
         }
 
-        uint256 res = uint256FromBytes(second_slice);
+        uint256 res = uint256FromBytesLittleEndian(second_slice);
 
         uint256 window_size = 256;
         uint256 p = BN254.P_MOD;
