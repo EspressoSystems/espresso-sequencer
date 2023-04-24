@@ -1,27 +1,15 @@
 #[cfg(test)]
 
 mod test {
-    use contract_bindings::hot_shot::{HotShot, NewBlocksCall};
-    use contract_bindings::TestClients;
-    use ethers::{
-        abi::AbiDecode,
-        providers::{Middleware, Provider},
-        types::U256,
-    };
-    use sequencer_utils::Anvil;
-    use std::time::Duration;
+
+    use crate::helpers::hotshot_contract::get_provider_and_deployer;
+    use contract_bindings::hot_shot::NewBlocksCall;
+    use contract_bindings::HotShot;
+    use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
 
     #[async_std::test]
-    async fn test_hotshot_contract() {
-        let anvil = Anvil::spawn(None).await;
-
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
-
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
-
+    async fn test_hotshot_block_commitment() {
+        let (provider, deployer) = get_provider_and_deployer().await;
         let hotshot = HotShot::deploy(deployer.clone(), ())
             .unwrap()
             .send()
