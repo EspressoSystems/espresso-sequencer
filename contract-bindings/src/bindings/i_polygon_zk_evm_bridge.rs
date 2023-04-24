@@ -1,72 +1,76 @@
 pub use i_polygon_zk_evm_bridge::*;
-#[allow(clippy::too_many_arguments, non_camel_case_types)]
+/// This module was auto-generated with ethers-rs Abigen.
+/// More information at: <https://github.com/gakonst/ethers-rs>
+#[allow(
+    clippy::enum_variant_names,
+    clippy::too_many_arguments,
+    clippy::upper_case_acronyms,
+    clippy::type_complexity,
+    dead_code,
+    non_camel_case_types
+)]
 pub mod i_polygon_zk_evm_bridge {
-    #![allow(clippy::enum_variant_names)]
-    #![allow(dead_code)]
-    #![allow(clippy::type_complexity)]
-    #![allow(unused_imports)]
-    use ethers::contract::{
-        builders::{ContractCall, Event},
-        Contract, Lazy,
-    };
-    use ethers::core::{
-        abi::{Abi, Detokenize, InvalidOutputType, Token, Tokenizable},
-        types::*,
-    };
-    use ethers::providers::Middleware;
-    #[doc = "IPolygonZkEVMBridge was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
-    use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"AlreadyClaimed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"AmountDoesNotMatchMsgValue\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"DestinationNetworkInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"EtherTransferFailed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"GlobalExitRootInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidSmtProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"MessageFailed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"MsgValueNotZero\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidAmount\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidOwner\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidSignature\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidSpender\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyPolygonZkEVM\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"activateEmergencyState\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"permitData\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"payable\",\"type\":\"function\",\"name\":\"bridgeAsset\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"payable\",\"type\":\"function\",\"name\":\"bridgeMessage\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32[32]\",\"name\":\"smtProof\",\"type\":\"bytes32[32]\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"index\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"originTokenAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"claimAsset\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32[32]\",\"name\":\"smtProof\",\"type\":\"bytes32[32]\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"index\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"originAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"claimMessage\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"deactivateEmergencyState\",\"outputs\":[]}]" ;
-    #[doc = r" The parsed JSON-ABI of the contract."]
-    pub static IPOLYGONZKEVMBRIDGE_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
-        ethers::contract::Lazy::new(|| {
-            ethers::core::utils::__serde_json::from_str(__ABI).expect("invalid abi")
+    #[rustfmt::skip]
+    const __ABI: &str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"AlreadyClaimed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"AmountDoesNotMatchMsgValue\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"DestinationNetworkInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"EtherTransferFailed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"GlobalExitRootInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidSmtProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"MessageFailed\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"MsgValueNotZero\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidAmount\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidOwner\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidSignature\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotValidSpender\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyPolygonZkEVM\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"activateEmergencyState\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"permitData\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"payable\",\"type\":\"function\",\"name\":\"bridgeAsset\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"payable\",\"type\":\"function\",\"name\":\"bridgeMessage\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32[32]\",\"name\":\"smtProof\",\"type\":\"bytes32[32]\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"index\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"originTokenAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"claimAsset\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32[32]\",\"name\":\"smtProof\",\"type\":\"bytes32[32]\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"index\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"mainnetExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"bytes32\",\"name\":\"rollupExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"originNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"originAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint32\",\"name\":\"destinationNetwork\",\"type\":\"uint32\",\"components\":[]},{\"internalType\":\"address\",\"name\":\"destinationAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"bytes\",\"name\":\"metadata\",\"type\":\"bytes\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"claimMessage\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"deactivateEmergencyState\",\"outputs\":[]}]";
+    ///The parsed JSON ABI of the contract.
+    pub static IPOLYGONZKEVMBRIDGE_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+        ::ethers::contract::Lazy::new(|| {
+            ::ethers::core::utils::__serde_json::from_str(__ABI).expect("ABI is always valid")
         });
-    pub struct IPolygonZkEVMBridge<M>(ethers::contract::Contract<M>);
-    impl<M> Clone for IPolygonZkEVMBridge<M> {
+    pub struct IPolygonZkEVMBridge<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for IPolygonZkEVMBridge<M> {
         fn clone(&self) -> Self {
-            IPolygonZkEVMBridge(self.0.clone())
+            Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> std::ops::Deref for IPolygonZkEVMBridge<M> {
-        type Target = ethers::contract::Contract<M>;
+    impl<M> ::core::ops::Deref for IPolygonZkEVMBridge<M> {
+        type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> std::fmt::Debug for IPolygonZkEVMBridge<M> {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    impl<M> ::core::ops::DerefMut for IPolygonZkEVMBridge<M> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+    impl<M> ::core::fmt::Debug for IPolygonZkEVMBridge<M> {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             f.debug_tuple(stringify!(IPolygonZkEVMBridge))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ethers::providers::Middleware> IPolygonZkEVMBridge<M> {
-        #[doc = r" Creates a new contract instance with the specified `ethers`"]
-        #[doc = r" client at the given `Address`. The contract derefs to a `ethers::Contract`"]
-        #[doc = r" object"]
-        pub fn new<T: Into<ethers::core::types::Address>>(
+    impl<M: ::ethers::providers::Middleware> IPolygonZkEVMBridge<M> {
+        /// Creates a new contract instance with the specified `ethers` client at
+        /// `address`. The contract derefs to a `ethers::Contract` object.
+        pub fn new<T: Into<::ethers::core::types::Address>>(
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            ethers::contract::Contract::new(address.into(), IPOLYGONZKEVMBRIDGE_ABI.clone(), client)
-                .into()
+            Self(::ethers::contract::Contract::new(
+                address.into(),
+                IPOLYGONZKEVMBRIDGE_ABI.clone(),
+                client,
+            ))
         }
-        #[doc = "Calls the contract's `activateEmergencyState` (0x2072f6c5) function"]
-        pub fn activate_emergency_state(&self) -> ethers::contract::builders::ContractCall<M, ()> {
+        ///Calls the contract's `activateEmergencyState` (0x2072f6c5) function
+        pub fn activate_emergency_state(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([32, 114, 246, 197], ())
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `bridgeAsset` (0x0871e971) function"]
+        ///Calls the contract's `bridgeAsset` (0x0871e971) function
         pub fn bridge_asset(
             &self,
-            token: ethers::core::types::Address,
+            token: ::ethers::core::types::Address,
             destination_network: u32,
-            destination_address: ethers::core::types::Address,
-            amount: ethers::core::types::U256,
-            permit_data: ethers::core::types::Bytes,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+            destination_address: ::ethers::core::types::Address,
+            amount: ::ethers::core::types::U256,
+            permit_data: ::ethers::core::types::Bytes,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [8, 113, 233, 113],
@@ -80,13 +84,13 @@ pub mod i_polygon_zk_evm_bridge {
                 )
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `bridgeMessage` (0xd96a15f7) function"]
+        ///Calls the contract's `bridgeMessage` (0xd96a15f7) function
         pub fn bridge_message(
             &self,
             destination_network: u32,
-            destination_address: ethers::core::types::Address,
-            metadata: ethers::core::types::Bytes,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+            destination_address: ::ethers::core::types::Address,
+            metadata: ::ethers::core::types::Bytes,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [217, 106, 21, 247],
@@ -94,20 +98,20 @@ pub mod i_polygon_zk_evm_bridge {
                 )
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `claimAsset` (0x2cffd02e) function"]
+        ///Calls the contract's `claimAsset` (0x2cffd02e) function
         pub fn claim_asset(
             &self,
-            smt_proof: [[u8; 32]; 32usize],
+            smt_proof: [[u8; 32]; 32],
             index: u32,
             mainnet_exit_root: [u8; 32],
             rollup_exit_root: [u8; 32],
             origin_network: u32,
-            origin_token_address: ethers::core::types::Address,
+            origin_token_address: ::ethers::core::types::Address,
             destination_network: u32,
-            destination_address: ethers::core::types::Address,
-            amount: ethers::core::types::U256,
-            metadata: ethers::core::types::Bytes,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+            destination_address: ::ethers::core::types::Address,
+            amount: ::ethers::core::types::U256,
+            metadata: ::ethers::core::types::Bytes,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [44, 255, 208, 46],
@@ -126,20 +130,20 @@ pub mod i_polygon_zk_evm_bridge {
                 )
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `claimMessage` (0x2d2c9d94) function"]
+        ///Calls the contract's `claimMessage` (0x2d2c9d94) function
         pub fn claim_message(
             &self,
-            smt_proof: [[u8; 32]; 32usize],
+            smt_proof: [[u8; 32]; 32],
             index: u32,
             mainnet_exit_root: [u8; 32],
             rollup_exit_root: [u8; 32],
             origin_network: u32,
-            origin_address: ethers::core::types::Address,
+            origin_address: ::ethers::core::types::Address,
             destination_network: u32,
-            destination_address: ethers::core::types::Address,
-            amount: ethers::core::types::U256,
-            metadata: ethers::core::types::Bytes,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+            destination_address: ::ethers::core::types::Address,
+            amount: ::ethers::core::types::U256,
+            metadata: ::ethers::core::types::Bytes,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [45, 44, 157, 148],
@@ -158,185 +162,199 @@ pub mod i_polygon_zk_evm_bridge {
                 )
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `deactivateEmergencyState` (0xdbc16976) function"]
+        ///Calls the contract's `deactivateEmergencyState` (0xdbc16976) function
         pub fn deactivate_emergency_state(
             &self,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([219, 193, 105, 118], ())
                 .expect("method not found (this should never happen)")
         }
     }
-    impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>>
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
         for IPolygonZkEVMBridge<M>
     {
-        fn from(contract: ethers::contract::Contract<M>) -> Self {
-            Self(contract)
+        fn from(contract: ::ethers::contract::Contract<M>) -> Self {
+            Self::new(contract.address(), contract.client())
         }
     }
-    #[doc = "Custom Error type `AlreadyClaimed` with signature `AlreadyClaimed()` and selector `[100, 108, 245, 88]`"]
+    ///Custom Error type `AlreadyClaimed` with signature `AlreadyClaimed()` and selector `0x646cf558`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "AlreadyClaimed", abi = "AlreadyClaimed()")]
     pub struct AlreadyClaimed;
-    #[doc = "Custom Error type `AmountDoesNotMatchMsgValue` with signature `AmountDoesNotMatchMsgValue()` and selector `[184, 146, 64, 245]`"]
+    ///Custom Error type `AmountDoesNotMatchMsgValue` with signature `AmountDoesNotMatchMsgValue()` and selector `0xb89240f5`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "AmountDoesNotMatchMsgValue",
         abi = "AmountDoesNotMatchMsgValue()"
     )]
     pub struct AmountDoesNotMatchMsgValue;
-    #[doc = "Custom Error type `DestinationNetworkInvalid` with signature `DestinationNetworkInvalid()` and selector `[5, 149, 234, 46]`"]
+    ///Custom Error type `DestinationNetworkInvalid` with signature `DestinationNetworkInvalid()` and selector `0x0595ea2e`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "DestinationNetworkInvalid",
         abi = "DestinationNetworkInvalid()"
     )]
     pub struct DestinationNetworkInvalid;
-    #[doc = "Custom Error type `EtherTransferFailed` with signature `EtherTransferFailed()` and selector `[103, 71, 162, 136]`"]
+    ///Custom Error type `EtherTransferFailed` with signature `EtherTransferFailed()` and selector `0x6747a288`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "EtherTransferFailed", abi = "EtherTransferFailed()")]
     pub struct EtherTransferFailed;
-    #[doc = "Custom Error type `GlobalExitRootInvalid` with signature `GlobalExitRootInvalid()` and selector `[0, 47, 111, 173]`"]
+    ///Custom Error type `GlobalExitRootInvalid` with signature `GlobalExitRootInvalid()` and selector `0x002f6fad`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "GlobalExitRootInvalid", abi = "GlobalExitRootInvalid()")]
     pub struct GlobalExitRootInvalid;
-    #[doc = "Custom Error type `InvalidSmtProof` with signature `InvalidSmtProof()` and selector `[224, 65, 124, 236]`"]
+    ///Custom Error type `InvalidSmtProof` with signature `InvalidSmtProof()` and selector `0xe0417cec`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "InvalidSmtProof", abi = "InvalidSmtProof()")]
     pub struct InvalidSmtProof;
-    #[doc = "Custom Error type `MessageFailed` with signature `MessageFailed()` and selector `[55, 227, 145, 195]`"]
+    ///Custom Error type `MessageFailed` with signature `MessageFailed()` and selector `0x37e391c3`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "MessageFailed", abi = "MessageFailed()")]
     pub struct MessageFailed;
-    #[doc = "Custom Error type `MsgValueNotZero` with signature `MsgValueNotZero()` and selector `[121, 142, 230, 241]`"]
+    ///Custom Error type `MsgValueNotZero` with signature `MsgValueNotZero()` and selector `0x798ee6f1`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "MsgValueNotZero", abi = "MsgValueNotZero()")]
     pub struct MsgValueNotZero;
-    #[doc = "Custom Error type `NotValidAmount` with signature `NotValidAmount()` and selector `[3, 255, 252, 75]`"]
+    ///Custom Error type `NotValidAmount` with signature `NotValidAmount()` and selector `0x03fffc4b`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "NotValidAmount", abi = "NotValidAmount()")]
     pub struct NotValidAmount;
-    #[doc = "Custom Error type `NotValidOwner` with signature `NotValidOwner()` and selector `[145, 46, 204, 231]`"]
+    ///Custom Error type `NotValidOwner` with signature `NotValidOwner()` and selector `0x912ecce7`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "NotValidOwner", abi = "NotValidOwner()")]
     pub struct NotValidOwner;
-    #[doc = "Custom Error type `NotValidSignature` with signature `NotValidSignature()` and selector `[226, 130, 192, 186]`"]
+    ///Custom Error type `NotValidSignature` with signature `NotValidSignature()` and selector `0xe282c0ba`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "NotValidSignature", abi = "NotValidSignature()")]
     pub struct NotValidSignature;
-    #[doc = "Custom Error type `NotValidSpender` with signature `NotValidSpender()` and selector `[117, 6, 67, 175]`"]
+    ///Custom Error type `NotValidSpender` with signature `NotValidSpender()` and selector `0x750643af`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "NotValidSpender", abi = "NotValidSpender()")]
     pub struct NotValidSpender;
-    #[doc = "Custom Error type `OnlyPolygonZkEVM` with signature `OnlyPolygonZkEVM()` and selector `[226, 232, 16, 107]`"]
+    ///Custom Error type `OnlyPolygonZkEVM` with signature `OnlyPolygonZkEVM()` and selector `0xe2e8106b`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyPolygonZkEVM", abi = "OnlyPolygonZkEVM()")]
     pub struct OnlyPolygonZkEVM;
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    ///Container type for all of the contract's custom errors
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum IPolygonZkEVMBridgeErrors {
         AlreadyClaimed(AlreadyClaimed),
         AmountDoesNotMatchMsgValue(AmountDoesNotMatchMsgValue),
@@ -351,300 +369,368 @@ pub mod i_polygon_zk_evm_bridge {
         NotValidSignature(NotValidSignature),
         NotValidSpender(NotValidSpender),
         OnlyPolygonZkEVM(OnlyPolygonZkEVM),
+        /// The standard solidity revert string, with selector
+        /// Error(string) -- 0x08c379a0
+        RevertString(::std::string::String),
     }
-    impl ethers::core::abi::AbiDecode for IPolygonZkEVMBridgeErrors {
+    impl ::ethers::core::abi::AbiDecode for IPolygonZkEVMBridgeErrors {
         fn decode(
             data: impl AsRef<[u8]>,
-        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
+            let data = data.as_ref();
             if let Ok(decoded) =
-                <AlreadyClaimed as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <::std::string::String as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::AlreadyClaimed(decoded));
+                return Ok(Self::RevertString(decoded));
+            }
+            if let Ok(decoded) = <AlreadyClaimed as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::AlreadyClaimed(decoded));
             }
             if let Ok(decoded) =
-                <AmountDoesNotMatchMsgValue as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <AmountDoesNotMatchMsgValue as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::AmountDoesNotMatchMsgValue(
-                    decoded,
-                ));
+                return Ok(Self::AmountDoesNotMatchMsgValue(decoded));
             }
             if let Ok(decoded) =
-                <DestinationNetworkInvalid as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <DestinationNetworkInvalid as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::DestinationNetworkInvalid(
-                    decoded,
-                ));
+                return Ok(Self::DestinationNetworkInvalid(decoded));
             }
             if let Ok(decoded) =
-                <EtherTransferFailed as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <EtherTransferFailed as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::EtherTransferFailed(decoded));
+                return Ok(Self::EtherTransferFailed(decoded));
             }
             if let Ok(decoded) =
-                <GlobalExitRootInvalid as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <GlobalExitRootInvalid as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::GlobalExitRootInvalid(decoded));
+                return Ok(Self::GlobalExitRootInvalid(decoded));
             }
-            if let Ok(decoded) =
-                <InvalidSmtProof as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            if let Ok(decoded) = <InvalidSmtProof as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::InvalidSmtProof(decoded));
+            }
+            if let Ok(decoded) = <MessageFailed as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::MessageFailed(decoded));
+            }
+            if let Ok(decoded) = <MsgValueNotZero as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::MsgValueNotZero(decoded));
+            }
+            if let Ok(decoded) = <NotValidAmount as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::NotValidAmount(decoded));
+            }
+            if let Ok(decoded) = <NotValidOwner as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::NotValidOwner(decoded));
+            }
+            if let Ok(decoded) = <NotValidSignature as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::InvalidSmtProof(decoded));
+                return Ok(Self::NotValidSignature(decoded));
             }
-            if let Ok(decoded) =
-                <MessageFailed as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+            if let Ok(decoded) = <NotValidSpender as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::NotValidSpender(decoded));
+            }
+            if let Ok(decoded) = <OnlyPolygonZkEVM as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeErrors::MessageFailed(decoded));
+                return Ok(Self::OnlyPolygonZkEVM(decoded));
             }
-            if let Ok(decoded) =
-                <MsgValueNotZero as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::MsgValueNotZero(decoded));
-            }
-            if let Ok(decoded) =
-                <NotValidAmount as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::NotValidAmount(decoded));
-            }
-            if let Ok(decoded) =
-                <NotValidOwner as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::NotValidOwner(decoded));
-            }
-            if let Ok(decoded) =
-                <NotValidSignature as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::NotValidSignature(decoded));
-            }
-            if let Ok(decoded) =
-                <NotValidSpender as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::NotValidSpender(decoded));
-            }
-            if let Ok(decoded) =
-                <OnlyPolygonZkEVM as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeErrors::OnlyPolygonZkEVM(decoded));
-            }
-            Err(ethers::core::abi::Error::InvalidData.into())
+            Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ethers::core::abi::AbiEncode for IPolygonZkEVMBridgeErrors {
-        fn encode(self) -> Vec<u8> {
+    impl ::ethers::core::abi::AbiEncode for IPolygonZkEVMBridgeErrors {
+        fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
-                IPolygonZkEVMBridgeErrors::AlreadyClaimed(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::AmountDoesNotMatchMsgValue(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::DestinationNetworkInvalid(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::EtherTransferFailed(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::GlobalExitRootInvalid(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::InvalidSmtProof(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::MessageFailed(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::MsgValueNotZero(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::NotValidAmount(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::NotValidOwner(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::NotValidSignature(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::NotValidSpender(element) => element.encode(),
-                IPolygonZkEVMBridgeErrors::OnlyPolygonZkEVM(element) => element.encode(),
+                Self::AlreadyClaimed(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::AmountDoesNotMatchMsgValue(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::DestinationNetworkInvalid(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::EtherTransferFailed(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::GlobalExitRootInvalid(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::InvalidSmtProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::MessageFailed(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::MsgValueNotZero(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NotValidAmount(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NotValidOwner(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NotValidSignature(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NotValidSpender(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::OnlyPolygonZkEVM(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
     }
-    impl ::std::fmt::Display for IPolygonZkEVMBridgeErrors {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    impl ::ethers::contract::ContractRevert for IPolygonZkEVMBridgeErrors {
+        fn valid_selector(selector: [u8; 4]) -> bool {
+            match selector {
+                [0x08, 0xc3, 0x79, 0xa0] => true,
+                _ if selector == <AlreadyClaimed as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <AmountDoesNotMatchMsgValue as ::ethers::contract::EthError>::selector() =>
+                {
+                    true
+                }
+                _ if selector
+                    == <DestinationNetworkInvalid as ::ethers::contract::EthError>::selector() =>
+                {
+                    true
+                }
+                _ if selector
+                    == <EtherTransferFailed as ::ethers::contract::EthError>::selector() =>
+                {
+                    true
+                }
+                _ if selector
+                    == <GlobalExitRootInvalid as ::ethers::contract::EthError>::selector() =>
+                {
+                    true
+                }
+                _ if selector == <InvalidSmtProof as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector == <MessageFailed as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector == <MsgValueNotZero as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector == <NotValidAmount as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector == <NotValidOwner as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <NotValidSignature as ::ethers::contract::EthError>::selector() =>
+                {
+                    true
+                }
+                _ if selector == <NotValidSpender as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector == <OnlyPolygonZkEVM as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ => false,
+            }
+        }
+    }
+    impl ::core::fmt::Display for IPolygonZkEVMBridgeErrors {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                IPolygonZkEVMBridgeErrors::AlreadyClaimed(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::AmountDoesNotMatchMsgValue(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::DestinationNetworkInvalid(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::EtherTransferFailed(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::GlobalExitRootInvalid(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::InvalidSmtProof(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::MessageFailed(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::MsgValueNotZero(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::NotValidAmount(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::NotValidOwner(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::NotValidSignature(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::NotValidSpender(element) => element.fmt(f),
-                IPolygonZkEVMBridgeErrors::OnlyPolygonZkEVM(element) => element.fmt(f),
+                Self::AlreadyClaimed(element) => ::core::fmt::Display::fmt(element, f),
+                Self::AmountDoesNotMatchMsgValue(element) => ::core::fmt::Display::fmt(element, f),
+                Self::DestinationNetworkInvalid(element) => ::core::fmt::Display::fmt(element, f),
+                Self::EtherTransferFailed(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GlobalExitRootInvalid(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidSmtProof(element) => ::core::fmt::Display::fmt(element, f),
+                Self::MessageFailed(element) => ::core::fmt::Display::fmt(element, f),
+                Self::MsgValueNotZero(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NotValidAmount(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NotValidOwner(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NotValidSignature(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NotValidSpender(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OnlyPolygonZkEVM(element) => ::core::fmt::Display::fmt(element, f),
+                Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
         }
     }
-    impl ::std::convert::From<AlreadyClaimed> for IPolygonZkEVMBridgeErrors {
-        fn from(var: AlreadyClaimed) -> Self {
-            IPolygonZkEVMBridgeErrors::AlreadyClaimed(var)
+    impl ::core::convert::From<::std::string::String> for IPolygonZkEVMBridgeErrors {
+        fn from(value: String) -> Self {
+            Self::RevertString(value)
         }
     }
-    impl ::std::convert::From<AmountDoesNotMatchMsgValue> for IPolygonZkEVMBridgeErrors {
-        fn from(var: AmountDoesNotMatchMsgValue) -> Self {
-            IPolygonZkEVMBridgeErrors::AmountDoesNotMatchMsgValue(var)
+    impl ::core::convert::From<AlreadyClaimed> for IPolygonZkEVMBridgeErrors {
+        fn from(value: AlreadyClaimed) -> Self {
+            Self::AlreadyClaimed(value)
         }
     }
-    impl ::std::convert::From<DestinationNetworkInvalid> for IPolygonZkEVMBridgeErrors {
-        fn from(var: DestinationNetworkInvalid) -> Self {
-            IPolygonZkEVMBridgeErrors::DestinationNetworkInvalid(var)
+    impl ::core::convert::From<AmountDoesNotMatchMsgValue> for IPolygonZkEVMBridgeErrors {
+        fn from(value: AmountDoesNotMatchMsgValue) -> Self {
+            Self::AmountDoesNotMatchMsgValue(value)
         }
     }
-    impl ::std::convert::From<EtherTransferFailed> for IPolygonZkEVMBridgeErrors {
-        fn from(var: EtherTransferFailed) -> Self {
-            IPolygonZkEVMBridgeErrors::EtherTransferFailed(var)
+    impl ::core::convert::From<DestinationNetworkInvalid> for IPolygonZkEVMBridgeErrors {
+        fn from(value: DestinationNetworkInvalid) -> Self {
+            Self::DestinationNetworkInvalid(value)
         }
     }
-    impl ::std::convert::From<GlobalExitRootInvalid> for IPolygonZkEVMBridgeErrors {
-        fn from(var: GlobalExitRootInvalid) -> Self {
-            IPolygonZkEVMBridgeErrors::GlobalExitRootInvalid(var)
+    impl ::core::convert::From<EtherTransferFailed> for IPolygonZkEVMBridgeErrors {
+        fn from(value: EtherTransferFailed) -> Self {
+            Self::EtherTransferFailed(value)
         }
     }
-    impl ::std::convert::From<InvalidSmtProof> for IPolygonZkEVMBridgeErrors {
-        fn from(var: InvalidSmtProof) -> Self {
-            IPolygonZkEVMBridgeErrors::InvalidSmtProof(var)
+    impl ::core::convert::From<GlobalExitRootInvalid> for IPolygonZkEVMBridgeErrors {
+        fn from(value: GlobalExitRootInvalid) -> Self {
+            Self::GlobalExitRootInvalid(value)
         }
     }
-    impl ::std::convert::From<MessageFailed> for IPolygonZkEVMBridgeErrors {
-        fn from(var: MessageFailed) -> Self {
-            IPolygonZkEVMBridgeErrors::MessageFailed(var)
+    impl ::core::convert::From<InvalidSmtProof> for IPolygonZkEVMBridgeErrors {
+        fn from(value: InvalidSmtProof) -> Self {
+            Self::InvalidSmtProof(value)
         }
     }
-    impl ::std::convert::From<MsgValueNotZero> for IPolygonZkEVMBridgeErrors {
-        fn from(var: MsgValueNotZero) -> Self {
-            IPolygonZkEVMBridgeErrors::MsgValueNotZero(var)
+    impl ::core::convert::From<MessageFailed> for IPolygonZkEVMBridgeErrors {
+        fn from(value: MessageFailed) -> Self {
+            Self::MessageFailed(value)
         }
     }
-    impl ::std::convert::From<NotValidAmount> for IPolygonZkEVMBridgeErrors {
-        fn from(var: NotValidAmount) -> Self {
-            IPolygonZkEVMBridgeErrors::NotValidAmount(var)
+    impl ::core::convert::From<MsgValueNotZero> for IPolygonZkEVMBridgeErrors {
+        fn from(value: MsgValueNotZero) -> Self {
+            Self::MsgValueNotZero(value)
         }
     }
-    impl ::std::convert::From<NotValidOwner> for IPolygonZkEVMBridgeErrors {
-        fn from(var: NotValidOwner) -> Self {
-            IPolygonZkEVMBridgeErrors::NotValidOwner(var)
+    impl ::core::convert::From<NotValidAmount> for IPolygonZkEVMBridgeErrors {
+        fn from(value: NotValidAmount) -> Self {
+            Self::NotValidAmount(value)
         }
     }
-    impl ::std::convert::From<NotValidSignature> for IPolygonZkEVMBridgeErrors {
-        fn from(var: NotValidSignature) -> Self {
-            IPolygonZkEVMBridgeErrors::NotValidSignature(var)
+    impl ::core::convert::From<NotValidOwner> for IPolygonZkEVMBridgeErrors {
+        fn from(value: NotValidOwner) -> Self {
+            Self::NotValidOwner(value)
         }
     }
-    impl ::std::convert::From<NotValidSpender> for IPolygonZkEVMBridgeErrors {
-        fn from(var: NotValidSpender) -> Self {
-            IPolygonZkEVMBridgeErrors::NotValidSpender(var)
+    impl ::core::convert::From<NotValidSignature> for IPolygonZkEVMBridgeErrors {
+        fn from(value: NotValidSignature) -> Self {
+            Self::NotValidSignature(value)
         }
     }
-    impl ::std::convert::From<OnlyPolygonZkEVM> for IPolygonZkEVMBridgeErrors {
-        fn from(var: OnlyPolygonZkEVM) -> Self {
-            IPolygonZkEVMBridgeErrors::OnlyPolygonZkEVM(var)
+    impl ::core::convert::From<NotValidSpender> for IPolygonZkEVMBridgeErrors {
+        fn from(value: NotValidSpender) -> Self {
+            Self::NotValidSpender(value)
         }
     }
-    #[doc = "Container type for all input parameters for the `activateEmergencyState` function with signature `activateEmergencyState()` and selector `[32, 114, 246, 197]`"]
+    impl ::core::convert::From<OnlyPolygonZkEVM> for IPolygonZkEVMBridgeErrors {
+        fn from(value: OnlyPolygonZkEVM) -> Self {
+            Self::OnlyPolygonZkEVM(value)
+        }
+    }
+    ///Container type for all input parameters for the `activateEmergencyState` function with signature `activateEmergencyState()` and selector `0x2072f6c5`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "activateEmergencyState", abi = "activateEmergencyState()")]
     pub struct ActivateEmergencyStateCall;
-    #[doc = "Container type for all input parameters for the `bridgeAsset` function with signature `bridgeAsset(address,uint32,address,uint256,bytes)` and selector `[8, 113, 233, 113]`"]
+    ///Container type for all input parameters for the `bridgeAsset` function with signature `bridgeAsset(address,uint32,address,uint256,bytes)` and selector `0x0871e971`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(
         name = "bridgeAsset",
         abi = "bridgeAsset(address,uint32,address,uint256,bytes)"
     )]
     pub struct BridgeAssetCall {
-        pub token: ethers::core::types::Address,
+        pub token: ::ethers::core::types::Address,
         pub destination_network: u32,
-        pub destination_address: ethers::core::types::Address,
-        pub amount: ethers::core::types::U256,
-        pub permit_data: ethers::core::types::Bytes,
+        pub destination_address: ::ethers::core::types::Address,
+        pub amount: ::ethers::core::types::U256,
+        pub permit_data: ::ethers::core::types::Bytes,
     }
-    #[doc = "Container type for all input parameters for the `bridgeMessage` function with signature `bridgeMessage(uint32,address,bytes)` and selector `[217, 106, 21, 247]`"]
+    ///Container type for all input parameters for the `bridgeMessage` function with signature `bridgeMessage(uint32,address,bytes)` and selector `0xd96a15f7`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "bridgeMessage", abi = "bridgeMessage(uint32,address,bytes)")]
     pub struct BridgeMessageCall {
         pub destination_network: u32,
-        pub destination_address: ethers::core::types::Address,
-        pub metadata: ethers::core::types::Bytes,
+        pub destination_address: ::ethers::core::types::Address,
+        pub metadata: ::ethers::core::types::Bytes,
     }
-    #[doc = "Container type for all input parameters for the `claimAsset` function with signature `claimAsset(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)` and selector `[44, 255, 208, 46]`"]
+    ///Container type for all input parameters for the `claimAsset` function with signature `claimAsset(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)` and selector `0x2cffd02e`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(
         name = "claimAsset",
         abi = "claimAsset(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)"
     )]
     pub struct ClaimAssetCall {
-        pub smt_proof: [[u8; 32]; 32usize],
+        pub smt_proof: [[u8; 32]; 32],
         pub index: u32,
         pub mainnet_exit_root: [u8; 32],
         pub rollup_exit_root: [u8; 32],
         pub origin_network: u32,
-        pub origin_token_address: ethers::core::types::Address,
+        pub origin_token_address: ::ethers::core::types::Address,
         pub destination_network: u32,
-        pub destination_address: ethers::core::types::Address,
-        pub amount: ethers::core::types::U256,
-        pub metadata: ethers::core::types::Bytes,
+        pub destination_address: ::ethers::core::types::Address,
+        pub amount: ::ethers::core::types::U256,
+        pub metadata: ::ethers::core::types::Bytes,
     }
-    #[doc = "Container type for all input parameters for the `claimMessage` function with signature `claimMessage(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)` and selector `[45, 44, 157, 148]`"]
+    ///Container type for all input parameters for the `claimMessage` function with signature `claimMessage(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)` and selector `0x2d2c9d94`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(
         name = "claimMessage",
         abi = "claimMessage(bytes32[32],uint32,bytes32,bytes32,uint32,address,uint32,address,uint256,bytes)"
     )]
     pub struct ClaimMessageCall {
-        pub smt_proof: [[u8; 32]; 32usize],
+        pub smt_proof: [[u8; 32]; 32],
         pub index: u32,
         pub mainnet_exit_root: [u8; 32],
         pub rollup_exit_root: [u8; 32],
         pub origin_network: u32,
-        pub origin_address: ethers::core::types::Address,
+        pub origin_address: ::ethers::core::types::Address,
         pub destination_network: u32,
-        pub destination_address: ethers::core::types::Address,
-        pub amount: ethers::core::types::U256,
-        pub metadata: ethers::core::types::Bytes,
+        pub destination_address: ::ethers::core::types::Address,
+        pub amount: ::ethers::core::types::U256,
+        pub metadata: ::ethers::core::types::Bytes,
     }
-    #[doc = "Container type for all input parameters for the `deactivateEmergencyState` function with signature `deactivateEmergencyState()` and selector `[219, 193, 105, 118]`"]
+    ///Container type for all input parameters for the `deactivateEmergencyState` function with signature `deactivateEmergencyState()` and selector `0xdbc16976`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "deactivateEmergencyState", abi = "deactivateEmergencyState()")]
     pub struct DeactivateEmergencyStateCall;
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    ///Container type for all of the contract's call
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum IPolygonZkEVMBridgeCalls {
         ActivateEmergencyState(ActivateEmergencyStateCall),
         BridgeAsset(BridgeAssetCall),
@@ -653,97 +739,94 @@ pub mod i_polygon_zk_evm_bridge {
         ClaimMessage(ClaimMessageCall),
         DeactivateEmergencyState(DeactivateEmergencyStateCall),
     }
-    impl ethers::core::abi::AbiDecode for IPolygonZkEVMBridgeCalls {
+    impl ::ethers::core::abi::AbiDecode for IPolygonZkEVMBridgeCalls {
         fn decode(
             data: impl AsRef<[u8]>,
-        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
+            let data = data.as_ref();
             if let Ok(decoded) =
-                <ActivateEmergencyStateCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <ActivateEmergencyStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeCalls::ActivateEmergencyState(decoded));
+                return Ok(Self::ActivateEmergencyState(decoded));
+            }
+            if let Ok(decoded) = <BridgeAssetCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::BridgeAsset(decoded));
+            }
+            if let Ok(decoded) = <BridgeMessageCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::BridgeMessage(decoded));
+            }
+            if let Ok(decoded) = <ClaimAssetCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::ClaimAsset(decoded));
+            }
+            if let Ok(decoded) = <ClaimMessageCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ClaimMessage(decoded));
             }
             if let Ok(decoded) =
-                <BridgeAssetCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <DeactivateEmergencyStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMBridgeCalls::BridgeAsset(decoded));
+                return Ok(Self::DeactivateEmergencyState(decoded));
             }
-            if let Ok(decoded) =
-                <BridgeMessageCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeCalls::BridgeMessage(decoded));
-            }
-            if let Ok(decoded) =
-                <ClaimAssetCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeCalls::ClaimAsset(decoded));
-            }
-            if let Ok(decoded) =
-                <ClaimMessageCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMBridgeCalls::ClaimMessage(decoded));
-            }
-            if let Ok(decoded) =
-                <DeactivateEmergencyStateCall as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(IPolygonZkEVMBridgeCalls::DeactivateEmergencyState(decoded));
-            }
-            Err(ethers::core::abi::Error::InvalidData.into())
+            Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ethers::core::abi::AbiEncode for IPolygonZkEVMBridgeCalls {
+    impl ::ethers::core::abi::AbiEncode for IPolygonZkEVMBridgeCalls {
         fn encode(self) -> Vec<u8> {
             match self {
-                IPolygonZkEVMBridgeCalls::ActivateEmergencyState(element) => element.encode(),
-                IPolygonZkEVMBridgeCalls::BridgeAsset(element) => element.encode(),
-                IPolygonZkEVMBridgeCalls::BridgeMessage(element) => element.encode(),
-                IPolygonZkEVMBridgeCalls::ClaimAsset(element) => element.encode(),
-                IPolygonZkEVMBridgeCalls::ClaimMessage(element) => element.encode(),
-                IPolygonZkEVMBridgeCalls::DeactivateEmergencyState(element) => element.encode(),
+                Self::ActivateEmergencyState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::BridgeAsset(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::BridgeMessage(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ClaimAsset(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ClaimMessage(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::DeactivateEmergencyState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
             }
         }
     }
-    impl ::std::fmt::Display for IPolygonZkEVMBridgeCalls {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    impl ::core::fmt::Display for IPolygonZkEVMBridgeCalls {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                IPolygonZkEVMBridgeCalls::ActivateEmergencyState(element) => element.fmt(f),
-                IPolygonZkEVMBridgeCalls::BridgeAsset(element) => element.fmt(f),
-                IPolygonZkEVMBridgeCalls::BridgeMessage(element) => element.fmt(f),
-                IPolygonZkEVMBridgeCalls::ClaimAsset(element) => element.fmt(f),
-                IPolygonZkEVMBridgeCalls::ClaimMessage(element) => element.fmt(f),
-                IPolygonZkEVMBridgeCalls::DeactivateEmergencyState(element) => element.fmt(f),
+                Self::ActivateEmergencyState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::BridgeAsset(element) => ::core::fmt::Display::fmt(element, f),
+                Self::BridgeMessage(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ClaimAsset(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ClaimMessage(element) => ::core::fmt::Display::fmt(element, f),
+                Self::DeactivateEmergencyState(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
-    impl ::std::convert::From<ActivateEmergencyStateCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: ActivateEmergencyStateCall) -> Self {
-            IPolygonZkEVMBridgeCalls::ActivateEmergencyState(var)
+    impl ::core::convert::From<ActivateEmergencyStateCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: ActivateEmergencyStateCall) -> Self {
+            Self::ActivateEmergencyState(value)
         }
     }
-    impl ::std::convert::From<BridgeAssetCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: BridgeAssetCall) -> Self {
-            IPolygonZkEVMBridgeCalls::BridgeAsset(var)
+    impl ::core::convert::From<BridgeAssetCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: BridgeAssetCall) -> Self {
+            Self::BridgeAsset(value)
         }
     }
-    impl ::std::convert::From<BridgeMessageCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: BridgeMessageCall) -> Self {
-            IPolygonZkEVMBridgeCalls::BridgeMessage(var)
+    impl ::core::convert::From<BridgeMessageCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: BridgeMessageCall) -> Self {
+            Self::BridgeMessage(value)
         }
     }
-    impl ::std::convert::From<ClaimAssetCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: ClaimAssetCall) -> Self {
-            IPolygonZkEVMBridgeCalls::ClaimAsset(var)
+    impl ::core::convert::From<ClaimAssetCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: ClaimAssetCall) -> Self {
+            Self::ClaimAsset(value)
         }
     }
-    impl ::std::convert::From<ClaimMessageCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: ClaimMessageCall) -> Self {
-            IPolygonZkEVMBridgeCalls::ClaimMessage(var)
+    impl ::core::convert::From<ClaimMessageCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: ClaimMessageCall) -> Self {
+            Self::ClaimMessage(value)
         }
     }
-    impl ::std::convert::From<DeactivateEmergencyStateCall> for IPolygonZkEVMBridgeCalls {
-        fn from(var: DeactivateEmergencyStateCall) -> Self {
-            IPolygonZkEVMBridgeCalls::DeactivateEmergencyState(var)
+    impl ::core::convert::From<DeactivateEmergencyStateCall> for IPolygonZkEVMBridgeCalls {
+        fn from(value: DeactivateEmergencyStateCall) -> Self {
+            Self::DeactivateEmergencyState(value)
         }
     }
 }

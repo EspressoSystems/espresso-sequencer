@@ -1,194 +1,1362 @@
 pub use polygon_zk_evm_global_exit_root_l2_mock::*;
-#[allow(clippy::too_many_arguments, non_camel_case_types)]
+/// This module was auto-generated with ethers-rs Abigen.
+/// More information at: <https://github.com/gakonst/ethers-rs>
+#[allow(
+    clippy::enum_variant_names,
+    clippy::too_many_arguments,
+    clippy::upper_case_acronyms,
+    clippy::type_complexity,
+    dead_code,
+    non_camel_case_types
+)]
 pub mod polygon_zk_evm_global_exit_root_l2_mock {
-    #![allow(clippy::enum_variant_names)]
-    #![allow(dead_code)]
-    #![allow(clippy::type_complexity)]
-    #![allow(unused_imports)]
-    use ethers::contract::{
-        builders::{ContractCall, Event},
-        Contract, Lazy,
-    };
-    use ethers::core::{
-        abi::{Abi, Detokenize, InvalidOutputType, Token, Tokenizable},
-        types::*,
-    };
-    use ethers::providers::Middleware;
-    #[doc = "PolygonZkEVMGlobalExitRootL2Mock was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
-    use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setLastGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]" ;
-    #[doc = r" The parsed JSON-ABI of the contract."]
-    pub static POLYGONZKEVMGLOBALEXITROOTL2MOCK_ABI: ethers::contract::Lazy<
-        ethers::core::abi::Abi,
-    > = ethers::contract::Lazy::new(|| {
-        ethers::core::utils::__serde_json::from_str(__ABI).expect("invalid abi")
+    #[rustfmt::skip]
+    const __ABI: &str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_bridgeAddress\",\"type\":\"address\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAllowedContracts\",\"outputs\":[]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"bridgeAddress\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"globalExitRootMap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"lastRollupExitRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"globalExitRoot\",\"type\":\"bytes32\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"setLastGlobalExitRoot\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRoot\",\"type\":\"bytes32\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"updateExitRoot\",\"outputs\":[]}]";
+    ///The parsed JSON ABI of the contract.
+    pub static POLYGONZKEVMGLOBALEXITROOTL2MOCK_ABI: ::ethers::contract::Lazy<
+        ::ethers::core::abi::Abi,
+    > = ::ethers::contract::Lazy::new(|| {
+        ::ethers::core::utils::__serde_json::from_str(__ABI).expect("ABI is always valid")
     });
-    pub struct PolygonZkEVMGlobalExitRootL2Mock<M>(ethers::contract::Contract<M>);
-    impl<M> Clone for PolygonZkEVMGlobalExitRootL2Mock<M> {
+    #[rustfmt::skip]
+    const __BYTECODE: &[u8] = &[
+        96,
+        160,
+        96,
+        64,
+        82,
+        52,
+        128,
+        21,
+        97,
+        0,
+        16,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        96,
+        64,
+        81,
+        97,
+        2,
+        117,
+        56,
+        3,
+        128,
+        97,
+        2,
+        117,
+        131,
+        57,
+        129,
+        1,
+        96,
+        64,
+        129,
+        144,
+        82,
+        97,
+        0,
+        47,
+        145,
+        97,
+        0,
+        64,
+        86,
+        91,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        22,
+        96,
+        128,
+        82,
+        97,
+        0,
+        112,
+        86,
+        91,
+        96,
+        0,
+        96,
+        32,
+        130,
+        132,
+        3,
+        18,
+        21,
+        97,
+        0,
+        82,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        129,
+        81,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        129,
+        22,
+        129,
+        20,
+        97,
+        0,
+        105,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        147,
+        146,
+        80,
+        80,
+        80,
+        86,
+        91,
+        96,
+        128,
+        81,
+        97,
+        1,
+        228,
+        97,
+        0,
+        145,
+        96,
+        0,
+        57,
+        96,
+        0,
+        129,
+        129,
+        96,
+        240,
+        1,
+        82,
+        97,
+        1,
+        53,
+        1,
+        82,
+        97,
+        1,
+        228,
+        96,
+        0,
+        243,
+        254,
+        96,
+        128,
+        96,
+        64,
+        82,
+        52,
+        128,
+        21,
+        97,
+        0,
+        16,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        96,
+        4,
+        54,
+        16,
+        97,
+        0,
+        98,
+        87,
+        96,
+        0,
+        53,
+        96,
+        224,
+        28,
+        128,
+        99,
+        1,
+        253,
+        144,
+        68,
+        20,
+        97,
+        0,
+        103,
+        87,
+        128,
+        99,
+        17,
+        108,
+        64,
+        195,
+        20,
+        97,
+        0,
+        131,
+        87,
+        128,
+        99,
+        37,
+        123,
+        54,
+        50,
+        20,
+        97,
+        0,
+        152,
+        87,
+        128,
+        99,
+        51,
+        214,
+        36,
+        125,
+        20,
+        97,
+        0,
+        184,
+        87,
+        128,
+        99,
+        150,
+        224,
+        116,
+        89,
+        20,
+        97,
+        0,
+        203,
+        87,
+        128,
+        99,
+        163,
+        197,
+        115,
+        235,
+        20,
+        97,
+        0,
+        235,
+        87,
+        91,
+        96,
+        0,
+        128,
+        253,
+        91,
+        97,
+        0,
+        112,
+        96,
+        1,
+        84,
+        129,
+        86,
+        91,
+        96,
+        64,
+        81,
+        144,
+        129,
+        82,
+        96,
+        32,
+        1,
+        91,
+        96,
+        64,
+        81,
+        128,
+        145,
+        3,
+        144,
+        243,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        145,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        96,
+        1,
+        85,
+        86,
+        91,
+        0,
+        91,
+        97,
+        0,
+        112,
+        97,
+        0,
+        166,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        96,
+        0,
+        96,
+        32,
+        129,
+        144,
+        82,
+        144,
+        129,
+        82,
+        96,
+        64,
+        144,
+        32,
+        84,
+        129,
+        86,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        198,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        97,
+        1,
+        42,
+        86,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        217,
+        54,
+        96,
+        4,
+        97,
+        1,
+        140,
+        86,
+        91,
+        96,
+        0,
+        145,
+        130,
+        82,
+        96,
+        32,
+        130,
+        144,
+        82,
+        96,
+        64,
+        144,
+        145,
+        32,
+        85,
+        86,
+        91,
+        97,
+        1,
+        18,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        129,
+        86,
+        91,
+        96,
+        64,
+        81,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        144,
+        145,
+        22,
+        129,
+        82,
+        96,
+        32,
+        1,
+        97,
+        0,
+        122,
+        86,
+        91,
+        51,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        22,
+        20,
+        97,
+        0,
+        145,
+        87,
+        96,
+        64,
+        81,
+        99,
+        180,
+        147,
+        101,
+        221,
+        96,
+        224,
+        27,
+        129,
+        82,
+        96,
+        4,
+        1,
+        96,
+        64,
+        81,
+        128,
+        145,
+        3,
+        144,
+        253,
+        91,
+        96,
+        0,
+        96,
+        32,
+        130,
+        132,
+        3,
+        18,
+        21,
+        97,
+        1,
+        133,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        53,
+        145,
+        144,
+        80,
+        86,
+        91,
+        96,
+        0,
+        128,
+        96,
+        64,
+        131,
+        133,
+        3,
+        18,
+        21,
+        97,
+        1,
+        159,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        80,
+        128,
+        53,
+        146,
+        96,
+        32,
+        144,
+        145,
+        1,
+        53,
+        145,
+        80,
+        86,
+        254,
+        162,
+        100,
+        105,
+        112,
+        102,
+        115,
+        88,
+        34,
+        18,
+        32,
+        166,
+        25,
+        37,
+        186,
+        55,
+        52,
+        105,
+        188,
+        183,
+        197,
+        46,
+        135,
+        155,
+        110,
+        12,
+        116,
+        178,
+        159,
+        94,
+        113,
+        199,
+        141,
+        58,
+        197,
+        129,
+        221,
+        168,
+        216,
+        98,
+        143,
+        165,
+        76,
+        100,
+        115,
+        111,
+        108,
+        99,
+        67,
+        0,
+        8,
+        17,
+        0,
+        51,
+    ];
+    ///The bytecode of the contract.
+    pub static POLYGONZKEVMGLOBALEXITROOTL2MOCK_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__BYTECODE);
+    #[rustfmt::skip]
+    const __DEPLOYED_BYTECODE: &[u8] = &[
+        96,
+        128,
+        96,
+        64,
+        82,
+        52,
+        128,
+        21,
+        97,
+        0,
+        16,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        96,
+        4,
+        54,
+        16,
+        97,
+        0,
+        98,
+        87,
+        96,
+        0,
+        53,
+        96,
+        224,
+        28,
+        128,
+        99,
+        1,
+        253,
+        144,
+        68,
+        20,
+        97,
+        0,
+        103,
+        87,
+        128,
+        99,
+        17,
+        108,
+        64,
+        195,
+        20,
+        97,
+        0,
+        131,
+        87,
+        128,
+        99,
+        37,
+        123,
+        54,
+        50,
+        20,
+        97,
+        0,
+        152,
+        87,
+        128,
+        99,
+        51,
+        214,
+        36,
+        125,
+        20,
+        97,
+        0,
+        184,
+        87,
+        128,
+        99,
+        150,
+        224,
+        116,
+        89,
+        20,
+        97,
+        0,
+        203,
+        87,
+        128,
+        99,
+        163,
+        197,
+        115,
+        235,
+        20,
+        97,
+        0,
+        235,
+        87,
+        91,
+        96,
+        0,
+        128,
+        253,
+        91,
+        97,
+        0,
+        112,
+        96,
+        1,
+        84,
+        129,
+        86,
+        91,
+        96,
+        64,
+        81,
+        144,
+        129,
+        82,
+        96,
+        32,
+        1,
+        91,
+        96,
+        64,
+        81,
+        128,
+        145,
+        3,
+        144,
+        243,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        145,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        96,
+        1,
+        85,
+        86,
+        91,
+        0,
+        91,
+        97,
+        0,
+        112,
+        97,
+        0,
+        166,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        96,
+        0,
+        96,
+        32,
+        129,
+        144,
+        82,
+        144,
+        129,
+        82,
+        96,
+        64,
+        144,
+        32,
+        84,
+        129,
+        86,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        198,
+        54,
+        96,
+        4,
+        97,
+        1,
+        115,
+        86,
+        91,
+        97,
+        1,
+        42,
+        86,
+        91,
+        97,
+        0,
+        150,
+        97,
+        0,
+        217,
+        54,
+        96,
+        4,
+        97,
+        1,
+        140,
+        86,
+        91,
+        96,
+        0,
+        145,
+        130,
+        82,
+        96,
+        32,
+        130,
+        144,
+        82,
+        96,
+        64,
+        144,
+        145,
+        32,
+        85,
+        86,
+        91,
+        97,
+        1,
+        18,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        129,
+        86,
+        91,
+        96,
+        64,
+        81,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        144,
+        145,
+        22,
+        129,
+        82,
+        96,
+        32,
+        1,
+        97,
+        0,
+        122,
+        86,
+        91,
+        51,
+        96,
+        1,
+        96,
+        1,
+        96,
+        160,
+        27,
+        3,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        22,
+        20,
+        97,
+        0,
+        145,
+        87,
+        96,
+        64,
+        81,
+        99,
+        180,
+        147,
+        101,
+        221,
+        96,
+        224,
+        27,
+        129,
+        82,
+        96,
+        4,
+        1,
+        96,
+        64,
+        81,
+        128,
+        145,
+        3,
+        144,
+        253,
+        91,
+        96,
+        0,
+        96,
+        32,
+        130,
+        132,
+        3,
+        18,
+        21,
+        97,
+        1,
+        133,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        53,
+        145,
+        144,
+        80,
+        86,
+        91,
+        96,
+        0,
+        128,
+        96,
+        64,
+        131,
+        133,
+        3,
+        18,
+        21,
+        97,
+        1,
+        159,
+        87,
+        96,
+        0,
+        128,
+        253,
+        91,
+        80,
+        80,
+        128,
+        53,
+        146,
+        96,
+        32,
+        144,
+        145,
+        1,
+        53,
+        145,
+        80,
+        86,
+        254,
+        162,
+        100,
+        105,
+        112,
+        102,
+        115,
+        88,
+        34,
+        18,
+        32,
+        166,
+        25,
+        37,
+        186,
+        55,
+        52,
+        105,
+        188,
+        183,
+        197,
+        46,
+        135,
+        155,
+        110,
+        12,
+        116,
+        178,
+        159,
+        94,
+        113,
+        199,
+        141,
+        58,
+        197,
+        129,
+        221,
+        168,
+        216,
+        98,
+        143,
+        165,
+        76,
+        100,
+        115,
+        111,
+        108,
+        99,
+        67,
+        0,
+        8,
+        17,
+        0,
+        51,
+    ];
+    ///The deployed bytecode of the contract.
+    pub static POLYGONZKEVMGLOBALEXITROOTL2MOCK_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
+    pub struct PolygonZkEVMGlobalExitRootL2Mock<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for PolygonZkEVMGlobalExitRootL2Mock<M> {
         fn clone(&self) -> Self {
-            PolygonZkEVMGlobalExitRootL2Mock(self.0.clone())
+            Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> std::ops::Deref for PolygonZkEVMGlobalExitRootL2Mock<M> {
-        type Target = ethers::contract::Contract<M>;
+    impl<M> ::core::ops::Deref for PolygonZkEVMGlobalExitRootL2Mock<M> {
+        type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> std::fmt::Debug for PolygonZkEVMGlobalExitRootL2Mock<M> {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    impl<M> ::core::ops::DerefMut for PolygonZkEVMGlobalExitRootL2Mock<M> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+    impl<M> ::core::fmt::Debug for PolygonZkEVMGlobalExitRootL2Mock<M> {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             f.debug_tuple(stringify!(PolygonZkEVMGlobalExitRootL2Mock))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ethers::providers::Middleware> PolygonZkEVMGlobalExitRootL2Mock<M> {
-        #[doc = r" Creates a new contract instance with the specified `ethers`"]
-        #[doc = r" client at the given `Address`. The contract derefs to a `ethers::Contract`"]
-        #[doc = r" object"]
-        pub fn new<T: Into<ethers::core::types::Address>>(
+    impl<M: ::ethers::providers::Middleware> PolygonZkEVMGlobalExitRootL2Mock<M> {
+        /// Creates a new contract instance with the specified `ethers` client at
+        /// `address`. The contract derefs to a `ethers::Contract` object.
+        pub fn new<T: Into<::ethers::core::types::Address>>(
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            ethers::contract::Contract::new(
+            Self(::ethers::contract::Contract::new(
                 address.into(),
                 POLYGONZKEVMGLOBALEXITROOTL2MOCK_ABI.clone(),
                 client,
-            )
-            .into()
+            ))
         }
-        #[doc = "Calls the contract's `bridgeAddress` (0xa3c573eb) function"]
+        /// Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it.
+        /// Returns a new instance of a deployer that returns an instance of this contract after sending the transaction
+        ///
+        /// Notes:
+        /// - If there are no constructor arguments, you should pass `()` as the argument.
+        /// - The default poll duration is 7 seconds.
+        /// - The default number of confirmations is 1 block.
+        ///
+        ///
+        /// # Example
+        ///
+        /// Generate contract bindings with `abigen!` and deploy a new contract instance.
+        ///
+        /// *Note*: this requires a `bytecode` and `abi` object in the `greeter.json` artifact.
+        ///
+        /// ```ignore
+        /// # async fn deploy<M: ethers::providers::Middleware>(client: ::std::sync::Arc<M>) {
+        ///     abigen!(Greeter, "../greeter.json");
+        ///
+        ///    let greeter_contract = Greeter::deploy(client, "Hello world!".to_string()).unwrap().send().await.unwrap();
+        ///    let msg = greeter_contract.greet().call().await.unwrap();
+        /// # }
+        /// ```
+        pub fn deploy<T: ::ethers::core::abi::Tokenize>(
+            client: ::std::sync::Arc<M>,
+            constructor_args: T,
+        ) -> ::core::result::Result<
+            ::ethers::contract::builders::ContractDeployer<M, Self>,
+            ::ethers::contract::ContractError<M>,
+        > {
+            let factory = ::ethers::contract::ContractFactory::new(
+                POLYGONZKEVMGLOBALEXITROOTL2MOCK_ABI.clone(),
+                POLYGONZKEVMGLOBALEXITROOTL2MOCK_BYTECODE.clone().into(),
+                client,
+            );
+            let deployer = factory.deploy(constructor_args)?;
+            let deployer = ::ethers::contract::ContractDeployer::new(deployer);
+            Ok(deployer)
+        }
+        ///Calls the contract's `bridgeAddress` (0xa3c573eb) function
         pub fn bridge_address(
             &self,
-        ) -> ethers::contract::builders::ContractCall<M, ethers::core::types::Address> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([163, 197, 115, 235], ())
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `globalExitRootMap` (0x257b3632) function"]
+        ///Calls the contract's `globalExitRootMap` (0x257b3632) function
         pub fn global_exit_root_map(
             &self,
             p0: [u8; 32],
-        ) -> ethers::contract::builders::ContractCall<M, ethers::core::types::U256> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
             self.0
                 .method_hash([37, 123, 54, 50], p0)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `lastRollupExitRoot` (0x01fd9044) function"]
+        ///Calls the contract's `lastRollupExitRoot` (0x01fd9044) function
         pub fn last_rollup_exit_root(
             &self,
-        ) -> ethers::contract::builders::ContractCall<M, [u8; 32]> {
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
                 .method_hash([1, 253, 144, 68], ())
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `setExitRoot` (0x116c40c3) function"]
+        ///Calls the contract's `setExitRoot` (0x116c40c3) function
         pub fn set_exit_root(
             &self,
             new_root: [u8; 32],
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([17, 108, 64, 195], new_root)
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `setLastGlobalExitRoot` (0x96e07459) function"]
+        ///Calls the contract's `setLastGlobalExitRoot` (0x96e07459) function
         pub fn set_last_global_exit_root(
             &self,
             global_exit_root: [u8; 32],
-            block_number: ethers::core::types::U256,
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+            block_number: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([150, 224, 116, 89], (global_exit_root, block_number))
                 .expect("method not found (this should never happen)")
         }
-        #[doc = "Calls the contract's `updateExitRoot` (0x33d6247d) function"]
+        ///Calls the contract's `updateExitRoot` (0x33d6247d) function
         pub fn update_exit_root(
             &self,
             new_root: [u8; 32],
-        ) -> ethers::contract::builders::ContractCall<M, ()> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([51, 214, 36, 125], new_root)
                 .expect("method not found (this should never happen)")
         }
     }
-    impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>>
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
         for PolygonZkEVMGlobalExitRootL2Mock<M>
     {
-        fn from(contract: ethers::contract::Contract<M>) -> Self {
-            Self(contract)
+        fn from(contract: ::ethers::contract::Contract<M>) -> Self {
+            Self::new(contract.address(), contract.client())
         }
     }
-    #[doc = "Custom Error type `OnlyAllowedContracts` with signature `OnlyAllowedContracts()` and selector `[180, 147, 101, 221]`"]
+    ///Custom Error type `OnlyAllowedContracts` with signature `OnlyAllowedContracts()` and selector `0xb49365dd`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyAllowedContracts", abi = "OnlyAllowedContracts()")]
     pub struct OnlyAllowedContracts;
-    #[doc = "Container type for all input parameters for the `bridgeAddress` function with signature `bridgeAddress()` and selector `[163, 197, 115, 235]`"]
+    ///Container type for all input parameters for the `bridgeAddress` function with signature `bridgeAddress()` and selector `0xa3c573eb`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "bridgeAddress", abi = "bridgeAddress()")]
     pub struct BridgeAddressCall;
-    #[doc = "Container type for all input parameters for the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `[37, 123, 54, 50]`"]
+    ///Container type for all input parameters for the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `0x257b3632`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "globalExitRootMap", abi = "globalExitRootMap(bytes32)")]
     pub struct GlobalExitRootMapCall(pub [u8; 32]);
-    #[doc = "Container type for all input parameters for the `lastRollupExitRoot` function with signature `lastRollupExitRoot()` and selector `[1, 253, 144, 68]`"]
+    ///Container type for all input parameters for the `lastRollupExitRoot` function with signature `lastRollupExitRoot()` and selector `0x01fd9044`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "lastRollupExitRoot", abi = "lastRollupExitRoot()")]
     pub struct LastRollupExitRootCall;
-    #[doc = "Container type for all input parameters for the `setExitRoot` function with signature `setExitRoot(bytes32)` and selector `[17, 108, 64, 195]`"]
+    ///Container type for all input parameters for the `setExitRoot` function with signature `setExitRoot(bytes32)` and selector `0x116c40c3`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "setExitRoot", abi = "setExitRoot(bytes32)")]
     pub struct SetExitRootCall {
         pub new_root: [u8; 32],
     }
-    #[doc = "Container type for all input parameters for the `setLastGlobalExitRoot` function with signature `setLastGlobalExitRoot(bytes32,uint256)` and selector `[150, 224, 116, 89]`"]
+    ///Container type for all input parameters for the `setLastGlobalExitRoot` function with signature `setLastGlobalExitRoot(bytes32,uint256)` and selector `0x96e07459`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(
         name = "setLastGlobalExitRoot",
@@ -196,23 +1364,25 @@ pub mod polygon_zk_evm_global_exit_root_l2_mock {
     )]
     pub struct SetLastGlobalExitRootCall {
         pub global_exit_root: [u8; 32],
-        pub block_number: ethers::core::types::U256,
+        pub block_number: ::ethers::core::types::U256,
     }
-    #[doc = "Container type for all input parameters for the `updateExitRoot` function with signature `updateExitRoot(bytes32)` and selector `[51, 214, 36, 125]`"]
+    ///Container type for all input parameters for the `updateExitRoot` function with signature `updateExitRoot(bytes32)` and selector `0x33d6247d`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthCall,
-        ethers :: contract :: EthDisplay,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     #[ethcall(name = "updateExitRoot", abi = "updateExitRoot(bytes32)")]
     pub struct UpdateExitRootCall {
         pub new_root: [u8; 32],
     }
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    ///Container type for all of the contract's call
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum PolygonZkEVMGlobalExitRootL2MockCalls {
         BridgeAddress(BridgeAddressCall),
         GlobalExitRootMap(GlobalExitRootMapCall),
@@ -221,146 +1391,133 @@ pub mod polygon_zk_evm_global_exit_root_l2_mock {
         SetLastGlobalExitRoot(SetLastGlobalExitRootCall),
         UpdateExitRoot(UpdateExitRootCall),
     }
-    impl ethers::core::abi::AbiDecode for PolygonZkEVMGlobalExitRootL2MockCalls {
+    impl ::ethers::core::abi::AbiDecode for PolygonZkEVMGlobalExitRootL2MockCalls {
         fn decode(
             data: impl AsRef<[u8]>,
-        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
-            if let Ok(decoded) =
-                <BridgeAddressCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
+            let data = data.as_ref();
+            if let Ok(decoded) = <BridgeAddressCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::BridgeAddress(
-                    decoded,
-                ));
+                return Ok(Self::BridgeAddress(decoded));
             }
             if let Ok(decoded) =
-                <GlobalExitRootMapCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <GlobalExitRootMapCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::GlobalExitRootMap(
-                    decoded,
-                ));
+                return Ok(Self::GlobalExitRootMap(decoded));
             }
             if let Ok(decoded) =
-                <LastRollupExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <LastRollupExitRootCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::LastRollupExitRoot(
-                    decoded,
-                ));
+                return Ok(Self::LastRollupExitRoot(decoded));
+            }
+            if let Ok(decoded) = <SetExitRootCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::SetExitRoot(decoded));
             }
             if let Ok(decoded) =
-                <SetExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <SetLastGlobalExitRootCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::SetExitRoot(decoded));
+                return Ok(Self::SetLastGlobalExitRoot(decoded));
             }
             if let Ok(decoded) =
-                <SetLastGlobalExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <UpdateExitRootCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::SetLastGlobalExitRoot(decoded));
+                return Ok(Self::UpdateExitRoot(decoded));
             }
-            if let Ok(decoded) =
-                <UpdateExitRootCall as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(PolygonZkEVMGlobalExitRootL2MockCalls::UpdateExitRoot(
-                    decoded,
-                ));
-            }
-            Err(ethers::core::abi::Error::InvalidData.into())
+            Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ethers::core::abi::AbiEncode for PolygonZkEVMGlobalExitRootL2MockCalls {
+    impl ::ethers::core::abi::AbiEncode for PolygonZkEVMGlobalExitRootL2MockCalls {
         fn encode(self) -> Vec<u8> {
             match self {
-                PolygonZkEVMGlobalExitRootL2MockCalls::BridgeAddress(element) => element.encode(),
-                PolygonZkEVMGlobalExitRootL2MockCalls::GlobalExitRootMap(element) => {
-                    element.encode()
+                Self::BridgeAddress(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GlobalExitRootMap(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::LastRollupExitRoot(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                PolygonZkEVMGlobalExitRootL2MockCalls::LastRollupExitRoot(element) => {
-                    element.encode()
+                Self::SetExitRoot(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::SetLastGlobalExitRoot(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                PolygonZkEVMGlobalExitRootL2MockCalls::SetExitRoot(element) => element.encode(),
-                PolygonZkEVMGlobalExitRootL2MockCalls::SetLastGlobalExitRoot(element) => {
-                    element.encode()
-                }
-                PolygonZkEVMGlobalExitRootL2MockCalls::UpdateExitRoot(element) => element.encode(),
+                Self::UpdateExitRoot(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
     }
-    impl ::std::fmt::Display for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    impl ::core::fmt::Display for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                PolygonZkEVMGlobalExitRootL2MockCalls::BridgeAddress(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootL2MockCalls::GlobalExitRootMap(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootL2MockCalls::LastRollupExitRoot(element) => {
-                    element.fmt(f)
-                }
-                PolygonZkEVMGlobalExitRootL2MockCalls::SetExitRoot(element) => element.fmt(f),
-                PolygonZkEVMGlobalExitRootL2MockCalls::SetLastGlobalExitRoot(element) => {
-                    element.fmt(f)
-                }
-                PolygonZkEVMGlobalExitRootL2MockCalls::UpdateExitRoot(element) => element.fmt(f),
+                Self::BridgeAddress(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GlobalExitRootMap(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LastRollupExitRoot(element) => ::core::fmt::Display::fmt(element, f),
+                Self::SetExitRoot(element) => ::core::fmt::Display::fmt(element, f),
+                Self::SetLastGlobalExitRoot(element) => ::core::fmt::Display::fmt(element, f),
+                Self::UpdateExitRoot(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
-    impl ::std::convert::From<BridgeAddressCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: BridgeAddressCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::BridgeAddress(var)
+    impl ::core::convert::From<BridgeAddressCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: BridgeAddressCall) -> Self {
+            Self::BridgeAddress(value)
         }
     }
-    impl ::std::convert::From<GlobalExitRootMapCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: GlobalExitRootMapCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::GlobalExitRootMap(var)
+    impl ::core::convert::From<GlobalExitRootMapCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: GlobalExitRootMapCall) -> Self {
+            Self::GlobalExitRootMap(value)
         }
     }
-    impl ::std::convert::From<LastRollupExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: LastRollupExitRootCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::LastRollupExitRoot(var)
+    impl ::core::convert::From<LastRollupExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: LastRollupExitRootCall) -> Self {
+            Self::LastRollupExitRoot(value)
         }
     }
-    impl ::std::convert::From<SetExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: SetExitRootCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::SetExitRoot(var)
+    impl ::core::convert::From<SetExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: SetExitRootCall) -> Self {
+            Self::SetExitRoot(value)
         }
     }
-    impl ::std::convert::From<SetLastGlobalExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: SetLastGlobalExitRootCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::SetLastGlobalExitRoot(var)
+    impl ::core::convert::From<SetLastGlobalExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: SetLastGlobalExitRootCall) -> Self {
+            Self::SetLastGlobalExitRoot(value)
         }
     }
-    impl ::std::convert::From<UpdateExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
-        fn from(var: UpdateExitRootCall) -> Self {
-            PolygonZkEVMGlobalExitRootL2MockCalls::UpdateExitRoot(var)
+    impl ::core::convert::From<UpdateExitRootCall> for PolygonZkEVMGlobalExitRootL2MockCalls {
+        fn from(value: UpdateExitRootCall) -> Self {
+            Self::UpdateExitRoot(value)
         }
     }
-    #[doc = "Container type for all return fields from the `bridgeAddress` function with signature `bridgeAddress()` and selector `[163, 197, 115, 235]`"]
+    ///Container type for all return fields from the `bridgeAddress` function with signature `bridgeAddress()` and selector `0xa3c573eb`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
-    pub struct BridgeAddressReturn(pub ethers::core::types::Address);
-    #[doc = "Container type for all return fields from the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `[37, 123, 54, 50]`"]
+    pub struct BridgeAddressReturn(pub ::ethers::core::types::Address);
+    ///Container type for all return fields from the `globalExitRootMap` function with signature `globalExitRootMap(bytes32)` and selector `0x257b3632`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
-    pub struct GlobalExitRootMapReturn(pub ethers::core::types::U256);
-    #[doc = "Container type for all return fields from the `lastRollupExitRoot` function with signature `lastRollupExitRoot()` and selector `[1, 253, 144, 68]`"]
+    pub struct GlobalExitRootMapReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `lastRollupExitRoot` function with signature `lastRollupExitRoot()` and selector `0x01fd9044`
     #[derive(
         Clone,
-        Debug,
-        Eq,
-        PartialEq,
-        ethers :: contract :: EthAbiType,
-        ethers :: contract :: EthAbiCodec,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
         Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
     )]
     pub struct LastRollupExitRootReturn(pub [u8; 32]);
 }
