@@ -1,6 +1,4 @@
-pragma solidity ^0.8.13;
-
-import "forge-std/console.sol";
+pragma solidity ^0.8.0;
 
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
