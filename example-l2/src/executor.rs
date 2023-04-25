@@ -174,17 +174,17 @@ mod test {
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
-        let hotshot_contract = HotShot::deploy(deployer.clone(), ())
+        let hotshot_contract = HotShot::deploy(clients.trusted_sequencer.clone(), ())
             .unwrap()
             .send()
             .await
             .unwrap();
-        let rollup_contract = ExampleRollup::deploy(deployer.clone(), hotshot_contract.address())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        let rollup_contract =
+            ExampleRollup::deploy(clients.deployer.clone(), hotshot_contract.address())
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
         let max_updates = 5;
