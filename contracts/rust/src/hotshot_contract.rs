@@ -7,10 +7,13 @@ mod test {
     use contract_bindings::bls_test::G2Point;
     use contract_bindings::hot_shot::NewBlocksCall;
     use contract_bindings::HotShot;
+    use ethers::middleware::SignerMiddleware;
+    use ethers::signers::Wallet;
     use ethers::types::Bytes;
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
+    use ethers_providers::Http;
     use jf_primitives::signatures::bls_over_bn254::{
-        BLSOverBN254CurveSignatureScheme, Signature, VerKey,
+        BLSOverBN254CurveSignatureScheme, SignKey, Signature, VerKey,
     };
     use jf_primitives::signatures::{AggregateableSignatureSchemes, SignatureScheme};
     use jf_utils::test_rng;
@@ -91,6 +94,55 @@ mod test {
         }
     }
 
+    fn get_slice_from_bitmap<T: Clone>(input: Vec<T>, bitmap: &Vec<U256>) -> Vec<T> {
+        assert_eq!(input.len(), bitmap.len());
+        let mut res = vec![];
+        for i in 0..input.len() {
+            if bitmap[i] == U256::from(1) {
+                res.push(input[i].clone());
+            }
+        }
+        res
+    }
+
+    async fn check_qc_with_bitmap(
+        bitmap: &Vec<U256>,
+        staking_keys: &[(SignKey, VerKey)],
+        hotshot: &HotShot<
+            SignerMiddleware<
+                ethers::providers::Provider<Http>,
+                Wallet<ethers::core::k256::ecdsa::SigningKey>,
+            >,
+        >,
+    ) {
+        // Compute a signature with 3 keys holding enough staking in total
+        let n_sigs = bitmap.len();
+        let rng = &mut test_rng();
+        let mut signatures: Vec<Signature> = vec![];
+        let message = Bytes::from(b"unique message");
+        for key_pair in staking_keys.iter().take(n_sigs) {
+            let sk = key_pair.0.clone();
+            let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
+            signatures.push(sig.clone());
+        }
+
+        let vks = get_slice_from_bitmap::<VerKey>(
+            staking_keys.iter().map(|k| k.1).collect::<Vec<VerKey>>(),
+            bitmap,
+        );
+        let sigs = get_slice_from_bitmap::<Signature>(signatures, bitmap);
+        let agg_sig = BLSOverBN254CurveSignatureScheme::aggregate(&(), &vks, &sigs).unwrap();
+        let agg_sig_value: MyG1Point = agg_sig.clone().sigma.into_affine().into();
+
+        // Call the contract
+        let res = hotshot
+            .verify_agg_sig(message.clone(), agg_sig_value.into(), bitmap.to_vec())
+            .call()
+            .await;
+
+        assert!(res.is_ok());
+    }
+
     #[async_std::test]
     async fn test_validate_qc() {
         let (_, deployer) = get_provider_and_deployer().await;
@@ -119,36 +171,44 @@ mod test {
                 .unwrap();
         }
 
-        // Compute a signature with 3 keys holding enough staking in total
-        let mut signatures: Vec<Signature> = vec![];
-        let message = Bytes::from(b"unique message");
-        for key_pair in staking_keys.iter().take(n_sigs) {
-            let sk = key_pair.0.clone();
-            let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
-            signatures.push(sig.clone());
-        }
+        check_qc_with_bitmap(
+            &vec![
+                U256::from(1),
+                U256::from(1),
+                U256::from(1),
+                U256::from(0),
+                U256::from(0),
+            ],
+            &staking_keys,
+            &hotshot,
+        )
+        .await;
 
-        // Compute the aggregated signature with the first 3 keys
-        let vks = &staking_keys.iter().map(|k| k.1).collect::<Vec<VerKey>>()[..2];
-        let sigs = &signatures[..2];
-        let agg_sig = BLSOverBN254CurveSignatureScheme::aggregate(&(), vks, sigs).unwrap();
-        let agg_sig_value: MyG1Point = agg_sig.clone().sigma.into_affine().into();
+        check_qc_with_bitmap(
+            &vec![
+                U256::from(0),
+                U256::from(1),
+                U256::from(1),
+                U256::from(0),
+                U256::from(1),
+            ],
+            &staking_keys,
+            &hotshot,
+        )
+        .await;
 
-        let bitmap = vec![
-            U256::from(1),
-            U256::from(1),
-            U256::from(0),
-            U256::from(0),
-            U256::from(0),
-        ];
-
-        // Call the contract
-        let res = hotshot
-            .verify_agg_sig(message.clone(), agg_sig_value.into(), bitmap)
-            .call()
-            .await;
-
-        assert!(res.is_ok());
+        check_qc_with_bitmap(
+            &vec![
+                U256::from(1),
+                U256::from(0),
+                U256::from(0),
+                U256::from(0),
+                U256::from(0),
+            ],
+            &staking_keys,
+            &hotshot,
+        )
+        .await;
 
         // TODO error cases
         // Threshold is too low
