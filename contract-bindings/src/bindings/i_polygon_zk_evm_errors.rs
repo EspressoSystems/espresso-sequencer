@@ -1,573 +1,613 @@
 pub use i_polygon_zk_evm_errors::*;
-#[allow(clippy::too_many_arguments, non_camel_case_types)]
+/// This module was auto-generated with ethers-rs Abigen.
+/// More information at: <https://github.com/gakonst/ethers-rs>
+#[allow(
+    clippy::enum_variant_names,
+    clippy::too_many_arguments,
+    clippy::upper_case_acronyms,
+    clippy::type_complexity,
+    dead_code,
+    non_camel_case_types
+)]
 pub mod i_polygon_zk_evm_errors {
-    #![allow(clippy::enum_variant_names)]
-    #![allow(dead_code)]
-    #![allow(clippy::type_complexity)]
-    #![allow(unused_imports)]
-    use ethers::contract::{
-        builders::{ContractCall, Event},
-        Contract, Lazy,
-    };
-    use ethers::core::{
-        abi::{Abi, Detokenize, InvalidOutputType, Token, Tokenizable},
-        types::*,
-    };
-    use ethers::providers::Middleware;
-    #[doc = "IPolygonZkEVMErrors was auto-generated with ethers-rs Abigen. More information at: https://github.com/gakonst/ethers-rs"]
-    use std::sync::Arc;
-    # [rustfmt :: skip] const __ABI : & str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"BatchAlreadyVerified\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"BatchNotSequencedOrNotSequenceEnd\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ExceedMaxVerifyBatches\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalNumBatchBelowLastVerifiedBatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalNumBatchDoesNotMatchPendingState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalPendingStateNumInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForceBatchTimeoutNotExpired\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForceBatchesOverflow\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForcedDataDoesNotMatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"GlobalExitRootNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"HaltTimeoutNotExpired\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InitNumBatchAboveLastVerifiedBatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InitNumBatchDoesNotMatchPendingState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidRangeBatchTimeTarget\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidRangeMultiplierBatchFee\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewAccInputHashDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewPendingStateTimeoutMustBeLower\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewTrustedAggregatorTimeoutMustBeLower\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotEnoughMaticAmount\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OldAccInputHashDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OldStateRootDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAdmin\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyPendingAdmin\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyTrustedAggregator\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyTrustedSequencer\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateNotConsolidable\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateTimeoutExceedHaltAggregationTimeout\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequenceZeroBatches\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequencedTimestampBelowForcedTimestamp\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequencedTimestampInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"StoredRootMustBeDifferentThanNewRoot\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TransactionsLengthAboveMax\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TrustedAggregatorTimeoutExceedHaltAggregationTimeout\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TrustedAggregatorTimeoutNotExpired\",\"outputs\":[]}]" ;
-    #[doc = r" The parsed JSON-ABI of the contract."]
-    pub static IPOLYGONZKEVMERRORS_ABI: ethers::contract::Lazy<ethers::core::abi::Abi> =
-        ethers::contract::Lazy::new(|| {
-            ethers::core::utils::__serde_json::from_str(__ABI).expect("invalid abi")
+    #[rustfmt::skip]
+    const __ABI: &str = "[{\"inputs\":[],\"type\":\"error\",\"name\":\"BatchAlreadyVerified\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"BatchNotSequencedOrNotSequenceEnd\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ExceedMaxVerifyBatches\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalNumBatchBelowLastVerifiedBatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalNumBatchDoesNotMatchPendingState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"FinalPendingStateNumInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForceBatchTimeoutNotExpired\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForceBatchesOverflow\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"ForcedDataDoesNotMatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"GlobalExitRootNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"HaltTimeoutNotExpired\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InitNumBatchAboveLastVerifiedBatch\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InitNumBatchDoesNotMatchPendingState\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidRangeBatchTimeTarget\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"InvalidRangeMultiplierBatchFee\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewAccInputHashDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewPendingStateTimeoutMustBeLower\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NewTrustedAggregatorTimeoutMustBeLower\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NotEnoughMaticAmount\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OldAccInputHashDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OldStateRootDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyAdmin\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyPendingAdmin\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyTrustedAggregator\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"OnlyTrustedSequencer\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateDoesNotExist\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateNotConsolidable\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"PendingStateTimeoutExceedHaltAggregationTimeout\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequenceZeroBatches\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequencedTimestampBelowForcedTimestamp\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"SequencedTimestampInvalid\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"StoredRootMustBeDifferentThanNewRoot\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TransactionsLengthAboveMax\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TrustedAggregatorTimeoutExceedHaltAggregationTimeout\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"TrustedAggregatorTimeoutNotExpired\",\"outputs\":[]}]";
+    ///The parsed JSON ABI of the contract.
+    pub static IPOLYGONZKEVMERRORS_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+        ::ethers::contract::Lazy::new(|| {
+            ::ethers::core::utils::__serde_json::from_str(__ABI).expect("ABI is always valid")
         });
-    pub struct IPolygonZkEVMErrors<M>(ethers::contract::Contract<M>);
-    impl<M> Clone for IPolygonZkEVMErrors<M> {
+    pub struct IPolygonZkEVMErrors<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for IPolygonZkEVMErrors<M> {
         fn clone(&self) -> Self {
-            IPolygonZkEVMErrors(self.0.clone())
+            Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> std::ops::Deref for IPolygonZkEVMErrors<M> {
-        type Target = ethers::contract::Contract<M>;
+    impl<M> ::core::ops::Deref for IPolygonZkEVMErrors<M> {
+        type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> std::fmt::Debug for IPolygonZkEVMErrors<M> {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    impl<M> ::core::ops::DerefMut for IPolygonZkEVMErrors<M> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+    impl<M> ::core::fmt::Debug for IPolygonZkEVMErrors<M> {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             f.debug_tuple(stringify!(IPolygonZkEVMErrors))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ethers::providers::Middleware> IPolygonZkEVMErrors<M> {
-        #[doc = r" Creates a new contract instance with the specified `ethers`"]
-        #[doc = r" client at the given `Address`. The contract derefs to a `ethers::Contract`"]
-        #[doc = r" object"]
-        pub fn new<T: Into<ethers::core::types::Address>>(
+    impl<M: ::ethers::providers::Middleware> IPolygonZkEVMErrors<M> {
+        /// Creates a new contract instance with the specified `ethers` client at
+        /// `address`. The contract derefs to a `ethers::Contract` object.
+        pub fn new<T: Into<::ethers::core::types::Address>>(
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            ethers::contract::Contract::new(address.into(), IPOLYGONZKEVMERRORS_ABI.clone(), client)
-                .into()
+            Self(::ethers::contract::Contract::new(
+                address.into(),
+                IPOLYGONZKEVMERRORS_ABI.clone(),
+                client,
+            ))
         }
     }
-    impl<M: ethers::providers::Middleware> From<ethers::contract::Contract<M>>
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
         for IPolygonZkEVMErrors<M>
     {
-        fn from(contract: ethers::contract::Contract<M>) -> Self {
-            Self(contract)
+        fn from(contract: ::ethers::contract::Contract<M>) -> Self {
+            Self::new(contract.address(), contract.client())
         }
     }
-    #[doc = "Custom Error type `BatchAlreadyVerified` with signature `BatchAlreadyVerified()` and selector `[129, 42, 55, 45]`"]
+    ///Custom Error type `BatchAlreadyVerified` with signature `BatchAlreadyVerified()` and selector `0x812a372d`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "BatchAlreadyVerified", abi = "BatchAlreadyVerified()")]
     pub struct BatchAlreadyVerified;
-    #[doc = "Custom Error type `BatchNotSequencedOrNotSequenceEnd` with signature `BatchNotSequencedOrNotSequenceEnd()` and selector `[152, 197, 192, 20]`"]
+    ///Custom Error type `BatchNotSequencedOrNotSequenceEnd` with signature `BatchNotSequencedOrNotSequenceEnd()` and selector `0x98c5c014`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "BatchNotSequencedOrNotSequenceEnd",
         abi = "BatchNotSequencedOrNotSequenceEnd()"
     )]
     pub struct BatchNotSequencedOrNotSequenceEnd;
-    #[doc = "Custom Error type `ExceedMaxVerifyBatches` with signature `ExceedMaxVerifyBatches()` and selector `[181, 159, 117, 58]`"]
+    ///Custom Error type `ExceedMaxVerifyBatches` with signature `ExceedMaxVerifyBatches()` and selector `0xb59f753a`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "ExceedMaxVerifyBatches", abi = "ExceedMaxVerifyBatches()")]
     pub struct ExceedMaxVerifyBatches;
-    #[doc = "Custom Error type `FinalNumBatchBelowLastVerifiedBatch` with signature `FinalNumBatchBelowLastVerifiedBatch()` and selector `[185, 177, 143, 87]`"]
+    ///Custom Error type `FinalNumBatchBelowLastVerifiedBatch` with signature `FinalNumBatchBelowLastVerifiedBatch()` and selector `0xb9b18f57`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "FinalNumBatchBelowLastVerifiedBatch",
         abi = "FinalNumBatchBelowLastVerifiedBatch()"
     )]
     pub struct FinalNumBatchBelowLastVerifiedBatch;
-    #[doc = "Custom Error type `FinalNumBatchDoesNotMatchPendingState` with signature `FinalNumBatchDoesNotMatchPendingState()` and selector `[50, 162, 167, 127]`"]
+    ///Custom Error type `FinalNumBatchDoesNotMatchPendingState` with signature `FinalNumBatchDoesNotMatchPendingState()` and selector `0x32a2a77f`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "FinalNumBatchDoesNotMatchPendingState",
         abi = "FinalNumBatchDoesNotMatchPendingState()"
     )]
     pub struct FinalNumBatchDoesNotMatchPendingState;
-    #[doc = "Custom Error type `FinalPendingStateNumInvalid` with signature `FinalPendingStateNumInvalid()` and selector `[191, 167, 7, 159]`"]
+    ///Custom Error type `FinalPendingStateNumInvalid` with signature `FinalPendingStateNumInvalid()` and selector `0xbfa7079f`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "FinalPendingStateNumInvalid",
         abi = "FinalPendingStateNumInvalid()"
     )]
     pub struct FinalPendingStateNumInvalid;
-    #[doc = "Custom Error type `ForceBatchTimeoutNotExpired` with signature `ForceBatchTimeoutNotExpired()` and selector `[196, 74, 8, 33]`"]
+    ///Custom Error type `ForceBatchTimeoutNotExpired` with signature `ForceBatchTimeoutNotExpired()` and selector `0xc44a0821`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "ForceBatchTimeoutNotExpired",
         abi = "ForceBatchTimeoutNotExpired()"
     )]
     pub struct ForceBatchTimeoutNotExpired;
-    #[doc = "Custom Error type `ForceBatchesOverflow` with signature `ForceBatchesOverflow()` and selector `[198, 48, 160, 13]`"]
+    ///Custom Error type `ForceBatchesOverflow` with signature `ForceBatchesOverflow()` and selector `0xc630a00d`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "ForceBatchesOverflow", abi = "ForceBatchesOverflow()")]
     pub struct ForceBatchesOverflow;
-    #[doc = "Custom Error type `ForcedDataDoesNotMatch` with signature `ForcedDataDoesNotMatch()` and selector `[206, 61, 117, 94]`"]
+    ///Custom Error type `ForcedDataDoesNotMatch` with signature `ForcedDataDoesNotMatch()` and selector `0xce3d755e`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "ForcedDataDoesNotMatch", abi = "ForcedDataDoesNotMatch()")]
     pub struct ForcedDataDoesNotMatch;
-    #[doc = "Custom Error type `GlobalExitRootNotExist` with signature `GlobalExitRootNotExist()` and selector `[115, 189, 102, 141]`"]
+    ///Custom Error type `GlobalExitRootNotExist` with signature `GlobalExitRootNotExist()` and selector `0x73bd668d`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "GlobalExitRootNotExist", abi = "GlobalExitRootNotExist()")]
     pub struct GlobalExitRootNotExist;
-    #[doc = "Custom Error type `HaltTimeoutNotExpired` with signature `HaltTimeoutNotExpired()` and selector `[210, 87, 85, 90]`"]
+    ///Custom Error type `HaltTimeoutNotExpired` with signature `HaltTimeoutNotExpired()` and selector `0xd257555a`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "HaltTimeoutNotExpired", abi = "HaltTimeoutNotExpired()")]
     pub struct HaltTimeoutNotExpired;
-    #[doc = "Custom Error type `InitNumBatchAboveLastVerifiedBatch` with signature `InitNumBatchAboveLastVerifiedBatch()` and selector `[30, 86, 233, 226]`"]
+    ///Custom Error type `InitNumBatchAboveLastVerifiedBatch` with signature `InitNumBatchAboveLastVerifiedBatch()` and selector `0x1e56e9e2`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "InitNumBatchAboveLastVerifiedBatch",
         abi = "InitNumBatchAboveLastVerifiedBatch()"
     )]
     pub struct InitNumBatchAboveLastVerifiedBatch;
-    #[doc = "Custom Error type `InitNumBatchDoesNotMatchPendingState` with signature `InitNumBatchDoesNotMatchPendingState()` and selector `[43, 210, 227, 231]`"]
+    ///Custom Error type `InitNumBatchDoesNotMatchPendingState` with signature `InitNumBatchDoesNotMatchPendingState()` and selector `0x2bd2e3e7`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "InitNumBatchDoesNotMatchPendingState",
         abi = "InitNumBatchDoesNotMatchPendingState()"
     )]
     pub struct InitNumBatchDoesNotMatchPendingState;
-    #[doc = "Custom Error type `InvalidProof` with signature `InvalidProof()` and selector `[9, 189, 227, 57]`"]
+    ///Custom Error type `InvalidProof` with signature `InvalidProof()` and selector `0x09bde339`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "InvalidProof", abi = "InvalidProof()")]
     pub struct InvalidProof;
-    #[doc = "Custom Error type `InvalidRangeBatchTimeTarget` with signature `InvalidRangeBatchTimeTarget()` and selector `[224, 103, 223, 232]`"]
+    ///Custom Error type `InvalidRangeBatchTimeTarget` with signature `InvalidRangeBatchTimeTarget()` and selector `0xe067dfe8`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "InvalidRangeBatchTimeTarget",
         abi = "InvalidRangeBatchTimeTarget()"
     )]
     pub struct InvalidRangeBatchTimeTarget;
-    #[doc = "Custom Error type `InvalidRangeMultiplierBatchFee` with signature `InvalidRangeMultiplierBatchFee()` and selector `[76, 37, 51, 200]`"]
+    ///Custom Error type `InvalidRangeMultiplierBatchFee` with signature `InvalidRangeMultiplierBatchFee()` and selector `0x4c2533c8`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "InvalidRangeMultiplierBatchFee",
         abi = "InvalidRangeMultiplierBatchFee()"
     )]
     pub struct InvalidRangeMultiplierBatchFee;
-    #[doc = "Custom Error type `NewAccInputHashDoesNotExist` with signature `NewAccInputHashDoesNotExist()` and selector `[102, 56, 91, 81]`"]
+    ///Custom Error type `NewAccInputHashDoesNotExist` with signature `NewAccInputHashDoesNotExist()` and selector `0x66385b51`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "NewAccInputHashDoesNotExist",
         abi = "NewAccInputHashDoesNotExist()"
     )]
     pub struct NewAccInputHashDoesNotExist;
-    #[doc = "Custom Error type `NewPendingStateTimeoutMustBeLower` with signature `NewPendingStateTimeoutMustBeLower()` and selector `[72, 160, 90, 144]`"]
+    ///Custom Error type `NewPendingStateTimeoutMustBeLower` with signature `NewPendingStateTimeoutMustBeLower()` and selector `0x48a05a90`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "NewPendingStateTimeoutMustBeLower",
         abi = "NewPendingStateTimeoutMustBeLower()"
     )]
     pub struct NewPendingStateTimeoutMustBeLower;
-    #[doc = "Custom Error type `NewTrustedAggregatorTimeoutMustBeLower` with signature `NewTrustedAggregatorTimeoutMustBeLower()` and selector `[64, 22, 54, 223]`"]
+    ///Custom Error type `NewTrustedAggregatorTimeoutMustBeLower` with signature `NewTrustedAggregatorTimeoutMustBeLower()` and selector `0x401636df`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "NewTrustedAggregatorTimeoutMustBeLower",
         abi = "NewTrustedAggregatorTimeoutMustBeLower()"
     )]
     pub struct NewTrustedAggregatorTimeoutMustBeLower;
-    #[doc = "Custom Error type `NotEnoughMaticAmount` with signature `NotEnoughMaticAmount()` and selector `[71, 50, 253, 181]`"]
+    ///Custom Error type `NotEnoughMaticAmount` with signature `NotEnoughMaticAmount()` and selector `0x4732fdb5`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "NotEnoughMaticAmount", abi = "NotEnoughMaticAmount()")]
     pub struct NotEnoughMaticAmount;
-    #[doc = "Custom Error type `OldAccInputHashDoesNotExist` with signature `OldAccInputHashDoesNotExist()` and selector `[104, 24, 194, 158]`"]
+    ///Custom Error type `OldAccInputHashDoesNotExist` with signature `OldAccInputHashDoesNotExist()` and selector `0x6818c29e`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "OldAccInputHashDoesNotExist",
         abi = "OldAccInputHashDoesNotExist()"
     )]
     pub struct OldAccInputHashDoesNotExist;
-    #[doc = "Custom Error type `OldStateRootDoesNotExist` with signature `OldStateRootDoesNotExist()` and selector `[73, 151, 185, 134]`"]
+    ///Custom Error type `OldStateRootDoesNotExist` with signature `OldStateRootDoesNotExist()` and selector `0x4997b986`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OldStateRootDoesNotExist", abi = "OldStateRootDoesNotExist()")]
     pub struct OldStateRootDoesNotExist;
-    #[doc = "Custom Error type `OnlyAdmin` with signature `OnlyAdmin()` and selector `[71, 85, 101, 121]`"]
+    ///Custom Error type `OnlyAdmin` with signature `OnlyAdmin()` and selector `0x47556579`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyAdmin", abi = "OnlyAdmin()")]
     pub struct OnlyAdmin;
-    #[doc = "Custom Error type `OnlyPendingAdmin` with signature `OnlyPendingAdmin()` and selector `[209, 236, 75, 35]`"]
+    ///Custom Error type `OnlyPendingAdmin` with signature `OnlyPendingAdmin()` and selector `0xd1ec4b23`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyPendingAdmin", abi = "OnlyPendingAdmin()")]
     pub struct OnlyPendingAdmin;
-    #[doc = "Custom Error type `OnlyTrustedAggregator` with signature `OnlyTrustedAggregator()` and selector `[187, 203, 188, 5]`"]
+    ///Custom Error type `OnlyTrustedAggregator` with signature `OnlyTrustedAggregator()` and selector `0xbbcbbc05`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyTrustedAggregator", abi = "OnlyTrustedAggregator()")]
     pub struct OnlyTrustedAggregator;
-    #[doc = "Custom Error type `OnlyTrustedSequencer` with signature `OnlyTrustedSequencer()` and selector `[17, 231, 190, 21]`"]
+    ///Custom Error type `OnlyTrustedSequencer` with signature `OnlyTrustedSequencer()` and selector `0x11e7be15`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "OnlyTrustedSequencer", abi = "OnlyTrustedSequencer()")]
     pub struct OnlyTrustedSequencer;
-    #[doc = "Custom Error type `PendingStateDoesNotExist` with signature `PendingStateDoesNotExist()` and selector `[187, 20, 194, 5]`"]
+    ///Custom Error type `PendingStateDoesNotExist` with signature `PendingStateDoesNotExist()` and selector `0xbb14c205`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "PendingStateDoesNotExist", abi = "PendingStateDoesNotExist()")]
     pub struct PendingStateDoesNotExist;
-    #[doc = "Custom Error type `PendingStateInvalid` with signature `PendingStateInvalid()` and selector `[208, 134, 183, 11]`"]
+    ///Custom Error type `PendingStateInvalid` with signature `PendingStateInvalid()` and selector `0xd086b70b`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "PendingStateInvalid", abi = "PendingStateInvalid()")]
     pub struct PendingStateInvalid;
-    #[doc = "Custom Error type `PendingStateNotConsolidable` with signature `PendingStateNotConsolidable()` and selector `[12, 233, 228, 162]`"]
+    ///Custom Error type `PendingStateNotConsolidable` with signature `PendingStateNotConsolidable()` and selector `0x0ce9e4a2`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "PendingStateNotConsolidable",
         abi = "PendingStateNotConsolidable()"
     )]
     pub struct PendingStateNotConsolidable;
-    #[doc = "Custom Error type `PendingStateTimeoutExceedHaltAggregationTimeout` with signature `PendingStateTimeoutExceedHaltAggregationTimeout()` and selector `[204, 150, 80, 112]`"]
+    ///Custom Error type `PendingStateTimeoutExceedHaltAggregationTimeout` with signature `PendingStateTimeoutExceedHaltAggregationTimeout()` and selector `0xcc965070`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "PendingStateTimeoutExceedHaltAggregationTimeout",
         abi = "PendingStateTimeoutExceedHaltAggregationTimeout()"
     )]
     pub struct PendingStateTimeoutExceedHaltAggregationTimeout;
-    #[doc = "Custom Error type `SequenceZeroBatches` with signature `SequenceZeroBatches()` and selector `[203, 89, 26, 95]`"]
+    ///Custom Error type `SequenceZeroBatches` with signature `SequenceZeroBatches()` and selector `0xcb591a5f`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(name = "SequenceZeroBatches", abi = "SequenceZeroBatches()")]
     pub struct SequenceZeroBatches;
-    #[doc = "Custom Error type `SequencedTimestampBelowForcedTimestamp` with signature `SequencedTimestampBelowForcedTimestamp()` and selector `[127, 122, 184, 114]`"]
+    ///Custom Error type `SequencedTimestampBelowForcedTimestamp` with signature `SequencedTimestampBelowForcedTimestamp()` and selector `0x7f7ab872`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "SequencedTimestampBelowForcedTimestamp",
         abi = "SequencedTimestampBelowForcedTimestamp()"
     )]
     pub struct SequencedTimestampBelowForcedTimestamp;
-    #[doc = "Custom Error type `SequencedTimestampInvalid` with signature `SequencedTimestampInvalid()` and selector `[234, 130, 121, 22]`"]
+    ///Custom Error type `SequencedTimestampInvalid` with signature `SequencedTimestampInvalid()` and selector `0xea827916`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "SequencedTimestampInvalid",
         abi = "SequencedTimestampInvalid()"
     )]
     pub struct SequencedTimestampInvalid;
-    #[doc = "Custom Error type `StoredRootMustBeDifferentThanNewRoot` with signature `StoredRootMustBeDifferentThanNewRoot()` and selector `[164, 114, 118, 189]`"]
+    ///Custom Error type `StoredRootMustBeDifferentThanNewRoot` with signature `StoredRootMustBeDifferentThanNewRoot()` and selector `0xa47276bd`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "StoredRootMustBeDifferentThanNewRoot",
         abi = "StoredRootMustBeDifferentThanNewRoot()"
     )]
     pub struct StoredRootMustBeDifferentThanNewRoot;
-    #[doc = "Custom Error type `TransactionsLengthAboveMax` with signature `TransactionsLengthAboveMax()` and selector `[162, 154, 108, 124]`"]
+    ///Custom Error type `TransactionsLengthAboveMax` with signature `TransactionsLengthAboveMax()` and selector `0xa29a6c7c`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "TransactionsLengthAboveMax",
         abi = "TransactionsLengthAboveMax()"
     )]
     pub struct TransactionsLengthAboveMax;
-    #[doc = "Custom Error type `TrustedAggregatorTimeoutExceedHaltAggregationTimeout` with signature `TrustedAggregatorTimeoutExceedHaltAggregationTimeout()` and selector `[29, 6, 232, 121]`"]
+    ///Custom Error type `TrustedAggregatorTimeoutExceedHaltAggregationTimeout` with signature `TrustedAggregatorTimeoutExceedHaltAggregationTimeout()` and selector `0x1d06e879`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "TrustedAggregatorTimeoutExceedHaltAggregationTimeout",
         abi = "TrustedAggregatorTimeoutExceedHaltAggregationTimeout()"
     )]
     pub struct TrustedAggregatorTimeoutExceedHaltAggregationTimeout;
-    #[doc = "Custom Error type `TrustedAggregatorTimeoutNotExpired` with signature `TrustedAggregatorTimeoutNotExpired()` and selector `[138, 7, 4, 211]`"]
+    ///Custom Error type `TrustedAggregatorTimeoutNotExpired` with signature `TrustedAggregatorTimeoutNotExpired()` and selector `0x8a0704d3`
     #[derive(
         Clone,
-        Debug,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
         Default,
-        Eq,
+        Debug,
         PartialEq,
-        ethers :: contract :: EthError,
-        ethers :: contract :: EthDisplay,
+        Eq,
+        Hash,
     )]
     #[etherror(
         name = "TrustedAggregatorTimeoutNotExpired",
         abi = "TrustedAggregatorTimeoutNotExpired()"
     )]
     pub struct TrustedAggregatorTimeoutNotExpired;
-    #[derive(Debug, Clone, PartialEq, Eq, ethers :: contract :: EthAbiType)]
+    ///Container type for all of the contract's custom errors
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum IPolygonZkEVMErrorsErrors {
         BatchAlreadyVerified(BatchAlreadyVerified),
         BatchNotSequencedOrNotSequenceEnd(BatchNotSequencedOrNotSequenceEnd),
@@ -610,565 +650,747 @@ pub mod i_polygon_zk_evm_errors {
             TrustedAggregatorTimeoutExceedHaltAggregationTimeout,
         ),
         TrustedAggregatorTimeoutNotExpired(TrustedAggregatorTimeoutNotExpired),
+        /// The standard solidity revert string, with selector
+        /// Error(string) -- 0x08c379a0
+        RevertString(::std::string::String),
     }
-    impl ethers::core::abi::AbiDecode for IPolygonZkEVMErrorsErrors {
+    impl ::ethers::core::abi::AbiDecode for IPolygonZkEVMErrorsErrors {
         fn decode(
             data: impl AsRef<[u8]>,
-        ) -> ::std::result::Result<Self, ethers::core::abi::AbiError> {
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
+            let data = data.as_ref();
             if let Ok(decoded) =
-                <BatchAlreadyVerified as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <::std::string::String as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMErrorsErrors::BatchAlreadyVerified(decoded));
+                return Ok(Self::RevertString(decoded));
             }
             if let Ok(decoded) =
-                <BatchNotSequencedOrNotSequenceEnd as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
+                <BatchAlreadyVerified as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::BatchAlreadyVerified(decoded));
+            }
+            if let Ok(decoded) =
+                <BatchNotSequencedOrNotSequenceEnd as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::BatchNotSequencedOrNotSequenceEnd(decoded));
+            }
+            if let Ok(decoded) =
+                <ExceedMaxVerifyBatches as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ExceedMaxVerifyBatches(decoded));
+            }
+            if let Ok(decoded) =
+                <FinalNumBatchBelowLastVerifiedBatch as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
                 )
             {
-                return Ok(IPolygonZkEVMErrorsErrors::BatchNotSequencedOrNotSequenceEnd(decoded));
+                return Ok(Self::FinalNumBatchBelowLastVerifiedBatch(decoded));
             }
             if let Ok(decoded) =
-                <ExceedMaxVerifyBatches as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::ExceedMaxVerifyBatches(decoded));
-            }
-            if let Ok(decoded) =
-                <FinalNumBatchBelowLastVerifiedBatch as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
+                <FinalNumBatchDoesNotMatchPendingState as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
                 )
             {
-                return Ok(IPolygonZkEVMErrorsErrors::FinalNumBatchBelowLastVerifiedBatch(decoded));
+                return Ok(Self::FinalNumBatchDoesNotMatchPendingState(decoded));
             }
             if let Ok(decoded) =
-                <FinalNumBatchDoesNotMatchPendingState as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
+                <FinalPendingStateNumInvalid as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::FinalPendingStateNumInvalid(decoded));
+            }
+            if let Ok(decoded) =
+                <ForceBatchTimeoutNotExpired as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ForceBatchTimeoutNotExpired(decoded));
+            }
+            if let Ok(decoded) =
+                <ForceBatchesOverflow as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ForceBatchesOverflow(decoded));
+            }
+            if let Ok(decoded) =
+                <ForcedDataDoesNotMatch as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ForcedDataDoesNotMatch(decoded));
+            }
+            if let Ok(decoded) =
+                <GlobalExitRootNotExist as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::GlobalExitRootNotExist(decoded));
+            }
+            if let Ok(decoded) =
+                <HaltTimeoutNotExpired as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::HaltTimeoutNotExpired(decoded));
+            }
+            if let Ok(decoded) =
+                <InitNumBatchAboveLastVerifiedBatch as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::InitNumBatchAboveLastVerifiedBatch(decoded));
+            }
+            if let Ok(decoded) =
+                <InitNumBatchDoesNotMatchPendingState as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
                 )
             {
+                return Ok(Self::InitNumBatchDoesNotMatchPendingState(decoded));
+            }
+            if let Ok(decoded) = <InvalidProof as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::InvalidProof(decoded));
+            }
+            if let Ok(decoded) =
+                <InvalidRangeBatchTimeTarget as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::InvalidRangeBatchTimeTarget(decoded));
+            }
+            if let Ok(decoded) =
+                <InvalidRangeMultiplierBatchFee as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::InvalidRangeMultiplierBatchFee(decoded));
+            }
+            if let Ok(decoded) =
+                <NewAccInputHashDoesNotExist as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NewAccInputHashDoesNotExist(decoded));
+            }
+            if let Ok(decoded) =
+                <NewPendingStateTimeoutMustBeLower as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NewPendingStateTimeoutMustBeLower(decoded));
+            }
+            if let Ok(decoded) =
+                <NewTrustedAggregatorTimeoutMustBeLower as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
+                )
+            {
+                return Ok(Self::NewTrustedAggregatorTimeoutMustBeLower(decoded));
+            }
+            if let Ok(decoded) =
+                <NotEnoughMaticAmount as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NotEnoughMaticAmount(decoded));
+            }
+            if let Ok(decoded) =
+                <OldAccInputHashDoesNotExist as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::OldAccInputHashDoesNotExist(decoded));
+            }
+            if let Ok(decoded) =
+                <OldStateRootDoesNotExist as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::OldStateRootDoesNotExist(decoded));
+            }
+            if let Ok(decoded) = <OnlyAdmin as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::OnlyAdmin(decoded));
+            }
+            if let Ok(decoded) = <OnlyPendingAdmin as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::OnlyPendingAdmin(decoded));
+            }
+            if let Ok(decoded) =
+                <OnlyTrustedAggregator as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::OnlyTrustedAggregator(decoded));
+            }
+            if let Ok(decoded) =
+                <OnlyTrustedSequencer as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::OnlyTrustedSequencer(decoded));
+            }
+            if let Ok(decoded) =
+                <PendingStateDoesNotExist as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::PendingStateDoesNotExist(decoded));
+            }
+            if let Ok(decoded) =
+                <PendingStateInvalid as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::PendingStateInvalid(decoded));
+            }
+            if let Ok(decoded) =
+                <PendingStateNotConsolidable as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::PendingStateNotConsolidable(decoded));
+            }
+            if let Ok(decoded)
+                = <PendingStateTimeoutExceedHaltAggregationTimeout as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
+                ) {
                 return Ok(
-                    IPolygonZkEVMErrorsErrors::FinalNumBatchDoesNotMatchPendingState(decoded),
+                    Self::PendingStateTimeoutExceedHaltAggregationTimeout(decoded),
                 );
             }
             if let Ok(decoded) =
-                <FinalPendingStateNumInvalid as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <SequenceZeroBatches as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMErrorsErrors::FinalPendingStateNumInvalid(
-                    decoded,
-                ));
+                return Ok(Self::SequenceZeroBatches(decoded));
             }
             if let Ok(decoded) =
-                <ForceBatchTimeoutNotExpired as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::ForceBatchTimeoutNotExpired(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <ForceBatchesOverflow as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::ForceBatchesOverflow(decoded));
-            }
-            if let Ok(decoded) =
-                <ForcedDataDoesNotMatch as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::ForcedDataDoesNotMatch(decoded));
-            }
-            if let Ok(decoded) =
-                <GlobalExitRootNotExist as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::GlobalExitRootNotExist(decoded));
-            }
-            if let Ok(decoded) =
-                <HaltTimeoutNotExpired as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::HaltTimeoutNotExpired(decoded));
-            }
-            if let Ok(decoded) =
-                <InitNumBatchAboveLastVerifiedBatch as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
+                <SequencedTimestampBelowForcedTimestamp as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
                 )
             {
-                return Ok(IPolygonZkEVMErrorsErrors::InitNumBatchAboveLastVerifiedBatch(decoded));
+                return Ok(Self::SequencedTimestampBelowForcedTimestamp(decoded));
             }
             if let Ok(decoded) =
-                <InitNumBatchDoesNotMatchPendingState as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
+                <SequencedTimestampInvalid as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::SequencedTimestampInvalid(decoded));
+            }
+            if let Ok(decoded) =
+                <StoredRootMustBeDifferentThanNewRoot as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
                 )
             {
+                return Ok(Self::StoredRootMustBeDifferentThanNewRoot(decoded));
+            }
+            if let Ok(decoded) =
+                <TransactionsLengthAboveMax as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::TransactionsLengthAboveMax(decoded));
+            }
+            if let Ok(decoded)
+                = <TrustedAggregatorTimeoutExceedHaltAggregationTimeout as ::ethers::core::abi::AbiDecode>::decode(
+                    data,
+                ) {
                 return Ok(
-                    IPolygonZkEVMErrorsErrors::InitNumBatchDoesNotMatchPendingState(decoded),
+                    Self::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(decoded),
                 );
             }
             if let Ok(decoded) =
-                <InvalidProof as ethers::core::abi::AbiDecode>::decode(data.as_ref())
+                <TrustedAggregatorTimeoutNotExpired as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(IPolygonZkEVMErrorsErrors::InvalidProof(decoded));
+                return Ok(Self::TrustedAggregatorTimeoutNotExpired(decoded));
             }
-            if let Ok(decoded) =
-                <InvalidRangeBatchTimeTarget as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::InvalidRangeBatchTimeTarget(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <InvalidRangeMultiplierBatchFee as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::InvalidRangeMultiplierBatchFee(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <NewAccInputHashDoesNotExist as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::NewAccInputHashDoesNotExist(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <NewPendingStateTimeoutMustBeLower as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::NewPendingStateTimeoutMustBeLower(decoded));
-            }
-            if let Ok(decoded) =
-                <NewTrustedAggregatorTimeoutMustBeLower as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(
-                    IPolygonZkEVMErrorsErrors::NewTrustedAggregatorTimeoutMustBeLower(decoded),
-                );
-            }
-            if let Ok(decoded) =
-                <NotEnoughMaticAmount as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::NotEnoughMaticAmount(decoded));
-            }
-            if let Ok(decoded) =
-                <OldAccInputHashDoesNotExist as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OldAccInputHashDoesNotExist(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <OldStateRootDoesNotExist as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OldStateRootDoesNotExist(decoded));
-            }
-            if let Ok(decoded) = <OnlyAdmin as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OnlyAdmin(decoded));
-            }
-            if let Ok(decoded) =
-                <OnlyPendingAdmin as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OnlyPendingAdmin(decoded));
-            }
-            if let Ok(decoded) =
-                <OnlyTrustedAggregator as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OnlyTrustedAggregator(decoded));
-            }
-            if let Ok(decoded) =
-                <OnlyTrustedSequencer as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::OnlyTrustedSequencer(decoded));
-            }
-            if let Ok(decoded) =
-                <PendingStateDoesNotExist as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::PendingStateDoesNotExist(decoded));
-            }
-            if let Ok(decoded) =
-                <PendingStateInvalid as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::PendingStateInvalid(decoded));
-            }
-            if let Ok(decoded) =
-                <PendingStateNotConsolidable as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::PendingStateNotConsolidable(
-                    decoded,
-                ));
-            }
-            if let Ok (decoded) = < PendingStateTimeoutExceedHaltAggregationTimeout as ethers :: core :: abi :: AbiDecode > :: decode (data . as_ref ()) { return Ok (IPolygonZkEVMErrorsErrors :: PendingStateTimeoutExceedHaltAggregationTimeout (decoded)) }
-            if let Ok(decoded) =
-                <SequenceZeroBatches as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::SequenceZeroBatches(decoded));
-            }
-            if let Ok(decoded) =
-                <SequencedTimestampBelowForcedTimestamp as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(
-                    IPolygonZkEVMErrorsErrors::SequencedTimestampBelowForcedTimestamp(decoded),
-                );
-            }
-            if let Ok(decoded) =
-                <SequencedTimestampInvalid as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::SequencedTimestampInvalid(
-                    decoded,
-                ));
-            }
-            if let Ok(decoded) =
-                <StoredRootMustBeDifferentThanNewRoot as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(
-                    IPolygonZkEVMErrorsErrors::StoredRootMustBeDifferentThanNewRoot(decoded),
-                );
-            }
-            if let Ok(decoded) =
-                <TransactionsLengthAboveMax as ethers::core::abi::AbiDecode>::decode(data.as_ref())
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::TransactionsLengthAboveMax(
-                    decoded,
-                ));
-            }
-            if let Ok (decoded) = < TrustedAggregatorTimeoutExceedHaltAggregationTimeout as ethers :: core :: abi :: AbiDecode > :: decode (data . as_ref ()) { return Ok (IPolygonZkEVMErrorsErrors :: TrustedAggregatorTimeoutExceedHaltAggregationTimeout (decoded)) }
-            if let Ok(decoded) =
-                <TrustedAggregatorTimeoutNotExpired as ethers::core::abi::AbiDecode>::decode(
-                    data.as_ref(),
-                )
-            {
-                return Ok(IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutNotExpired(decoded));
-            }
-            Err(ethers::core::abi::Error::InvalidData.into())
+            Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ethers::core::abi::AbiEncode for IPolygonZkEVMErrorsErrors {
-        fn encode(self) -> Vec<u8> {
+    impl ::ethers::core::abi::AbiEncode for IPolygonZkEVMErrorsErrors {
+        fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
-                IPolygonZkEVMErrorsErrors::BatchAlreadyVerified(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::BatchNotSequencedOrNotSequenceEnd(element) => {
-                    element.encode()
+                Self::BatchAlreadyVerified(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::ExceedMaxVerifyBatches(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::FinalNumBatchBelowLastVerifiedBatch(element) => {
-                    element.encode()
+                Self::BatchNotSequencedOrNotSequenceEnd(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::FinalNumBatchDoesNotMatchPendingState(element) => {
-                    element.encode()
+                Self::ExceedMaxVerifyBatches(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::FinalPendingStateNumInvalid(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::ForceBatchTimeoutNotExpired(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::ForceBatchesOverflow(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::ForcedDataDoesNotMatch(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::GlobalExitRootNotExist(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::HaltTimeoutNotExpired(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::InitNumBatchAboveLastVerifiedBatch(element) => {
-                    element.encode()
+                Self::FinalNumBatchBelowLastVerifiedBatch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::InitNumBatchDoesNotMatchPendingState(element) => {
-                    element.encode()
+                Self::FinalNumBatchDoesNotMatchPendingState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::InvalidProof(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::InvalidRangeBatchTimeTarget(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::InvalidRangeMultiplierBatchFee(element) => {
-                    element.encode()
+                Self::FinalPendingStateNumInvalid(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::NewAccInputHashDoesNotExist(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::NewPendingStateTimeoutMustBeLower(element) => {
-                    element.encode()
+                Self::ForceBatchTimeoutNotExpired(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::NewTrustedAggregatorTimeoutMustBeLower(element) => {
-                    element.encode()
+                Self::ForceBatchesOverflow(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::NotEnoughMaticAmount(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OldAccInputHashDoesNotExist(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OldStateRootDoesNotExist(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OnlyAdmin(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OnlyPendingAdmin(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OnlyTrustedAggregator(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::OnlyTrustedSequencer(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::PendingStateDoesNotExist(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::PendingStateInvalid(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::PendingStateNotConsolidable(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::PendingStateTimeoutExceedHaltAggregationTimeout(
-                    element,
-                ) => element.encode(),
-                IPolygonZkEVMErrorsErrors::SequenceZeroBatches(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::SequencedTimestampBelowForcedTimestamp(element) => {
-                    element.encode()
+                Self::ForcedDataDoesNotMatch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::SequencedTimestampInvalid(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::StoredRootMustBeDifferentThanNewRoot(element) => {
-                    element.encode()
+                Self::GlobalExitRootNotExist(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                IPolygonZkEVMErrorsErrors::TransactionsLengthAboveMax(element) => element.encode(),
-                IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(
-                    element,
-                ) => element.encode(),
-                IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutNotExpired(element) => {
-                    element.encode()
+                Self::HaltTimeoutNotExpired(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::InitNumBatchAboveLastVerifiedBatch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::InitNumBatchDoesNotMatchPendingState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::InvalidProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::InvalidRangeBatchTimeTarget(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::InvalidRangeMultiplierBatchFee(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::NewAccInputHashDoesNotExist(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::NewPendingStateTimeoutMustBeLower(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::NewTrustedAggregatorTimeoutMustBeLower(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::NotEnoughMaticAmount(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::OldAccInputHashDoesNotExist(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::OldStateRootDoesNotExist(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::OnlyAdmin(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::OnlyPendingAdmin(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::OnlyTrustedAggregator(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::OnlyTrustedSequencer(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::PendingStateDoesNotExist(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::PendingStateInvalid(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::PendingStateNotConsolidable(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::PendingStateTimeoutExceedHaltAggregationTimeout(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::SequenceZeroBatches(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::SequencedTimestampBelowForcedTimestamp(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::SequencedTimestampInvalid(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::StoredRootMustBeDifferentThanNewRoot(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::TransactionsLengthAboveMax(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::TrustedAggregatorTimeoutNotExpired(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
     }
-    impl ::std::fmt::Display for IPolygonZkEVMErrorsErrors {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    impl ::ethers::contract::ContractRevert for IPolygonZkEVMErrorsErrors {
+        fn valid_selector(selector: [u8; 4]) -> bool {
+            match selector {
+                [0x08, 0xc3, 0x79, 0xa0] => true,
+                _ if selector
+                    == <BatchAlreadyVerified as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <BatchNotSequencedOrNotSequenceEnd as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <ExceedMaxVerifyBatches as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <FinalNumBatchBelowLastVerifiedBatch as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <FinalNumBatchDoesNotMatchPendingState as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <FinalPendingStateNumInvalid as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <ForceBatchTimeoutNotExpired as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <ForceBatchesOverflow as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <ForcedDataDoesNotMatch as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <GlobalExitRootNotExist as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <HaltTimeoutNotExpired as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InitNumBatchAboveLastVerifiedBatch as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InitNumBatchDoesNotMatchPendingState as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InvalidProof as ::ethers::contract::EthError>::selector() => true,
+                _ if selector
+                    == <InvalidRangeBatchTimeTarget as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InvalidRangeMultiplierBatchFee as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <NewAccInputHashDoesNotExist as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <NewPendingStateTimeoutMustBeLower as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <NewTrustedAggregatorTimeoutMustBeLower as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <NotEnoughMaticAmount as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <OldAccInputHashDoesNotExist as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <OldStateRootDoesNotExist as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <OnlyAdmin as ::ethers::contract::EthError>::selector() => true,
+                _ if selector
+                    == <OnlyPendingAdmin as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <OnlyTrustedAggregator as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <OnlyTrustedSequencer as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <PendingStateDoesNotExist as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <PendingStateInvalid as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <PendingStateNotConsolidable as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <PendingStateTimeoutExceedHaltAggregationTimeout as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <SequenceZeroBatches as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <SequencedTimestampBelowForcedTimestamp as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <SequencedTimestampInvalid as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <StoredRootMustBeDifferentThanNewRoot as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <TransactionsLengthAboveMax as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <TrustedAggregatorTimeoutExceedHaltAggregationTimeout as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <TrustedAggregatorTimeoutNotExpired as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ => false,
+            }
+        }
+    }
+    impl ::core::fmt::Display for IPolygonZkEVMErrorsErrors {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                IPolygonZkEVMErrorsErrors::BatchAlreadyVerified(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::BatchNotSequencedOrNotSequenceEnd(element) => {
-                    element.fmt(f)
+                Self::BatchAlreadyVerified(element) => ::core::fmt::Display::fmt(element, f),
+                Self::BatchNotSequencedOrNotSequenceEnd(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::ExceedMaxVerifyBatches(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::FinalNumBatchBelowLastVerifiedBatch(element) => {
-                    element.fmt(f)
+                Self::ExceedMaxVerifyBatches(element) => ::core::fmt::Display::fmt(element, f),
+                Self::FinalNumBatchBelowLastVerifiedBatch(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::FinalNumBatchDoesNotMatchPendingState(element) => {
-                    element.fmt(f)
+                Self::FinalNumBatchDoesNotMatchPendingState(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::FinalPendingStateNumInvalid(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::ForceBatchTimeoutNotExpired(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::ForceBatchesOverflow(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::ForcedDataDoesNotMatch(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::GlobalExitRootNotExist(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::HaltTimeoutNotExpired(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::InitNumBatchAboveLastVerifiedBatch(element) => {
-                    element.fmt(f)
+                Self::FinalPendingStateNumInvalid(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ForceBatchTimeoutNotExpired(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ForceBatchesOverflow(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ForcedDataDoesNotMatch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GlobalExitRootNotExist(element) => ::core::fmt::Display::fmt(element, f),
+                Self::HaltTimeoutNotExpired(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InitNumBatchAboveLastVerifiedBatch(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::InitNumBatchDoesNotMatchPendingState(element) => {
-                    element.fmt(f)
+                Self::InitNumBatchDoesNotMatchPendingState(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::InvalidProof(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::InvalidRangeBatchTimeTarget(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::InvalidRangeMultiplierBatchFee(element) => {
-                    element.fmt(f)
+                Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidRangeBatchTimeTarget(element) => ::core::fmt::Display::fmt(element, f),
+                Self::InvalidRangeMultiplierBatchFee(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::NewAccInputHashDoesNotExist(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::NewPendingStateTimeoutMustBeLower(element) => {
-                    element.fmt(f)
+                Self::NewAccInputHashDoesNotExist(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NewPendingStateTimeoutMustBeLower(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::NewTrustedAggregatorTimeoutMustBeLower(element) => {
-                    element.fmt(f)
+                Self::NewTrustedAggregatorTimeoutMustBeLower(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::NotEnoughMaticAmount(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OldAccInputHashDoesNotExist(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OldStateRootDoesNotExist(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OnlyAdmin(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OnlyPendingAdmin(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OnlyTrustedAggregator(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::OnlyTrustedSequencer(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::PendingStateDoesNotExist(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::PendingStateInvalid(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::PendingStateNotConsolidable(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::PendingStateTimeoutExceedHaltAggregationTimeout(
-                    element,
-                ) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::SequenceZeroBatches(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::SequencedTimestampBelowForcedTimestamp(element) => {
-                    element.fmt(f)
+                Self::NotEnoughMaticAmount(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OldAccInputHashDoesNotExist(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OldStateRootDoesNotExist(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OnlyAdmin(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OnlyPendingAdmin(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OnlyTrustedAggregator(element) => ::core::fmt::Display::fmt(element, f),
+                Self::OnlyTrustedSequencer(element) => ::core::fmt::Display::fmt(element, f),
+                Self::PendingStateDoesNotExist(element) => ::core::fmt::Display::fmt(element, f),
+                Self::PendingStateInvalid(element) => ::core::fmt::Display::fmt(element, f),
+                Self::PendingStateNotConsolidable(element) => ::core::fmt::Display::fmt(element, f),
+                Self::PendingStateTimeoutExceedHaltAggregationTimeout(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::SequencedTimestampInvalid(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::StoredRootMustBeDifferentThanNewRoot(element) => {
-                    element.fmt(f)
+                Self::SequenceZeroBatches(element) => ::core::fmt::Display::fmt(element, f),
+                Self::SequencedTimestampBelowForcedTimestamp(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
-                IPolygonZkEVMErrorsErrors::TransactionsLengthAboveMax(element) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(
-                    element,
-                ) => element.fmt(f),
-                IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutNotExpired(element) => {
-                    element.fmt(f)
+                Self::SequencedTimestampInvalid(element) => ::core::fmt::Display::fmt(element, f),
+                Self::StoredRootMustBeDifferentThanNewRoot(element) => {
+                    ::core::fmt::Display::fmt(element, f)
                 }
+                Self::TransactionsLengthAboveMax(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::TrustedAggregatorTimeoutNotExpired(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
         }
     }
-    impl ::std::convert::From<BatchAlreadyVerified> for IPolygonZkEVMErrorsErrors {
-        fn from(var: BatchAlreadyVerified) -> Self {
-            IPolygonZkEVMErrorsErrors::BatchAlreadyVerified(var)
+    impl ::core::convert::From<::std::string::String> for IPolygonZkEVMErrorsErrors {
+        fn from(value: String) -> Self {
+            Self::RevertString(value)
         }
     }
-    impl ::std::convert::From<BatchNotSequencedOrNotSequenceEnd> for IPolygonZkEVMErrorsErrors {
-        fn from(var: BatchNotSequencedOrNotSequenceEnd) -> Self {
-            IPolygonZkEVMErrorsErrors::BatchNotSequencedOrNotSequenceEnd(var)
+    impl ::core::convert::From<BatchAlreadyVerified> for IPolygonZkEVMErrorsErrors {
+        fn from(value: BatchAlreadyVerified) -> Self {
+            Self::BatchAlreadyVerified(value)
         }
     }
-    impl ::std::convert::From<ExceedMaxVerifyBatches> for IPolygonZkEVMErrorsErrors {
-        fn from(var: ExceedMaxVerifyBatches) -> Self {
-            IPolygonZkEVMErrorsErrors::ExceedMaxVerifyBatches(var)
+    impl ::core::convert::From<BatchNotSequencedOrNotSequenceEnd> for IPolygonZkEVMErrorsErrors {
+        fn from(value: BatchNotSequencedOrNotSequenceEnd) -> Self {
+            Self::BatchNotSequencedOrNotSequenceEnd(value)
         }
     }
-    impl ::std::convert::From<FinalNumBatchBelowLastVerifiedBatch> for IPolygonZkEVMErrorsErrors {
-        fn from(var: FinalNumBatchBelowLastVerifiedBatch) -> Self {
-            IPolygonZkEVMErrorsErrors::FinalNumBatchBelowLastVerifiedBatch(var)
+    impl ::core::convert::From<ExceedMaxVerifyBatches> for IPolygonZkEVMErrorsErrors {
+        fn from(value: ExceedMaxVerifyBatches) -> Self {
+            Self::ExceedMaxVerifyBatches(value)
         }
     }
-    impl ::std::convert::From<FinalNumBatchDoesNotMatchPendingState> for IPolygonZkEVMErrorsErrors {
-        fn from(var: FinalNumBatchDoesNotMatchPendingState) -> Self {
-            IPolygonZkEVMErrorsErrors::FinalNumBatchDoesNotMatchPendingState(var)
+    impl ::core::convert::From<FinalNumBatchBelowLastVerifiedBatch> for IPolygonZkEVMErrorsErrors {
+        fn from(value: FinalNumBatchBelowLastVerifiedBatch) -> Self {
+            Self::FinalNumBatchBelowLastVerifiedBatch(value)
         }
     }
-    impl ::std::convert::From<FinalPendingStateNumInvalid> for IPolygonZkEVMErrorsErrors {
-        fn from(var: FinalPendingStateNumInvalid) -> Self {
-            IPolygonZkEVMErrorsErrors::FinalPendingStateNumInvalid(var)
+    impl ::core::convert::From<FinalNumBatchDoesNotMatchPendingState> for IPolygonZkEVMErrorsErrors {
+        fn from(value: FinalNumBatchDoesNotMatchPendingState) -> Self {
+            Self::FinalNumBatchDoesNotMatchPendingState(value)
         }
     }
-    impl ::std::convert::From<ForceBatchTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
-        fn from(var: ForceBatchTimeoutNotExpired) -> Self {
-            IPolygonZkEVMErrorsErrors::ForceBatchTimeoutNotExpired(var)
+    impl ::core::convert::From<FinalPendingStateNumInvalid> for IPolygonZkEVMErrorsErrors {
+        fn from(value: FinalPendingStateNumInvalid) -> Self {
+            Self::FinalPendingStateNumInvalid(value)
         }
     }
-    impl ::std::convert::From<ForceBatchesOverflow> for IPolygonZkEVMErrorsErrors {
-        fn from(var: ForceBatchesOverflow) -> Self {
-            IPolygonZkEVMErrorsErrors::ForceBatchesOverflow(var)
+    impl ::core::convert::From<ForceBatchTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
+        fn from(value: ForceBatchTimeoutNotExpired) -> Self {
+            Self::ForceBatchTimeoutNotExpired(value)
         }
     }
-    impl ::std::convert::From<ForcedDataDoesNotMatch> for IPolygonZkEVMErrorsErrors {
-        fn from(var: ForcedDataDoesNotMatch) -> Self {
-            IPolygonZkEVMErrorsErrors::ForcedDataDoesNotMatch(var)
+    impl ::core::convert::From<ForceBatchesOverflow> for IPolygonZkEVMErrorsErrors {
+        fn from(value: ForceBatchesOverflow) -> Self {
+            Self::ForceBatchesOverflow(value)
         }
     }
-    impl ::std::convert::From<GlobalExitRootNotExist> for IPolygonZkEVMErrorsErrors {
-        fn from(var: GlobalExitRootNotExist) -> Self {
-            IPolygonZkEVMErrorsErrors::GlobalExitRootNotExist(var)
+    impl ::core::convert::From<ForcedDataDoesNotMatch> for IPolygonZkEVMErrorsErrors {
+        fn from(value: ForcedDataDoesNotMatch) -> Self {
+            Self::ForcedDataDoesNotMatch(value)
         }
     }
-    impl ::std::convert::From<HaltTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
-        fn from(var: HaltTimeoutNotExpired) -> Self {
-            IPolygonZkEVMErrorsErrors::HaltTimeoutNotExpired(var)
+    impl ::core::convert::From<GlobalExitRootNotExist> for IPolygonZkEVMErrorsErrors {
+        fn from(value: GlobalExitRootNotExist) -> Self {
+            Self::GlobalExitRootNotExist(value)
         }
     }
-    impl ::std::convert::From<InitNumBatchAboveLastVerifiedBatch> for IPolygonZkEVMErrorsErrors {
-        fn from(var: InitNumBatchAboveLastVerifiedBatch) -> Self {
-            IPolygonZkEVMErrorsErrors::InitNumBatchAboveLastVerifiedBatch(var)
+    impl ::core::convert::From<HaltTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
+        fn from(value: HaltTimeoutNotExpired) -> Self {
+            Self::HaltTimeoutNotExpired(value)
         }
     }
-    impl ::std::convert::From<InitNumBatchDoesNotMatchPendingState> for IPolygonZkEVMErrorsErrors {
-        fn from(var: InitNumBatchDoesNotMatchPendingState) -> Self {
-            IPolygonZkEVMErrorsErrors::InitNumBatchDoesNotMatchPendingState(var)
+    impl ::core::convert::From<InitNumBatchAboveLastVerifiedBatch> for IPolygonZkEVMErrorsErrors {
+        fn from(value: InitNumBatchAboveLastVerifiedBatch) -> Self {
+            Self::InitNumBatchAboveLastVerifiedBatch(value)
         }
     }
-    impl ::std::convert::From<InvalidProof> for IPolygonZkEVMErrorsErrors {
-        fn from(var: InvalidProof) -> Self {
-            IPolygonZkEVMErrorsErrors::InvalidProof(var)
+    impl ::core::convert::From<InitNumBatchDoesNotMatchPendingState> for IPolygonZkEVMErrorsErrors {
+        fn from(value: InitNumBatchDoesNotMatchPendingState) -> Self {
+            Self::InitNumBatchDoesNotMatchPendingState(value)
         }
     }
-    impl ::std::convert::From<InvalidRangeBatchTimeTarget> for IPolygonZkEVMErrorsErrors {
-        fn from(var: InvalidRangeBatchTimeTarget) -> Self {
-            IPolygonZkEVMErrorsErrors::InvalidRangeBatchTimeTarget(var)
+    impl ::core::convert::From<InvalidProof> for IPolygonZkEVMErrorsErrors {
+        fn from(value: InvalidProof) -> Self {
+            Self::InvalidProof(value)
         }
     }
-    impl ::std::convert::From<InvalidRangeMultiplierBatchFee> for IPolygonZkEVMErrorsErrors {
-        fn from(var: InvalidRangeMultiplierBatchFee) -> Self {
-            IPolygonZkEVMErrorsErrors::InvalidRangeMultiplierBatchFee(var)
+    impl ::core::convert::From<InvalidRangeBatchTimeTarget> for IPolygonZkEVMErrorsErrors {
+        fn from(value: InvalidRangeBatchTimeTarget) -> Self {
+            Self::InvalidRangeBatchTimeTarget(value)
         }
     }
-    impl ::std::convert::From<NewAccInputHashDoesNotExist> for IPolygonZkEVMErrorsErrors {
-        fn from(var: NewAccInputHashDoesNotExist) -> Self {
-            IPolygonZkEVMErrorsErrors::NewAccInputHashDoesNotExist(var)
+    impl ::core::convert::From<InvalidRangeMultiplierBatchFee> for IPolygonZkEVMErrorsErrors {
+        fn from(value: InvalidRangeMultiplierBatchFee) -> Self {
+            Self::InvalidRangeMultiplierBatchFee(value)
         }
     }
-    impl ::std::convert::From<NewPendingStateTimeoutMustBeLower> for IPolygonZkEVMErrorsErrors {
-        fn from(var: NewPendingStateTimeoutMustBeLower) -> Self {
-            IPolygonZkEVMErrorsErrors::NewPendingStateTimeoutMustBeLower(var)
+    impl ::core::convert::From<NewAccInputHashDoesNotExist> for IPolygonZkEVMErrorsErrors {
+        fn from(value: NewAccInputHashDoesNotExist) -> Self {
+            Self::NewAccInputHashDoesNotExist(value)
         }
     }
-    impl ::std::convert::From<NewTrustedAggregatorTimeoutMustBeLower> for IPolygonZkEVMErrorsErrors {
-        fn from(var: NewTrustedAggregatorTimeoutMustBeLower) -> Self {
-            IPolygonZkEVMErrorsErrors::NewTrustedAggregatorTimeoutMustBeLower(var)
+    impl ::core::convert::From<NewPendingStateTimeoutMustBeLower> for IPolygonZkEVMErrorsErrors {
+        fn from(value: NewPendingStateTimeoutMustBeLower) -> Self {
+            Self::NewPendingStateTimeoutMustBeLower(value)
         }
     }
-    impl ::std::convert::From<NotEnoughMaticAmount> for IPolygonZkEVMErrorsErrors {
-        fn from(var: NotEnoughMaticAmount) -> Self {
-            IPolygonZkEVMErrorsErrors::NotEnoughMaticAmount(var)
+    impl ::core::convert::From<NewTrustedAggregatorTimeoutMustBeLower> for IPolygonZkEVMErrorsErrors {
+        fn from(value: NewTrustedAggregatorTimeoutMustBeLower) -> Self {
+            Self::NewTrustedAggregatorTimeoutMustBeLower(value)
         }
     }
-    impl ::std::convert::From<OldAccInputHashDoesNotExist> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OldAccInputHashDoesNotExist) -> Self {
-            IPolygonZkEVMErrorsErrors::OldAccInputHashDoesNotExist(var)
+    impl ::core::convert::From<NotEnoughMaticAmount> for IPolygonZkEVMErrorsErrors {
+        fn from(value: NotEnoughMaticAmount) -> Self {
+            Self::NotEnoughMaticAmount(value)
         }
     }
-    impl ::std::convert::From<OldStateRootDoesNotExist> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OldStateRootDoesNotExist) -> Self {
-            IPolygonZkEVMErrorsErrors::OldStateRootDoesNotExist(var)
+    impl ::core::convert::From<OldAccInputHashDoesNotExist> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OldAccInputHashDoesNotExist) -> Self {
+            Self::OldAccInputHashDoesNotExist(value)
         }
     }
-    impl ::std::convert::From<OnlyAdmin> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OnlyAdmin) -> Self {
-            IPolygonZkEVMErrorsErrors::OnlyAdmin(var)
+    impl ::core::convert::From<OldStateRootDoesNotExist> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OldStateRootDoesNotExist) -> Self {
+            Self::OldStateRootDoesNotExist(value)
         }
     }
-    impl ::std::convert::From<OnlyPendingAdmin> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OnlyPendingAdmin) -> Self {
-            IPolygonZkEVMErrorsErrors::OnlyPendingAdmin(var)
+    impl ::core::convert::From<OnlyAdmin> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OnlyAdmin) -> Self {
+            Self::OnlyAdmin(value)
         }
     }
-    impl ::std::convert::From<OnlyTrustedAggregator> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OnlyTrustedAggregator) -> Self {
-            IPolygonZkEVMErrorsErrors::OnlyTrustedAggregator(var)
+    impl ::core::convert::From<OnlyPendingAdmin> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OnlyPendingAdmin) -> Self {
+            Self::OnlyPendingAdmin(value)
         }
     }
-    impl ::std::convert::From<OnlyTrustedSequencer> for IPolygonZkEVMErrorsErrors {
-        fn from(var: OnlyTrustedSequencer) -> Self {
-            IPolygonZkEVMErrorsErrors::OnlyTrustedSequencer(var)
+    impl ::core::convert::From<OnlyTrustedAggregator> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OnlyTrustedAggregator) -> Self {
+            Self::OnlyTrustedAggregator(value)
         }
     }
-    impl ::std::convert::From<PendingStateDoesNotExist> for IPolygonZkEVMErrorsErrors {
-        fn from(var: PendingStateDoesNotExist) -> Self {
-            IPolygonZkEVMErrorsErrors::PendingStateDoesNotExist(var)
+    impl ::core::convert::From<OnlyTrustedSequencer> for IPolygonZkEVMErrorsErrors {
+        fn from(value: OnlyTrustedSequencer) -> Self {
+            Self::OnlyTrustedSequencer(value)
         }
     }
-    impl ::std::convert::From<PendingStateInvalid> for IPolygonZkEVMErrorsErrors {
-        fn from(var: PendingStateInvalid) -> Self {
-            IPolygonZkEVMErrorsErrors::PendingStateInvalid(var)
+    impl ::core::convert::From<PendingStateDoesNotExist> for IPolygonZkEVMErrorsErrors {
+        fn from(value: PendingStateDoesNotExist) -> Self {
+            Self::PendingStateDoesNotExist(value)
         }
     }
-    impl ::std::convert::From<PendingStateNotConsolidable> for IPolygonZkEVMErrorsErrors {
-        fn from(var: PendingStateNotConsolidable) -> Self {
-            IPolygonZkEVMErrorsErrors::PendingStateNotConsolidable(var)
+    impl ::core::convert::From<PendingStateInvalid> for IPolygonZkEVMErrorsErrors {
+        fn from(value: PendingStateInvalid) -> Self {
+            Self::PendingStateInvalid(value)
         }
     }
-    impl ::std::convert::From<PendingStateTimeoutExceedHaltAggregationTimeout>
+    impl ::core::convert::From<PendingStateNotConsolidable> for IPolygonZkEVMErrorsErrors {
+        fn from(value: PendingStateNotConsolidable) -> Self {
+            Self::PendingStateNotConsolidable(value)
+        }
+    }
+    impl ::core::convert::From<PendingStateTimeoutExceedHaltAggregationTimeout>
         for IPolygonZkEVMErrorsErrors
     {
-        fn from(var: PendingStateTimeoutExceedHaltAggregationTimeout) -> Self {
-            IPolygonZkEVMErrorsErrors::PendingStateTimeoutExceedHaltAggregationTimeout(var)
+        fn from(value: PendingStateTimeoutExceedHaltAggregationTimeout) -> Self {
+            Self::PendingStateTimeoutExceedHaltAggregationTimeout(value)
         }
     }
-    impl ::std::convert::From<SequenceZeroBatches> for IPolygonZkEVMErrorsErrors {
-        fn from(var: SequenceZeroBatches) -> Self {
-            IPolygonZkEVMErrorsErrors::SequenceZeroBatches(var)
+    impl ::core::convert::From<SequenceZeroBatches> for IPolygonZkEVMErrorsErrors {
+        fn from(value: SequenceZeroBatches) -> Self {
+            Self::SequenceZeroBatches(value)
         }
     }
-    impl ::std::convert::From<SequencedTimestampBelowForcedTimestamp> for IPolygonZkEVMErrorsErrors {
-        fn from(var: SequencedTimestampBelowForcedTimestamp) -> Self {
-            IPolygonZkEVMErrorsErrors::SequencedTimestampBelowForcedTimestamp(var)
+    impl ::core::convert::From<SequencedTimestampBelowForcedTimestamp> for IPolygonZkEVMErrorsErrors {
+        fn from(value: SequencedTimestampBelowForcedTimestamp) -> Self {
+            Self::SequencedTimestampBelowForcedTimestamp(value)
         }
     }
-    impl ::std::convert::From<SequencedTimestampInvalid> for IPolygonZkEVMErrorsErrors {
-        fn from(var: SequencedTimestampInvalid) -> Self {
-            IPolygonZkEVMErrorsErrors::SequencedTimestampInvalid(var)
+    impl ::core::convert::From<SequencedTimestampInvalid> for IPolygonZkEVMErrorsErrors {
+        fn from(value: SequencedTimestampInvalid) -> Self {
+            Self::SequencedTimestampInvalid(value)
         }
     }
-    impl ::std::convert::From<StoredRootMustBeDifferentThanNewRoot> for IPolygonZkEVMErrorsErrors {
-        fn from(var: StoredRootMustBeDifferentThanNewRoot) -> Self {
-            IPolygonZkEVMErrorsErrors::StoredRootMustBeDifferentThanNewRoot(var)
+    impl ::core::convert::From<StoredRootMustBeDifferentThanNewRoot> for IPolygonZkEVMErrorsErrors {
+        fn from(value: StoredRootMustBeDifferentThanNewRoot) -> Self {
+            Self::StoredRootMustBeDifferentThanNewRoot(value)
         }
     }
-    impl ::std::convert::From<TransactionsLengthAboveMax> for IPolygonZkEVMErrorsErrors {
-        fn from(var: TransactionsLengthAboveMax) -> Self {
-            IPolygonZkEVMErrorsErrors::TransactionsLengthAboveMax(var)
+    impl ::core::convert::From<TransactionsLengthAboveMax> for IPolygonZkEVMErrorsErrors {
+        fn from(value: TransactionsLengthAboveMax) -> Self {
+            Self::TransactionsLengthAboveMax(value)
         }
     }
-    impl ::std::convert::From<TrustedAggregatorTimeoutExceedHaltAggregationTimeout>
+    impl ::core::convert::From<TrustedAggregatorTimeoutExceedHaltAggregationTimeout>
         for IPolygonZkEVMErrorsErrors
     {
-        fn from(var: TrustedAggregatorTimeoutExceedHaltAggregationTimeout) -> Self {
-            IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(var)
+        fn from(value: TrustedAggregatorTimeoutExceedHaltAggregationTimeout) -> Self {
+            Self::TrustedAggregatorTimeoutExceedHaltAggregationTimeout(value)
         }
     }
-    impl ::std::convert::From<TrustedAggregatorTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
-        fn from(var: TrustedAggregatorTimeoutNotExpired) -> Self {
-            IPolygonZkEVMErrorsErrors::TrustedAggregatorTimeoutNotExpired(var)
+    impl ::core::convert::From<TrustedAggregatorTimeoutNotExpired> for IPolygonZkEVMErrorsErrors {
+        fn from(value: TrustedAggregatorTimeoutNotExpired) -> Self {
+            Self::TrustedAggregatorTimeoutNotExpired(value)
         }
     }
 }
