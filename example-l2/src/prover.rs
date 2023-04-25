@@ -7,13 +7,13 @@ use sequencer::SeqTypes;
 use crate::state::State;
 
 /// A mock proof that state_commitment represents a valid state transition from
-/// previous_state_commitment when the transactions committed to by block_commitment are applied.
+/// previous_state_commitment when the transactions in a given block are applied.
 #[derive(Debug, Clone, Into)]
 pub(crate) struct Proof(Vec<u8>);
 
 impl Proof {
     pub fn generate(
-        _block: &BlockQueryData<SeqTypes>, // A real prover would use the block commitment and transaction set to construct the state transition proof
+        _block: &BlockQueryData<SeqTypes>,
         _state_commitment: Commitment<State>,
         _previous_state_commitment: Commitment<State>,
     ) -> Self {
