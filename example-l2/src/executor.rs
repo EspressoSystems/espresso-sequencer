@@ -188,16 +188,15 @@ mod test {
                 .unwrap();
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
-        let max_updates = 5;
         let mut ws_url = anvil.url();
         ws_url.set_scheme("ws").unwrap();
         let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
         let state_update_filter = rollup_contract.state_update_filter().filter;
-        let mut stream = socket_provider
+        let stream = socket_provider
             .subscribe_logs(&state_update_filter)
             .await
             .unwrap()
-            .take(max_updates);
+            .take(2);
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -258,23 +257,15 @@ mod test {
         spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
         // Wait for the rollup contract to process all state updates
-        let mut num_updates = 0;
-        let mut transaction_fully_executed = false;
-        while stream.next().await.is_some() {
-            num_updates += 1;
-            let state_comm = state.read().await.commit();
-            let bob_balance = state.read().await.get_balance(&bob.address());
-            let state_comm = commitment_to_u256(state_comm);
-            let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
-            // Ensure that the state commitments match AND that Bob's balance updates as expected
-            if state_comm == contract_state_comm && bob_balance == 100 {
-                transaction_fully_executed = true;
-                break;
-            } else if num_updates == max_updates {
-                // Panic if the rollup contract never catches up to the rollup
-                panic!("Rollup contract failed to process state update");
-            }
-        }
-        assert!(transaction_fully_executed);
+        stream.collect::<Vec<Log>>().await;
+
+        // Ensure that the state commitments match AND that Bob's balance updates as expected
+        let state_comm = state.read().await.commit();
+        let bob_balance = state.read().await.get_balance(&bob.address());
+        let state_comm = commitment_to_u256(state_comm);
+        let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
+
+        assert_eq!(state_comm, contract_state_comm);
+        assert_eq!(bob_balance, 100);
     }
 }
