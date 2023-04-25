@@ -259,7 +259,8 @@ mod test {
 
         // Wait for the rollup contract to process all state updates
         let mut num_updates = 0;
-        while stream.next().await.is_none() {
+        let mut transaction_fully_executed = false;
+        while stream.next().await.is_some() {
             num_updates += 1;
             let state_comm = state.read().await.commit();
             let bob_balance = state.read().await.get_balance(&bob.address());
@@ -267,11 +268,13 @@ mod test {
             let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
             // Ensure that the state commitments match AND that Bob's balance updates as expected
             if state_comm == contract_state_comm && bob_balance == 100 {
+                transaction_fully_executed = true;
                 break;
             } else if num_updates == max_updates {
                 // Panic if the rollup contract never catches up to the rollup
                 panic!("Rollup contract failed to process state update");
             }
         }
+        assert!(transaction_fully_executed);
     }
 }
