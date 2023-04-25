@@ -140,7 +140,7 @@ pub async fn run_executor(
 #[cfg(test)]
 mod test {
     use crate::transaction::{SignedTransaction, Transaction};
-    use crate::VM_ID;
+    use crate::RollupVM;
 
     use super::*;
     use async_std::task::spawn;
@@ -156,9 +156,10 @@ mod test {
     use rand_chacha::ChaChaRng;
     use sequencer::api::SequencerNode;
     use sequencer::hotshot_commitment::run_hotshot_commitment_task;
-    use sequencer::transaction::Transaction as SequencerTransaction;
-    use sequencer::VmTransaction;
-    use sequencer_utils::{commitment_to_u256, Anvil};
+    use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
+    use sequencer::transaction::SequencerTransaction;
+    use sequencer::Vm;
+    use sequencer_utils::{commitment_to_u256, AnvilOptions};
     use std::path::Path;
     use std::time::Duration;
     use surf_disco::{Client, Url};
@@ -170,7 +171,7 @@ mod test {
     #[async_std::test]
     async fn test_execute() {
         // Start a test HotShot and Rollup contract
-        let anvil = Anvil::spawn(None).await;
+        let anvil = AnvilOptions::default().spawn().await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
@@ -200,7 +201,7 @@ mod test {
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
-        let nodes = sequencer::testing::init_hotshot_handles().await;
+        let nodes = init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
@@ -231,7 +232,7 @@ mod test {
             nonce: 1,
         };
         let txn = SignedTransaction::new(txn, &alice).await;
-        let txn = SequencerTransaction::new(VM_ID.into(), txn.encode());
+        let txn = RollupVM.wrap(&txn);
         let client: Client<ServerError> = Client::new(sequencer_url.clone());
         client.connect(None).await;
         client
@@ -267,5 +268,122 @@ mod test {
 
         assert_eq!(state_comm, contract_state_comm);
         assert_eq!(bob_balance, 100);
+    }
+
+    #[async_std::test]
+    async fn test_execute_batched_updates_to_slow_l1() {
+        let num_txns = 10;
+
+        // Start a test HotShot and Rollup contract.
+        let anvil = AnvilOptions::default()
+            .block_time(Duration::from_secs(30))
+            .spawn()
+            .await;
+        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
+        provider.set_interval(Duration::from_millis(10));
+        let chain_id = provider.get_chainid().await.unwrap().as_u64();
+        let clients = TestClients::new(&provider, chain_id);
+        let hotshot_contract = HotShot::deploy(clients.deployer.clone(), ())
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        let rollup_contract =
+            ExampleRollup::deploy(clients.deployer.clone(), hotshot_contract.address())
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+
+        // Setup a WS connection to the rollup contract and subscribe to state updates
+        let max_updates = 5 * num_txns as usize;
+        let mut ws_url = anvil.url();
+        ws_url.set_scheme("ws").unwrap();
+        let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
+        let state_update_filter = rollup_contract.state_update_filter().filter;
+        let mut stream = socket_provider
+            .subscribe_logs(&state_update_filter)
+            .await
+            .unwrap()
+            .take(max_updates);
+
+        // Start a test HotShot configuration
+        let sequencer_port = pick_unused_port().unwrap();
+        let nodes = sequencer::testing::init_hotshot_handles().await;
+        let api_node = nodes[0].clone();
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
+        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
+        let query_data = QueryData::create(storage_path, ()).unwrap();
+        let SequencerNode { .. } = sequencer::api::serve(query_data, init_handle, sequencer_port)
+            .await
+            .unwrap();
+        for node in &nodes {
+            node.start().await;
+        }
+        let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
+            .parse()
+            .unwrap();
+
+        // Create mock rollup state
+        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
+        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
+        let state = Arc::new(RwLock::new(State::from_initial_balances([(
+            alice.address(),
+            9999,
+        )])));
+
+        // Spawn hotshot commitment and executor tasks
+        let hotshot_opt = HotShotContractOptions {
+            l1_provider: anvil.url(),
+            sequencer_mnemonic: TEST_MNEMONIC.to_string(),
+            hotshot_address: hotshot_contract.address(),
+            l1_chain_id: None,
+            query_service_url: sequencer_url,
+        };
+        let options = hotshot_opt.clone();
+        let state_lock = state.clone();
+        let rollup_address = rollup_contract.address();
+        spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
+        spawn(async move { run_executor(rollup_address, &options, state_lock).await });
+
+        // Submit transactions to sequencer
+        for nonce in 0..num_txns {
+            let txn = Transaction {
+                amount: 1,
+                destination: bob.address(),
+                nonce,
+            };
+            let txn = SignedTransaction::new(txn, &alice).await;
+            let txn = SequencerTransaction::from(RollupVM.wrap(&txn));
+            nodes[0].submit_transaction(txn.clone()).await.unwrap();
+
+            // Wait for the transaction to be sequenced, before we can sequence the next one.
+            wait_for_decide_on_handle(nodes[0].clone(), txn)
+                .await
+                .unwrap();
+        }
+
+        // Wait for the rollup contract to process all state updates
+        let mut num_updates = 0;
+        while stream.next().await.is_none() {
+            let bob_balance = state.read().await.get_balance(&bob.address());
+            if bob_balance == num_txns {
+                break;
+            }
+            tracing::info!("Bob's balance is {bob_balance}/{num_txns}");
+            num_updates += 1;
+
+            if num_updates == max_updates {
+                // Panic if the rollup contract never catches up to the rollup
+                panic!("Rollup contract failed to process state update");
+            }
+        }
+
+        // Ensure the state commitments match.
+        let state_comm = state.read().await.commit();
+        let state_comm = commitment_to_u256(state_comm);
+        let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
+        assert_eq!(state_comm, contract_state_comm);
     }
 }

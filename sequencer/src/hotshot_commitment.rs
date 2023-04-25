@@ -230,7 +230,7 @@ mod test {
         data::{LeafType, ViewNumber},
         traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
     };
-    use sequencer_utils::Anvil;
+    use sequencer_utils::AnvilOptions;
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -239,7 +239,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let anvil = Anvil::spawn(None).await;
+        let anvil = AnvilOptions::default().spawn().await;
         let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
 
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();

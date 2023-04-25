@@ -15,16 +15,34 @@ use url::Url;
 
 pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
 
-#[derive(Debug)]
-pub struct Anvil {
-    child: Child,
-    url: Url,
+#[derive(Clone, Debug, Default)]
+pub struct AnvilOptions {
+    block_time: Option<Duration>,
+    port: Option<u16>,
 }
 
-impl Anvil {
-    pub async fn spawn(port: Option<u16>) -> Self {
-        let port = port.unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
+impl AnvilOptions {
+    pub fn block_time(mut self, time: Duration) -> Self {
+        self.block_time = Some(time);
+        self
+    }
 
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
+    pub async fn spawn(self) -> Anvil {
+        let port = self
+            .port
+            .unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
+
+        let mut command = "anvil --silent --host 0.0.0.0".to_string();
+        if let Some(block_time) = self.block_time {
+            command = format!("{command} -b {}", block_time.as_secs());
+        }
+
+        tracing::info!("Starting Anvil: {command}");
         let child = Command::new("docker")
             .arg("run")
             .arg("-p")
@@ -33,7 +51,7 @@ impl Anvil {
             // Ideally the stdout would be captured, in tests but I could not
             // get this to work. Pass `--silent` to avoid spamming the test
             // output.
-            .arg("anvil --silent --host 0.0.0.0")
+            .arg(&command)
             .spawn()
             .unwrap();
 
@@ -42,9 +60,17 @@ impl Anvil {
             .await
             .unwrap();
 
-        Self { child, url }
+        Anvil { child, url }
     }
+}
 
+#[derive(Debug)]
+pub struct Anvil {
+    child: Child,
+    url: Url,
+}
+
+impl Anvil {
     pub fn url(&self) -> Url {
         self.url.clone()
     }
