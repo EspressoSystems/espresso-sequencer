@@ -1,4 +1,6 @@
+extern crate derive_more;
 use commit::Commitment;
+use derive_more::Into;
 use hotshot_query_service::availability::BlockQueryData;
 use sequencer::SeqTypes;
 
@@ -6,8 +8,8 @@ use crate::state::State;
 
 /// A mock proof that state_commitment represents a valid state transition from
 /// previous_state_commitment when the transactions committed to by block_commitment are applied.
-#[derive(Debug, Clone)]
-pub(crate) struct Proof(pub Vec<u8>);
+#[derive(Debug, Clone, Into)]
+pub(crate) struct Proof(Vec<u8>);
 
 impl Proof {
     pub fn generate(

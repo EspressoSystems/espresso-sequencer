@@ -117,8 +117,9 @@ pub async fn run_executor(
             let (proof, state_comm) = {
                 let mut state_lock = state.write().await;
                 let proof = state_lock.execute_block(&block).await;
+                let proof_bytes: Vec<u8> = proof.into();
                 (
-                    Bytes::from(proof.0),
+                    Bytes::from(proof_bytes),
                     commitment_to_u256(state_lock.commit()),
                 )
             };
