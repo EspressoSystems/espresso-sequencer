@@ -64,7 +64,7 @@ contract HotShot {
     }
 
     // TODO document
-    function verify_agg_sig(bytes memory message, BN254.G1Point memory sig, uint256[] memory bitmap) public {
+    function verify_agg_sig(bytes memory message, BN254.G1Point memory sig, uint256[] memory bitmap) public view {
         // Build aggregated public key
 
         // Loop until we find a one in the bitmap
