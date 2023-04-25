@@ -1,4 +1,4 @@
-pub use bytes_lib::*;
+pub use bn256g2::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,11 +9,11 @@ pub use bytes_lib::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod bytes_lib {
+pub mod bn256g2 {
     #[rustfmt::skip]
     const __ABI: &str = "[]";
     ///The parsed JSON ABI of the contract.
-    pub static BYTESLIB_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static BN256G2_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(|| {
             ::ethers::core::utils::__serde_json::from_str(__ABI).expect("ABI is always valid")
         });
@@ -117,37 +117,37 @@ pub mod bytes_lib {
         34,
         18,
         32,
-        212,
-        208,
-        245,
-        244,
-        101,
-        129,
-        194,
-        197,
-        144,
-        85,
-        0,
-        16,
-        164,
-        253,
+        115,
+        126,
+        127,
+        135,
         28,
-        245,
-        153,
-        21,
-        161,
-        251,
-        80,
-        155,
-        187,
-        120,
-        54,
-        105,
-        185,
+        71,
+        246,
+        193,
+        217,
+        241,
+        119,
+        8,
+        180,
         170,
-        69,
-        235,
-        209,
+        112,
+        207,
+        2,
+        121,
+        114,
+        98,
+        222,
+        182,
+        155,
+        7,
+        22,
+        226,
+        212,
+        26,
+        85,
+        199,
+        186,
         23,
         100,
         115,
@@ -162,7 +162,7 @@ pub mod bytes_lib {
         51,
     ];
     ///The bytecode of the contract.
-    pub static BYTESLIB_BYTECODE: ::ethers::core::types::Bytes =
+    pub static BN256G2_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
     const __DEPLOYED_BYTECODE: &[u8] = &[
@@ -209,37 +209,37 @@ pub mod bytes_lib {
         34,
         18,
         32,
-        212,
-        208,
-        245,
-        244,
-        101,
-        129,
-        194,
-        197,
-        144,
-        85,
-        0,
-        16,
-        164,
-        253,
+        115,
+        126,
+        127,
+        135,
         28,
-        245,
-        153,
-        21,
-        161,
-        251,
-        80,
-        155,
-        187,
-        120,
-        54,
-        105,
-        185,
+        71,
+        246,
+        193,
+        217,
+        241,
+        119,
+        8,
+        180,
         170,
-        69,
-        235,
-        209,
+        112,
+        207,
+        2,
+        121,
+        114,
+        98,
+        222,
+        182,
+        155,
+        7,
+        22,
+        226,
+        212,
+        26,
+        85,
+        199,
+        186,
         23,
         100,
         115,
@@ -254,33 +254,33 @@ pub mod bytes_lib {
         51,
     ];
     ///The deployed bytecode of the contract.
-    pub static BYTESLIB_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
+    pub static BN256G2_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
-    pub struct BytesLib<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for BytesLib<M> {
+    pub struct BN256G2<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for BN256G2<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for BytesLib<M> {
+    impl<M> ::core::ops::Deref for BN256G2<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for BytesLib<M> {
+    impl<M> ::core::ops::DerefMut for BN256G2<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for BytesLib<M> {
+    impl<M> ::core::fmt::Debug for BN256G2<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(stringify!(BytesLib))
+            f.debug_tuple(stringify!(BN256G2))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> BytesLib<M> {
+    impl<M: ::ethers::providers::Middleware> BN256G2<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -289,7 +289,7 @@ pub mod bytes_lib {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                BYTESLIB_ABI.clone(),
+                BN256G2_ABI.clone(),
                 client,
             ))
         }
@@ -324,8 +324,8 @@ pub mod bytes_lib {
             ::ethers::contract::ContractError<M>,
         > {
             let factory = ::ethers::contract::ContractFactory::new(
-                BYTESLIB_ABI.clone(),
-                BYTESLIB_BYTECODE.clone().into(),
+                BN256G2_ABI.clone(),
+                BN256G2_BYTECODE.clone().into(),
                 client,
             );
             let deployer = factory.deploy(constructor_args)?;
@@ -333,7 +333,7 @@ pub mod bytes_lib {
             Ok(deployer)
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BytesLib<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BN256G2<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
