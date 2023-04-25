@@ -2,7 +2,9 @@ pragma solidity ^0.8.0;
 
 import {BN254} from "bn254/BN254.sol";
 import {BLSSig} from "./libraries/BLSSig.sol";
-// import {BN256} from "solidity-BN256G2/BN256G2.sol";
+
+// TODO use forge install with a fork of the library that supports solidity ^0.8.0.
+import {BN256G2} from "./libraries//BN256G2.sol";
 
 contract HotShot {
     uint256 public constant MAX_BLOCKS = 1000;
@@ -74,26 +76,33 @@ contract HotShot {
         // TODO test
         require(index < bitmap.length, "At least one key must be selected.");
 
-        //        BN254.G2Point agg_pk = stakingKeys[index];
-        //        for (int i=index;i<bitmap.length;i++){
-        //            // Compute the group multiplication of the two keys
-        //
-        //            if (bitmap[i] == 1) {
-        //                BN254.G2Point memory pk = stakingKeys[i];
-        //
-        //                uint256 p1xx = agg_pk.x0;
-        //                uint256 p1xy = agg_pk.x1;
-        //                uint256 p1yx = agg_pk.y0;
-        //                uint256 p1yy = agg_pk.y1;
-        //                uint256 p2xx = pk.x0;
-        //                uint256 p2xy = pk.x1;
-        //                uint256 p2yx = pk.y0;
-        //                uint256 p2yy = pk.y1;
-        //
-        //                (uint256 p3xx, uint256 p3xy, uint256 p3yx, uint256 p3yy) = ECTwistAdd(p1xx,p1xy,p1yx,p1yy,p2xx, p2xy,p2yy);
-        //                agg_pk = BN254.G2Point(p3xx,p3xy, p3yx,p3yy);
-        //
-        //            }
-        //        }
+        BN254.G2Point memory agg_pk = stakingKeys[index];
+        for (uint256 i = index + 1; i < bitmap.length; i++) {
+            // Compute the group multiplication of the two keys
+
+            if (bitmap[i] == 1) {
+                BN254.G2Point memory pk = stakingKeys[i];
+
+                uint256 p1xx = agg_pk.x0;
+                uint256 p1xy = agg_pk.x1;
+                uint256 p1yx = agg_pk.y0;
+                uint256 p1yy = agg_pk.y1;
+                uint256 p2xx = pk.x0;
+                uint256 p2xy = pk.x1;
+                uint256 p2yx = pk.y0;
+                uint256 p2yy = pk.y1;
+
+                uint256 p3xx;
+                uint256 p3xy;
+                uint256 p3yx;
+                uint256 p3yy;
+
+                // TODO this generates a rust compilation error related to bindings...
+                // (p3xx, p3xy, p3yx, p3yy) = BN256G2.ECTwistAdd(p1xx, p1xy, p1yx, p1yy, p2xx, p2xy, p2yx, p2yy);
+                //agg_pk = BN254.G2Point(p3xx, p3xy, p3yx, p3yy);
+            }
+        }
+
+        BLSSig.verify_bls_sig(message, sig, agg_pk);
     }
 }

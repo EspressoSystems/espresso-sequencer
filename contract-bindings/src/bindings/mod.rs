@@ -6,6 +6,7 @@
 pub mod bls_sig;
 pub mod bls_test;
 pub mod bn254;
+pub mod bn256g2;
 pub mod bytes_lib;
 pub mod counter;
 pub mod dai;
