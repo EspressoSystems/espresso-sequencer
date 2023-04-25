@@ -83,18 +83,19 @@ contract HotShot {
             if (bitmap[i] == 1) {
                 BN254.G2Point memory pk = stakingKeys[i];
 
-                uint256 p1xx = agg_pk.x0;
-                uint256 p1xy = agg_pk.x1;
-                uint256 p1yx = agg_pk.y0;
-                uint256 p1yy = agg_pk.y1;
-                uint256 p2xx = pk.x0;
-                uint256 p2xy = pk.x1;
-                uint256 p2yx = pk.y0;
-                uint256 p2yy = pk.y1;
+                // Note: (x,y) coordinates for each field component must be inverted!
+                uint256 p1xy = agg_pk.x0;
+                uint256 p1xx = agg_pk.x1;
+                uint256 p1yy = agg_pk.y0;
+                uint256 p1yx = agg_pk.y1;
+                uint256 p2xy = pk.x0;
+                uint256 p2xx = pk.x1;
+                uint256 p2yy = pk.y0;
+                uint256 p2yx = pk.y1;
 
                 (uint256 p3xx, uint256 p3xy, uint256 p3yx, uint256 p3yy) =
                     BN256G2.ECTwistAdd(p1xx, p1xy, p1yx, p1yy, p2xx, p2xy, p2yx, p2yy);
-                agg_pk = BN254.G2Point(p3xx, p3xy, p3yx, p3yy);
+                agg_pk = BN254.G2Point(p3xy, p3xx, p3yy, p3yx);
             }
         }
 
