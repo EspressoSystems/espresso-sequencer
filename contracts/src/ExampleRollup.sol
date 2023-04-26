@@ -8,7 +8,11 @@ contract ExampleRollup {
     uint256 public stateCommitment;
     uint256 public verifiedBlocks;
 
-    error InvalidProof(uint256 blockHeight, bytes proof);
+    // Attempted to verify a proof of the blocks from `verifiedBlocks` to `verifiedBlocks + count`,
+    // but the HotShot `blockHeight` is less than  `verifiedBlocks + count`.
+    error NotYetSequenced(uint256 verifiedBlocks, uint64 count, uint256 blockHeight);
+    // Attempted to verify an invalid proof of the blocks from `firstBlock` to `firstBlock + count`.
+    error InvalidProof(uint256 firstBlock, uint64 count, bytes proof);
 
     event StateUpdate(uint256 blockHeight);
 
@@ -18,28 +22,40 @@ contract ExampleRollup {
         verifiedBlocks = 0;
     }
 
+    // Verify a batch proof of the execution of a chain of blocks.
+    //
     // For demonstration purposes, this always returns true.
-    // A real rollup would verify the state update proof against the current state commitment, the most recent hotshot block commitment,
-    // and the next state commitment.
+    //
+    // A real rollup would verify the state update proof against
+    // * the current state commitment
+    // * the last verified hotshot block commitment
+    // * the last hotshot block commitment in a chain of newly verified blocks extending from the
+    //   last verified block
+    // * the new state commitment after executing the chain of new blocks
     function verifyProof(
-        uint256, /* next block commitment*/
-        uint256, /* next state commitment*/
-        uint256, /* current state commitment*/
-        bytes calldata /*proof*/
+        uint256, /* firstBlock */
+        uint256, /* lastBlock */
+        uint256, /* oldState */
+        uint256, /* newState */
+        bytes calldata /* proof */
     ) private pure returns (bool) {
         return true;
     }
 
-    function newBlock(uint256 nextStateCommitment, bytes calldata proof) external {
-        uint256 nextBlockCommitment = hotshot.commitments(verifiedBlocks + 1);
-
-        if (!verifyProof(nextBlockCommitment, nextStateCommitment, stateCommitment, proof)) {
-            revert InvalidProof(verifiedBlocks + 1, proof);
+    function verifyBlocks(uint64 count, uint256 nextStateCommitment, bytes calldata proof) external {
+        uint256 blockHeight = hotshot.blockHeight();
+        if (verifiedBlocks + count >= blockHeight) {
+            revert NotYetSequenced(verifiedBlocks, count, blockHeight);
         }
 
-        verifiedBlocks += 1;
-        stateCommitment = nextStateCommitment;
+        uint256 firstBlock = hotshot.commitments(verifiedBlocks);
+        uint256 lastBlock = hotshot.commitments(verifiedBlocks + count);
+        if (!verifyProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof)) {
+            revert InvalidProof(verifiedBlocks, count, proof);
+        }
 
+        verifiedBlocks += count;
+        stateCommitment = nextStateCommitment;
         emit StateUpdate(verifiedBlocks);
     }
 }

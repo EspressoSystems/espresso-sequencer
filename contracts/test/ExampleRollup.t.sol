@@ -36,7 +36,7 @@ contract ExampleRollupTest is Test {
         vm.expectEmit(false, false, false, true, address(rollup));
         emit StateUpdate(1);
 
-        rollup.newBlock(nextStateCommitment, proof);
+        rollup.verifyBlocks(1, nextStateCommitment, proof);
 
         assertEq(rollup.stateCommitment(), nextStateCommitment);
         assertEq(rollup.verifiedBlocks(), 1);

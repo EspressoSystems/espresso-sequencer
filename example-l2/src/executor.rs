@@ -1,12 +1,12 @@
-use std::sync::Arc;
-
+use crate::prover::BatchProof;
 use ark_serialize::CanonicalDeserialize;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
 use commit::Committable;
-use contract_bindings::{example_rollup::ExampleRollup, HotShot};
+use contract_bindings::{example_rollup::ExampleRollup, hot_shot::NewBlocksFilter, HotShot};
 use ethers::prelude::*;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
+use std::sync::Arc;
 
 use sequencer::{
     hotshot_commitment::{connect_l1, HotShotContractOptions},
@@ -52,9 +52,9 @@ pub async fn run_executor(
     };
 
     let rollup_contract = ExampleRollup::new(rollup_address, l1.clone());
-    let hotshot_contract = HotShot::new(opt.hotshot_address, l1.clone());
-    let blocks_filter = hotshot_contract.new_blocks_filter().filter;
-    let mut stream = match socket_provider.subscribe_logs(&blocks_filter).await {
+    let hotshot_contract = HotShot::new(opt.hotshot_address, Arc::new(socket_provider));
+    let filter = hotshot_contract.new_blocks_filter();
+    let mut stream = match filter.subscribe().await {
         Ok(stream) => stream,
         Err(err) => {
             tracing::error!("Unable to subscribe to L1 log stream: {}", err);
@@ -63,20 +63,24 @@ pub async fn run_executor(
         }
     };
 
-    let mut block_height = 0;
-    loop {
-        let current_block_height = match hotshot_contract.block_height().call().await {
-            Ok(from) => from.as_u64(),
+    while let Some(event) = stream.next().await {
+        let (first_block, num_blocks) = match event {
+            Ok(NewBlocksFilter {
+                first_block_number,
+                num_blocks,
+            }) => (first_block_number, num_blocks.as_u64()),
             Err(err) => {
-                tracing::error!("Unable to read block_height from contract: {}", err);
-                tracing::error!("Executor task will exit");
-                return;
+                tracing::error!("Error in HotShot block stream, retrying: {err}");
+                continue;
             }
         };
-        // Get commitments
-        for i in block_height..current_block_height {
+
+        // Execute new blocks, generating proofs.
+        let mut proofs = vec![];
+        let mut state = state.write().await;
+        for i in 0..num_blocks {
             let mut commit_bytes = [0; 32];
-            let commitment = match hotshot_contract.commitments(U256::from(i)).call().await {
+            let commitment = match hotshot_contract.commitments(first_block + i).call().await {
                 // TODO: Replace these with typed errors
                 Ok(commitment) => commitment,
                 Err(err) => {
@@ -97,7 +101,7 @@ pub async fn run_executor(
             };
 
             let block = match hotshot
-                .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", i))
+                .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", first_block + i))
                 .send()
                 .await
             {
@@ -114,26 +118,26 @@ pub async fn run_executor(
                 return;
             }
 
-            let (proof, state_comm) = {
-                let mut state_lock = state.write().await;
-                let proof = state_lock.execute_block(&block).await;
-                let proof_bytes: Vec<u8> = proof.into();
-                (
-                    Bytes::from(proof_bytes),
-                    commitment_to_u256(state_lock.commit()),
-                )
-            };
-
-            while contract_send(rollup_contract.new_block(state_comm, proof.clone()))
-                .await
-                .is_none()
-            {
-                tracing::warn!("Failed to submit proof to contract, retrying");
-                sleep(std::time::Duration::from_secs(1)).await;
-            }
+            proofs.push(state.execute_block(&block).await);
         }
-        block_height = current_block_height;
-        stream.next().await;
+
+        // Compute an aggregate proof.
+        let proof = Bytes::from(<Vec<u8>>::from(BatchProof::generate(proofs)));
+        let state_comm = commitment_to_u256(state.commit());
+
+        // Send the batch proof to L1.
+        tracing::info!(
+            "Sending batch proof of blocks {}-{} to L1",
+            first_block,
+            first_block + num_blocks - 1
+        );
+        while contract_send(rollup_contract.verify_blocks(num_blocks, state_comm, proof.clone()))
+            .await
+            .is_none()
+        {
+            tracing::warn!("Failed to submit proof to contract, retrying");
+            sleep(std::time::Duration::from_secs(1)).await;
+        }
     }
 }
 

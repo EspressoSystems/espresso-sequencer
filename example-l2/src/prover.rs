@@ -20,3 +20,13 @@ impl Proof {
         Self(vec![0; 32])
     }
 }
+
+/// A mock proof aggregating a batch of proofs for a range of blocks.
+#[derive(Debug, Clone, Into)]
+pub(crate) struct BatchProof(Vec<u8>);
+
+impl BatchProof {
+    pub fn generate(_proofs: impl IntoIterator<Item = Proof>) -> BatchProof {
+        BatchProof(vec![0; 32])
+    }
+}
