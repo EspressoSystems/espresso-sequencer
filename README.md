@@ -114,13 +114,11 @@ In order to avoid constant warnings about checksum mismatches with
 
 ### Handling git submodules
 
-The project requires to use git submodules. In order to avoid corrupting the state of one of those submodules you can:
-* Configure git to automatically update submodules for the repository by running `git config submodule.recurse true` 
-   inside the repo. Then running `git submodule update` should no longer be necessary.
-* As an alternative, avoid using `git add .` (or similar) but instead 
-  * commit files and directories one by one and investigate  if there are changes that should not be there. For example bindings changed of contracts that were not modified and changes to submodules. 
-  * or use git clients built into ones IDE may be convenient for this task as they have better UX for adding files individually or in groups, diffing, conflict resolution.
-  * or use `git add -u .` to add all changes except the one with the submodules.
+The project requires to use git submodules. 
+In order to avoid corrupting the state of one of those submodules you can:
+* run `git submodule update` before making changes,
+* or configure git to automatically update submodules for the repository with `git config submodule.recurse true` 
+   inside the repository. 
 
 ## Implementation Plan
 
