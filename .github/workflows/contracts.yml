@@ -56,10 +56,7 @@ jobs:
       - name: Check if bindings up to date
         run: |
           cargo run --bin gen-bindings
-          git status
-          # Error if any `git status --porcelain` reports anything
-          # TODO: enable this (or another check) once ethers abigen is determinstic.
-          # exit $(git status --porcelain | wc -l)
+          exit $(git status --porcelain | wc -l)
 
       - name: Run tests
         run: forge test -vvv
