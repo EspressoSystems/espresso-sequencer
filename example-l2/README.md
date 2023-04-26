@@ -15,7 +15,7 @@ TODO
 ## Transaction Lifecycle
 The diagram below represents the lifecycle of a single rollup transaction, illustrating how the example rollup interacts with the Espresso sequencer along the way. The diagram below is a simplified version of this [system overview](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/system-overview), focusing on a single example rollup transaction. 
 
-![Example Rollup](./doc/example_l2.svg)
+![Example Rollup](../doc/example_l2.svg)
 
 1. Alice signs a transaction transferring rollup tokens to Bob. Alice sends this transaction to the Rollup through the `submit` endpoint of the rollup API. If Alice is concerned about censorship, she can send her transaction directly to the sequencer. 
 3. The rollup API server forwards the transaction to the sequencer. The transaction is tagged with the rollup’s unique VM ID so that the rollup can identify its own transactions in step 4. 
