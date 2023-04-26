@@ -64,7 +64,12 @@ contract HotShot {
     }
 
     // TODO document
-    function verify_agg_sig(bytes memory message, BN254.G1Point memory sig, uint256[] memory bitmap) public view {
+    function verify_agg_sig(
+        bytes memory message,
+        BN254.G1Point memory sig,
+        uint256[] memory bitmap,
+        uint256 min_stake_threshold
+    ) public view {
         // Build aggregated public key
 
         // Loop until we find a one in the bitmap
@@ -73,8 +78,21 @@ contract HotShot {
             index++;
         }
 
+        // TODO missing: compute the total amount of weight from the bitmap and check it against some value t passed as argument
+
         // TODO test
         require(index < bitmap.length, "At least one key must be selected.");
+
+        // TODO test
+        // Compute the stake corresponding to the signers and check if it is enough
+        uint256 stake = 0;
+        for (uint256 i = 0; i < bitmap.length; i++) {
+            if (bitmap[i] == 1) {
+                stake += stakeAmounts[i]; // TODO check to avoid wrapping around?
+            }
+        }
+        // TODO test
+        require(stake >= min_stake_threshold, "Not enough stake is available for validating the signature.");
 
         BN254.G2Point memory agg_pk = stakingKeys[index];
         for (uint256 i = index + 1; i < bitmap.length; i++) {

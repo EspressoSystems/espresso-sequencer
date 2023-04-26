@@ -18,6 +18,9 @@ mod test {
     use jf_primitives::signatures::{AggregateableSignatureSchemes, SignatureScheme};
     use jf_utils::test_rng;
 
+    const OK_EXPECTED: bool = true;
+    const ERROR_EXPECTED: bool = false;
+
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
         let (provider, deployer) = get_provider_and_deployer().await;
@@ -105,15 +108,17 @@ mod test {
         res
     }
 
-    async fn check_qc_with_bitmap(
+    async fn check_agg_sig(
         bitmap: &Vec<U256>,
         staking_keys: &[(SignKey, VerKey)],
+        stake_threshold: U256,
         hotshot: &HotShot<
             SignerMiddleware<
                 ethers::providers::Provider<Http>,
                 Wallet<ethers::core::k256::ecdsa::SigningKey>,
             >,
         >,
+        res_expected: bool,
     ) {
         // Compute a signature with 3 keys holding enough staking in total
         let n_sigs = bitmap.len();
@@ -136,11 +141,19 @@ mod test {
 
         // Call the contract
         let res = hotshot
-            .verify_agg_sig(message.clone(), agg_sig_value.into(), bitmap.to_vec())
+            .verify_agg_sig(
+                message.clone(),
+                agg_sig_value.into(),
+                bitmap.to_vec(),
+                stake_threshold,
+            )
             .call()
             .await;
 
-        assert!(res.is_ok());
+        match res_expected {
+            OK_EXPECTED => assert!(res.is_ok()),
+            ERROR_EXPECTED => assert!(res.is_err()),
+        }
     }
 
     #[async_std::test]
@@ -161,7 +174,7 @@ mod test {
             staking_keys.push((sk.clone(), pk));
             let pk = pk.to_affine();
             let pk_value: MyG2Point = pk.into();
-            let amount = U256::from(10 * i);
+            let amount = U256::from(10 * (i + 1));
             hotshot
                 .add_new_staking_key(pk_value.clone().into(), amount)
                 .send()
@@ -171,7 +184,10 @@ mod test {
                 .unwrap();
         }
 
-        check_qc_with_bitmap(
+        // Happy path
+
+        let stake_threshold = U256::from(10);
+        check_agg_sig(
             &vec![
                 U256::from(1),
                 U256::from(1),
@@ -180,11 +196,13 @@ mod test {
                 U256::from(0),
             ],
             &staking_keys,
+            stake_threshold,
             &hotshot,
+            OK_EXPECTED,
         )
         .await;
 
-        check_qc_with_bitmap(
+        check_agg_sig(
             &vec![
                 U256::from(0),
                 U256::from(1),
@@ -193,11 +211,13 @@ mod test {
                 U256::from(1),
             ],
             &staking_keys,
+            stake_threshold,
             &hotshot,
+            OK_EXPECTED,
         )
         .await;
 
-        check_qc_with_bitmap(
+        check_agg_sig(
             &vec![
                 U256::from(1),
                 U256::from(0),
@@ -206,12 +226,29 @@ mod test {
                 U256::from(0),
             ],
             &staking_keys,
+            stake_threshold,
             &hotshot,
+            OK_EXPECTED,
         )
         .await;
 
         // TODO error cases
         // Threshold is too low
+        check_agg_sig(
+            &vec![
+                U256::from(1),
+                U256::from(0),
+                U256::from(0),
+                U256::from(0),
+                U256::from(0),
+            ],
+            &staking_keys,
+            U256::from(1000),
+            &hotshot,
+            ERROR_EXPECTED,
+        )
+        .await;
+
         // Signature is invalid
         // Bitmap is not correct
     }
