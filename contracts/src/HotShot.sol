@@ -104,12 +104,10 @@ contract HotShot {
 
         BN254.G2Point memory agg_pk = stakingKeys[index];
         for (uint256 i = index + 1; i < bitmap.length; i++) {
-            // Compute the group multiplication of the two keys
-
             if (bitmap[i]) {
                 BN254.G2Point memory pk = stakingKeys[i];
 
-                // Note: (x,y) coordinates for each field component must be inverted!
+                // Note: (x,y) coordinates for each field component must be inverted.
                 uint256 p1xy = agg_pk.x0;
                 uint256 p1xx = agg_pk.x1;
                 uint256 p1yy = agg_pk.y0;
