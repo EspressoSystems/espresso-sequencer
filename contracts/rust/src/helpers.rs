@@ -33,7 +33,7 @@ pub(crate) mod hotshot_contract {
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer;
 
-        (provider, deployer)
+        (provider, deployer.provider)
     }
 
     pub(crate) async fn get_bls_test_contract() -> BLSTest<

@@ -1,13 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::{
-    sync::Arc,
-    task::{sleep, spawn_local},
-};
+use async_std::task::{sleep, spawn_local};
 use contract_bindings::PolygonZkEVM;
-use ethers::{
-    prelude::{coins_bip39::English, *},
-    providers::Middleware,
-};
+use ethers::{prelude::*, providers::Middleware};
 use futures::{
     future::{ready, FutureExt},
     join,
@@ -17,9 +11,8 @@ use hermez_adaptor::{Layer1Backend, ZkEvmNode};
 use hotshot_query_service::{availability::BlockQueryData, data_source::QueryData};
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
 use sequencer::SeqTypes;
-use sequencer_utils::wait_for_http;
+use sequencer_utils::{connect_rpc, wait_for_http};
 use std::time::Duration;
-use surf_disco::Url;
 use tempfile::TempDir;
 use zkevm::ZkEvm;
 
@@ -43,8 +36,8 @@ async fn test_end_to_end() {
     let rollup_address = node.l1().rollup.address();
     let hotshot_address = node.l1().hotshot.address();
 
-    let l1 = connect_rpc(&l1_provider, mnemonic, None).await.unwrap();
-    let l2 = connect_rpc(&l2_provider, mnemonic, None).await.unwrap();
+    let l1 = connect_rpc(&l1_provider, mnemonic, 0, None).await.unwrap();
+    let l2 = connect_rpc(&l2_provider, mnemonic, 0, None).await.unwrap();
     let zkevm = ZkEvm {
         chain_id: l2.get_chainid().await.unwrap().as_u64(),
     };
@@ -86,6 +79,7 @@ async fn test_end_to_end() {
     let hotshot_contract_opt = HotShotContractOptions {
         l1_provider: env.l1_provider(),
         sequencer_mnemonic: mnemonic.to_string(),
+        sequencer_account_index: node.l1().clients.funded[0].index,
         hotshot_address,
         l1_chain_id: None,
         query_service_url: env.sequencer(),
@@ -206,44 +200,4 @@ async fn test_end_to_end() {
             break;
         }
     }
-}
-
-async fn connect_rpc(
-    provider: &Url,
-    mnemonic: &str,
-    chain_id: Option<u64>,
-) -> Option<Arc<NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>>> {
-    let provider = match Provider::try_from(provider.to_string()) {
-        Ok(provider) => provider,
-        Err(err) => {
-            tracing::error!("error connecting to RPC {}: {}", provider, err);
-            return None;
-        }
-    };
-    let chain_id = match chain_id {
-        Some(id) => id,
-        None => match provider.get_chainid().await {
-            Ok(id) => id.as_u64(),
-            Err(err) => {
-                tracing::error!("error getting chain ID: {}", err);
-                return None;
-            }
-        },
-    };
-    let wallet = match MnemonicBuilder::<English>::default()
-        .phrase(mnemonic)
-        .build()
-    {
-        Ok(wallet) => wallet,
-        Err(err) => {
-            tracing::error!("error opening wallet: {}", err);
-            return None;
-        }
-    };
-    let wallet = wallet.with_chain_id(chain_id);
-    let address = wallet.address();
-    Some(Arc::new(NonceManagerMiddleware::new(
-        SignerMiddleware::new(provider, wallet),
-        address,
-    )))
 }

@@ -1,5 +1,5 @@
 use ark_serialize::CanonicalSerialize;
-use async_std::task::sleep;
+use async_std::{sync::Arc, task::sleep};
 use commit::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
@@ -7,6 +7,7 @@ use ethers::{
     prelude::*,
     providers::Middleware as _,
     providers::{Http, Provider},
+    signers::coins_bip39::English,
     types::U256,
 };
 use std::process::{Child, Command};
@@ -80,6 +81,54 @@ impl Drop for Anvil {
     fn drop(&mut self) {
         self.child.kill().unwrap();
     }
+}
+
+pub async fn connect_rpc(
+    provider: &Url,
+    mnemonic: &str,
+    index: u32,
+    chain_id: Option<u64>,
+) -> Option<Arc<Middleware>> {
+    let provider = match Provider::try_from(provider.to_string()) {
+        Ok(provider) => provider,
+        Err(err) => {
+            tracing::error!("error connecting to RPC {}: {}", provider, err);
+            return None;
+        }
+    };
+    let chain_id = match chain_id {
+        Some(id) => id,
+        None => match provider.get_chainid().await {
+            Ok(id) => id.as_u64(),
+            Err(err) => {
+                tracing::error!("error getting chain ID: {}", err);
+                return None;
+            }
+        },
+    };
+    let mnemonic = match MnemonicBuilder::<English>::default()
+        .phrase(mnemonic)
+        .index(index)
+    {
+        Ok(mnemonic) => mnemonic,
+        Err(err) => {
+            tracing::error!("error building walletE: {}", err);
+            return None;
+        }
+    };
+    let wallet = match mnemonic.build() {
+        Ok(wallet) => wallet,
+        Err(err) => {
+            tracing::error!("error opening wallet: {}", err);
+            return None;
+        }
+    };
+    let wallet = wallet.with_chain_id(chain_id);
+    let address = wallet.address();
+    Some(Arc::new(NonceManagerMiddleware::new(
+        SignerMiddleware::new(provider, wallet),
+        address,
+    )))
 }
 
 pub async fn wait_for_http(

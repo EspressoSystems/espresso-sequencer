@@ -176,28 +176,29 @@ mod test {
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let hotshot_contract = HotShot::deploy(clients.trusted_sequencer.clone(), ())
+        let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
             .unwrap()
             .send()
             .await
             .unwrap();
-        let rollup_contract =
-            ExampleRollup::deploy(clients.deployer.clone(), hotshot_contract.address())
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        let rollup_contract = ExampleRollup::deploy(
+            clients.deployer.provider.clone(),
+            hotshot_contract.address(),
+        )
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
         let mut ws_url = anvil.url();
         ws_url.set_scheme("ws").unwrap();
         let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
         let state_update_filter = rollup_contract.state_update_filter().filter;
-        let stream = socket_provider
+        let mut stream = socket_provider
             .subscribe_logs(&state_update_filter)
             .await
-            .unwrap()
-            .take(2);
+            .unwrap();
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -247,27 +248,37 @@ mod test {
         let hotshot_opt = HotShotContractOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
+            sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
             query_service_url: sequencer_url,
         };
-        let options = hotshot_opt.clone();
+        let options = HotShotContractOptions {
+            sequencer_account_index: clients.funded[1].index,
+            ..hotshot_opt.clone()
+        };
         let state_lock = state.clone();
         let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
         spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
         // Wait for the rollup contract to process all state updates
-        stream.collect::<Vec<Log>>().await;
+        loop {
+            // Wait for an event. This stream should not end until our events have been processed.
+            stream.next().await.unwrap();
+            let bob_balance = state.read().await.get_balance(&bob.address());
+            if bob_balance == 100 {
+                break;
+            } else {
+                tracing::info!("Bob's balance is {bob_balance}/100");
+            }
+        }
 
-        // Ensure that the state commitments match AND that Bob's balance updates as expected
+        // Ensure that the state commitments match.
         let state_comm = state.read().await.commit();
-        let bob_balance = state.read().await.get_balance(&bob.address());
         let state_comm = commitment_to_u256(state_comm);
         let contract_state_comm = rollup_contract.state_commitment().call().await.unwrap();
-
         assert_eq!(state_comm, contract_state_comm);
-        assert_eq!(bob_balance, 100);
     }
 
     #[async_std::test]
@@ -283,20 +294,21 @@ mod test {
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let hotshot_contract = HotShot::deploy(clients.deployer.clone(), ())
+        let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
             .unwrap()
             .send()
             .await
             .unwrap();
-        let rollup_contract =
-            ExampleRollup::deploy(clients.deployer.clone(), hotshot_contract.address())
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        let rollup_contract = ExampleRollup::deploy(
+            clients.deployer.provider.clone(),
+            hotshot_contract.address(),
+        )
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
-        let max_updates = 5 * num_txns as usize;
         let mut ws_url = anvil.url();
         ws_url.set_scheme("ws").unwrap();
         let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
@@ -304,12 +316,11 @@ mod test {
         let mut stream = socket_provider
             .subscribe_logs(&state_update_filter)
             .await
-            .unwrap()
-            .take(max_updates);
+            .unwrap();
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
-        let nodes = sequencer::testing::init_hotshot_handles().await;
+        let nodes = init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
@@ -337,18 +348,22 @@ mod test {
         let hotshot_opt = HotShotContractOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
+            sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
             query_service_url: sequencer_url,
         };
-        let options = hotshot_opt.clone();
+        let options = HotShotContractOptions {
+            sequencer_account_index: clients.funded[1].index,
+            ..hotshot_opt.clone()
+        };
         let state_lock = state.clone();
         let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
         spawn(async move { run_executor(rollup_address, &options, state_lock).await });
 
         // Submit transactions to sequencer
-        for nonce in 0..num_txns {
+        for nonce in 1..=num_txns {
             let txn = Transaction {
                 amount: 1,
                 destination: bob.address(),
@@ -359,24 +374,21 @@ mod test {
             nodes[0].submit_transaction(txn.clone()).await.unwrap();
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.
+            tracing::info!("Waiting for txn {nonce} to be sequenced");
             wait_for_decide_on_handle(nodes[0].clone(), txn)
                 .await
                 .unwrap();
         }
 
         // Wait for the rollup contract to process all state updates
-        let mut num_updates = 0;
-        while stream.next().await.is_none() {
+        loop {
+            // Wait for an event. This stream should not end until our events have been processed.
+            stream.next().await.unwrap();
             let bob_balance = state.read().await.get_balance(&bob.address());
             if bob_balance == num_txns {
                 break;
-            }
-            tracing::info!("Bob's balance is {bob_balance}/{num_txns}");
-            num_updates += 1;
-
-            if num_updates == max_updates {
-                // Panic if the rollup contract never catches up to the rollup
-                panic!("Rollup contract failed to process state update");
+            } else {
+                tracing::info!("Bob's balance is {bob_balance}/{num_txns}");
             }
         }
 

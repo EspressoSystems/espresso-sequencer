@@ -1,12 +1,12 @@
 use async_std::{sync::Arc, task::sleep};
 use clap::Args;
 use contract_bindings::HotShot;
+use ethers::prelude::*;
 use ethers::types::Address;
-use ethers::{prelude::*, providers::Middleware as _, signers::coins_bip39::English};
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
 use hotshot_types::traits::node_implementation::NodeImplementation;
-use sequencer_utils::{commitment_to_u256, contract_send, Middleware};
+use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Middleware};
 use std::time::Duration;
 use surf_disco::Url;
 
@@ -34,12 +34,20 @@ pub struct HotShotContractOptions {
     #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
     pub hotshot_address: Address,
 
-    /// Mnemonic phrase for the sequencer wallet.
+    /// Mnemonic phrase for a funded wallet.
     ///
-    /// This is the wallet that will be used to send blocks sequenced by HotShot to the rollup
-    /// contract. It must be funded with ETH and MATIC on layer 1.
+    /// This is the wallet that will be used to send blocks sequenced by HotShot to the sequencer
+    /// contract. It must be funded with ETH on layer 1.
     #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
     pub sequencer_mnemonic: String,
+
+    /// Index of a funded account derived from sequencer-mnemonic.
+    #[clap(
+        long,
+        env = "ESPRESSO_ZKEVM_SEQUENCER_ACCOUNT_INDEX",
+        default_value = "0"
+    )]
+    pub sequencer_account_index: u32,
 
     /// URL of HotShot Query Service
     ///
@@ -174,47 +182,13 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
 }
 
 pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>> {
-    connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
-}
-
-async fn connect_rpc(
-    provider: &Url,
-    mnemonic: &str,
-    chain_id: Option<u64>,
-) -> Option<Arc<Middleware>> {
-    let provider = match Provider::try_from(provider.to_string()) {
-        Ok(provider) => provider,
-        Err(err) => {
-            tracing::error!("error connecting to RPC {}: {}", provider, err);
-            return None;
-        }
-    };
-    let chain_id = match chain_id {
-        Some(id) => id,
-        None => match provider.get_chainid().await {
-            Ok(id) => id.as_u64(),
-            Err(err) => {
-                tracing::error!("error getting chain ID: {}", err);
-                return None;
-            }
-        },
-    };
-    let wallet = match MnemonicBuilder::<English>::default()
-        .phrase(mnemonic)
-        .build()
-    {
-        Ok(wallet) => wallet,
-        Err(err) => {
-            tracing::error!("error opening wallet: {}", err);
-            return None;
-        }
-    };
-    let wallet = wallet.with_chain_id(chain_id);
-    let address = wallet.address();
-    Some(Arc::new(NonceManagerMiddleware::new(
-        SignerMiddleware::new(provider, wallet),
-        address,
-    )))
+    connect_rpc(
+        &opt.l1_provider,
+        &opt.sequencer_mnemonic,
+        opt.sequencer_account_index,
+        opt.l1_chain_id,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -245,9 +219,14 @@ mod test {
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
 
-        let adaptor_l1_signer = connect_rpc(l1.provider.url(), TEST_MNEMONIC, None)
-            .await
-            .unwrap();
+        let adaptor_l1_signer = connect_rpc(
+            l1.provider.url(),
+            TEST_MNEMONIC,
+            l1.clients.funded[0].index,
+            None,
+        )
+        .await
+        .unwrap();
 
         // Create a few test batches.
         let num_batches = 2u64;
