@@ -1,0 +1,79 @@
+version: "1"
+services:
+  # cdn-server:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/cdn-server:main
+  #   ports:
+  #     - "$ESPRESSO_CDN_SERVER_PORT:$ESPRESSO_CDN_SERVER_PORT"
+  #   environment:
+  #     - ESPRESSO_CDN_SERVER_PORT
+  #     - ESPRESSO_CDN_SERVER_NUM_NODES=5
+  #     - ESPRESSO_CDN_SERVER_START_DELAY=5s
+  #     - RUST_LOG
+  # sequencer0:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+  #   ports:
+  #     - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_CDN_URL
+  #     - ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_SEQUENCER_STORAGE_PATH
+  #     - RUST_LOG
+  #   depends_on:
+  #     - cdn-server
+  # sequencer1:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+  #   ports:
+  #     - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_CDN_URL
+  #     - ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_SEQUENCER_STORAGE_PATH
+  #     - RUST_LOG
+  #   depends_on:
+  #     - cdn-server
+  # sequencer2:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+  #   ports:
+  #     - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_CDN_URL
+  #     - ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_SEQUENCER_STORAGE_PATH
+  #     - RUST_LOG
+  #   depends_on:
+  #     - cdn-server
+  # sequencer3:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+  #   ports:
+  #     - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_CDN_URL
+  #     - ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_SEQUENCER_STORAGE_PATH
+  #     - RUST_LOG
+  #   depends_on:
+  #     - cdn-server
+  # sequencer4:
+  #   image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+  #   ports:
+  #     - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+  #   environment:
+  #     - ESPRESSO_SEQUENCER_CDN_URL
+  #     - ESPRESSO_SEQUENCER_API_PORT
+  #     - ESPRESSO_SEQUENCER_STORAGE_PATH
+  #     - RUST_LOG
+  #   depends_on:
+  #     - cdn-server
+  mock-l1-network:
+    image: ghcr.io/foundry-rs/foundry:latest
+    ports:
+      - $ESPRESSO_ZKEVM_L1_PORT:$ESPRESSO_ZKEVM_L1_PORT
+    environment:
+      - ESPRESSO_ZKEVM_L1_PORT
+    # The way the foundry image handles arguments is strange, the double quotes
+    # make it work here.
+    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_ZKEVM_L1_PORT --chain-id 1337'"
+  example-contracts:
+    image: example-contracts:latest
+    depends_on:
+      - mock-l1-network

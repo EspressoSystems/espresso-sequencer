@@ -7,6 +7,7 @@ pub mod executor;
 mod prover;
 pub mod state;
 pub mod transaction;
+pub mod utils;
 
 // The VmID helps Rollups find their transactions in the sequenced block.
 pub const VM_ID: u64 = 1;

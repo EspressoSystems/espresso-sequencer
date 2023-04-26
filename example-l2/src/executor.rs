@@ -140,12 +140,11 @@ pub async fn run_executor(
 #[cfg(test)]
 mod test {
     use crate::transaction::{SignedTransaction, Transaction};
+    use crate::utils::deploy_example_contracts;
     use crate::VM_ID;
 
     use super::*;
     use async_std::task::spawn;
-    use contract_bindings::example_rollup::ExampleRollup;
-    use contract_bindings::TestClients;
     use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
@@ -160,7 +159,6 @@ mod test {
     use sequencer::VmTransaction;
     use sequencer_utils::{commitment_to_u256, Anvil};
     use std::path::Path;
-    use std::time::Duration;
     use surf_disco::{Client, Url};
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
@@ -171,21 +169,7 @@ mod test {
     async fn test_execute() {
         // Start a test HotShot and Rollup contract
         let anvil = Anvil::spawn(None).await;
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let hotshot_contract = HotShot::deploy(clients.trusted_sequencer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-        let rollup_contract =
-            ExampleRollup::deploy(clients.deployer.clone(), hotshot_contract.address())
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        let (hotshot_contract, rollup_contract) = deploy_example_contracts(&anvil.url()).await;
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
         let mut ws_url = anvil.url();
