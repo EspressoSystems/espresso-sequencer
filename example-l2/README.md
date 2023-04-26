@@ -15,9 +15,7 @@ TODO
 ## Transaction Lifecycle
 The diagram below represents the lifecycle of a single rollup transaction, illustrating how the example rollup interacts with the Espresso sequencer along the way. The diagram below is a simplified version of this [system overview](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/system-overview), focusing on a single example rollup transaction. 
 
-![Untitled](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/2a2934f6-5d3e-4aa6-8f1e-1941ac82c1ca/Untitled.png)
-
-[Diagram](https://www.plantuml.com/plantuml/uml/ZPBFpjCm4CJlVefLBvmQAVm_8DI2Ya3AeT0Z8EGuRXFLyGPdJLiXtfrrRA84fP--NEp8lndFsDxq91tvrWY5ROTMMuBLHwH3ZGG7_TDhgxHRWUp3dvXIkwjiEwFX2nhZku2aAVmMaBu9ljr_6XWU5vPtLwqyeGj4c4yyvk3UuIyTi3GRiJz2fA6JwYnF6bQ5l36Q3ziMURISHXhxmNkqvAIYVqL_5Fd_SEgMVxDJE5LElE3TjwPH6jQ-MxyTkbea3QuvrGHu1DFOiyWpEFYoRGZOn_PirQ0LsbOGO244wu3b72JA2RjH_3I33-WkqbLtrFon4DOLNYoRn3PBCPvbiCUUe3Iepg4g9sgvw-YLdDv4g-5UbdoUSo9Dgdx8A6ZX_ecyc5jKakI2U3ph9OkNgKtd48yJSUo_82-H2DjH_-eHBSGxBEF1tg_oEeFFNhiRbD98g_HK_WJuIQAdUC5VwwQgjFtks2nK5Ec9ZGiLBnHvV55pd7E4OdCqoiM6D_Ij-Gi0)
+![Example Rollup](./doc/example_l2.svg)
 
 1. Alice signs a transaction transferring rollup tokens to Bob. Alice sends this transaction to the Rollup through the `submit` endpoint of the rollup API. If Alice is concerned about censorship, she can send her transaction directly to the sequencer. 
 3. The rollup API server forwards the transaction to the sequencer. The transaction is tagged with the rollup’s unique VM ID so that the rollup can identify its own transactions in step 4. 
