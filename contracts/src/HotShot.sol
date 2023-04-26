@@ -7,6 +7,8 @@ import {BLSSig} from "./libraries/BLSSig.sol";
 import {BN256G2} from "./libraries//BN256G2.sol";
 
 contract HotShot {
+    event NewStakingKey(BN254.G2Point staking_key, uint256 amount);
+
     uint256 public constant MAX_BLOCKS = 1000;
     mapping(uint256 => uint256) public commitments;
     uint256 public blockHeight;
@@ -60,6 +62,7 @@ contract HotShot {
         uint256 index = stakingKeys.length;
         stakeAmounts[index] = amount;
         stakingKeys.push(staking_key);
+        emit NewStakingKey(staking_key, amount);
     }
 
     function getStakingKey(uint256 index) public view returns (BN254.G2Point memory, uint256) {
