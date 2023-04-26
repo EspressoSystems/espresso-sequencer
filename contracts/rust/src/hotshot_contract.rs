@@ -18,8 +18,10 @@ mod test {
     use jf_primitives::signatures::{AggregateableSignatureSchemes, SignatureScheme};
     use jf_utils::test_rng;
 
-    const OK_EXPECTED: bool = true;
-    const ERROR_EXPECTED: bool = false;
+    enum ResultExpected {
+        Ok,
+        Error,
+    }
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
@@ -118,7 +120,7 @@ mod test {
                 Wallet<ethers::core::k256::ecdsa::SigningKey>,
             >,
         >,
-        res_expected: bool,
+        res_expected: ResultExpected,
     ) {
         let n_sigs = bitmap.len();
         let rng = &mut test_rng();
@@ -153,8 +155,8 @@ mod test {
             .await;
 
         match res_expected {
-            OK_EXPECTED => assert!(res.is_ok()),
-            ERROR_EXPECTED => assert!(res.is_err()),
+            ResultExpected::Ok => assert!(res.is_ok()),
+            ResultExpected::Error => assert!(res.is_err()),
         }
     }
 
@@ -197,7 +199,7 @@ mod test {
             &messages,
             stake_threshold,
             &hotshot,
-            OK_EXPECTED,
+            ResultExpected::Ok,
         )
         .await;
 
@@ -207,7 +209,7 @@ mod test {
             &messages,
             stake_threshold,
             &hotshot,
-            OK_EXPECTED,
+            ResultExpected::Ok,
         )
         .await;
 
@@ -217,7 +219,7 @@ mod test {
             &messages,
             stake_threshold,
             &hotshot,
-            OK_EXPECTED,
+            ResultExpected::Ok,
         )
         .await;
 
@@ -230,7 +232,7 @@ mod test {
             &messages,
             U256::from(1000),
             &hotshot,
-            ERROR_EXPECTED,
+            ResultExpected::Error,
         )
         .await;
 
@@ -244,7 +246,7 @@ mod test {
             &messages,
             stake_threshold,
             &hotshot,
-            ERROR_EXPECTED,
+            ResultExpected::Error,
         )
         .await;
 
@@ -255,7 +257,7 @@ mod test {
             &messages,
             stake_threshold,
             &hotshot,
-            ERROR_EXPECTED,
+            ResultExpected::Error,
         )
         .await;
     }
