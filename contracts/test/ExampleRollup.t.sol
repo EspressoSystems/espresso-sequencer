@@ -13,32 +13,44 @@ contract ExampleRollupTest is Test {
 
     function setUp() public {
         hotshot = new HotShot();
-        rollup = new ExampleRollup(address(hotshot));
+        rollup = new ExampleRollup(address(hotshot), 0);
     }
 
     function testStateUpdate() public {
         // Add a commitment to hotshot
-        uint256[] memory comms = new uint[](2);
-        bytes[] memory qcs = new bytes[](2);
-
+        uint256[] memory comms = new uint[](1);
+        bytes[] memory qcs = new bytes[](1);
         comms[0] = 576467464341;
         qcs[0] = "0x3333";
-
-        comms[1] = 234274238974;
-        qcs[1] = "0x4444";
-
         hotshot.newBlocks(comms, qcs);
 
         // Send a state update to the rollup
-        bytes memory proof = "0x0000";
-        uint256 nextStateCommitment = 523123;
-
+        ExampleRollup.BatchProof memory proof =
+            ExampleRollup.BatchProof({firstBlock: comms[0], lastBlock: comms[0], oldState: 0, newState: 523123});
         vm.expectEmit(false, false, false, true, address(rollup));
         emit StateUpdate(1);
+        rollup.verifyBlocks(1, proof.newState, proof);
 
-        rollup.verifyBlocks(1, nextStateCommitment, proof);
-
-        assertEq(rollup.stateCommitment(), nextStateCommitment);
+        assertEq(rollup.stateCommitment(), proof.newState);
         assertEq(rollup.verifiedBlocks(), 1);
+    }
+
+    function testInvalidProof() public {
+        // Add a commitment to hotshot
+        uint256[] memory comms = new uint[](1);
+        bytes[] memory qcs = new bytes[](1);
+        comms[0] = 576467464341;
+        qcs[0] = "0x3333";
+        hotshot.newBlocks(comms, qcs);
+
+        // Send an invalid state update to the rollup
+        ExampleRollup.BatchProof memory proof =
+            ExampleRollup.BatchProof({firstBlock: comms[0], lastBlock: 0, oldState: 0, newState: 523123});
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ExampleRollup.InvalidProof.selector, comms[0], comms[0], proof.oldState, proof.newState, proof
+            )
+        );
+        rollup.verifyBlocks(1, proof.newState, proof);
     }
 }

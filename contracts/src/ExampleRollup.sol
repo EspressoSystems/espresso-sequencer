@@ -11,47 +11,72 @@ contract ExampleRollup {
     // Attempted to verify a proof of the blocks from `verifiedBlocks` to `verifiedBlocks + count`,
     // but the HotShot `blockHeight` is less than  `verifiedBlocks + count`.
     error NotYetSequenced(uint256 verifiedBlocks, uint64 count, uint256 blockHeight);
-    // Attempted to verify an invalid proof of the blocks from `firstBlock` to `firstBlock + count`.
-    error InvalidProof(uint256 firstBlock, uint64 count, bytes proof);
+    // Attempted to verify an invalid proof.
+    error InvalidProof(uint256 firstBlock, uint256 lastBlock, uint256 oldState, uint256 newState, BatchProof proof);
+    // Attempted to verify an empty chain of blocks;
+    error NoBlocks();
 
     event StateUpdate(uint256 blockHeight);
 
-    constructor(address hotshotAddress) {
+    constructor(address hotshotAddress, uint256 initialState) {
         hotshot = HotShot(hotshotAddress);
-        stateCommitment = 0;
+        stateCommitment = initialState;
         verifiedBlocks = 0;
+    }
+
+    // A batch proof of the execution of a chain of blocks.
+    //
+    // For demonstration purposes, this just contains the public parameters that the proof was
+    // generated with, so that the contract can at least check that the prover is submitting the
+    // intended proof. In a real rollup, this would contain a SNARK witness attesting to the state
+    // update.
+    struct BatchProof {
+        uint256 firstBlock;
+        uint256 lastBlock;
+        uint256 oldState;
+        uint256 newState;
     }
 
     // Verify a batch proof of the execution of a chain of blocks.
     //
-    // For demonstration purposes, this always returns true.
+    // For demonstration purposes, this merely checks that the public parameters with which `proof`
+    // was generated match the claimed public parameters.
     //
     // A real rollup would verify the state update proof against
     // * the current state commitment
-    // * the last verified hotshot block commitment
-    // * the last hotshot block commitment in a chain of newly verified blocks extending from the
-    //   last verified block
+    // * the first unverified HotShot block commitment
+    // * the last HotShot block commitment in the claimed chain of blocks
     // * the new state commitment after executing the chain of new blocks
+    // The proof would constrain the VM execution semantics for each block and would enforce that
+    // the executed blocks form a chain from `firstBlock` to `lastBlock`. The latter condition
+    // forces the prover to execute the correct chain of blocks without explicitly taking this
+    // entire chain as a public input (which would be expensive). This holds up to collision
+    // resistance of the hash function used to link each HotShot block to its parent.
     function verifyProof(
-        uint256, /* firstBlock */
-        uint256, /* lastBlock */
-        uint256, /* oldState */
-        uint256, /* newState */
-        bytes calldata /* proof */
+        uint256 firstBlock,
+        uint256 lastBlock,
+        uint256 oldState,
+        uint256 newState,
+        BatchProof calldata proof
     ) private pure returns (bool) {
-        return true;
+        return firstBlock == proof.firstBlock && lastBlock == proof.lastBlock && oldState == proof.oldState
+            && newState == proof.newState;
     }
 
-    function verifyBlocks(uint64 count, uint256 nextStateCommitment, bytes calldata proof) external {
+    function verifyBlocks(uint64 count, uint256 nextStateCommitment, BatchProof calldata proof) external {
+        if (count == 0) {
+            revert NoBlocks();
+        }
+
         uint256 blockHeight = hotshot.blockHeight();
-        if (verifiedBlocks + count >= blockHeight) {
+        if (verifiedBlocks + count > blockHeight) {
             revert NotYetSequenced(verifiedBlocks, count, blockHeight);
         }
 
         uint256 firstBlock = hotshot.commitments(verifiedBlocks);
-        uint256 lastBlock = hotshot.commitments(verifiedBlocks + count);
+        uint256 lastBlock = hotshot.commitments(verifiedBlocks + count - 1);
         if (!verifyProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof)) {
-            revert InvalidProof(verifiedBlocks, count, proof);
+            revert InvalidProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof);
         }
 
         verifiedBlocks += count;

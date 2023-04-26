@@ -1,18 +1,21 @@
 use crate::prover::BatchProof;
-use ark_serialize::CanonicalDeserialize;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
 use commit::Committable;
-use contract_bindings::{example_rollup::ExampleRollup, hot_shot::NewBlocksFilter, HotShot};
+use contract_bindings::{
+    example_rollup::{self, ExampleRollup},
+    hot_shot::NewBlocksFilter,
+    HotShot,
+};
 use ethers::prelude::*;
-use hotshot_query_service::availability::{BlockHash, BlockQueryData};
+use hotshot_query_service::availability::BlockQueryData;
 use std::sync::Arc;
 
 use sequencer::{
     hotshot_commitment::{connect_l1, HotShotContractOptions},
     SeqTypes,
 };
-use sequencer_utils::{commitment_to_u256, contract_send};
+use sequencer_utils::{commitment_to_u256, contract_send, u256_to_commitment};
 
 use crate::state::State;
 
@@ -79,7 +82,6 @@ pub async fn run_executor(
         let mut proofs = vec![];
         let mut state = state.write().await;
         for i in 0..num_blocks {
-            let mut commit_bytes = [0; 32];
             let commitment = match hotshot_contract.commitments(first_block + i).call().await {
                 // TODO: Replace these with typed errors
                 Ok(commitment) => commitment,
@@ -89,9 +91,7 @@ pub async fn run_executor(
                     return;
                 }
             };
-            commitment.to_little_endian(&mut commit_bytes);
-            let block_commitment = match BlockHash::<SeqTypes>::deserialize(&*commit_bytes.to_vec())
-            {
+            let block_commitment = match u256_to_commitment(commitment) {
                 Ok(commitment) => commitment,
                 Err(err) => {
                     tracing::error!("Unable to deserialize commitment: {}", err);
@@ -122,15 +122,17 @@ pub async fn run_executor(
         }
 
         // Compute an aggregate proof.
-        let proof = Bytes::from(<Vec<u8>>::from(BatchProof::generate(proofs)));
+        let proof = BatchProof::generate(&proofs);
         let state_comm = commitment_to_u256(state.commit());
 
         // Send the batch proof to L1.
         tracing::info!(
-            "Sending batch proof of blocks {}-{} to L1",
+            "Sending batch proof of blocks {}-{} to L1: {:?}",
             first_block,
-            first_block + num_blocks - 1
+            first_block + num_blocks - 1,
+            proof,
         );
+        let proof = example_rollup::BatchProof::from(proof);
         while contract_send(rollup_contract.verify_blocks(num_blocks, state_comm, proof.clone()))
             .await
             .is_none()
@@ -174,6 +176,15 @@ mod test {
 
     #[async_std::test]
     async fn test_execute() {
+        // Create mock rollup state
+        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
+        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
+        let state = Arc::new(RwLock::new(State::from_initial_balances([(
+            alice.address(),
+            9999,
+        )])));
+        let initial_state = { state.read().await.commit() };
+
         // Start a test HotShot and Rollup contract
         let anvil = AnvilOptions::default().spawn().await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
@@ -187,7 +198,10 @@ mod test {
             .unwrap();
         let rollup_contract = ExampleRollup::deploy(
             clients.deployer.provider.clone(),
-            hotshot_contract.address(),
+            (
+                hotshot_contract.address(),
+                commitment_to_u256(initial_state),
+            ),
         )
         .unwrap()
         .send()
@@ -221,14 +235,6 @@ mod test {
         let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
             .parse()
             .unwrap();
-
-        // Create mock rollup state
-        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
-        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
-        let state = Arc::new(RwLock::new(State::from_initial_balances([(
-            alice.address(),
-            9999,
-        )])));
 
         // Submit transaction to sequencer
         let txn = Transaction {
@@ -289,6 +295,15 @@ mod test {
     async fn test_execute_batched_updates_to_slow_l1() {
         let num_txns = 10;
 
+        // Create mock rollup state
+        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
+        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
+        let state = Arc::new(RwLock::new(State::from_initial_balances([(
+            alice.address(),
+            9999,
+        )])));
+        let initial_state = { state.read().await.commit() };
+
         // Start a test HotShot and Rollup contract.
         let anvil = AnvilOptions::default()
             .block_time(Duration::from_secs(30))
@@ -305,7 +320,10 @@ mod test {
             .unwrap();
         let rollup_contract = ExampleRollup::deploy(
             clients.deployer.provider.clone(),
-            hotshot_contract.address(),
+            (
+                hotshot_contract.address(),
+                commitment_to_u256(initial_state),
+            ),
         )
         .unwrap()
         .send()
@@ -339,14 +357,6 @@ mod test {
         let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
             .parse()
             .unwrap();
-
-        // Create mock rollup state
-        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
-        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
-        let state = Arc::new(RwLock::new(State::from_initial_balances([(
-            alice.address(),
-            9999,
-        )])));
 
         // Spawn hotshot commitment and executor tasks
         let hotshot_opt = HotShotContractOptions {

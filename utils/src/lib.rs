@@ -1,4 +1,4 @@
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::{sync::Arc, task::sleep};
 use commit::{Commitment, Committable};
 use ethers::{
@@ -171,6 +171,12 @@ pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
     comm.serialize(&mut buf).unwrap();
     let state_comm: [u8; 32] = buf.try_into().unwrap();
     U256::from_little_endian(&state_comm)
+}
+
+pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, SerializationError> {
+    let mut commit_bytes = [0; 32];
+    comm.to_little_endian(&mut commit_bytes);
+    Commitment::deserialize(&*commit_bytes.to_vec())
 }
 
 pub async fn contract_send<T: Detokenize>(
