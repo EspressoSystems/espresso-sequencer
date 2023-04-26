@@ -97,11 +97,11 @@ mod test {
         }
     }
 
-    fn get_slice_from_bitmap<T: Clone>(input: Vec<T>, bitmap: &Vec<U256>) -> Vec<T> {
+    fn get_slice_from_bitmap<T: Clone>(input: Vec<T>, bitmap: &Vec<bool>) -> Vec<T> {
         assert_eq!(input.len(), bitmap.len());
         let mut res = vec![];
         for i in 0..input.len() {
-            if bitmap[i] == U256::from(1) {
+            if bitmap[i] {
                 res.push(input[i].clone());
             }
         }
@@ -109,7 +109,7 @@ mod test {
     }
 
     async fn check_agg_sig(
-        bitmap: &Vec<U256>,
+        bitmap: &Vec<bool>,
         staking_keys: &[(SignKey, VerKey)],
         stake_threshold: U256,
         hotshot: &HotShot<
@@ -188,13 +188,7 @@ mod test {
 
         let stake_threshold = U256::from(10);
         check_agg_sig(
-            &vec![
-                U256::from(1),
-                U256::from(1),
-                U256::from(1),
-                U256::from(0),
-                U256::from(0),
-            ],
+            &vec![true, true, true, false, false],
             &staking_keys,
             stake_threshold,
             &hotshot,
@@ -203,13 +197,7 @@ mod test {
         .await;
 
         check_agg_sig(
-            &vec![
-                U256::from(0),
-                U256::from(1),
-                U256::from(1),
-                U256::from(0),
-                U256::from(1),
-            ],
+            &vec![false, true, true, false, true],
             &staking_keys,
             stake_threshold,
             &hotshot,
@@ -218,13 +206,7 @@ mod test {
         .await;
 
         check_agg_sig(
-            &vec![
-                U256::from(1),
-                U256::from(0),
-                U256::from(0),
-                U256::from(0),
-                U256::from(0),
-            ],
+            &vec![true, false, false, false, false],
             &staking_keys,
             stake_threshold,
             &hotshot,
@@ -235,13 +217,7 @@ mod test {
         // TODO error cases
         // Threshold is too low
         check_agg_sig(
-            &vec![
-                U256::from(1),
-                U256::from(0),
-                U256::from(0),
-                U256::from(0),
-                U256::from(0),
-            ],
+            &vec![true, false, false, false, false],
             &staking_keys,
             U256::from(1000),
             &hotshot,

@@ -67,14 +67,14 @@ contract HotShot {
     function verify_agg_sig(
         bytes memory message,
         BN254.G1Point memory sig,
-        uint256[] memory bitmap,
+        bool[] memory bitmap,
         uint256 min_stake_threshold
     ) public view {
         // Build aggregated public key
 
         // Loop until we find a one in the bitmap
         uint256 index = 0;
-        while (bitmap[index] == 0 && index < bitmap.length) {
+        while (!bitmap[index] && index < bitmap.length) {
             index++;
         }
 
@@ -87,7 +87,7 @@ contract HotShot {
         // Compute the stake corresponding to the signers and check if it is enough
         uint256 stake = 0;
         for (uint256 i = 0; i < bitmap.length; i++) {
-            if (bitmap[i] == 1) {
+            if (bitmap[i]) {
                 stake += stakeAmounts[i]; // TODO check to avoid wrapping around?
             }
         }
@@ -98,7 +98,7 @@ contract HotShot {
         for (uint256 i = index + 1; i < bitmap.length; i++) {
             // Compute the group multiplication of the two keys
 
-            if (bitmap[i] == 1) {
+            if (bitmap[i]) {
                 BN254.G2Point memory pk = stakingKeys[i];
 
                 // Note: (x,y) coordinates for each field component must be inverted!
