@@ -55,6 +55,7 @@ fn main() -> Result<(), ()> {
     // Compile HotShot specific contracts
     Command::new("forge")
         .arg("build")
+        .arg("--force") // Forge sometimes doesn't recompile when it should.
         .current_dir(&hotshot_contracts_path)
         .output()
         .expect("failed to execute process");
