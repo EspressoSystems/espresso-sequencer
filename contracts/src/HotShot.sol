@@ -52,7 +52,10 @@ contract HotShot {
         emit NewBlocks(firstBlockNumber, newCommitments.length);
     }
 
-    // Stake table related functions
+    // @dev Stake table related functions
+    // @notice This function is for testing purposes only. The real sequencer contract will perform several checks before adding a new key (e.g. validate deposits).
+    // @param staking_key public key for the BLS scheme
+    // @param amount stake corresponding to the staking key
     function addNewStakingKey(BN254.G2Point memory staking_key, uint256 amount) public {
         uint256 index = stakingKeys.length;
         stakeAmounts[index] = amount;
