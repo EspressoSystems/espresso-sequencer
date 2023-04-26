@@ -97,10 +97,9 @@ In order to avoid constant warnings about checksum mismatches with
 [svm-rs](https://github.com/roynalnaruto/svm-rs) managed `solc` we set
 `FOUNDRY_SRC` to solc installed via flake.nix.
 
-### Generating the bindings and deploying Hotshot contracts with Hermez contracts
-
-* Generate the contracts bindings: `cargo run --bin gen-bindings`.
-* Edit src/contract-bindings/src/deploy.rs
+* To use the contrats from rust generate the rust contracts bindings: `just
+  update-contract-bindings`.
+* When adding a new contract edit `src/contract-bindings/src/deploy.rs`
   * Add reference to new contract binding, e.g. `use crate::bindings::counter::Counter`
   * Add call to `mk_deploy` macro, e.g. `mk_deploy!(ESPRESSO_CONTRACTS_PREFIX,Counter);`
 
@@ -109,9 +108,7 @@ In order to avoid constant warnings about checksum mismatches with
 - Ensure submodules are checkout out: `git submodule update --init --recursive`
 - Install dependencies `just npm i`
 - Compile the contracts `just hardhat compile`
-- Update the rust bindings: `cargo run --bin gen-bindings`
-- Compile contracts and update bindings: `just update-contract-bindings`
-- Run a hardhat dev node: `just hardhat node`
+- Update the rust bindings: `just update-contract-bindings`
 - Update the zkevm-node contract bindings to match zkevm-contracts: `just
   update-zkevm-node-contract-bindings`
 
