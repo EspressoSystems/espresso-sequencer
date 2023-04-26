@@ -91,7 +91,7 @@ contract HotShot {
 
         // Compute the stake corresponding to the signers and check if it is enough
         uint256 stake = 0;
-        for (uint256 i = 0; i < bitmap.length; i++) {
+        for (uint256 i = index; i < bitmap.length; i++) {
             if (bitmap[i]) {
                 stake += stakeAmounts[i]; // TODO check to avoid wrapping around?
             }
