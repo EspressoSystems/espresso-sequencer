@@ -63,13 +63,19 @@ contract HotShot {
         return (stakingKeys[index], stakeAmounts[index]);
     }
 
-    // TODO document
+    // @dev Verify an aggregated signature against a bitmap (use to reconstruct the aggregated public key) and some stake threshold. If the stake involved by the signers is bigger than the threshold and the signature is valid then the validation passes, otherwise the transaction reverts.@author
+    // @param message message to check the signature against
+    // @param sig aggregated signature
+    // @param bitmap bit vector that corresponds to the public keys of the stake table to take into account to build the aggregated public key
+    // @param min_stake_threshold total stake that must me matched by the signers in order for the signature to be valid
     function verify_agg_sig(
         bytes memory message,
         BN254.G1Point memory sig,
         bool[] memory bitmap,
         uint256 min_stake_threshold
     ) public view {
+        require(bitmap.length <= stakingKeys.length, "bitmap is too long");
+
         // Build aggregated public key
 
         // Loop until we find a one in the bitmap
@@ -78,12 +84,8 @@ contract HotShot {
             index++;
         }
 
-        // TODO missing: compute the total amount of weight from the bitmap and check it against some value t passed as argument
-
-        // TODO test
         require(index < bitmap.length, "At least one key must be selected.");
 
-        // TODO test
         // Compute the stake corresponding to the signers and check if it is enough
         uint256 stake = 0;
         for (uint256 i = 0; i < bitmap.length; i++) {
@@ -91,7 +93,7 @@ contract HotShot {
                 stake += stakeAmounts[i]; // TODO check to avoid wrapping around?
             }
         }
-        // TODO test
+
         require(stake >= min_stake_threshold, "Not enough stake is available for validating the signature.");
 
         BN254.G2Point memory agg_pk = stakingKeys[index];

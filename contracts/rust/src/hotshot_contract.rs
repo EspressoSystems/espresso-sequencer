@@ -97,8 +97,7 @@ mod test {
         }
     }
 
-    fn get_slice_from_bitmap<T: Clone>(input: Vec<T>, bitmap: &Vec<bool>) -> Vec<T> {
-        assert_eq!(input.len(), bitmap.len());
+    fn get_slice_from_bitmap<T: Clone>(input: Vec<T>, bitmap: &[bool]) -> Vec<T> {
         let mut res = vec![];
         for i in 0..input.len() {
             if bitmap[i] {
@@ -111,6 +110,7 @@ mod test {
     async fn check_agg_sig(
         bitmap: &Vec<bool>,
         staking_keys: &[(SignKey, VerKey)],
+        messages: &[Bytes],
         stake_threshold: U256,
         hotshot: &HotShot<
             SignerMiddleware<
@@ -120,14 +120,13 @@ mod test {
         >,
         res_expected: bool,
     ) {
-        // Compute a signature with 3 keys holding enough staking in total
         let n_sigs = bitmap.len();
         let rng = &mut test_rng();
         let mut signatures: Vec<Signature> = vec![];
-        let message = Bytes::from(b"unique message");
-        for key_pair in staking_keys.iter().take(n_sigs) {
+
+        for (key_pair, message) in staking_keys.iter().take(n_sigs).zip(messages) {
             let sk = key_pair.0.clone();
-            let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
+            let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, message, rng).unwrap();
             signatures.push(sig.clone());
         }
 
@@ -140,6 +139,9 @@ mod test {
         let agg_sig_value: MyG1Point = agg_sig.clone().sigma.into_affine().into();
 
         // Call the contract
+
+        let message = messages[0].clone();
+
         let res = hotshot
             .verify_agg_sig(
                 message.clone(),
@@ -186,10 +188,13 @@ mod test {
 
         // Happy path
 
+        // Each signer is expected to sign the same message
+        let messages = vec![Bytes::from(b"unique message"); n_sigs];
         let stake_threshold = U256::from(10);
         check_agg_sig(
             &vec![true, true, true, false, false],
             &staking_keys,
+            &messages,
             stake_threshold,
             &hotshot,
             OK_EXPECTED,
@@ -199,6 +204,7 @@ mod test {
         check_agg_sig(
             &vec![false, true, true, false, true],
             &staking_keys,
+            &messages,
             stake_threshold,
             &hotshot,
             OK_EXPECTED,
@@ -208,24 +214,49 @@ mod test {
         check_agg_sig(
             &vec![true, false, false, false, false],
             &staking_keys,
+            &messages,
             stake_threshold,
             &hotshot,
             OK_EXPECTED,
         )
         .await;
 
-        // TODO error cases
+        // Error cases
+
         // Threshold is too low
         check_agg_sig(
             &vec![true, false, false, false, false],
             &staking_keys,
+            &messages,
             U256::from(1000),
             &hotshot,
             ERROR_EXPECTED,
         )
         .await;
 
-        // Signature is invalid
-        // Bitmap is not correct
+        // Signature is invalid because one message differs
+        let unique_message = Bytes::from(b"unique message");
+        let mut messages = vec![unique_message; n_sigs];
+        messages[0] = Bytes::from(b"different message");
+        check_agg_sig(
+            &vec![true, true, true, false, true],
+            &staking_keys,
+            &messages,
+            stake_threshold,
+            &hotshot,
+            ERROR_EXPECTED,
+        )
+        .await;
+
+        // Bitmap length is too high
+        check_agg_sig(
+            &vec![true; 32],
+            &staking_keys,
+            &messages,
+            stake_threshold,
+            &hotshot,
+            ERROR_EXPECTED,
+        )
+        .await;
     }
 }
