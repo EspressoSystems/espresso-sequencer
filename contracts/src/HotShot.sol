@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 import {BN254} from "bn254/BN254.sol";
 import {BLSSig} from "./libraries/BLSSig.sol";
 
-// TODO use forge install with a fork of the library that supports solidity ^0.8.0.
 import {BN256G2} from "./libraries//BN256G2.sol";
 
 contract HotShot {
