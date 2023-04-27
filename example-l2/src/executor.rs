@@ -56,7 +56,7 @@ pub async fn run_executor(
 
     let rollup_contract = ExampleRollup::new(rollup_address, l1.clone());
     let hotshot_contract = HotShot::new(opt.hotshot_address, Arc::new(socket_provider));
-    let filter = hotshot_contract.new_blocks_filter();
+    let filter = hotshot_contract.new_blocks_filter().from_block(0);
     let mut stream = match filter.subscribe().await {
         Ok(stream) => stream,
         Err(err) => {
@@ -81,6 +81,12 @@ pub async fn run_executor(
         // Execute new blocks, generating proofs.
         let mut proofs = vec![];
         let mut state = state.write().await;
+        tracing::info!(
+            "executing blocks {}-{}, state is {}",
+            first_block,
+            first_block + num_blocks - 1,
+            state.commit()
+        );
         for i in 0..num_blocks {
             let commitment = match hotshot_contract.commitments(first_block + i).call().await {
                 // TODO: Replace these with typed errors
@@ -191,6 +197,7 @@ mod test {
             9999,
         )])));
         let initial_state = { state.read().await.commit() };
+        tracing::info!("initial state: {initial_state}");
 
         // Start a test HotShot and Rollup contract
         let anvil = AnvilOptions::default().spawn().await;
@@ -310,6 +317,7 @@ mod test {
             9999,
         )])));
         let initial_state = { state.read().await.commit() };
+        tracing::info!("initial state: {initial_state}");
 
         // Start a test HotShot and Rollup contract.
         let mut anvil = AnvilOptions::default().spawn().await;
