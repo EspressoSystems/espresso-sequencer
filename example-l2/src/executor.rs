@@ -312,10 +312,7 @@ mod test {
         let initial_state = { state.read().await.commit() };
 
         // Start a test HotShot and Rollup contract.
-        let anvil = AnvilOptions::default()
-            .block_time(Duration::from_secs(30))
-            .spawn()
-            .await;
+        let mut anvil = AnvilOptions::default().spawn().await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
@@ -336,6 +333,11 @@ mod test {
         .send()
         .await
         .unwrap();
+
+        // Once the contracts have been deployed, restart the L1 with a slow block time.
+        anvil
+            .restart(AnvilOptions::default().block_time(Duration::from_secs(30)))
+            .await;
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
         let mut ws_url = anvil.url();

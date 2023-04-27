@@ -10,8 +10,10 @@ use ethers::{
     signers::coins_bip39::English,
     types::U256,
 };
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::Duration;
+use tempfile::TempDir;
 use url::Url;
 
 pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
@@ -20,6 +22,7 @@ pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Lo
 pub struct AnvilOptions {
     block_time: Option<Duration>,
     port: Option<u16>,
+    load_state: Option<PathBuf>,
 }
 
 impl AnvilOptions {
@@ -33,14 +36,44 @@ impl AnvilOptions {
         self
     }
 
+    pub fn load_state(mut self, path: PathBuf) -> Self {
+        self.load_state = Some(path);
+        self
+    }
+
     pub async fn spawn(self) -> Anvil {
-        let port = self
+        let state_dir = TempDir::new().unwrap();
+        let (child, url) = Anvil::spawn_server(self, state_dir.path()).await;
+        Anvil {
+            child,
+            url,
+            state_dir,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Anvil {
+    child: Child,
+    url: Url,
+    state_dir: TempDir,
+}
+
+impl Anvil {
+    async fn spawn_server(opt: AnvilOptions, state_dir: &Path) -> (Child, Url) {
+        let port = opt
             .port
             .unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
 
-        let mut command = "anvil --silent --host 0.0.0.0".to_string();
-        if let Some(block_time) = self.block_time {
+        let mut command = format!(
+            "anvil --silent --host 0.0.0.0 --dump-state {}",
+            state_dir.display()
+        );
+        if let Some(block_time) = opt.block_time {
             command = format!("{command} -b {}", block_time.as_secs());
+        }
+        if let Some(load_state) = opt.load_state {
+            command = format!("{command} --load-state {}", load_state.display());
         }
 
         tracing::info!("Starting Anvil: {command}");
@@ -61,25 +94,38 @@ impl AnvilOptions {
             .await
             .unwrap();
 
-        Anvil { child, url }
+        (child, url)
     }
-}
 
-#[derive(Debug)]
-pub struct Anvil {
-    child: Child,
-    url: Url,
-}
-
-impl Anvil {
     pub fn url(&self) -> Url {
         self.url.clone()
+    }
+
+    /// Restart the server, possibly with different options.
+    pub async fn restart(&mut self, mut opt: AnvilOptions) {
+        // Kill the server and wait for it to dump its state.
+        self.child.kill().unwrap();
+        self.child.wait().unwrap();
+
+        // If `opt` does not explicitly override the URL, use the current one.
+        if opt.port.is_none() {
+            opt.port = self.url.port();
+        }
+
+        // Load state from the file where we just dumped state.
+        opt = opt.load_state(self.state_dir.path().join("state.json"));
+
+        // Restart the server with the new options, loading state from disk.
+        let (child, url) = Self::spawn_server(opt, self.state_dir.path()).await;
+        self.child = child;
+        self.url = url;
     }
 }
 
 impl Drop for Anvil {
     fn drop(&mut self) {
         self.child.kill().unwrap();
+        self.child.wait().unwrap();
     }
 }
 

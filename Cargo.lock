@@ -7680,6 +7680,7 @@ dependencies = [
  "ethers",
  "portpicker",
  "surf",
+ "tempfile",
  "tracing",
  "url",
 ]
