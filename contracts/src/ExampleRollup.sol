@@ -6,11 +6,12 @@ import "./HotShot.sol";
 contract ExampleRollup {
     HotShot hotshot;
     uint256 public stateCommitment;
-    uint256 public verifiedBlocks;
+    uint256 public numVerifiedBlocks;
 
-    // Attempted to verify a proof of the blocks from `verifiedBlocks` to `verifiedBlocks + count`,
-    // but the HotShot `blockHeight` is less than  `verifiedBlocks + count`.
-    error NotYetSequenced(uint256 verifiedBlocks, uint64 count, uint256 blockHeight);
+    // Attempted to verify a proof of the blocks from `numVerifiedBlocks` to
+    // `numVerifiedBlocks + count`, but the HotShot `blockHeight` is less than
+    // `numVerifiedBlocks + count`.
+    error NotYetSequenced(uint256 numVerifiedBlocks, uint64 count, uint256 blockHeight);
     // Attempted to verify an invalid proof.
     error InvalidProof(uint256 firstBlock, uint256 lastBlock, uint256 oldState, uint256 newState, BatchProof proof);
     // Attempted to verify an empty chain of blocks;
@@ -21,7 +22,7 @@ contract ExampleRollup {
     constructor(address hotshotAddress, uint256 initialState) {
         hotshot = HotShot(hotshotAddress);
         stateCommitment = initialState;
-        verifiedBlocks = 0;
+        numVerifiedBlocks = 0;
     }
 
     // A batch proof of the execution of a chain of blocks.
@@ -69,18 +70,18 @@ contract ExampleRollup {
         }
 
         uint256 blockHeight = hotshot.blockHeight();
-        if (verifiedBlocks + count > blockHeight) {
-            revert NotYetSequenced(verifiedBlocks, count, blockHeight);
+        if (numVerifiedBlocks + count > blockHeight) {
+            revert NotYetSequenced(numVerifiedBlocks, count, blockHeight);
         }
 
-        uint256 firstBlock = hotshot.commitments(verifiedBlocks);
-        uint256 lastBlock = hotshot.commitments(verifiedBlocks + count - 1);
+        uint256 firstBlock = hotshot.commitments(numVerifiedBlocks);
+        uint256 lastBlock = hotshot.commitments(numVerifiedBlocks + count - 1);
         if (!verifyProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof)) {
             revert InvalidProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof);
         }
 
-        verifiedBlocks += count;
+        numVerifiedBlocks += count;
         stateCommitment = nextStateCommitment;
-        emit StateUpdate(verifiedBlocks);
+        emit StateUpdate(numVerifiedBlocks);
     }
 }

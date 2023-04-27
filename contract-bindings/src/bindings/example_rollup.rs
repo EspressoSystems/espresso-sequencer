@@ -11,7 +11,7 @@ pub use example_rollup::*;
 )]
 pub mod example_rollup {
     #[rustfmt::skip]
-    const __ABI: &str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"hotshotAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"initialState\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"struct ExampleRollup.BatchProof\",\"name\":\"proof\",\"type\":\"tuple\",\"components\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]}]}],\"type\":\"error\",\"name\":\"InvalidProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NoBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"verifiedBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint64\",\"name\":\"count\",\"type\":\"uint64\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"blockHeight\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"NotYetSequenced\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockHeight\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"StateUpdate\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"stateCommitment\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"verifiedBlocks\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"count\",\"type\":\"uint64\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"nextStateCommitment\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"struct ExampleRollup.BatchProof\",\"name\":\"proof\",\"type\":\"tuple\",\"components\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]}]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"verifyBlocks\",\"outputs\":[]}]";
+    const __ABI: &str = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"hotshotAddress\",\"type\":\"address\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"initialState\",\"type\":\"uint256\",\"components\":[]}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"struct ExampleRollup.BatchProof\",\"name\":\"proof\",\"type\":\"tuple\",\"components\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]}]}],\"type\":\"error\",\"name\":\"InvalidProof\",\"outputs\":[]},{\"inputs\":[],\"type\":\"error\",\"name\":\"NoBlocks\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"numVerifiedBlocks\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint64\",\"name\":\"count\",\"type\":\"uint64\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"blockHeight\",\"type\":\"uint256\",\"components\":[]}],\"type\":\"error\",\"name\":\"NotYetSequenced\",\"outputs\":[]},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"blockHeight\",\"type\":\"uint256\",\"components\":[],\"indexed\":false}],\"type\":\"event\",\"name\":\"StateUpdate\",\"outputs\":[],\"anonymous\":false},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"numVerifiedBlocks\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[],\"stateMutability\":\"view\",\"type\":\"function\",\"name\":\"stateCommitment\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\",\"components\":[]}]},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"count\",\"type\":\"uint64\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"nextStateCommitment\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"struct ExampleRollup.BatchProof\",\"name\":\"proof\",\"type\":\"tuple\",\"components\":[{\"internalType\":\"uint256\",\"name\":\"firstBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"lastBlock\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"oldState\",\"type\":\"uint256\",\"components\":[]},{\"internalType\":\"uint256\",\"name\":\"newState\",\"type\":\"uint256\",\"components\":[]}]}],\"stateMutability\":\"nonpayable\",\"type\":\"function\",\"name\":\"verifyBlocks\",\"outputs\":[]}]";
     ///The parsed JSON ABI of the contract.
     pub static EXAMPLEROLLUP_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(|| {
@@ -227,10 +227,10 @@ pub mod example_rollup {
         87,
         128,
         99,
-        132,
-        152,
-        6,
-        126,
+        65,
+        44,
+        200,
+        254,
         20,
         97,
         0,
@@ -1304,38 +1304,38 @@ pub mod example_rollup {
         34,
         18,
         32,
-        2,
-        85,
-        71,
-        241,
-        16,
-        193,
-        21,
-        152,
-        68,
-        241,
-        216,
-        231,
-        178,
-        188,
-        7,
-        23,
-        20,
-        31,
-        213,
-        93,
-        37,
-        222,
-        78,
-        8,
-        100,
-        176,
-        101,
-        236,
-        115,
-        32,
+        207,
+        114,
+        111,
         160,
-        110,
+        28,
+        182,
+        149,
+        109,
+        206,
+        114,
+        229,
+        204,
+        114,
+        39,
+        179,
+        145,
+        207,
+        170,
+        111,
+        58,
+        241,
+        197,
+        146,
+        132,
+        139,
+        15,
+        56,
+        58,
+        168,
+        2,
+        8,
+        18,
         100,
         115,
         111,
@@ -1398,10 +1398,10 @@ pub mod example_rollup {
         87,
         128,
         99,
-        132,
-        152,
-        6,
-        126,
+        65,
+        44,
+        200,
+        254,
         20,
         97,
         0,
@@ -2475,38 +2475,38 @@ pub mod example_rollup {
         34,
         18,
         32,
-        2,
-        85,
-        71,
-        241,
-        16,
-        193,
-        21,
-        152,
-        68,
-        241,
-        216,
-        231,
-        178,
-        188,
-        7,
-        23,
-        20,
-        31,
-        213,
-        93,
-        37,
-        222,
-        78,
-        8,
-        100,
-        176,
-        101,
-        236,
-        115,
-        32,
+        207,
+        114,
+        111,
         160,
-        110,
+        28,
+        182,
+        149,
+        109,
+        206,
+        114,
+        229,
+        204,
+        114,
+        39,
+        179,
+        145,
+        207,
+        170,
+        111,
+        58,
+        241,
+        197,
+        146,
+        132,
+        139,
+        15,
+        56,
+        58,
+        168,
+        2,
+        8,
+        18,
         100,
         115,
         111,
@@ -2598,20 +2598,20 @@ pub mod example_rollup {
             let deployer = ::ethers::contract::ContractDeployer::new(deployer);
             Ok(deployer)
         }
+        ///Calls the contract's `numVerifiedBlocks` (0x412cc8fe) function
+        pub fn num_verified_blocks(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([65, 44, 200, 254], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `stateCommitment` (0xd800741e) function
         pub fn state_commitment(
             &self,
         ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
             self.0
                 .method_hash([216, 0, 116, 30], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `verifiedBlocks` (0x8498067e) function
-        pub fn verified_blocks(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
-            self.0
-                .method_hash([132, 152, 6, 126], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `verifyBlocks` (0x032571a9) function
@@ -2699,7 +2699,7 @@ pub mod example_rollup {
         abi = "NotYetSequenced(uint256,uint64,uint256)"
     )]
     pub struct NotYetSequenced {
-        pub verified_blocks: ::ethers::core::types::U256,
+        pub num_verified_blocks: ::ethers::core::types::U256,
         pub count: u64,
         pub block_height: ::ethers::core::types::U256,
     }
@@ -2802,6 +2802,19 @@ pub mod example_rollup {
     pub struct StateUpdateFilter {
         pub block_height: ::ethers::core::types::U256,
     }
+    ///Container type for all input parameters for the `numVerifiedBlocks` function with signature `numVerifiedBlocks()` and selector `0x412cc8fe`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "numVerifiedBlocks", abi = "numVerifiedBlocks()")]
+    pub struct NumVerifiedBlocksCall;
     ///Container type for all input parameters for the `stateCommitment` function with signature `stateCommitment()` and selector `0xd800741e`
     #[derive(
         Clone,
@@ -2815,19 +2828,6 @@ pub mod example_rollup {
     )]
     #[ethcall(name = "stateCommitment", abi = "stateCommitment()")]
     pub struct StateCommitmentCall;
-    ///Container type for all input parameters for the `verifiedBlocks` function with signature `verifiedBlocks()` and selector `0x8498067e`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "verifiedBlocks", abi = "verifiedBlocks()")]
-    pub struct VerifiedBlocksCall;
     ///Container type for all input parameters for the `verifyBlocks` function with signature `verifyBlocks(uint64,uint256,(uint256,uint256,uint256,uint256))` and selector `0x032571a9`
     #[derive(
         Clone,
@@ -2851,8 +2851,8 @@ pub mod example_rollup {
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum ExampleRollupCalls {
+        NumVerifiedBlocks(NumVerifiedBlocksCall),
         StateCommitment(StateCommitmentCall),
-        VerifiedBlocks(VerifiedBlocksCall),
         VerifyBlocks(VerifyBlocksCall),
     }
     impl ::ethers::core::abi::AbiDecode for ExampleRollupCalls {
@@ -2861,14 +2861,14 @@ pub mod example_rollup {
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
             if let Ok(decoded) =
+                <NumVerifiedBlocksCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NumVerifiedBlocks(decoded));
+            }
+            if let Ok(decoded) =
                 <StateCommitmentCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::StateCommitment(decoded));
-            }
-            if let Ok(decoded) =
-                <VerifiedBlocksCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::VerifiedBlocks(decoded));
             }
             if let Ok(decoded) = <VerifyBlocksCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -2880,8 +2880,8 @@ pub mod example_rollup {
     impl ::ethers::core::abi::AbiEncode for ExampleRollupCalls {
         fn encode(self) -> Vec<u8> {
             match self {
+                Self::NumVerifiedBlocks(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::StateCommitment(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::VerifiedBlocks(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VerifyBlocks(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
@@ -2889,10 +2889,15 @@ pub mod example_rollup {
     impl ::core::fmt::Display for ExampleRollupCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
+                Self::NumVerifiedBlocks(element) => ::core::fmt::Display::fmt(element, f),
                 Self::StateCommitment(element) => ::core::fmt::Display::fmt(element, f),
-                Self::VerifiedBlocks(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VerifyBlocks(element) => ::core::fmt::Display::fmt(element, f),
             }
+        }
+    }
+    impl ::core::convert::From<NumVerifiedBlocksCall> for ExampleRollupCalls {
+        fn from(value: NumVerifiedBlocksCall) -> Self {
+            Self::NumVerifiedBlocks(value)
         }
     }
     impl ::core::convert::From<StateCommitmentCall> for ExampleRollupCalls {
@@ -2900,16 +2905,23 @@ pub mod example_rollup {
             Self::StateCommitment(value)
         }
     }
-    impl ::core::convert::From<VerifiedBlocksCall> for ExampleRollupCalls {
-        fn from(value: VerifiedBlocksCall) -> Self {
-            Self::VerifiedBlocks(value)
-        }
-    }
     impl ::core::convert::From<VerifyBlocksCall> for ExampleRollupCalls {
         fn from(value: VerifyBlocksCall) -> Self {
             Self::VerifyBlocks(value)
         }
     }
+    ///Container type for all return fields from the `numVerifiedBlocks` function with signature `numVerifiedBlocks()` and selector `0x412cc8fe`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct NumVerifiedBlocksReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `stateCommitment` function with signature `stateCommitment()` and selector `0xd800741e`
     #[derive(
         Clone,
@@ -2922,18 +2934,6 @@ pub mod example_rollup {
         Hash,
     )]
     pub struct StateCommitmentReturn(pub ::ethers::core::types::U256);
-    ///Container type for all return fields from the `verifiedBlocks` function with signature `verifiedBlocks()` and selector `0x8498067e`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct VerifiedBlocksReturn(pub ::ethers::core::types::U256);
     ///`BatchProof(uint256,uint256,uint256,uint256)`
     #[derive(
         Clone,

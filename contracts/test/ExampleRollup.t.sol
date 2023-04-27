@@ -32,7 +32,7 @@ contract ExampleRollupTest is Test {
         rollup.verifyBlocks(1, proof.newState, proof);
 
         assertEq(rollup.stateCommitment(), proof.newState);
-        assertEq(rollup.verifiedBlocks(), 1);
+        assertEq(rollup.numVerifiedBlocks(), 1);
     }
 
     function testInvalidProof() public {
