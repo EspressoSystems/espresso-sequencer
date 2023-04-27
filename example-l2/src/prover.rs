@@ -6,8 +6,20 @@ use derive_more::Into;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 use sequencer::SeqTypes;
 use sequencer_utils::{commitment_to_u256, u256_to_commitment};
+use snafu::Snafu;
 
 use crate::state::State;
+
+/// An error that occurs while generating proofs.
+#[derive(Clone, Debug, Snafu)]
+pub enum ProofError {
+    #[snafu(display("Proofs out of order at position {position} in batch proof. Previous proof ends in {new_state} but next proof starts in {old_state}."))]
+    OutOfOrder {
+        position: usize,
+        new_state: Commitment<State>,
+        old_state: Commitment<State>,
+    },
+}
 
 /// A mock proof that state_commitment represents a valid state transition from
 /// previous_state_commitment when the transactions in a given block are applied.
@@ -43,13 +55,28 @@ pub(crate) struct BatchProof {
 
 impl BatchProof {
     /// Generate a proof of correct execution of a range of blocks.
-    pub fn generate(proofs: &[Proof]) -> BatchProof {
-        BatchProof {
+    ///
+    /// # Error
+    ///
+    /// `proofs` must contain, in order, a proof for each block in a consecutive chain. If it is
+    /// out of order or not consecutive, an error will be returned.
+    pub fn generate(proofs: &[Proof]) -> Result<BatchProof, ProofError> {
+        for i in 0..proofs.len() - 1 {
+            if proofs[i].new_state != proofs[i + 1].old_state {
+                return Err(ProofError::OutOfOrder {
+                    position: i,
+                    new_state: proofs[i].new_state,
+                    old_state: proofs[i].old_state,
+                });
+            }
+        }
+
+        Ok(BatchProof {
             first_block: proofs[0].block,
             last_block: proofs[proofs.len() - 1].block,
             old_state: proofs[0].old_state,
             new_state: proofs[proofs.len() - 1].new_state,
-        }
+        })
     }
 }
 

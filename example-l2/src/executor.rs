@@ -122,7 +122,14 @@ pub async fn run_executor(
         }
 
         // Compute an aggregate proof.
-        let proof = BatchProof::generate(&proofs);
+        let proof = match BatchProof::generate(&proofs) {
+            Ok(proof) => proof,
+            Err(err) => {
+                tracing::error!("Error generating batch proof: {err}");
+                tracing::error!("Executor task will exit");
+                return;
+            }
+        };
         let state_comm = commitment_to_u256(state.commit());
 
         // Send the batch proof to L1.
