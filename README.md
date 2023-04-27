@@ -112,6 +112,14 @@ In order to avoid constant warnings about checksum mismatches with
 - Update the zkevm-node contract bindings to match zkevm-contracts: `just
   update-zkevm-node-contract-bindings`
 
+### Handling git submodules
+
+The project requires to use git submodules. 
+In order to avoid corrupting the state of one of those submodules you can:
+* run `git submodule update` before making changes,
+* or configure git to automatically update submodules for the repository with `git config submodule.recurse true` 
+   inside the repository. 
+
 ## Implementation Plan
 
 We will work towards the architecture illustrated above in three phases.
