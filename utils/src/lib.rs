@@ -212,3 +212,25 @@ pub async fn contract_send<T: Detokenize>(
         .expect("transaction mined but block number not set");
     Some((receipt, block_number.as_u64()))
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use commit::RawCommitmentBuilder;
+
+    struct TestCommittable;
+
+    impl Committable for TestCommittable {
+        fn commit(&self) -> Commitment<Self> {
+            RawCommitmentBuilder::new("TestCommittable").finalize()
+        }
+    }
+
+    #[test]
+    fn test_commitment_to_u256_round_trip() {
+        assert_eq!(
+            TestCommittable.commit(),
+            u256_to_commitment(commitment_to_u256(TestCommittable.commit())).unwrap()
+        );
+    }
+}
