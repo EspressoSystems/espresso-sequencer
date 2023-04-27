@@ -1,5 +1,5 @@
-use ark_serialize::CanonicalSerialize;
-use async_std::task::sleep;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
+use async_std::{sync::Arc, task::sleep};
 use commit::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
@@ -7,24 +7,76 @@ use ethers::{
     prelude::*,
     providers::Middleware as _,
     providers::{Http, Provider},
+    signers::coins_bip39::English,
     types::U256,
 };
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::Duration;
+use tempfile::TempDir;
 use url::Url;
 
 pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
+
+#[derive(Clone, Debug, Default)]
+pub struct AnvilOptions {
+    block_time: Option<Duration>,
+    port: Option<u16>,
+    load_state: Option<PathBuf>,
+}
+
+impl AnvilOptions {
+    pub fn block_time(mut self, time: Duration) -> Self {
+        self.block_time = Some(time);
+        self
+    }
+
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
+    pub fn load_state(mut self, path: PathBuf) -> Self {
+        self.load_state = Some(path);
+        self
+    }
+
+    pub async fn spawn(self) -> Anvil {
+        let state_dir = TempDir::new().unwrap();
+        let (child, url) = Anvil::spawn_server(self, state_dir.path()).await;
+        Anvil {
+            child,
+            url,
+            state_dir,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Anvil {
     child: Child,
     url: Url,
+    state_dir: TempDir,
 }
 
 impl Anvil {
-    pub async fn spawn(port: Option<u16>) -> Self {
-        let port = port.unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
+    async fn spawn_server(opt: AnvilOptions, state_dir: &Path) -> (Child, Url) {
+        let port = opt
+            .port
+            .unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
 
+        let mut command = format!(
+            "anvil --silent --host 0.0.0.0 --dump-state {}",
+            state_dir.display()
+        );
+        if let Some(block_time) = opt.block_time {
+            command = format!("{command} -b {}", block_time.as_secs());
+        }
+        if let Some(load_state) = opt.load_state {
+            command = format!("{command} --load-state {}", load_state.display());
+        }
+
+        tracing::info!("Starting Anvil: {command}");
         let child = Command::new("docker")
             .arg("run")
             .arg("-p")
@@ -33,7 +85,7 @@ impl Anvil {
             // Ideally the stdout would be captured, in tests but I could not
             // get this to work. Pass `--silent` to avoid spamming the test
             // output.
-            .arg("anvil --silent --host 0.0.0.0")
+            .arg(&command)
             .spawn()
             .unwrap();
 
@@ -42,18 +94,87 @@ impl Anvil {
             .await
             .unwrap();
 
-        Self { child, url }
+        (child, url)
     }
 
     pub fn url(&self) -> Url {
         self.url.clone()
+    }
+
+    /// Restart the server, possibly with different options.
+    pub async fn restart(&mut self, mut opt: AnvilOptions) {
+        // Kill the server and wait for it to dump its state.
+        self.child.kill().unwrap();
+        self.child.wait().unwrap();
+
+        // If `opt` does not explicitly override the URL, use the current one.
+        if opt.port.is_none() {
+            opt.port = self.url.port();
+        }
+
+        // Load state from the file where we just dumped state.
+        opt = opt.load_state(self.state_dir.path().join("state.json"));
+
+        // Restart the server with the new options, loading state from disk.
+        let (child, url) = Self::spawn_server(opt, self.state_dir.path()).await;
+        self.child = child;
+        self.url = url;
     }
 }
 
 impl Drop for Anvil {
     fn drop(&mut self) {
         self.child.kill().unwrap();
+        self.child.wait().unwrap();
     }
+}
+
+pub async fn connect_rpc(
+    provider: &Url,
+    mnemonic: &str,
+    index: u32,
+    chain_id: Option<u64>,
+) -> Option<Arc<Middleware>> {
+    let provider = match Provider::try_from(provider.to_string()) {
+        Ok(provider) => provider,
+        Err(err) => {
+            tracing::error!("error connecting to RPC {}: {}", provider, err);
+            return None;
+        }
+    };
+    let chain_id = match chain_id {
+        Some(id) => id,
+        None => match provider.get_chainid().await {
+            Ok(id) => id.as_u64(),
+            Err(err) => {
+                tracing::error!("error getting chain ID: {}", err);
+                return None;
+            }
+        },
+    };
+    let mnemonic = match MnemonicBuilder::<English>::default()
+        .phrase(mnemonic)
+        .index(index)
+    {
+        Ok(mnemonic) => mnemonic,
+        Err(err) => {
+            tracing::error!("error building walletE: {}", err);
+            return None;
+        }
+    };
+    let wallet = match mnemonic.build() {
+        Ok(wallet) => wallet,
+        Err(err) => {
+            tracing::error!("error opening wallet: {}", err);
+            return None;
+        }
+    };
+    let wallet = wallet.with_chain_id(chain_id);
+    let address = wallet.address();
+    Some(Arc::new(NonceManagerMiddleware::new(
+        SignerMiddleware::new(provider, wallet),
+        address,
+    )))
 }
 
 pub async fn wait_for_http(
@@ -98,6 +219,12 @@ pub fn commitment_to_u256<T: Committable>(comm: Commitment<T>) -> U256 {
     U256::from_little_endian(&state_comm)
 }
 
+pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, SerializationError> {
+    let mut commit_bytes = [0; 32];
+    comm.to_little_endian(&mut commit_bytes);
+    Commitment::deserialize(&*commit_bytes.to_vec())
+}
+
 pub async fn contract_send<T: Detokenize>(
     call: ContractCall<Middleware, T>,
 ) -> Option<(TransactionReceipt, u64)> {
@@ -130,4 +257,26 @@ pub async fn contract_send<T: Detokenize>(
         .block_number
         .expect("transaction mined but block number not set");
     Some((receipt, block_number.as_u64()))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use commit::RawCommitmentBuilder;
+
+    struct TestCommittable;
+
+    impl Committable for TestCommittable {
+        fn commit(&self) -> Commitment<Self> {
+            RawCommitmentBuilder::new("TestCommittable").finalize()
+        }
+    }
+
+    #[test]
+    fn test_commitment_to_u256_round_trip() {
+        assert_eq!(
+            TestCommittable.commit(),
+            u256_to_commitment(commitment_to_u256(TestCommittable.commit())).unwrap()
+        );
+    }
 }

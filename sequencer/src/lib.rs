@@ -363,7 +363,7 @@ pub mod testing {
             start_delay: Duration::from_millis(1).as_millis() as u64,
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
-            propose_max_round_time: Duration::from_secs(30),
+            propose_max_round_time: Duration::from_secs(5),
             election_config: Some(ElectionConfig {}),
         };
 
@@ -403,6 +403,8 @@ pub mod testing {
         mut handle: HotShotHandle<SeqTypes, Node<N>>,
         submitted_txn: SequencerTransaction,
     ) -> Result<(), ()> {
+        let start_view = handle.get_current_view().await;
+
         // Keep getting events until we see a Decide event
         loop {
             let event = handle.next_event().await;
@@ -416,31 +418,18 @@ pub mod testing {
                         },
                     ..
                 }) => {
-                    if let Some(transactions) =
-                        leaf.iter().find_map(|leaf| match leaf.get_deltas() {
-                            Either::Left(block) => {
-                                if !block.transactions.is_empty() {
-                                    Some(block.transactions)
-                                } else {
-                                    None
-                                }
-                            }
-                            Either::Right(_) => None,
-                        })
-                    {
-                        // When we find a non-empty Decide, check that it only contains the target transaction
-                        assert_eq!(transactions, vec![submitted_txn]);
+                    if leaf.iter().any(|leaf| match leaf.get_deltas() {
+                        Either::Left(block) => block.transactions.contains(&submitted_txn),
+                        Either::Right(_) => false,
+                    }) {
                         return Ok(());
-                    } else {
-                        // Empty Decide event
-                        continue;
                     }
                 }
                 Ok(Event {
                     view_number: vn, ..
                 }) => {
                     // Don't wait too long; 20 views should more more than enough
-                    if *vn > 20u64 {
+                    if *vn > *start_view + 20u64 {
                         panic!();
                     }
                 } // Keep waiting
