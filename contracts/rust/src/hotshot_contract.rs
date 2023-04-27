@@ -132,11 +132,11 @@ mod test {
             signatures.push(sig.clone());
         }
 
-        let vks = get_slice_from_bitmap::<VerKey>(
+        let vks = get_slice_from_bitmap(
             staking_keys.iter().map(|k| k.1).collect::<Vec<VerKey>>(),
             bitmap,
         );
-        let sigs = get_slice_from_bitmap::<Signature>(signatures, bitmap);
+        let sigs = get_slice_from_bitmap(signatures, bitmap);
         let agg_sig = BLSOverBN254CurveSignatureScheme::aggregate(&(), &vks, &sigs).unwrap();
         let agg_sig_value: MyG1Point = agg_sig.clone().sigma.into_affine().into();
 
