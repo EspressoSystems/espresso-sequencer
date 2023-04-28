@@ -12,6 +12,9 @@ demo:
     cargo run --all-features --bin zkevm-node -- --detach
     {{compose-espresso}} up -V --force-recreate --abort-on-container-exit || just down
 
+rollup-demo:
+    docker compose -f docker-compose-demo.yaml up   
+
 down:
     {{compose}} down -v --remove-orphans
 

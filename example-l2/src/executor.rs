@@ -8,30 +8,41 @@ use contract_bindings::{example_rollup::ExampleRollup, HotShot};
 use ethers::prelude::*;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 
-use sequencer::{
-    hotshot_commitment::{connect_l1, HotShotContractOptions},
-    SeqTypes,
-};
+use sequencer::{hotshot_commitment::connect_rpc, SeqTypes};
 use sequencer_utils::{commitment_to_u256, contract_send};
+use surf_disco::Url;
 
 use crate::state::State;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
+#[derive(Clone, Debug)]
+pub struct ExecutorOptions {
+    pub sequencer_url: Url,
+    pub l1_provider: Url,
+    pub rollup_mnemonic: String,
+    pub hotshot_address: Address,
+    pub rollup_address: Address,
+}
+
 /// Runs the executor service, which is responsible for:
 /// 1) Fetching blocks of ordered transactions from HotShot and applying them to the Rollup State.
 /// 2) Submitting mock proofs to the Rollup Contract.
-pub async fn run_executor(
-    rollup_address: Address,
-    opt: &HotShotContractOptions,
-    state: Arc<RwLock<State>>,
-) {
-    let query_service_url = opt.query_service_url.join("availability").unwrap();
+pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
+    let ExecutorOptions {
+        sequencer_url,
+        l1_provider,
+        hotshot_address,
+        rollup_address,
+        rollup_mnemonic,
+    } = opt;
+
+    let query_service_url = sequencer_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url.clone());
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
-    let Some(l1) = connect_l1(opt)
+    let Some(l1) = connect_rpc(l1_provider, rollup_mnemonic, None)
     .await else {
         // TODO: Switch these over to panics
         tracing::error!("unable to connect to L1, hotshot commitment task exiting");
@@ -40,7 +51,7 @@ pub async fn run_executor(
 
     // Create a socket connection to the L1 to subscribe to contract events
     // This assumes that the L1 node supports both HTTP and Websocket connections
-    let mut ws_url = opt.l1_provider.clone();
+    let mut ws_url = l1_provider.clone();
     ws_url.set_scheme("ws").unwrap();
     let socket_provider = match Provider::<Ws>::connect(ws_url).await {
         Ok(socket_provider) => socket_provider,
@@ -51,8 +62,8 @@ pub async fn run_executor(
         }
     };
 
-    let rollup_contract = ExampleRollup::new(rollup_address, l1.clone());
-    let hotshot_contract = HotShot::new(opt.hotshot_address, l1.clone());
+    let rollup_contract = ExampleRollup::new(*rollup_address, l1.clone());
+    let hotshot_contract = HotShot::new(*hotshot_address, l1.clone());
     let blocks_filter = hotshot_contract.new_blocks_filter().filter;
     let mut stream = match socket_provider.subscribe_logs(&blocks_filter).await {
         Ok(stream) => stream,
@@ -154,7 +165,7 @@ mod test {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::api::SequencerNode;
-    use sequencer::hotshot_commitment::run_hotshot_commitment_task;
+    use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
     use sequencer::transaction::Transaction as SequencerTransaction;
     use sequencer::VmTransaction;
     use sequencer_utils::{commitment_to_u256, Anvil};
@@ -232,13 +243,20 @@ mod test {
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
-            query_service_url: sequencer_url,
+            query_service_url: sequencer_url.clone(),
         };
-        let options = hotshot_opt.clone();
+
+        let rollup_opt = ExecutorOptions {
+            sequencer_url,
+            l1_provider: anvil.url(),
+            rollup_mnemonic: TEST_MNEMONIC.to_string(),
+            hotshot_address: hotshot_contract.address(),
+            rollup_address: rollup_contract.address(),
+        };
+
         let state_lock = state.clone();
-        let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
-        spawn(async move { run_executor(rollup_address, &options, state_lock).await });
+        spawn(async move { run_executor(&rollup_opt, state_lock).await });
 
         // Wait for the rollup contract to process all state updates
         stream.collect::<Vec<Log>>().await;

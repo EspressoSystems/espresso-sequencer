@@ -1,5 +1,4 @@
 use async_std::sync::RwLock;
-use clap::Parser;
 use ethers::abi::Address;
 use futures::FutureExt;
 use sequencer::Transaction;
@@ -12,13 +11,9 @@ use tide_disco::{error::ServerError, Api, App};
 use crate::VM_ID;
 use crate::{state::State, transaction::SignedTransaction};
 
-#[derive(Parser, Clone, Debug)]
-pub struct Options {
-    /// Port where the Rollup API will be served
-    #[clap(short, long, env = "ESPRESSO_MOCK_ROLLUP_PORT", default_value = "8080")]
+#[derive(Clone, Debug)]
+pub struct APIOptions {
     pub api_port: u16,
-    /// URL of a HotShot sequencer node.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
     pub sequencer_url: Url,
 }
 
@@ -37,19 +32,20 @@ async fn submit_transaction(
     Ok(())
 }
 
-pub async fn serve(options: Options, state: Arc<RwLock<State>>) -> io::Result<()> {
+pub async fn serve(options: &APIOptions, state: Arc<RwLock<State>>) -> io::Result<()> {
     type StateType = Arc<RwLock<State>>;
     let error_mapper = |err| io::Error::new(io::ErrorKind::Other, err);
-    let Options {
+    let APIOptions {
         api_port,
         sequencer_url,
-    } = options;
+        ..
+    } = options.clone();
     let mut app = App::<StateType, ServerError>::with_state(state);
     let toml = toml::from_str::<toml::Value>(include_str!("api.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     let mut api = Api::<StateType, ServerError>::new(toml).map_err(error_mapper)?;
 
-    api.post("submit", move |req, _| {
+    api.post("submit",  move|req, _| {
         let url = sequencer_url.clone();
         async move {
             let transaction = req
@@ -116,12 +112,12 @@ mod tests {
         let port = pick_unused_port().expect("No ports free");
         let api_url: Url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(api_url.clone());
-        let options = Options {
+        let options = APIOptions {
             api_port: port,
             sequencer_url: api_url,
         };
 
-        spawn(serve(options, state));
+        spawn(async move { serve(&options, state).await });
 
         client.connect(None).await;
 
@@ -164,11 +160,11 @@ mod tests {
             genesis_address,
             GENESIS_BALANCE,
         )])));
-        let options = Options {
+        let options = APIOptions {
             api_port,
             sequencer_url,
         };
-        spawn(async move { serve(options, state).await });
+        spawn(async move { serve(&options, state).await });
 
         // Create a transaction
         let transaction = Transaction {

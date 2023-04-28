@@ -177,7 +177,7 @@ pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>>
     connect_rpc(&opt.l1_provider, &opt.sequencer_mnemonic, opt.l1_chain_id).await
 }
 
-async fn connect_rpc(
+pub async fn connect_rpc(
     provider: &Url,
     mnemonic: &str,
     chain_id: Option<u64>,
