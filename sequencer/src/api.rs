@@ -137,9 +137,15 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
 
     // Start up handle
     let (handle, node_index) = init_handle(metrics).await;
-    handle.start().await;
 
+    // Get a clone the handle to use for populating the query data with consensus events.
+    //
+    // We must do this _before_ starting consensus on the handle, otherwise we could miss the first
+    // events emitted by consensus.
     let mut watch_handle = handle.clone();
+
+    // Start consensus.
+    handle.start().await;
 
     let state = Arc::new(RwLock::new(AppState::<I> {
         submit_state: handle.clone(),
