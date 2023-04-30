@@ -43,6 +43,16 @@ pub struct Options {
     /// contract. It must be funded with ETH on the layer 1.
     #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_MNEMONIC")]
     pub rollup_mnemonic: String,
+
+    /// Index of a funded account derived from mnemonic, designating the
+    /// account that will send commitments to the HotShot contract
+    #[clap(long, env = "ESPRESSO_DEMO_HOTSHOT_ACCOUNT_INDEX", default_value = "0")]
+    pub hotshot_account_index: u32,
+
+    /// Index of a funded account derived from mnemonic, desginating the account
+    /// that will send proofs to the rollup contract
+    #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_ACCOUNT_INDEX", default_value = "1")]
+    pub rollup_account_index: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

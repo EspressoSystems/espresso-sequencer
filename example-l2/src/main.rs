@@ -32,25 +32,25 @@ async fn main() {
     )])));
 
     let api_options = APIOptions {
-        sequencer_url: opt.sequencer_url.clone(),
         api_port: opt.api_port,
+        sequencer_url: opt.sequencer_url.clone(),
     };
 
     let executor_options = ExecutorOptions {
-        rollup_account_index: 0, // TODO
-        sequencer_url: opt.sequencer_url.clone(),
-        l1_provider: opt.l1_provider.clone(),
         hotshot_address: opt.hotshot_address,
+        l1_provider: opt.l1_provider.clone(),
+        rollup_account_index: opt.rollup_account_index,
         rollup_address: opt.rollup_address,
         rollup_mnemonic: opt.rollup_mnemonic.clone(),
+        sequencer_url: opt.sequencer_url.clone(),
     };
 
     let hotshot_contract_options = HotShotContractOptions {
-        sequencer_mnemonic: opt.rollup_mnemonic,
-        sequencer_account_index: 0,
-        l1_provider: opt.l1_provider.clone(),
-        l1_chain_id: None,
         hotshot_address: opt.hotshot_address,
+        l1_chain_id: None,
+        l1_provider: opt.l1_provider.clone(),
+        sequencer_mnemonic: opt.rollup_mnemonic,
+        sequencer_account_index: opt.hotshot_account_index,
         query_service_url: opt.sequencer_url,
     };
 
@@ -64,6 +64,11 @@ async fn main() {
     deploy_example_contracts(&opt.l1_provider, initial_state).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
+    tracing::info!(
+        "Address {:?} be seeded with {} dummy tokens",
+        genesis.address(),
+        GENESIS_BALANCE
+    );
     join!(
         run_executor(&executor_options, state.clone()),
         run_hotshot_commitment_task(&hotshot_contract_options),

@@ -48,37 +48,25 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
-    let Some(l1) = connect_rpc(l1_provider, rollup_mnemonic, *rollup_account_index, None)
-    .await else {
-        // TODO: Switch these over to panics
-        tracing::error!("unable to connect to L1, hotshot commitment task exiting");
-        return;
-    };
+    let l1 = connect_rpc(l1_provider, rollup_mnemonic, *rollup_account_index, None)
+        .await
+        .expect("unable to connect to L1, hotshot commitment task exiting");
 
     // Create a socket connection to the L1 to subscribe to contract events
     // This assumes that the L1 node supports both HTTP and Websocket connections
     let mut ws_url = l1_provider.clone();
     ws_url.set_scheme("ws").unwrap();
-    let socket_provider = match Provider::<Ws>::connect(ws_url).await {
-        Ok(socket_provider) => socket_provider,
-        Err(err) => {
-            tracing::error!("Unable to make websocket connection to L1: {}", err);
-            tracing::error!("Executor task will exit");
-            return;
-        }
-    };
+    let socket_provider = Provider::<Ws>::connect(ws_url)
+        .await
+        .expect("Unable to make websocket connection to L1");
 
     let rollup_contract = ExampleRollup::new(*rollup_address, l1.clone());
     let hotshot_contract = HotShot::new(*hotshot_address, Arc::new(socket_provider));
     let filter = hotshot_contract.new_blocks_filter().from_block(0);
-    let mut stream = match filter.subscribe().await {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::error!("Unable to subscribe to L1 log stream: {}", err);
-            tracing::error!("Executor task will exit");
-            return;
-        }
-    };
+    let mut stream = filter
+        .subscribe()
+        .await
+        .expect("Unable to subscribe to L1 log stream");
 
     while let Some(event) = stream.next().await {
         let (first_block, num_blocks) = match event {
@@ -102,54 +90,28 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
             state.commit()
         );
         for i in 0..num_blocks {
-            let commitment = match hotshot_contract.commitments(first_block + i).call().await {
-                // TODO: Replace these with typed errors
-                Ok(commitment) => commitment,
-                Err(err) => {
-                    tracing::error!("Unable to read commitment from contract: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
-            let block_commitment = match u256_to_commitment(commitment) {
-                Ok(commitment) => commitment,
-                Err(err) => {
-                    tracing::error!("Unable to deserialize commitment: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
-
-            let block = match hotshot
+            let commitment = hotshot_contract
+                .commitments(first_block + i)
+                .call()
+                .await
+                .expect("Unable to read commitment");
+            let block_commitment =
+                u256_to_commitment(commitment).expect("Unable to deserialize block commitment");
+            let block = hotshot
                 .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", first_block + i))
                 .send()
                 .await
-            {
-                Ok(block) => block,
-                Err(err) => {
-                    tracing::error!("Unable to query block from hotshot client: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
+                .expect("Unable to query block from HotShot client");
 
             if block.block().commit() != block_commitment {
-                tracing::error!("Block commitment does not match hash of recieved block, the executor cannot continue");
-                return;
+                panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
             proofs.push(state.execute_block(&block).await);
         }
 
         // Compute an aggregate proof.
-        let proof = match BatchProof::generate(&proofs) {
-            Ok(proof) => proof,
-            Err(err) => {
-                tracing::error!("Error generating batch proof: {err}");
-                tracing::error!("Executor task will exit");
-                return;
-            }
-        };
+        let proof = BatchProof::generate(&proofs).expect("Error generating batch proof");
         let state_comm = commitment_to_u256(state.commit());
 
         // Send the batch proof to L1.

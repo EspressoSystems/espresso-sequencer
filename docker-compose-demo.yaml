@@ -78,12 +78,6 @@ services:
     # The way the foundry image handles arguments is strange, the double quotes
     # make it work here.
     command: "'anvil --host 0.0.0.0 --port $ESPRESSO_ZKEVM_L1_PORT --chain-id 1337'"
-  example-contracts:
-    image: example-contracts:latest
-    environment:
-      - ESPRESSO_DEMO_L1_PROVIDER
-    depends_on:
-      - demo-l1-network
   example-rollup:
     image: example-rollup:latest
     environment:
