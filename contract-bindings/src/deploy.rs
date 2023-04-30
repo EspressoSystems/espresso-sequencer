@@ -98,33 +98,41 @@ pub async fn deploy_artifact<M: Middleware, T: Tokenize>(
     factory.deploy(args).unwrap().send().await.unwrap()
 }
 
+#[derive(Debug, Clone)]
+pub struct TestClient {
+    pub index: u32,
+    pub provider: Arc<EthMiddleware>,
+}
+
 // We may want to use different names once we deploy a customized system without
 // trusted parties.
 #[derive(Debug, Clone)]
 pub struct TestClients {
-    pub deployer: Arc<EthMiddleware>,
-    pub trusted_aggregator: Arc<EthMiddleware>,
-    pub trusted_sequencer: Arc<EthMiddleware>,
-    pub admin: Arc<EthMiddleware>,
+    // Account to use when deploying contracts.
+    pub deployer: TestClient,
     // The block_driver client shouldn't be used for anything else to avoid nonce issues.
-    pub block_driver: Arc<EthMiddleware>,
+    pub block_driver: TestClient,
+    // Various funded accounts that tests can use.
+    pub funded: Vec<TestClient>,
 }
 impl TestClients {
     pub fn new(provider: &Provider<Http>, chain_id: u64) -> Self {
         Self {
             deployer: get_test_client(0, provider, chain_id),
-            trusted_aggregator: get_test_client(1, provider, chain_id),
-            trusted_sequencer: get_test_client(2, provider, chain_id),
-            admin: get_test_client(3, provider, chain_id),
+            funded: vec![
+                get_test_client(1, provider, chain_id),
+                get_test_client(2, provider, chain_id),
+                get_test_client(3, provider, chain_id),
+            ],
             block_driver: get_test_client(4, provider, chain_id),
         }
     }
 }
 
-pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> Arc<EthMiddleware> {
+pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> TestClient {
     let mnemonic = MnemonicBuilder::<English>::default()
         .phrase("test test test test test test test test test test test junk");
-    Arc::new(SignerMiddleware::new(
+    let provider = Arc::new(SignerMiddleware::new(
         provider.clone(),
         mnemonic
             .index(index)
@@ -132,7 +140,8 @@ pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> 
             .build()
             .unwrap()
             .with_chain_id(chain_id),
-    ))
+    ));
+    TestClient { provider, index }
 }
 
 /// A system of hermez smart contracts for testing purposes.
@@ -164,7 +173,7 @@ impl TestHermezContracts {
         provider.set_interval(Duration::from_millis(10));
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
+        let deployer = clients.deployer.provider.clone();
         let hotshot = HotShot::new(hotshot_address, deployer.clone());
         let rollup = PolygonZkEVM::new(rollup_address, deployer.clone());
         let mut block_num = 0;
@@ -207,7 +216,7 @@ impl TestHermezContracts {
 
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
         let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer.clone();
+        let deployer = clients.deployer.provider.clone();
 
         let hotshot = HotShot::deploy(deployer.clone(), ())
             .unwrap()
@@ -340,7 +349,7 @@ impl TestHermezContracts {
 
     /// A helper function to mine a block
     pub async fn mine_block(&self) {
-        Self::do_mine_block(self.clients.block_driver.clone()).await;
+        Self::do_mine_block(self.clients.block_driver.provider.clone()).await;
     }
 
     async fn do_mine_block(client: Arc<EthMiddleware>) {
@@ -369,7 +378,7 @@ impl TestHermezContracts {
         interval: Duration,
     ) -> async_std::task::JoinHandle<()> {
         async_std::task::spawn(Self::do_mine_blocks_periodic(
-            self.clients.block_driver.clone(),
+            self.clients.block_driver.provider.clone(),
             interval,
         ))
     }

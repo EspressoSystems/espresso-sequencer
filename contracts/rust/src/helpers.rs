@@ -13,7 +13,7 @@ pub(crate) mod hotshot_contract {
     use ethers::middleware::SignerMiddleware;
     use ethers::prelude::Wallet;
     use ethers::providers::{Http, Middleware, Provider};
-    use sequencer_utils::Anvil;
+    use sequencer_utils::AnvilOptions;
     use std::time::Duration;
 
     pub(crate) async fn get_provider_and_deployer() -> (
@@ -25,7 +25,7 @@ pub(crate) mod hotshot_contract {
             >,
         >,
     ) {
-        let anvil = Anvil::spawn(None).await;
+        let anvil = AnvilOptions::default().spawn().await;
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
 
@@ -33,7 +33,7 @@ pub(crate) mod hotshot_contract {
         let clients = TestClients::new(&provider, chain_id);
         let deployer = clients.deployer;
 
-        (provider, deployer)
+        (provider, deployer.provider)
     }
 
     pub(crate) async fn get_bls_test_contract() -> BLSTest<

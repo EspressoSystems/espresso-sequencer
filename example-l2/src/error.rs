@@ -1,3 +1,4 @@
+use crate::state::Nonce;
 use ethers::abi::Address;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -8,6 +9,10 @@ pub enum RollupError {
     SignatureError,
     #[snafu(display("Insufficient balance for sender: {address}."))]
     InsufficientBalance { address: Address },
-    #[snafu(display("Invalid nonce. Nonces must increase consecutively."))]
-    InvalidNonce,
+    #[snafu(display("Invalid nonce for sender {address}. Found {actual}, expected {expected}"))]
+    InvalidNonce {
+        address: Address,
+        expected: Nonce,
+        actual: Nonce,
+    },
 }

@@ -107,7 +107,11 @@ impl State {
 
         // 2)
         if next_nonce != *prev_nonce + 1 {
-            return Err(RollupError::InvalidNonce);
+            return Err(RollupError::InvalidNonce {
+                address: sender,
+                expected: *prev_nonce + 1,
+                actual: next_nonce,
+            });
         }
 
         // 3)
@@ -127,6 +131,7 @@ impl State {
             .or_insert(Account::default());
         *destination_balance += transfer_amount;
 
+        tracing::info!("Applied transaction {next_nonce} for {sender}");
         Ok(())
     }
 
@@ -143,10 +148,7 @@ impl State {
         for txn in block.block().vm_transactions(&RollupVM) {
             let res = self.apply_transaction(&txn);
             if let Err(err) = res {
-                // TODO: more informative logging
                 tracing::error!("Transaction invalid: {}", err)
-            } else {
-                tracing::info!("Transaction applied")
             }
         }
         self.block_hash = Some(block.hash());
@@ -201,6 +203,13 @@ mod tests {
         let err = state
             .apply_transaction(&signed_transaction)
             .expect_err("Invalid transaction should throw error.");
-        assert_eq!(err, RollupError::InvalidNonce);
+        assert_eq!(
+            err,
+            RollupError::InvalidNonce {
+                address: alice.address(),
+                expected: 2,
+                actual: 1,
+            }
+        );
     }
 }
