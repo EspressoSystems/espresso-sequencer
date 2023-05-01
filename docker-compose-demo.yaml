@@ -73,11 +73,9 @@ services:
     image: ghcr.io/foundry-rs/foundry:latest
     ports:
       - $ESPRESSO_DEMO_L1_PORT:$ESPRESSO_DEMO_L1_PORT
-    environment:
-      - ESPRESSO_EXAMPLE_ROLLUP_L1_PORT
     # The way the foundry image handles arguments is strange, the double quotes
     # make it work here.
-    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_ZKEVM_L1_PORT --chain-id 1337'"
+    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_DEMO_L1_PORT --chain-id 1337'"
   example-rollup:
     image: example-rollup:latest
     environment:
