@@ -10,61 +10,63 @@ use contract_bindings::{
 use ethers::prelude::*;
 use hotshot_query_service::availability::BlockQueryData;
 use std::sync::Arc;
+use surf_disco::Url;
 
-use sequencer::{
-    hotshot_commitment::{connect_l1, HotShotContractOptions},
-    SeqTypes,
-};
-use sequencer_utils::{commitment_to_u256, contract_send, u256_to_commitment};
+use sequencer::SeqTypes;
+
+use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, u256_to_commitment};
 
 use crate::state::State;
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
+#[derive(Clone, Debug)]
+pub struct ExecutorOptions {
+    pub sequencer_url: Url,
+    pub l1_provider: Url,
+    pub rollup_account_index: u32,
+    pub rollup_mnemonic: String,
+    pub hotshot_address: Address,
+    pub rollup_address: Address,
+}
+
 /// Runs the executor service, which is responsible for:
 /// 1) Fetching blocks of ordered transactions from HotShot and applying them to the Rollup State.
 /// 2) Submitting mock proofs to the Rollup Contract.
-pub async fn run_executor(
-    rollup_address: Address,
-    opt: &HotShotContractOptions,
-    state: Arc<RwLock<State>>,
-) {
-    let query_service_url = opt.query_service_url.join("availability").unwrap();
+pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
+    let ExecutorOptions {
+        rollup_account_index,
+        sequencer_url,
+        l1_provider,
+        hotshot_address,
+        rollup_address,
+        rollup_mnemonic,
+    } = opt;
+
+    let query_service_url = sequencer_url.join("availability").unwrap();
     let hotshot = HotShotClient::new(query_service_url.clone());
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
-    let Some(l1) = connect_l1(opt)
-    .await else {
-        // TODO: Switch these over to panics
-        tracing::error!("unable to connect to L1, hotshot commitment task exiting");
-        return;
-    };
+    let l1 = connect_rpc(l1_provider, rollup_mnemonic, *rollup_account_index, None)
+        .await
+        .expect("unable to connect to L1, hotshot commitment task exiting");
 
     // Create a socket connection to the L1 to subscribe to contract events
     // This assumes that the L1 node supports both HTTP and Websocket connections
-    let mut ws_url = opt.l1_provider.clone();
+    let mut ws_url = l1_provider.clone();
     ws_url.set_scheme("ws").unwrap();
-    let socket_provider = match Provider::<Ws>::connect(ws_url).await {
-        Ok(socket_provider) => socket_provider,
-        Err(err) => {
-            tracing::error!("Unable to make websocket connection to L1: {}", err);
-            tracing::error!("Executor task will exit");
-            return;
-        }
-    };
+    let socket_provider = Provider::<Ws>::connect(ws_url)
+        .await
+        .expect("Unable to make websocket connection to L1");
 
-    let rollup_contract = ExampleRollup::new(rollup_address, l1.clone());
-    let hotshot_contract = HotShot::new(opt.hotshot_address, Arc::new(socket_provider));
+    let rollup_contract = ExampleRollup::new(*rollup_address, l1.clone());
+    let hotshot_contract = HotShot::new(*hotshot_address, Arc::new(socket_provider));
     let filter = hotshot_contract.new_blocks_filter().from_block(0);
-    let mut stream = match filter.subscribe().await {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::error!("Unable to subscribe to L1 log stream: {}", err);
-            tracing::error!("Executor task will exit");
-            return;
-        }
-    };
+    let mut stream = filter
+        .subscribe()
+        .await
+        .expect("Unable to subscribe to L1 log stream");
 
     while let Some(event) = stream.next().await {
         let (first_block, num_blocks) = match event {
@@ -88,54 +90,28 @@ pub async fn run_executor(
             state.commit()
         );
         for i in 0..num_blocks {
-            let commitment = match hotshot_contract.commitments(first_block + i).call().await {
-                // TODO: Replace these with typed errors
-                Ok(commitment) => commitment,
-                Err(err) => {
-                    tracing::error!("Unable to read commitment from contract: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
-            let block_commitment = match u256_to_commitment(commitment) {
-                Ok(commitment) => commitment,
-                Err(err) => {
-                    tracing::error!("Unable to deserialize commitment: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
-
-            let block = match hotshot
+            let commitment = hotshot_contract
+                .commitments(first_block + i)
+                .call()
+                .await
+                .expect("Unable to read commitment");
+            let block_commitment =
+                u256_to_commitment(commitment).expect("Unable to deserialize block commitment");
+            let block = hotshot
                 .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", first_block + i))
                 .send()
                 .await
-            {
-                Ok(block) => block,
-                Err(err) => {
-                    tracing::error!("Unable to query block from hotshot client: {}", err);
-                    tracing::error!("Executor task will exit");
-                    return;
-                }
-            };
+                .expect("Unable to query block from HotShot client");
 
             if block.block().commit() != block_commitment {
-                tracing::error!("Block commitment does not match hash of recieved block, the executor cannot continue");
-                return;
+                panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
             proofs.push(state.execute_block(&block).await);
         }
 
         // Compute an aggregate proof.
-        let proof = match BatchProof::generate(&proofs) {
-            Ok(proof) => proof,
-            Err(err) => {
-                tracing::error!("Error generating batch proof: {err}");
-                tracing::error!("Executor task will exit");
-                return;
-            }
-        };
+        let proof = BatchProof::generate(&proofs).expect("Error generating batch proof");
         let state_comm = commitment_to_u256(state.commit());
 
         // Send the batch proof to L1.
@@ -159,12 +135,11 @@ pub async fn run_executor(
 #[cfg(test)]
 mod test {
     use crate::transaction::{SignedTransaction, Transaction};
+    use crate::utils::deploy_example_contracts;
     use crate::RollupVM;
 
     use super::*;
     use async_std::task::spawn;
-    use contract_bindings::example_rollup::ExampleRollup;
-    use contract_bindings::TestClients;
     use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
@@ -174,7 +149,7 @@ mod test {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::api::SequencerNode;
-    use sequencer::hotshot_commitment::run_hotshot_commitment_task;
+    use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
     use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
     use sequencer::transaction::SequencerTransaction;
     use sequencer::Vm;
@@ -186,7 +161,6 @@ mod test {
     use tide_disco::error::ServerError;
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
-
     #[async_std::test]
     async fn test_execute() {
         // Create mock rollup state
@@ -201,26 +175,8 @@ mod test {
 
         // Start a test HotShot and Rollup contract
         let anvil = AnvilOptions::default().spawn().await;
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-        let rollup_contract = ExampleRollup::deploy(
-            clients.deployer.provider.clone(),
-            (
-                hotshot_contract.address(),
-                commitment_to_u256(initial_state),
-            ),
-        )
-        .unwrap()
-        .send()
-        .await
-        .unwrap();
+        let (hotshot_contract, rollup_contract, clients) =
+            deploy_example_contracts(&anvil.url(), initial_state).await;
 
         // Setup a WS connection to the rollup contract and subscribe to state updates
         let mut ws_url = anvil.url();
@@ -275,16 +231,21 @@ mod test {
             sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
-            query_service_url: sequencer_url,
+            query_service_url: sequencer_url.clone(),
         };
-        let options = HotShotContractOptions {
-            sequencer_account_index: clients.funded[1].index,
-            ..hotshot_opt.clone()
+
+        let rollup_opt = ExecutorOptions {
+            sequencer_url,
+            rollup_account_index: clients.funded[1].index,
+            l1_provider: anvil.url(),
+            rollup_mnemonic: TEST_MNEMONIC.to_string(),
+            hotshot_address: hotshot_contract.address(),
+            rollup_address: rollup_contract.address(),
         };
+
         let state_lock = state.clone();
-        let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
-        spawn(async move { run_executor(rollup_address, &options, state_lock).await });
+        spawn(async move { run_executor(&rollup_opt, state_lock).await });
 
         // Wait for the rollup contract to process all state updates
         loop {
@@ -321,26 +282,8 @@ mod test {
 
         // Start a test HotShot and Rollup contract.
         let mut anvil = AnvilOptions::default().spawn().await;
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-        let rollup_contract = ExampleRollup::deploy(
-            clients.deployer.provider.clone(),
-            (
-                hotshot_contract.address(),
-                commitment_to_u256(initial_state),
-            ),
-        )
-        .unwrap()
-        .send()
-        .await
-        .unwrap();
+        let (hotshot_contract, rollup_contract, clients) =
+            deploy_example_contracts(&anvil.url(), initial_state).await;
 
         // Once the contracts have been deployed, restart the L1 with a slow block time.
         anvil
@@ -382,16 +325,21 @@ mod test {
             sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
-            query_service_url: sequencer_url,
+            query_service_url: sequencer_url.clone(),
         };
-        let options = HotShotContractOptions {
-            sequencer_account_index: clients.funded[1].index,
-            ..hotshot_opt.clone()
+
+        let rollup_opt = ExecutorOptions {
+            sequencer_url,
+            l1_provider: anvil.url(),
+            rollup_account_index: clients.funded[1].index,
+            rollup_mnemonic: TEST_MNEMONIC.to_string(),
+            hotshot_address: hotshot_contract.address(),
+            rollup_address: rollup_contract.address(),
         };
+
         let state_lock = state.clone();
-        let rollup_address = rollup_contract.address();
         spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
-        spawn(async move { run_executor(rollup_address, &options, state_lock).await });
+        spawn(async move { run_executor(&rollup_opt, state_lock).await });
 
         // Submit transactions to sequencer
         for nonce in 1..=num_txns {

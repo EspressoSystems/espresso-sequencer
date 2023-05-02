@@ -1,4 +1,7 @@
+use clap::Parser;
+use ethers::types::Address;
 use sequencer::{Vm, VmId};
+use surf_disco::Url;
 use transaction::SignedTransaction;
 
 pub mod api;
@@ -7,9 +10,50 @@ pub mod executor;
 mod prover;
 pub mod state;
 pub mod transaction;
+pub mod utils;
 
 // The VmID helps Rollups find their transactions in the sequenced block.
 pub const VM_ID: u64 = 1;
+
+#[derive(Parser, Clone, Debug)]
+pub struct Options {
+    /// Port where the Rollup API will be served
+    #[clap(short, long, env = "ESPRESSO_DEMO_ROLLUP_PORT", default_value = "8082")]
+    pub api_port: u16,
+
+    /// URL of a HotShot sequencer node.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_URL")]
+    pub sequencer_url: Url,
+
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    #[clap(long, env = "ESPRESSO_DEMO_L1_PROVIDER")]
+    pub l1_provider: Url,
+
+    /// Address of HotShot contract on layer 1.
+    #[clap(long, env = "ESPRESSO_DEMO_HOTSHOT_ADDRESS")]
+    pub hotshot_address: Address,
+
+    /// Address of Rollup contract on layer 1.
+    #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_ADDRESS")]
+    pub rollup_address: Address,
+
+    /// Mnemonic phrase for the rollup wallet.
+    ///
+    /// This is the wallet that will be used to send batch proofs of transaction validity to the rollup
+    /// contract. It must be funded with ETH on the layer 1.
+    #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_MNEMONIC")]
+    pub rollup_mnemonic: String,
+
+    /// Index of a funded account derived from mnemonic, designating the
+    /// account that will send commitments to the HotShot contract
+    #[clap(long, env = "ESPRESSO_DEMO_HOTSHOT_ACCOUNT_INDEX", default_value = "0")]
+    pub hotshot_account_index: u32,
+
+    /// Index of a funded account derived from mnemonic, desginating the account
+    /// that will send proofs to the rollup contract
+    #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_ACCOUNT_INDEX", default_value = "1")]
+    pub rollup_account_index: u32,
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RollupVM;
