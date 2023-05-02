@@ -10,8 +10,17 @@ In the case of zkRollups, a prover periodically submits rollup state checkpoints
 To learn more about the Espresso Sequencer and different types of rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequencer)) or [technical documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme).
 
 ## Running the Example
-TODO
+### With Docker
+1. Start the demo: `just rollup-demo`
+2. Stop the demo: `just rollup-demo-down`
+### Natively
+1. Build all executables: `cargo build --release`
+2. Run the cdn: `just dev-cdn`
+3. Run the sequencer: `just dev-sequencer`
+4. Run a test Anvil node: `just dev-l1`
+5. Once the Sequencer HotShot network is running (there is a 10 second delay), run the demo: `just dev-demo`
 
+With the demo running, navigate to http://localhost:8082/ for API documentation. 
 ## Transaction Lifecycle
 The diagram below represents the lifecycle of a single rollup transaction, illustrating how the example rollup interacts with the Espresso sequencer along the way. The diagram below is a simplified version of this [system overview](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/system-overview), focusing on a single example rollup transaction. 
 
