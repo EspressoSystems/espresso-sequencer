@@ -63,12 +63,18 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
     let rollup_contract = ExampleRollup::new(*rollup_address, l1.clone());
     let hotshot_contract = HotShot::new(*hotshot_address, Arc::new(socket_provider));
     let filter = hotshot_contract.new_blocks_filter().from_block(0);
-    let mut stream = filter
+    let mut commits_stream = filter
         .subscribe()
         .await
         .expect("Unable to subscribe to L1 log stream");
 
-    while let Some(event) = stream.next().await {
+    let mut blocks_stream = hotshot
+        .socket("stream/blocks/0")
+        .subscribe()
+        .await
+        .expect("Unable to subscribe to HotShot block stream");
+
+    while let Some(event) = commits_stream.next().await {
         let (first_block, num_blocks) = match event {
             Ok(NewBlocksFilter {
                 first_block_number,
@@ -79,6 +85,15 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 continue;
             }
         };
+
+        // When HotShot introduces optimistic DA, full block content may not be available immediately
+        // so wait for all blocks to be ready before building the batch proof
+        let blocks: Vec<BlockQueryData<SeqTypes>> = blocks_stream
+            .by_ref()
+            .take(num_blocks as usize)
+            .map(|block| block.expect("Error fetching HotShot block"))
+            .collect()
+            .await;
 
         // Execute new blocks, generating proofs.
         let mut proofs = vec![];
@@ -97,17 +112,13 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 .expect("Unable to read commitment");
             let block_commitment =
                 u256_to_commitment(commitment).expect("Unable to deserialize block commitment");
-            let block = hotshot
-                .get::<BlockQueryData<SeqTypes>>(&format!("block/{}", first_block + i))
-                .send()
-                .await
-                .expect("Unable to query block from HotShot client");
+            let block = &blocks[i as usize];
 
             if block.block().commit() != block_commitment {
                 panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
-            proofs.push(state.execute_block(&block).await);
+            proofs.push(state.execute_block(block).await);
         }
 
         // Compute an aggregate proof.
