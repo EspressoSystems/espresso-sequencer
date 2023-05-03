@@ -10,8 +10,30 @@ In the case of zkRollups, a prover periodically submits rollup state checkpoints
 To learn more about the Espresso Sequencer and different types of rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequencer)) or [technical documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme).
 
 ## Running the Example
-TODO
+### With Docker
+1. Start the demo: `just rollup-demo`
+2. Stop the demo: `just rollup-demo-down`
+### Natively
+1. Build all executables: `cargo build --release`
+2. Run the cdn: `just dev-cdn`
+3. Run the sequencer: `just dev-sequencer`
+4. Run a test Anvil node: `just dev-l1`
+5. Once the Sequencer HotShot network is running (there is a 10 second delay), run the demo: `just dev-demo`
 
+### Interacting with the Demo
+With the demo running, navigate to http://localhost:8082/ for API documentation. 
+1. Query the genesis account balance: 
+```
+curl http://localhost:8082/rollup/balance/0xf23694f9c6d4837fc596c4eb7c3c3d8a8bae69ca
+```
+2. Send tokens to `0x885ee92eebda03540066a25a57cc625bbee15d5a`: 
+```
+curl -X POST -H "Content-Type: application/json" http://localhost:8082/rollup/submit -d "{\"transaction\":{\"amount\":100,\"destination\":\"0x885ee92eebda03540066a25a57cc625bbee15d5a\",\"nonce\":1},\"signature\":{\"r\":\"0x61395b25cf41321bc1242ec301c0aa5a5e5ff47b697f80119a20ce3e5be66f9e\",\"s\":\"0x447cf03a5ddb28b9a189d108a8e91efa523fd3fb37cebab1cad610d82a8edbb0\",\"v\":27}}"
+```
+3. Query `0x885ee92eebda03540066a25a57cc625bbee15d5a` balance: 
+```
+curl http://localhost:8082/rollup/balance/0x885ee92eebda03540066a25a57cc625bbee15d5a
+```
 ## Transaction Lifecycle
 The diagram below represents the lifecycle of a single rollup transaction, illustrating how the example rollup interacts with the Espresso sequencer along the way. The diagram below is a simplified version of this [system overview](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/system-overview), focusing on a single example rollup transaction. 
 
