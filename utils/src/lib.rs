@@ -101,15 +101,19 @@ impl Anvil {
         Provider::try_from(self.url().to_string()).unwrap()
     }
 
-    /// Restart the server, possibly with different options.
-    pub async fn restart(&mut self, mut opt: AnvilOptions) {
-        // Kill the server and wait for it to dump its state.
+    fn shutdown_gracefully(&self) {
         Command::new("kill")
             .args(["-s", "INT", &self.child.id().to_string()])
             .spawn()
             .unwrap()
             .wait()
             .unwrap();
+    }
+
+    /// Restart the server, possibly with different options.
+    pub async fn restart(&mut self, mut opt: AnvilOptions) {
+        // Stop the server and wait for it to dump its state.
+        self.shutdown_gracefully();
 
         // If `opt` does not explicitly override the URL, use the current one.
         if opt.port.is_none() {
@@ -128,8 +132,7 @@ impl Anvil {
 
 impl Drop for Anvil {
     fn drop(&mut self) {
-        self.child.kill().unwrap();
-        self.child.wait().unwrap();
+        self.shutdown_gracefully()
     }
 }
 
