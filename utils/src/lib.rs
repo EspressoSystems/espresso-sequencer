@@ -111,6 +111,10 @@ impl Anvil {
         self.child.kill().unwrap();
         self.child.wait().unwrap();
 
+        // This shouldn't really matter, but on mathis' computer this
+        // makes the test pass (???)
+        std::thread::sleep(Duration::from_secs(1));
+
         // If `opt` does not explicitly override the URL, use the current one.
         if opt.port.is_none() {
             opt.port = self.url.port();
