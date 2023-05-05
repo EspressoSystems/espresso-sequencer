@@ -1,109 +1,82 @@
 @startuml
-skinparam componentStyle rectangle
-
-frame Legend {
-  component "zkevm-node "as is"" as Original #PaleGreen
-  component "zkevm-node modified" as Modified #LightPink
-  component "new" as New
-}
-
-New -[hidden]r-> Original
-Original -[hidden]r-> Modified
-
-component User #White
-package "HotShot\n(other instances)" as HotShotExternal {
-  component "Gossip" as GossipExternal
-}
-
-package "Decentralized Sequencer" {
-  package "zkEVM app" as zkApp {
-    component "Query Service" as QueryService
-    component "Submit API" as Submit
-    package "Txn-ordering HotShot app" as App {
-      package HotShot {
-        component "Gossip" as GossipInternal
-        component "Events" as HotShotEvents
-      }
+component "HotShot Sequencer" as Seq
+package "Layer 2s" as L2 {
+    component "Rollup 1" as L2_1 {
+        component "API (e.g. JSON-RPC)" as L2_1_RPC
+        component Executor as L2_1_Exec
+        component Prover as L2_1_Prover
+        component "State DB" as L2_1_State
     }
-  }
+    component "Rollup 2" as L2_2
+    component "Rollup N" as L2_N
+}
+package "Layer 1" as L1 {
+    component "Sequencer Contract" as Seq_L1
+    package "Rollup Contracts" as L2_L1 {
+        component "Rollup 1\nContract" as L2_1_L1
+        component "Rollup 2\nContract" as L2_2_L1
+        component "Rollup N\nContract" as L2_N_L1
+    }
 }
 
-package "Ethereum L1" as L1 {
-  component "Rollup Contract" as Rollup #LightPink
-  note left of Rollup
-    Contract modified to store batch commitments
-    instead of batches. ForceBatches replaced by
-    Sequence, which validates a QC and stores a
-    batch commitment (associated with a GER).
-  end note
-  ' component "Bridge L1" as BridgeL1 #PaleGreen
-}
+Client -up-> L2_1_RPC : Transactions\nState queries
+note right of link
+1. Many clients submit transactions
+    to each L2 simultaneously (for
+    clarity only one is shown)
+end note
 
+L2_1_RPC -> Seq : Transaction\nRollup 1 ID
+note top of link
+2. L2s forward transactions to sequencer.
+end note
 
-package "L2 (zkevm-node)" as L2 {
-  component JsonRPC #LightPink
-  note left of JsonRPC
-    Modified to forward transactions
-    to the HotShot submit API.
-  end note
-  database L2DB #PaleGreen [
-    L2 Blockchain DB
-  ]
-  package "Hermez Prover" as HermezProver {
-    component Prover #PaleGreen
-    component Executor #PaleGreen
-    database Tree #PaleGreen [
-      L2 State DB
-      Merkle Tree
-    ]
-  }
-  'component "Bridge L2" as BridgeL2 #PaleGreen
-  component Etherman #LightPink
-  note left of Etherman
-    Etherman modified to fetch batch commits,
-    not batches, from contract, and to fetch
-    the full batches from the HotShot Query Service.
-  end note
-  component Aggregator #PaleGreen
-  component "State\nLibrary" as State #PaleGreen
-  component Synchronizer #PaleGreen
-  component "Batch Writer" as BatchWriter
-  note bottom of BatchWriter
-    New component which scans blocks from
-    HotShot and writes them to the contract.
-  end note
-}
+Seq -down-> L2_1_Exec : Block
+Seq -down-> L2_2 : Block
+Seq -down-> L2_N : Block
+note right of link
+3. Sequencer produces blocks --
+    ordered lists of transactions.
+    L2s receive blocks and execute
+    transactions for their rollup.
+end note
 
-User -down-> JsonRPC: EVM txn\nEVM query
-'User -[hidden]> Submit
-'positions the User box in a better place
-'User -[hidden]> L2
+Seq -down-> Seq_L1 : Block Commitment\nQC
+note right of link
+4. Sequencer posts succinct commitment
+    to block to L1. Contract verifies proof
+    of sequencing (Quorum Certificate)
+    then stores the block commitment.
+end note
 
-JsonRPC -> Submit: EVM txn
+L2_1_Prover -> L2_1_L1 : State\nProof
+L2_2 -down-> L2_2_L1 : State\nProof
+L2_N -down-> L2_N_L1 : State\nProof
+note right of link
+5. Rollups post updated state to L1.
+    ZK-rollups include a proof.
+end note
 
-GossipInternal <-> GossipExternal
+Seq_L1 -> L2_L1
+note bottom of link
+6. Rollup contracts read certified sequence
+    of block commitments from sequencer
+    contract. Verify state transition proofs
+    against this sequence (ZKR) or wait for
+    fraud proof against this sequence (ORU).
+end note
 
-QueryService -> BatchWriter: batch_commit, QC
-BatchWriter -> Rollup: Sequence(batch_commit, QC)
+' L2 1 details
+L2_1_RPC <-down- L2_1_State : Read state
+L2_1_Exec -down-> L2_1_State : Write state
+L2_1_Prover <-down- L2_1_State : Read State
 
-JsonRPC --> State: EVM query
-
-State -> L2DB: read
-State --> Tree: accounts
-State --> Executor: call, etc.
-
-Aggregator --> State: fetch\nprover\ninput
-Aggregator --> Etherman: proof
-Aggregator --> Prover: generate\nproof
-Etherman --> Rollup: proof
-Etherman <- Rollup: batch commit\nglobal exit root
-Etherman <- QueryService: batch
-Synchronizer <-- Etherman: batch\nglobal exit root
-State <-- Synchronizer: batch\nglobal exit root\nstate
-
-' Prover ..> BridgeL2
-' User --> BridgeL1
-Submit -up-> App: wrap in HotShot txn
-HotShotEvents -down-> QueryService
-
+' Layout
+L2_1_RPC -[hidden]r-> L2_1_Exec
+L2_1 -[hidden]r-> L2_2
+L2_2 -[hidden]r-> L2_N
+L2_1_L1 -[hidden]r-> L2_2_L1
+L2_2_L1 -[hidden]r-> L2_N_L1
+L2 -[hidden]d-> L1
+Seq -[hidden]d-> L2
 @enduml
