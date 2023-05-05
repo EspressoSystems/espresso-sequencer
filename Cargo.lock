@@ -3849,6 +3849,7 @@ dependencies = [
 name = "hotshot_contract"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ark-bn254 0.4.0",
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",

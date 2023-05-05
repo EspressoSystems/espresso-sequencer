@@ -2,7 +2,7 @@
 
 mod test {
 
-    use crate::helpers::hotshot_contract::get_bls_test_contract;
+    use crate::helpers::hotshot_contract::TestBLSSystem;
     use crate::helpers::{compare_field_elems, compare_group_elems, MyG1Point, MyG2Point};
     use ark_bn254::Fq;
     use ark_ec::CurveGroup;
@@ -15,6 +15,7 @@ mod test {
     };
     use jf_primitives::signatures::SignatureScheme;
     use jf_utils::test_rng;
+    use sequencer_utils::AnvilOptions;
     use sha3::Keccak256;
 
     fn test_inputs() -> Vec<Bytes> {
@@ -42,7 +43,9 @@ mod test {
         let sig = BLSOverBN254CurveSignatureScheme::sign(&(), &sk, &message, rng).unwrap();
         assert!(BLSOverBN254CurveSignatureScheme::verify(&(), &pk, &message, &sig).is_ok());
 
-        let bls = get_bls_test_contract().await;
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestBLSSystem { bls, .. } = TestBLSSystem::deploy(provider).await.unwrap();
 
         let sig_value: MyG1Point = sig.clone().sigma.into_affine().into();
 
@@ -88,7 +91,9 @@ mod test {
 
     #[async_std::test]
     async fn test_hash_to_field() {
-        let bls = get_bls_test_contract().await;
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestBLSSystem { bls, .. } = TestBLSSystem::deploy(provider).await.unwrap();
 
         // Same as in the hash_to_curve function
         // See https://github.com/EspressoSystems/jellyfish/blob/6c2c08f4e966fd1d454d48bcf30bd41a952f9f76/primitives/src/signatures/bls_over_bn254.rs#L310
@@ -106,7 +111,9 @@ mod test {
 
     #[async_std::test]
     async fn test_hash_to_curve() {
-        let bls = get_bls_test_contract().await;
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestBLSSystem { bls, .. } = TestBLSSystem::deploy(provider).await.unwrap();
 
         let msgs = test_inputs();
         for msg in msgs.iter() {
