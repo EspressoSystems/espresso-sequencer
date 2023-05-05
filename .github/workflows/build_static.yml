@@ -61,7 +61,6 @@ jobs:
           path: |
             target/x86_64-unknown-linux-musl/release/cdn-server
             target/x86_64-unknown-linux-musl/release/sequencer
-            target/x86_64-unknown-linux-musl/release/hermez-adaptor
             target/x86_64-unknown-linux-musl/release/example-l2
 
   static-dockers:
@@ -100,12 +99,6 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/cdn-server
 
-      - name: Generate hermez-adaptor docker metadata
-        uses: docker/metadata-action@v4
-        id: hermez-adaptor
-        with:
-          images: ghcr.io/espressosystems/espresso-sequencer/hermez-adaptor
-
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v4
         id: example-rollup 
@@ -131,16 +124,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-server.outputs.tags }}
           labels: ${{ steps.cdn-server.outputs.labels }}
-
-      - name: Build and push hermez-adaptor docker
-        uses: docker/build-push-action@v4
-        with:
-          context: ./
-          file: ./docker/hermez-adaptor.Dockerfile
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.hermez-adaptor.outputs.tags }}
-          labels: ${{ steps.hermez-adaptor.outputs.labels }}
 
       - name: Build and push example-rollup docker
         uses: docker/build-push-action@v4
