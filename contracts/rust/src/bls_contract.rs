@@ -8,6 +8,7 @@ mod test {
     use ark_ec::CurveGroup;
     use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
     use ark_std::vec;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::Bytes;
     use jf_primitives::signatures::bls_over_bn254::{
         hash_to_curve, BLSOverBN254CurveSignatureScheme,
@@ -30,6 +31,9 @@ mod test {
 
     #[async_std::test]
     async fn test_full_sig_scheme() {
+        setup_logging();
+        setup_backtrace();
+
         let rng = &mut test_rng();
         let message = Bytes::from(vec![1u8, 2u8, 3u8, 45u8, 88u8]);
 

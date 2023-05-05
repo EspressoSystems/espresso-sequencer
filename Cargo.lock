@@ -3854,6 +3854,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
+ "async-compatibility-layer",
  "async-std",
  "contract-bindings",
  "digest 0.10.6",

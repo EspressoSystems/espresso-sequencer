@@ -26,6 +26,7 @@ pub(crate) mod hotshot_contract {
         >,
     ) {
         let anvil = AnvilOptions::default().spawn().await;
+
         let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
         provider.set_interval(Duration::from_millis(10));
 

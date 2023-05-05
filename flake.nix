@@ -40,7 +40,8 @@
         info = builtins.split "\([a-zA-Z0-9_]+\)" system;
         arch = (builtins.elemAt (builtins.elemAt info 1) 0);
         os = (builtins.elemAt (builtins.elemAt info 3) 0);
-        RUST_LOG = "info,libp2p=off,isahc=error,surf=error";
+        # node=error: disable noisy anvil output
+        RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
         overlays = [
           (import rust-overlay)
           foundry.overlay
