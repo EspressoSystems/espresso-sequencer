@@ -101,6 +101,10 @@ impl Anvil {
         self.url.clone()
     }
 
+    pub fn provider(&self) -> Provider<Http> {
+        Provider::try_from(self.url().to_string()).unwrap()
+    }
+
     /// Restart the server, possibly with different options.
     pub async fn restart(&mut self, mut opt: AnvilOptions) {
         // Kill the server and wait for it to dump its state.

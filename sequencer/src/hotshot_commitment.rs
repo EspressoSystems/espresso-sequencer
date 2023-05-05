@@ -197,7 +197,7 @@ mod test {
     use crate::{transaction::SequencerTransaction, Block, Leaf, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
-    use contract_bindings::{hot_shot::NewBlocksCall, TestHermezContracts};
+    use contract_bindings::{hot_shot::NewBlocksCall, TestL1System};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use hotshot_types::{
         certificate::QuorumCertificate,
@@ -214,7 +214,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
-        let l1 = TestHermezContracts::deploy(&anvil.url(), "http://dummy".to_string()).await;
+        let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
 
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();

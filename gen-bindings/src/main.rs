@@ -49,7 +49,7 @@ fn main() -> Result<(), ()> {
         abigens.push(abigen.clone());
     }
 
-    // 3. Generate bindings for HotShot specific contracts
+    // Generate bindings for HotShot specific contracts
     let hotshot_contracts_path = workspace_dir.join("contracts");
 
     // Compile HotShot specific contracts
@@ -106,15 +106,11 @@ fn main() -> Result<(), ()> {
     })
     .collect();
 
-    for abigen in MultiAbigen::from_abigens(
+    abigens = MultiAbigen::from_abigens(
         artifacts
             .iter()
             .map(|path| Abigen::from_file(path).unwrap()),
-    )
-    .iter()
-    {
-        abigens.push(abigen.clone());
-    }
+    );
 
     // Remove existing bindings
     let bindings_dir = workspace_dir.join("contract-bindings/src/bindings");
