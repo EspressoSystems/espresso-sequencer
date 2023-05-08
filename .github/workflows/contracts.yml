@@ -47,13 +47,13 @@ jobs:
         name: Enable Rust Caching
 
       - name: Format check
-        run: nix develop -c pre-commit run forge-fmt --all-files
+        run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files
 
       - name: Build contracts
-        run: nix develop -c forge build --deny-warnings
+        run: nix develop --accept-flake-config -c forge build --deny-warnings
 
       - name: Check if bindings up to date
-        run: nix develop -c pre-commit run contract-bindings --all-files
+        run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files
 
       - name: Run tests
-        run: nix develop -c forge test -vvv
+        run: nix develop --accept-flake-config -c forge test -vvv
