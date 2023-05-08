@@ -18,37 +18,6 @@ fn main() -> Result<(), ()> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_dir = manifest_dir.parent().unwrap();
 
-    // 1. Generate bindings for all zkevm-contracts
-    //
-    // Hardhat's debug files trip up MultiAbigen otherwise we could use
-    // MultiAbigen::from_json_files instead
-    let artifacts: Vec<_> = find_paths(
-        workspace_dir
-            .join("zkevm-contracts/artifacts/contracts")
-            .to_str()
-            .unwrap(),
-        ".json",
-    )
-    .into_iter()
-    .filter(|path| !path.to_str().unwrap().ends_with(".dbg.json"))
-    .collect();
-
-    let mut abigens = MultiAbigen::from_abigens(
-        artifacts
-            .iter()
-            .map(|path| Abigen::from_file(path).unwrap()),
-    );
-
-    // 2. Generate bindings for other contracts (including Matic)
-    //    in gen-bindings/contracts/abi.
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    for abigen in MultiAbigen::from_json_files(manifest_dir.join("contracts/abi"))
-        .expect("Failed to read contracts")
-        .iter()
-    {
-        abigens.push(abigen.clone());
-    }
-
     // Generate bindings for HotShot specific contracts
     let hotshot_contracts_path = workspace_dir.join("contracts");
 
@@ -106,7 +75,7 @@ fn main() -> Result<(), ()> {
     })
     .collect();
 
-    abigens = MultiAbigen::from_abigens(
+    let abigens = MultiAbigen::from_abigens(
         artifacts
             .iter()
             .map(|path| Abigen::from_file(path).unwrap()),
@@ -130,7 +99,7 @@ fn main() -> Result<(), ()> {
         .wait()
         .unwrap();
 
-    println!("zkevm-contract bindings written to {bindings_dir:?}");
+    println!("Contract bindings written to {bindings_dir:?}");
 
     Ok(())
 }

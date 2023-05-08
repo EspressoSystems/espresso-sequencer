@@ -19,7 +19,7 @@ type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 #[derive(Args, Clone, Debug)]
 pub struct HotShotContractOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_PROVIDER")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider: Url,
 
     /// Chain ID for layer 1 Ethereum.
@@ -27,24 +27,24 @@ pub struct HotShotContractOptions {
     /// This can be specified explicitly as a sanity check. No transactions will be executed if the
     /// RPC specified by `l1_provider` has a different chain ID. If not specified, the chain ID from
     /// the RPC will be used.
-    #[clap(long, env = "ESPRESSO_ZKEVM_L1_CHAIN_ID")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_CHAIN_ID")]
     pub l1_chain_id: Option<u64>,
 
     /// Address of HotShot contract on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_HOTSHOT_ADDRESS", default_value = None)]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS", default_value = None)]
     pub hotshot_address: Address,
 
     /// Mnemonic phrase for a funded wallet.
     ///
     /// This is the wallet that will be used to send blocks sequenced by HotShot to the sequencer
     /// contract. It must be funded with ETH on layer 1.
-    #[clap(long, env = "ESPRESSO_ZKEVM_SEQUENCER_MNEMONIC", default_value = None)]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC", default_value = None)]
     pub sequencer_mnemonic: String,
 
     /// Index of a funded account derived from sequencer-mnemonic.
     #[clap(
         long,
-        env = "ESPRESSO_ZKEVM_SEQUENCER_ACCOUNT_INDEX",
+        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
         default_value = "0"
     )]
     pub sequencer_account_index: u32,

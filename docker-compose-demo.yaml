@@ -72,17 +72,17 @@ services:
   demo-l1-network:
     image: ghcr.io/foundry-rs/foundry:latest
     ports:
-      - $ESPRESSO_DEMO_L1_PORT:$ESPRESSO_DEMO_L1_PORT
+      - $ESPRESSO_SEQUENCER_L1_PORT:$ESPRESSO_SEQUENCER_L1_PORT
     # The way the foundry image handles arguments is strange, the double quotes
     # make it work here.
-    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_DEMO_L1_PORT --chain-id 1337'"
+    command: "'anvil --host 0.0.0.0 --port $ESPRESSO_SEQUENCER_L1_PORT --chain-id 1337'"
   example-rollup:
     image: ghcr.io/espressosystems/espresso-sequencer/example-rollup:main
     environment:
       - ESPRESSO_SEQUENCER_URL
-      - ESPRESSO_DEMO_L1_PROVIDER
-      - ESPRESSO_DEMO_ROLLUP_ADDRESS
-      - ESPRESSO_DEMO_HOTSHOT_ADDRESS
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_ROLLUP_ADDRESS
+      - ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS
       - ESPRESSO_DEMO_ROLLUP_PORT
       - ESPRESSO_DEMO_ROLLUP_MNEMONIC
     ports:
