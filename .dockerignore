@@ -7,5 +7,3 @@ target*/**/deps
 target*/**/examples
 target*/**/incremental
 target*/**/doc
-zkevm-contracts
-zkevm-node
