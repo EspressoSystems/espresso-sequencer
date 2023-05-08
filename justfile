@@ -32,3 +32,6 @@ dev-demo:
      --hotshot-address 0x5fbdb2315678afecb367f032d93f642f64180aa3 \
      --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
      --rollup-mnemonic "test test test test test test test test test test test junk"
+
+build-docker-images:
+    scripts/build-docker-images
