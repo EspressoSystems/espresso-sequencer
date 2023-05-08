@@ -56,7 +56,7 @@ jobs:
       - name: Check if bindings up to date
         run: |
           cargo run --bin gen-bindings
-          git status
+          git diff
           # Error if any `git status --porcelain` reports anything
           exit $(git status --porcelain | wc -l)
 
