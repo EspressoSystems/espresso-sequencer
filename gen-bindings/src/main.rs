@@ -22,12 +22,21 @@ fn main() -> Result<(), ()> {
     let hotshot_contracts_path = workspace_dir.join("contracts");
 
     // Compile HotShot specific contracts
-    Command::new("forge")
+    let status = Command::new("forge")
         .arg("build")
         .arg("--force") // Forge sometimes doesn't recompile when it should.
         .current_dir(&hotshot_contracts_path)
-        .output()
-        .expect("failed to execute process");
+        .spawn()
+        .expect("failed to execute process")
+        .wait()
+        .expect("failed to wait for process");
+
+    if !status.success() {
+        panic!(
+            "Error: `forge build` exited with non-zero exit code: {}",
+            status
+        );
+    }
 
     // Exclude foundry contracts from the bindings
     let exclude: HashSet<String> = HashSet::from_iter(
