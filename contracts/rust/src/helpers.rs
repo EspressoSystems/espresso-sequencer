@@ -7,47 +7,34 @@ pub use contract_bindings::bls_test::{G1Point, G2Point};
 use ethers::types::U256;
 
 pub(crate) mod hotshot_contract {
-    use async_std::sync::Arc;
+    use anyhow::Result;
     use contract_bindings::bls_test::BLSTest;
     use contract_bindings::TestClients;
     use ethers::middleware::SignerMiddleware;
-    use ethers::prelude::Wallet;
     use ethers::providers::{Http, Middleware, Provider};
-    use sequencer_utils::AnvilOptions;
-    use std::time::Duration;
+    use ethers::signers::LocalWallet;
 
-    pub(crate) async fn get_provider_and_deployer() -> (
-        Provider<Http>,
-        Arc<
-            SignerMiddleware<
-                ethers::providers::Provider<Http>,
-                Wallet<ethers::core::k256::ecdsa::SigningKey>,
-            >,
-        >,
-    ) {
-        let anvil = AnvilOptions::default().spawn().await;
-        let mut provider = Provider::try_from(&anvil.url().to_string()).unwrap();
-        provider.set_interval(Duration::from_millis(10));
+    type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
 
-        let chain_id = provider.get_chainid().await.unwrap().as_u64();
-        let clients = TestClients::new(&provider, chain_id);
-        let deployer = clients.deployer;
-
-        (provider, deployer.provider)
+    pub struct TestBLSSystem {
+        pub clients: TestClients,
+        pub bls: BLSTest<EthMiddleware>,
+        pub provider: Provider<Http>,
     }
 
-    pub(crate) async fn get_bls_test_contract() -> BLSTest<
-        SignerMiddleware<
-            ethers::providers::Provider<Http>,
-            Wallet<ethers::core::k256::ecdsa::SigningKey>,
-        >,
-    > {
-        let (_, deployer) = get_provider_and_deployer().await;
-        BLSTest::deploy(deployer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap()
+    impl TestBLSSystem {
+        pub async fn deploy(provider: Provider<Http>) -> Result<Self> {
+            let chain_id = provider.get_chainid().await?.as_u64();
+            let clients = TestClients::new(&provider, chain_id);
+            let bls = BLSTest::deploy(clients.deployer.provider.clone(), ())?
+                .send()
+                .await?;
+            Ok(Self {
+                clients,
+                bls,
+                provider,
+            })
+        }
     }
 }
 

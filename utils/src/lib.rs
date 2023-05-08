@@ -65,29 +65,25 @@ impl Anvil {
             .port
             .unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
 
-        let mut command = format!(
-            "anvil --silent --host 0.0.0.0 --dump-state {}",
-            state_dir.display()
-        );
+        let mut command = Command::new("anvil");
+        command.args([
+            "--silent",
+            "--port",
+            &port.to_string(),
+            "--dump-state",
+            &state_dir.display().to_string(),
+        ]);
+
         if let Some(block_time) = opt.block_time {
-            command = format!("{command} -b {}", block_time.as_secs());
+            command.args(["-b", &block_time.as_secs().to_string()]);
         }
         if let Some(load_state) = opt.load_state {
-            command = format!("{command} --load-state {}", load_state.display());
+            command.args(["--load-state", &load_state.display().to_string()]);
         }
 
-        tracing::info!("Starting Anvil: {command}");
-        let child = Command::new("docker")
-            .arg("run")
-            .arg("-p")
-            .arg(format!("{port}:8545"))
-            .arg("ghcr.io/foundry-rs/foundry:latest")
-            // Ideally the stdout would be captured, in tests but I could not
-            // get this to work. Pass `--silent` to avoid spamming the test
-            // output.
-            .arg(&command)
-            .spawn()
-            .unwrap();
+        tracing::info!("Starting Anvil: {:?}", &command);
+
+        let child = command.spawn().unwrap();
 
         let url = Url::parse(&format!("http://localhost:{port}")).unwrap();
         wait_for_rpc(&url, Duration::from_millis(200), 20)
@@ -101,11 +97,23 @@ impl Anvil {
         self.url.clone()
     }
 
+    pub fn provider(&self) -> Provider<Http> {
+        Provider::try_from(self.url().to_string()).unwrap()
+    }
+
+    fn shutdown_gracefully(&self) {
+        Command::new("kill")
+            .args(["-s", "INT", &self.child.id().to_string()])
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+    }
+
     /// Restart the server, possibly with different options.
     pub async fn restart(&mut self, mut opt: AnvilOptions) {
-        // Kill the server and wait for it to dump its state.
-        self.child.kill().unwrap();
-        self.child.wait().unwrap();
+        // Stop the server and wait for it to dump its state.
+        self.shutdown_gracefully();
 
         // If `opt` does not explicitly override the URL, use the current one.
         if opt.port.is_none() {
@@ -124,8 +132,7 @@ impl Anvil {
 
 impl Drop for Anvil {
     fn drop(&mut self) {
-        self.child.kill().unwrap();
-        self.child.wait().unwrap();
+        self.shutdown_gracefully()
     }
 }
 

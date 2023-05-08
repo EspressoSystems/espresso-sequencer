@@ -18,47 +18,25 @@ fn main() -> Result<(), ()> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_dir = manifest_dir.parent().unwrap();
 
-    // 1. Generate bindings for all zkevm-contracts
-    //
-    // Hardhat's debug files trip up MultiAbigen otherwise we could use
-    // MultiAbigen::from_json_files instead
-    let artifacts: Vec<_> = find_paths(
-        workspace_dir
-            .join("zkevm-contracts/artifacts/contracts")
-            .to_str()
-            .unwrap(),
-        ".json",
-    )
-    .into_iter()
-    .filter(|path| !path.to_str().unwrap().ends_with(".dbg.json"))
-    .collect();
-
-    let mut abigens = MultiAbigen::from_abigens(
-        artifacts
-            .iter()
-            .map(|path| Abigen::from_file(path).unwrap()),
-    );
-
-    // 2. Generate bindings for other contracts (including Matic)
-    //    in gen-bindings/contracts/abi.
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    for abigen in MultiAbigen::from_json_files(manifest_dir.join("contracts/abi"))
-        .expect("Failed to read contracts")
-        .iter()
-    {
-        abigens.push(abigen.clone());
-    }
-
-    // 3. Generate bindings for HotShot specific contracts
+    // Generate bindings for HotShot specific contracts
     let hotshot_contracts_path = workspace_dir.join("contracts");
 
     // Compile HotShot specific contracts
-    Command::new("forge")
+    let status = Command::new("forge")
         .arg("build")
         .arg("--force") // Forge sometimes doesn't recompile when it should.
         .current_dir(&hotshot_contracts_path)
-        .output()
-        .expect("failed to execute process");
+        .spawn()
+        .expect("failed to execute process")
+        .wait()
+        .expect("failed to wait for process");
+
+    if !status.success() {
+        panic!(
+            "Error: `forge build` exited with non-zero exit code: {}",
+            status
+        );
+    }
 
     // Exclude foundry contracts from the bindings
     let exclude: HashSet<String> = HashSet::from_iter(
@@ -106,15 +84,11 @@ fn main() -> Result<(), ()> {
     })
     .collect();
 
-    for abigen in MultiAbigen::from_abigens(
+    let abigens = MultiAbigen::from_abigens(
         artifacts
             .iter()
             .map(|path| Abigen::from_file(path).unwrap()),
-    )
-    .iter()
-    {
-        abigens.push(abigen.clone());
-    }
+    );
 
     // Remove existing bindings
     let bindings_dir = workspace_dir.join("contract-bindings/src/bindings");
@@ -134,7 +108,7 @@ fn main() -> Result<(), ()> {
         .wait()
         .unwrap();
 
-    println!("zkevm-contract bindings written to {bindings_dir:?}");
+    println!("Contract bindings written to {bindings_dir:?}");
 
     Ok(())
 }

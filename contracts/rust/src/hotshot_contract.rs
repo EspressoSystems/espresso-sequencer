@@ -1,12 +1,11 @@
 #[cfg(test)]
 
 mod test {
-    use crate::helpers::hotshot_contract::get_provider_and_deployer;
     use crate::helpers::{MyG1Point, MyG2Point};
     use ark_ec::CurveGroup;
     use contract_bindings::bls_test::G2Point;
     use contract_bindings::hot_shot::NewBlocksCall;
-    use contract_bindings::HotShot;
+    use contract_bindings::{HotShot, TestL1System};
     use ethers::middleware::SignerMiddleware;
     use ethers::signers::Wallet;
     use ethers::types::Bytes;
@@ -17,6 +16,7 @@ mod test {
     };
     use jf_primitives::signatures::{AggregateableSignatureSchemes, SignatureScheme};
     use jf_utils::test_rng;
+    use sequencer_utils::AnvilOptions;
 
     enum ResultExpected {
         Ok,
@@ -25,12 +25,9 @@ mod test {
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
-        let (provider, deployer) = get_provider_and_deployer().await;
-        let hotshot = HotShot::deploy(deployer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let block_num = U256::from(0);
         let commitment = U256::from(1234);
@@ -70,12 +67,9 @@ mod test {
 
     #[async_std::test]
     async fn test_hotshot_stake_table() {
-        let (_, deployer) = get_provider_and_deployer().await;
-        let hotshot = HotShot::deploy(deployer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let rng = &mut test_rng();
         for i in 0..5 {
@@ -162,12 +156,9 @@ mod test {
 
     #[async_std::test]
     async fn test_validate_qc() {
-        let (_, deployer) = get_provider_and_deployer().await;
-        let hotshot = HotShot::deploy(deployer.clone(), ())
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        let anvil = AnvilOptions::default().spawn().await;
+        let provider = anvil.provider();
+        let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         // Initialize the staking table with 5 keys
         let mut staking_keys = vec![];

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+
+nix develop .#crossShell --ignore-environment --command cargo build --release
+
+docker build -t ghcr.io/espressosystems/espresso-sequencer/cdn-server:main -f docker/cdn-server.Dockerfile .
+docker build -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile .
+docker build -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile .

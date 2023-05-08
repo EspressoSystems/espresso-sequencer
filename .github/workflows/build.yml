@@ -13,33 +13,22 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_LOG: info,libp2p=off
+  RUST_LOG: info,libp2p=off,node=error
 
 jobs:
   build:
-    # The tests that use docker compose currently only work on github's
-    # public runners.
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/espressosystems/devops-rust:stable
     steps:
-
-      - name: Check /proc/cpuinfo
-        run: cat /proc/cpuinfo
-
-      - name: Abort early if Intel ADX instructions (required by zkevm-prover) is not available
-        run: cat /proc/cpuinfo | grep -q ' adx ' || ( echo "Retry CI in the hopes of getting another CPU" && exit 1 )
-
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
         with:
           all_but_latest: true
           access_token: ${{ github.token }}
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - uses: actions/checkout@v3
         name: Checkout Repository
@@ -51,18 +40,6 @@ jobs:
         run: |
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
-
-
-      - name: Login to Github Container Repo
-        uses: docker/login-action@v2
-        # if: github.event_name != 'pull_request'
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull all docker compose images
-        run: docker-compose -f docker-compose.yaml -f docker-compose-anvil.yaml -f permissionless-docker-compose.yaml pull
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching

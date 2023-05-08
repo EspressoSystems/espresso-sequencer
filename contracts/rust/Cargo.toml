@@ -5,11 +5,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.71"
 ark-bn254 = "0.4.0"
 ark-ec = { version = "0.4.2" }
 ark-ff = "0.4.2"
 ark-serialize = "0.4.2"
 ark-std = { version = "0.4.0", default-features = false }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = ["logging-utils", "async-std-executor", "channel-async-std"] }
 async-std = "1.12.0"
 contract-bindings = { path = "../../contract-bindings" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }

@@ -1,9 +1,3 @@
-[submodule "zkevm-node"]
-	path = zkevm-node
-	url = git@github.com:EspressoSystems/zkevm-node
-[submodule "zkevm-contracts"]
-	path = zkevm-contracts
-	url = git@github.com:EspressoSystems/zkevm-contracts.git
 [submodule "lib/forge-std"]
 	path = contracts/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std

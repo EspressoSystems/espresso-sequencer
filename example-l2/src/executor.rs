@@ -150,6 +150,7 @@ mod test {
     use crate::RollupVM;
 
     use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
@@ -279,6 +280,9 @@ mod test {
 
     #[async_std::test]
     async fn test_execute_batched_updates_to_slow_l1() {
+        setup_logging();
+        setup_backtrace();
+
         let num_txns = 10;
 
         // Create mock rollup state
