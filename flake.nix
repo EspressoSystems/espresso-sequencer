@@ -68,30 +68,35 @@
                 enable = true;
                 description = "Enforce rustfmt";
                 entry = "cargo fmt --all";
+                types_or = [ "rust" "toml" ];
                 pass_filenames = false;
               };
               cargo-sort = {
                 enable = true;
                 description = "Ensure Cargo.toml are sorted";
                 entry = "cargo sort -g -w";
+                types_or = [ "toml" ];
                 pass_filenames = false;
               };
               cargo-clippy = {
                 enable = true;
                 description = "Run clippy";
                 entry = "cargo clippy --workspace --all-features --all-targets -- -D warnings";
+                types_or = [ "rust" "toml" ];
                 pass_filenames = false;
               };
               forge-fmt = {
                 enable = true;
                 description = "Enforce forge fmt";
                 entry = "forge fmt";
+                types_or = [ "solidity" ];
                 pass_filenames = false;
               };
               contract-bindings = {
                 enable = true;
                 description = "Generate contract bindings";
                 entry = "cargo run --bin gen-bindings";
+                types_or = [ "solidity" ];
                 pass_filenames = false;
               };
             };
