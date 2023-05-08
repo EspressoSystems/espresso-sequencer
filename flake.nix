@@ -88,6 +88,12 @@
                 entry = "forge fmt";
                 pass_filenames = false;
               };
+              contract-bindings = {
+                enable = true;
+                description = "Generate contract bindings";
+                entry = "cargo run --bin gen-bindings";
+                pass_filenames = false;
+              };
             };
           };
         };
