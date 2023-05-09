@@ -11,7 +11,6 @@ import {BytesLib} from "solidity-bytes-utils/BytesLib.sol";
 // solhint-disable-next-line
 /// https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
 library BLSSig {
-
     error BLSSigVerificationFailed();
 
     // TODO gas optimization
