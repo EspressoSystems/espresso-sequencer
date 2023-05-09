@@ -13,8 +13,8 @@ contract HotShot {
     uint256 public blockHeight;
 
     // Stake table related data structures
-    mapping(uint256 => uint256) private stakeAmounts;
-    BN254.G2Point[] private stakingKeys;
+    mapping(uint256 => uint256) private _stakeAmounts;
+    BN254.G2Point[] private _stakingKeys;
 
     event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
@@ -22,7 +22,7 @@ contract HotShot {
     error TooManyBlocks(uint256 numBlocks);
     error InvalidQC(uint256 blockNumber);
 
-    function verifyQC(uint256, /*blockNumber*/ uint256, /*commitment*/ bytes calldata /*qc*/ )
+    function _verifyQC(uint256, /*blockNumber*/ uint256, /*commitment*/ bytes calldata /*qc*/ )
         private
         pure
         returns (bool)
@@ -42,7 +42,7 @@ contract HotShot {
 
         uint256 firstBlockNumber = blockHeight;
         for (uint256 i = 0; i < newCommitments.length; ++i) {
-            if (!verifyQC(blockHeight, newCommitments[i], qcs[i])) {
+            if (!_verifyQC(blockHeight, newCommitments[i], qcs[i])) {
                 revert InvalidQC(blockHeight);
             }
 
@@ -58,14 +58,14 @@ contract HotShot {
     // @param staking_key public key for the BLS scheme
     // @param amount stake corresponding to the staking key
     function addNewStakingKey(BN254.G2Point memory staking_key, uint256 amount) public {
-        uint256 index = stakingKeys.length;
-        stakeAmounts[index] = amount;
-        stakingKeys.push(staking_key);
+        uint256 index = _stakingKeys.length;
+        _stakeAmounts[index] = amount;
+        _stakingKeys.push(staking_key);
         emit NewStakingKey(staking_key, amount, index);
     }
 
     function getStakingKey(uint256 index) public view returns (BN254.G2Point memory, uint256) {
-        return (stakingKeys[index], stakeAmounts[index]);
+        return (_stakingKeys[index], _stakeAmounts[index]);
     }
 
     // @dev Verify an aggregated signature against a bitmap (use to reconstruct the aggregated public key) and some stake threshold. If the stake involved by the signers is bigger than the threshold and the signature is valid then the validation passes, otherwise the transaction reverts.@author
@@ -79,7 +79,7 @@ contract HotShot {
         bool[] memory bitmap,
         uint256 min_stake_threshold
     ) public view {
-        require(bitmap.length <= stakingKeys.length, "bitmap is too long");
+        require(bitmap.length <= _stakingKeys.length, "bitmap is too long");
 
         // Build aggregated public key
 
@@ -95,16 +95,16 @@ contract HotShot {
         uint256 stake = 0;
         for (uint256 i = index; i < bitmap.length; i++) {
             if (bitmap[i]) {
-                stake += stakeAmounts[i]; // TODO check to avoid wrapping around?
+                stake += _stakeAmounts[i]; // TODO check to avoid wrapping around?
             }
         }
 
         require(stake >= min_stake_threshold, "Not enough stake is available for validating the signature.");
 
-        BN254.G2Point memory agg_pk = stakingKeys[index];
+        BN254.G2Point memory agg_pk = _stakingKeys[index];
         for (uint256 i = index + 1; i < bitmap.length; i++) {
             if (bitmap[i]) {
-                BN254.G2Point memory pk = stakingKeys[i];
+                BN254.G2Point memory pk = _stakingKeys[i];
 
                 // Note: (x,y) coordinates for each field component must be inverted.
                 uint256 p1xy = agg_pk.x0;
@@ -122,6 +122,6 @@ contract HotShot {
             }
         }
 
-        BLSSig.verify_bls_sig(message, sig, agg_pk);
+        BLSSig.verifyBlsSig(message, sig, agg_pk);
     }
 }

@@ -6,15 +6,15 @@ import {BLSSig} from "./libraries/BLSSig.sol";
 contract BLSTest {
     /// This contract is for testing purposes only
 
-    function hash_to_field(bytes memory message) public pure returns (uint256) {
-        return BLSSig.hash_to_field(message);
+    function hashToField(bytes memory message) public pure returns (uint256) {
+        return BLSSig.hashToField(message);
     }
 
-    function hash_to_curve(bytes memory input) public view returns (uint256, uint256) {
-        return BLSSig.hash_to_curve(input);
+    function hashToCurve(bytes memory input) public view returns (uint256, uint256) {
+        return BLSSig.hashToCurve(input);
     }
 
-    function verify_bls_sig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk) public view {
-        BLSSig.verify_bls_sig(message, sig, pk);
+    function verifyBlsSig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk) public view {
+        BLSSig.verifyBlsSig(message, sig, pk);
     }
 }
