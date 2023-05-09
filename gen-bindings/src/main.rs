@@ -90,14 +90,15 @@ fn main() -> Result<(), ()> {
             .map(|path| Abigen::from_file(path).unwrap()),
     );
 
+    // Generate bindings
+    let bindings = abigens.build().unwrap();
+
     // Remove existing bindings
     let bindings_dir = workspace_dir.join("contract-bindings/src/bindings");
     if bindings_dir.exists() {
         std::fs::remove_dir_all(&bindings_dir).unwrap();
     }
 
-    // Generate bindings
-    let bindings = abigens.build().unwrap();
     bindings.write_to_module(&bindings_dir, false).unwrap();
 
     // Unfortunately the bindings are not always correctly formatted.
