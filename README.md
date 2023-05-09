@@ -99,3 +99,9 @@ In order to avoid constant warnings about checksum mismatches with
 
 * To use the contrats from rust generate the rust contracts bindings: `just
   update-contract-bindings`.
+
+To generate documentation in `./docs` for solidity code run
+
+```shell
+forge doc
+```
