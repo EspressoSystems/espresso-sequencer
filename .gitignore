@@ -20,3 +20,5 @@ target/
 
 # solidity files cache
 cache/
+
+node_modules/

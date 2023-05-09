@@ -1,10 +1,9 @@
 pragma solidity ^0.8.13;
 
-import "forge-std/console.sol";
 import "./HotShot.sol";
 
 contract ExampleRollup {
-    HotShot hotshot;
+    HotShot public hotshot;
     uint256 public stateCommitment;
     uint256 public numVerifiedBlocks;
 
@@ -53,7 +52,7 @@ contract ExampleRollup {
     // forces the prover to execute the correct chain of blocks without explicitly taking this
     // entire chain as a public input (which would be expensive). This holds up to collision
     // resistance of the hash function used to link each HotShot block to its parent.
-    function verifyProof(
+    function _verifyProof(
         uint256 firstBlock,
         uint256 lastBlock,
         uint256 oldState,
@@ -76,7 +75,7 @@ contract ExampleRollup {
 
         uint256 firstBlock = hotshot.commitments(numVerifiedBlocks);
         uint256 lastBlock = hotshot.commitments(numVerifiedBlocks + count - 1);
-        if (!verifyProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof)) {
+        if (!_verifyProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof)) {
             revert InvalidProof(firstBlock, lastBlock, stateCommitment, nextStateCommitment, proof);
         }
 

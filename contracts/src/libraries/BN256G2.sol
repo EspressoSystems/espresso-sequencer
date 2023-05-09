@@ -1,10 +1,12 @@
 pragma solidity ^0.8.0;
-
 /**
  * @title Elliptic curve operations on twist points for alt_bn128
  * @author Mustafa Al-Bassam (mus@musalbas.com)
  * @dev Homepage: https://github.com/musalbas/solidity-BN256G2
  */
+
+// Disable solhint for this file because it's copied from elsewhere.
+/* solhint-disable */
 
 library BN256G2 {
     uint256 internal constant FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
@@ -293,3 +295,5 @@ library BN256G2 {
         }
     }
 }
+
+/* solhint-enable */

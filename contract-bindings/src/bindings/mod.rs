@@ -8,7 +8,6 @@ pub mod bls_test;
 pub mod bn254;
 pub mod bn256g2;
 pub mod bytes_lib;
-pub mod counter;
 pub mod example_rollup;
 pub mod example_rollup_test;
 pub mod hot_shot;

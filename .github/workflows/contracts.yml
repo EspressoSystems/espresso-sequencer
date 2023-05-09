@@ -19,7 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
         with:
@@ -39,7 +38,7 @@ jobs:
         continue-on-error: true
         with:
           name: espresso-systems-private
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           extraPullNames: nix-community
 
       - uses: actions/checkout@v3
@@ -55,6 +54,9 @@ jobs:
 
       - name: Format check
         run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files
+
+      - name: Solhint solidity linter
+        run: nix develop --accept-flake-config -c pre-commit run solhint --all-files
 
       - name: Build contracts
         run: nix develop --accept-flake-config -c forge build --deny-warnings

@@ -1,0 +1,9 @@
+plugins:
+  - ./node_modules/prettier-plugin-solidity
+bracketSpacing: true
+printWidth: 120
+proseWrap: "always"
+singleQuote: false
+tabWidth: 2
+trailingComma: "all"
+useTabs: false

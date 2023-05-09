@@ -1,0 +1,22 @@
+# directories
+broadcast
+cache
+lib
+node_modules
+out
+.direnv
+target
+
+# files
+*.env
+*.log
+*.json
+.DS_Store
+.pnp.*
+lcov.info
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.pre-commit-config.yaml
+*.yaml
+*.yml
