@@ -35,3 +35,10 @@ dev-demo:
 
 build-docker-images:
     scripts/build-docker-images
+
+solhint:
+    solhint --fix 'contracts/{script,src,test}/**/*.sol'
+
+fmt:
+    cargo fmt
+    prettier -w .

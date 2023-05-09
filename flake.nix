@@ -42,10 +42,27 @@
         os = (builtins.elemAt (builtins.elemAt info 3) 0);
         # node=error: disable noisy anvil output
         RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
+
+        solhintPkg = { buildNpmPackage, fetchFromGitHub }: buildNpmPackage rec {
+          pname = "solhint";
+          version = "3.4.1";
+          src = fetchFromGitHub {
+            owner = "protofire";
+            repo = pname;
+            rev = "v${version}";
+            hash = "sha256-cOZgphyNbTBWnnomOoQj9Ferss6/109EGkzVZY1eqrg=";
+          };
+          npmDepsHash = "sha256-s037N+fma4aLTrEhRb64UGr7uItP7v0s1gQ9X7fra00=";
+          dontNpmBuild = true;
+        };
+
         overlays = [
           (import rust-overlay)
           foundry.overlay
           solc-bin.overlays.default
+          (final: prev: {
+            solhint = solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
+          })
         ];
         pkgs = import nixpkgs {
           inherit system overlays;
@@ -92,12 +109,26 @@
                 types_or = [ "solidity" ];
                 pass_filenames = false;
               };
+              solhint = {
+                enable = true;
+                description = "Solidity linter";
+                entry = "solhint --fix 'contracts/{script,src,test}/**/*.sol'";
+                types_or = [ "solidity" ];
+                pass_filenames = true;
+              };
               contract-bindings = {
                 enable = true;
                 description = "Generate contract bindings";
                 entry = "cargo run --bin gen-bindings";
                 types_or = [ "solidity" ];
                 pass_filenames = false;
+              };
+              prettier-fmt = {
+                enable = true;
+                description = "Enforce markdown formatting";
+                entry = "prettier -w";
+                types_or = [ "markdown" ];
+                pass_filenames = true;
               };
             };
           };
@@ -141,8 +172,12 @@
                 plantuml
                 coreutils
 
+                # Ethereum contracts, solidity, ...
                 foundry-bin
                 solc
+                nodePackages.prettier
+                solhint
+
               ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ];
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
