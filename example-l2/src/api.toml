@@ -8,3 +8,9 @@ PATH = ["/balance/:address"]
 ":address" = "Literal"
 METHOD = "GET"
 DOC = "Get balance by address. The address must be a hex encoded Ethereum address."
+
+[route.nonce]
+PATH = ["/nonce/:address"]
+":address" = "Literal"
+METHOD = "GET"
+DOC = "Get transfer nonce by address. The address must be a hex encoded Ethereum address."

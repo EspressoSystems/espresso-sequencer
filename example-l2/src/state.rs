@@ -143,6 +143,14 @@ impl State {
             .unwrap_or(0)
     }
 
+    /// Fetch the nonce of an address
+    pub fn get_nonce(&self, address: &Address) -> Nonce {
+        self.accounts
+            .get(address)
+            .map(|account| account.nonce)
+            .unwrap_or(0)
+    }
+
     pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
         let state_commitment = self.commit();
         for txn in block.block().vm_transactions(&RollupVM) {

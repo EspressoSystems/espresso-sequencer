@@ -3066,6 +3066,8 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "strum",
+ "strum_macros",
  "surf-disco 0.4.0",
  "tempfile",
  "tide-disco 0.4.0",
