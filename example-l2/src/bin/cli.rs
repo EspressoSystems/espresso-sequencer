@@ -14,15 +14,15 @@ use example_l2::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use surf_disco::Client;
-use tide_disco::error::ServerError;
+use tide_disco::{error::ServerError, Url};
 
 type RollupClient = Client<ServerError>;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
-    /// Port where the Rollup API is served
-    #[clap(short, long, env = "ESPRESSO_DEMO_ROLLUP_PORT", default_value = "8082")]
-    pub api_port: u16,
+    /// Url of the Rollup client
+    #[clap(short, long, default_value = "http://localhost:8082")]
+    pub rollup_url: Url,
 
     #[command(subcommand)]
     pub command: ExampleRollupCommand,
@@ -99,11 +99,11 @@ async fn check_balance(check_balance: &CheckBalance, client: &RollupClient) {
 
 #[async_std::main]
 async fn main() {
-    let Options { api_port, command } = Options::parse();
-    let api_url = format!("http://localhost:{}", api_port)
-        .parse()
-        .expect("Error constructing Example Rollup API url");
-    let client: RollupClient = Client::new(api_url);
+    let Options {
+        rollup_url,
+        command,
+    } = Options::parse();
+    let client: RollupClient = Client::new(rollup_url);
     let connected = client.connect(Some(Duration::from_secs(2))).await;
     if !connected {
         println!("Could not connect to the Rollup Client. Ensure that the client is running and that the supplied port is correct.");

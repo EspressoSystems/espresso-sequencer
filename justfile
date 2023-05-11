@@ -4,8 +4,8 @@ rollup-demo:
 rollup-demo-down:
     docker compose -f docker-compose-demo.yaml down
 
-rollup-cli:
-    docker exec -it espresso-sequencer-example-rollup-1 bin/cli
+rollup-cli *cmd:
+    docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
 
 update-contract-bindings:
     cargo run --bin gen-bindings
