@@ -78,7 +78,6 @@ services:
     # The way the foundry image handles arguments is strange, the double quotes
     # make it work here.
     command: "'anvil --host 0.0.0.0 --chain-id 1337'"
-
   example-rollup:
     image: ghcr.io/espressosystems/espresso-sequencer/example-rollup:main
     environment:

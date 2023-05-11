@@ -8,6 +8,7 @@ pub mod api;
 pub mod error;
 pub mod executor;
 mod prover;
+pub mod seed;
 pub mod state;
 pub mod transaction;
 pub mod utils;

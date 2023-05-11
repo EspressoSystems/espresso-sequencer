@@ -75,6 +75,21 @@ pub async fn serve(options: &APIOptions, state: Arc<RwLock<State>>) -> io::Resul
     })
     .map_err(error_mapper)?;
 
+    api.get("nonce", |req, state| {
+        async move {
+            let address_str = req.string_param("address")?;
+            let address = address_str.parse::<Address>().
+            map_err(|_| ServerError {
+                status: tide_disco::StatusCode::BadRequest,
+                message: "Malformed address. Ensure that the address is valid hex encoded Ethereum address.".into()
+            })?;
+            let nonce = state.get_nonce(&address);
+            Ok(nonce)
+        }
+        .boxed()
+    })
+    .map_err(error_mapper)?;
+
     app.register_module("rollup", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     app.serve(format!("0.0.0.0:{}", api_port)).await

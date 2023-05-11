@@ -6,6 +6,7 @@ use ethers::signers::{LocalWallet, Signer};
 use example_l2::{
     api::{serve, APIOptions},
     executor::{run_executor, ExecutorOptions},
+    seed::{SeedIdentity, INITIAL_BALANCE},
     state::State,
     utils::deploy_example_contracts,
     Options,
@@ -15,8 +16,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
 use std::sync::Arc;
-
-const GENESIS_BALANCE: u64 = 9999;
+use strum::IntoEnumIterator;
 
 #[async_std::main]
 async fn main() {
@@ -25,11 +25,12 @@ async fn main() {
 
     let opt = Options::parse();
 
-    let genesis = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
-    let state = Arc::new(RwLock::new(State::from_initial_balances([(
-        genesis.address(),
-        GENESIS_BALANCE,
-    )])));
+    let mut initial_balances = vec![];
+    for identity in SeedIdentity::iter() {
+        let address = LocalWallet::new(&mut ChaChaRng::seed_from_u64(identity as u64)).address();
+        initial_balances.push((address, INITIAL_BALANCE))
+    }
+    let state = Arc::new(RwLock::new(State::from_initial_balances(initial_balances)));
 
     let api_options = APIOptions {
         api_port: opt.api_port,
@@ -64,11 +65,6 @@ async fn main() {
     deploy_example_contracts(&opt.l1_provider, initial_state).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
-    tracing::info!(
-        "Address {:?} be seeded with {} dummy tokens",
-        genesis.address(),
-        GENESIS_BALANCE
-    );
     join!(
         run_executor(&executor_options, state.clone()),
         run_hotshot_commitment_task(&hotshot_contract_options),
