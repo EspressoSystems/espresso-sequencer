@@ -7,6 +7,9 @@ rollup-demo-down:
 rollup-cli *cmd:
     docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
 
+pull-rollup-demo:
+    docker compose -f docker-compose-demo.yaml pull
+
 update-contract-bindings:
     cargo run --bin gen-bindings
 
@@ -38,10 +41,3 @@ dev-demo:
 
 build-docker-images:
     scripts/build-docker-images
-
-solhint:
-    solhint --fix 'contracts/{script,src,test}/**/*.sol'
-
-fmt:
-    cargo fmt
-    prettier -w .
