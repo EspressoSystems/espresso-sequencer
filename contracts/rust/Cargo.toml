@@ -17,7 +17,7 @@ contract-bindings = { path = "../../contract-bindings" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.3", features = ["abigen"] }
 ethers-providers = "2.0.4"
-ethers-solc = "2.0.3"
+ethers-solc = "2.0.4"
 hex = "0.4.3"
 
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish" }
