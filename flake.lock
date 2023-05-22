@@ -410,11 +410,11 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1682517912,
-        "narHash": "sha256-lCysLw4UaJ3oFXHu3HXfIIowap3jHAzGUFZGUkuclWE=",
+        "lastModified": 1684763220,
+        "narHash": "sha256-ab4ZvNmiJ7v5mS1IhBgS3E3PGmeii1Wt3gM029z9xfs=",
         "owner": "EspressoSystems",
         "repo": "nix-solc-bin",
-        "rev": "df39689c66e5f2c41a60f99852c09ccbe88d3817",
+        "rev": "00868cfebdda3e3471386d3e5f35d1a55e57145f",
         "type": "github"
       },
       "original": {
