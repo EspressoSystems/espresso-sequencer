@@ -598,7 +598,6 @@ dependencies = [
  "ark-ff 0.4.2",
  "ark-std 0.4.0",
  "tracing",
- "tracing-subscriber 0.2.25",
 ]
 
 [[package]]
@@ -795,7 +794,7 @@ dependencies = [
  "futures",
  "tracing",
  "tracing-error",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1279,13 +1278,10 @@ dependencies = [
 [[package]]
 name = "blst"
 version = "0.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a30d0edd9dd1c60ddb42b80341c7852f6f985279a5c1a83659dcb65899dec99"
+source = "git+https://github.com/EspressoSystems/blst.git?branch=no-std#faefc7fcb21864aaf4f6f443636ce8924108fcbd"
 dependencies = [
  "cc",
  "glob",
- "threadpool",
- "which",
  "zeroize",
 ]
 
@@ -1827,7 +1823,7 @@ dependencies = [
  "hex",
  "serde_json",
  "tracing",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4335,7 +4331,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#483fb97324d42724720f9155f200973a3b83a7b4"
+source = "git+https://github.com/EspressoSystems/jellyfish#53403e2f33ca8b8cedb8733ccba3d300c4b4c613"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -4376,7 +4372,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#483fb97324d42724720f9155f200973a3b83a7b4"
+source = "git+https://github.com/EspressoSystems/jellyfish#53403e2f33ca8b8cedb8733ccba3d300c4b4c613"
 dependencies = [
  "ark-bls12-377 0.4.0",
  "ark-bls12-381 0.4.0",
@@ -4444,7 +4440,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#483fb97324d42724720f9155f200973a3b83a7b4"
+source = "git+https://github.com/EspressoSystems/jellyfish#53403e2f33ca8b8cedb8733ccba3d300c4b4c613"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -8211,15 +8207,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "threadpool"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
-dependencies = [
- "num_cpus",
-]
-
-[[package]]
 name = "tide"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8282,7 +8269,7 @@ dependencies = [
  "tracing-distributed",
  "tracing-futures",
  "tracing-log",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -8328,7 +8315,7 @@ dependencies = [
  "tracing-distributed",
  "tracing-futures",
  "tracing-log",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -8612,7 +8599,7 @@ dependencies = [
  "itertools 0.9.0",
  "tracing",
  "tracing-core",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -8622,7 +8609,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d686ec1c0f384b1277f097b2f279a2ecc11afe8c133c1aabf036a27cb4cd206e"
 dependencies = [
  "tracing",
- "tracing-subscriber 0.3.17",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -8653,15 +8640,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
 dependencies = [
  "serde",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-subscriber"
-version = "0.2.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
-dependencies = [
  "tracing-core",
 ]
 
