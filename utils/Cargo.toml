@@ -8,7 +8,7 @@ edition = "2021"
 ark-serialize = { version = "0.3.0", features = ["derive"] }
 async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
-ethers = "2.0.3"
+ethers = "2.0.4"
 portpicker = "0.1.1"
 surf = "2.3.2"
 tempfile = "3.4.0"
