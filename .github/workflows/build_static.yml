@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v20
+        uses: cachix/install-nix-action@v21
 
       - uses: cachix/cachix-action@v12
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
