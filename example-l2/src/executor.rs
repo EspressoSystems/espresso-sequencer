@@ -161,7 +161,7 @@ mod test {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::api::SequencerNode;
-    use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
+    use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
     use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
     use sequencer::transaction::SequencerTransaction;
     use sequencer::Vm;
@@ -237,13 +237,13 @@ mod test {
             .unwrap();
 
         // Spawn hotshot commitment and executor tasks
-        let hotshot_opt = HotShotContractOptions {
+        let hotshot_opt = CommitmentTaskOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
             sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
-            query_service_url: sequencer_url.clone(),
+            query_service_url: Some(sequencer_url.clone()),
         };
 
         let rollup_opt = ExecutorOptions {
@@ -334,13 +334,13 @@ mod test {
             .unwrap();
 
         // Spawn hotshot commitment and executor tasks
-        let hotshot_opt = HotShotContractOptions {
+        let hotshot_opt = CommitmentTaskOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
             sequencer_account_index: clients.funded[0].index,
             hotshot_address: hotshot_contract.address(),
             l1_chain_id: None,
-            query_service_url: sequencer_url.clone(),
+            query_service_url: Some(sequencer_url.clone()),
         };
 
         let rollup_opt = ExecutorOptions {

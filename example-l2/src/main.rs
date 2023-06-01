@@ -14,7 +14,7 @@ use example_l2::{
 use futures::join;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, HotShotContractOptions};
+use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -46,13 +46,13 @@ async fn main() {
         sequencer_url: opt.sequencer_url.clone(),
     };
 
-    let hotshot_contract_options = HotShotContractOptions {
+    let hotshot_contract_options = CommitmentTaskOptions {
         hotshot_address: opt.hotshot_address,
         l1_chain_id: None,
         l1_provider: opt.l1_provider.clone(),
         sequencer_mnemonic: opt.rollup_mnemonic,
         sequencer_account_index: opt.hotshot_account_index,
-        query_service_url: opt.sequencer_url,
+        query_service_url: Some(opt.sequencer_url),
     };
 
     let serve_api = async {

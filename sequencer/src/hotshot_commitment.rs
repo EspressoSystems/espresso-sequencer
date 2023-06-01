@@ -17,7 +17,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
 #[derive(Args, Clone, Debug)]
-pub struct HotShotContractOptions {
+pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider: Url,
@@ -51,19 +51,27 @@ pub struct HotShotContractOptions {
 
     /// URL of HotShot Query Service
     ///
-    /// If unspecified, defaults to the query service internal to the sequencer process.
-    pub query_service_url: Url,
+    /// Even though this is an Option type it *must* currently be set when
+    /// passing the options to `run_hotshot_commitment_task`.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_QUERY_SERVICE_URL")]
+    pub query_service_url: Option<Url>,
 }
 
-pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
-    let query_service_url = opt.query_service_url.join("availability").unwrap();
+pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
+    let query_service_url = opt
+        .query_service_url
+        .clone()
+        .expect("query service URL must be specified")
+        .join("availability")
+        .unwrap();
+
     let hotshot = HotShotClient::new(query_service_url);
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt).await else {
-        tracing::error!("unable to connect to L1, hotshot commitment task exiting");
-        return;
+        panic!("unable to connect to L1, hotshot commitment task exiting");
+
     };
     let contract = HotShot::new(opt.hotshot_address, l1.clone());
 
@@ -72,8 +80,7 @@ pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
         Ok(from) => from.as_u64(),
         Err(err) => {
             tracing::error!("unable to read block_height from contract: {}", err);
-            tracing::error!("hotshot commitment task will exit");
-            return;
+            panic!("hotshot commitment task will exit");
         }
     };
     tracing::info!("last block sequenced: {}", from);
@@ -83,8 +90,7 @@ pub async fn run_hotshot_commitment_task(opt: &HotShotContractOptions) {
         Ok(max) => max.as_u64(),
         Err(err) => {
             tracing::error!("unable to read max_blocks from contract: {}", err);
-            tracing::error!("hotshot commitment task will exit");
-            return;
+            panic!("hotshot commitment task will exit");
         }
     };
     sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
@@ -181,7 +187,7 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
     }
 }
 
-pub async fn connect_l1(opt: &HotShotContractOptions) -> Option<Arc<Middleware>> {
+pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> {
     connect_rpc(
         &opt.l1_provider,
         &opt.sequencer_mnemonic,

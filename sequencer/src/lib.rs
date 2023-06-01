@@ -24,7 +24,7 @@ use hotshot::{
     types::{HotShotHandle, Message, SignatureKey},
     HotShot, HotShotInitializer,
 };
-use hotshot_commitment::HotShotContractOptions;
+use hotshot_commitment::CommitmentTaskOptions;
 use hotshot_types::{
     data::{CommitmentProposal, DAProposal, SequencingLeaf, ViewNumber},
     traits::{
@@ -79,12 +79,12 @@ pub struct Options {
 
     /// If specified, the sequencer will post hotshot commitments to the L1
     #[command(subcommand)]
-    pub hotshot_contract_options: Option<HotShotContractCommand>,
+    pub hotshot_contract_options: Option<SubCommand>,
 }
 
 #[derive(Subcommand, Clone, Debug)]
-pub enum HotShotContractCommand {
-    HotShotContractOptions(HotShotContractOptions),
+pub enum SubCommand {
+    CommitmentTask(CommitmentTaskOptions),
 }
 
 pub mod network {

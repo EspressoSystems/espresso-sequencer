@@ -5,7 +5,7 @@ use hotshot_query_service::data_source::QueryData;
 use sequencer::{
     api::{serve, HandleFromMetrics, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, ChainVariables, GenesisTransaction, HotShotContractCommand, Options,
+    init_node, Block, ChainVariables, GenesisTransaction, Options, SubCommand,
 };
 use std::{net::ToSocketAddrs, path::Path};
 
@@ -50,7 +50,7 @@ async fn main() {
     let SequencerNode {
         handle,
         update_task,
-        node_index,
+        ..
     } = serve(query_data, init_handle, opt.port)
         .await
         .expect("Failed to initialize API");
@@ -63,14 +63,18 @@ async fn main() {
         update_task.await.expect("Error in API server");
     };
 
-    if let (Some(HotShotContractCommand::HotShotContractOptions(hotshot_contract_options)), 0) =
-        (opt.hotshot_contract_options, node_index)
+    if let Some(SubCommand::CommitmentTask(hotshot_contract_options)) = opt.hotshot_contract_options
     {
-        join!(
-            run_sequencer,
-            run_hotshot_commitment_task(&hotshot_contract_options)
-        );
+        let mut options = hotshot_contract_options;
+        // If no query service is specified, use the one of this node.
+        if options.query_service_url.is_none() {
+            options.query_service_url =
+                Some(format!("http://localhost:{}", opt.port).parse().unwrap());
+        }
+        tracing::info!("Starting consensus and HotShot commitment task");
+        join!(run_sequencer, run_hotshot_commitment_task(&options));
     } else {
+        tracing::info!("Starting consensus");
         run_sequencer.await;
     }
 }
