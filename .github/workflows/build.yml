@@ -51,5 +51,5 @@ jobs:
       - name: Test
         run: |
           cargo test --release --workspace --all-features --no-run
-          cargo test --release --workspace --all-features --verbose -- -Zunstable-options --report-time --test-threads 1 --nocapture
+          cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
         timeout-minutes: 30
