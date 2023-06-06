@@ -22,19 +22,13 @@
 
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
-  inputs.fenix.url = "github:nix-community/fenix";
-  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.flake-utils.follows = "flake-utils";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = { self, nixpkgs, flake-utils, flake-compat, rust-overlay, fenix, pre-commit-hooks, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, pre-commit-hooks, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        info = builtins.split "\([a-zA-Z0-9_]+\)" system;
-        arch = (builtins.elemAt (builtins.elemAt info 1) 0);
-        os = (builtins.elemAt (builtins.elemAt info 3) 0);
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
         rustToolchain = pkgs.rust-bin.stable.latest.minimal.override {
@@ -159,7 +153,7 @@
             + self.checks.${system}.pre-commit-check.shellHook;
           buildInputs = with pkgs;
             [
-              fenix.packages.${system}.rust-analyzer
+              rust-bin.nightly.latest.rust-analyzer
               nixWithFlakes
               nixpkgs-fmt
               git
