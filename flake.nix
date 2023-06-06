@@ -108,7 +108,7 @@
               cargo-sort = {
                 enable = true;
                 description = "Ensure Cargo.toml are sorted";
-                entry = "cargo sort -g -w -c";
+                entry = "cargo sort -g -w";
                 pass_filenames = false;
               };
               cargo-clippy = {

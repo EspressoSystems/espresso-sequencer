@@ -12,7 +12,7 @@
 
 use async_std::sync::Arc;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use derive_more::{Index, IndexMut};
+use derive_more::{Display, Index, IndexMut};
 use hotshot::{
     traits::{
         election::static_committee::{
@@ -25,12 +25,14 @@ use hotshot::{
 };
 use hotshot_types::{
     data::{ValidatingLeaf, ValidatingProposal, ViewNumber},
+    message::ValidatingMessage,
     traits::{
         block_contents::Transaction,
+        consensus_type::validating_consensus::ValidatingConsensus,
         election::QuorumExchange,
-        node_implementation::NodeType,
+        node_implementation::{NodeType, ValidatingExchanges},
         signature_key::ed25519::Ed25519Pub,
-        state::{State, TestableBlock, TestableState, ValidatingConsensus},
+        state::{State, TestableBlock, TestableState},
     },
     vote::QuorumVote,
 };
@@ -69,7 +71,8 @@ impl Committable for MockTransaction {
 
 impl Transaction for MockTransaction {}
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[display(fmt = "{:?}", self)]
 pub struct MockState {
     pub last_block: Commitment<MockBlock>,
     pub spent: Arc<BTreeSet<u64>>,
@@ -118,8 +121,12 @@ impl State for MockState {
     type BlockType = MockBlock;
     type Time = ViewNumber;
 
-    fn next_block(&self) -> Self::BlockType {
-        MockBlock::new(self.last_block)
+    fn next_block(prev_commitment: Option<Self>) -> Self::BlockType {
+        MockBlock::new(
+            prev_commitment
+                .expect("No previous state commitment")
+                .last_block,
+        )
     }
 
     fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
@@ -164,7 +171,8 @@ impl TestableState for MockState {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Index, IndexMut)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Display, Index, IndexMut)]
+#[display(fmt = "{:?}", self)]
 pub struct MockBlock {
     pub parent: Commitment<MockBlock>,
     #[index]
@@ -290,13 +298,17 @@ pub struct MockNodeImpl;
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes, Self::Leaf>;
     type Leaf = MockLeaf;
-    type QuorumExchange = QuorumExchange<
+    type ConsensusMessage = ValidatingMessage<MockTypes, Self>;
+    type Exchanges = ValidatingExchanges<
         MockTypes,
-        Self::Leaf,
-        MockProposal,
-        MockMembership,
-        MockNetwork,
         Message<MockTypes, Self>,
+        QuorumExchange<
+            MockTypes,
+            Self::Leaf,
+            MockProposal,
+            MockMembership,
+            MockNetwork,
+            Message<MockTypes, Self>,
+        >,
     >;
-    type CommitteeExchange = Self::QuorumExchange;
 }
