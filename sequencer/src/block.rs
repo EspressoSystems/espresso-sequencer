@@ -8,7 +8,7 @@ use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_types::traits::state::TestableBlock;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
@@ -52,6 +52,14 @@ impl TestableBlock for Block {
 
     fn txn_count(&self) -> u64 {
         self.transactions.len() as u64
+    }
+}
+
+// Required for TestableBlock
+#[cfg(any(test, feature = "testing"))]
+impl Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
     }
 }
 

@@ -9,7 +9,10 @@ use hotshot_types::{
     traits::state::{ConsensusTime, TestableState},
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, ops::Deref};
+use std::{
+    fmt::{Debug, Display},
+    ops::Deref,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct State {
@@ -77,8 +80,11 @@ impl HotShotState for State {
 
     type Time = ViewNumber;
 
-    fn next_block(&self) -> Self::BlockType {
-        Block::next(self.commit())
+    fn next_block(prev_state: Option<Self>) -> Self::BlockType {
+        match prev_state {
+            Some(state) => Block::next(state.commit()),
+            None => Block::genesis(Default::default()), // TODO: Is this correct?
+        }
     }
 
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
@@ -105,6 +111,14 @@ impl HotShotState for State {
     }
 
     fn on_commit(&self) {}
+}
+
+// Required for TestableState
+#[cfg(any(test, feature = "testing"))]
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

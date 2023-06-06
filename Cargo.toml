@@ -8,3 +8,14 @@ members = [
   "sequencer",
   "utils",
 ]
+
+# TODO: remove this
+[patch."https://github.com/EspressoSystems/hotshot"]
+# hotshot = { git = "../hotshot" }
+# hotshot-centralized-server = { path = "../hotshot/centralized_server" }
+# hotshot-testing = { path = "../hotshot/testing" }
+# hotshot-types = { path = "../hotshot/types" }
+hotshot = { git = "https://github.com/EspressoSystems//hotshot", rev = "b38b44ae488af497111201306d198f6f39d59f8f" }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems//hotshot", rev = "b38b44ae488af497111201306d198f6f39d59f8f" }
+hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", rev = "b38b44ae488af497111201306d198f6f39d59f8f" }
+hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", rev = "b38b44ae488af497111201306d198f6f39d59f8f" }
