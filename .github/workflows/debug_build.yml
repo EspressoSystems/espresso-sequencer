@@ -38,5 +38,5 @@ jobs:
       - name: Test
         run: |
           cargo test --workspace --all-features --no-run
-          cargo test --workspace --all-features --verbose -- -Zunstable-options --report-time --test-threads 2
+          cargo test --workspace --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
