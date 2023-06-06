@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.0.1", features = ["logging-utils", "async-std-executor", "channel-async-std"] }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0", features = ["logging-utils", "async-std-executor", "channel-async-std"] }
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1.63"
 ethers = { version = "2.0.4", features = ["abigen"] }
