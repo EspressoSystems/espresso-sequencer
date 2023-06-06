@@ -14,6 +14,8 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - uses: styfle/cancel-workflow-action@0.9.1
         name: Cancel Outdated Builds
         with:
@@ -38,5 +40,5 @@ jobs:
       - name: Test
         run: |
           cargo test --workspace --all-features --no-run
-          cargo test --workspace --all-features --verbose -- -Zunstable-options --report-time --test-threads 2
+          cargo test --workspace --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
