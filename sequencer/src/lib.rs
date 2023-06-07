@@ -250,21 +250,6 @@ where
     .unwrap();
     let metrics = Box::<NoMetrics>::default();
 
-    // let quorum_exchange = QuorumExchange::create(
-    //     nodes_pub_keys.clone(),
-    //     ElectionConfig {},
-    //     quorum_channel,
-    //     public_key.clone(),
-    //     private_key.clone(),
-    // );
-
-    // let committee_exchange = CommitteeExchange::create(
-    //     nodes_pub_keys,
-    //     ElectionConfig {},
-    //     da_channel,
-    //     public_key.clone(),
-    //     private_key.clone(),
-    // );
     // TODO: use a proper key
     let enc_key = jf_primitives::aead::KeyPair::generate(&mut StdRng::seed_from_u64(0u64));
 
