@@ -44,4 +44,4 @@ jobs:
         run: nix-shell --run "echo Success"
 
       - name: "Sanity Check: nix environment builds all targets"
-        run: nix-shell --run "cargo build --all-targets --release --workspace"
+        run: nix-shell --run "cargo build --all-targets --all-features --release --workspace"
