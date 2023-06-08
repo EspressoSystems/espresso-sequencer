@@ -228,6 +228,7 @@ mod test {
         transaction::{SequencerTransaction, Transaction},
         vm::VmId,
     };
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::FutureExt;
     use hotshot_query_service::data_source::QueryData;
     use hotshot_types::traits::metrics::Metrics;
@@ -242,6 +243,9 @@ mod test {
 
     #[async_std::test]
     async fn submit_test() {
+        setup_logging();
+        setup_backtrace();
+
         let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");

@@ -18,10 +18,7 @@ async fn main() {
 
     // Create genesis block.
     let genesis = Block::genesis(GenesisTransaction {
-        chain_variables: ChainVariables::new(
-            opt.chain_id,
-            0, // committee_size, unused
-        ),
+        chain_variables: ChainVariables::new(opt.chain_id),
     });
 
     let cdn_addr = (

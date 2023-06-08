@@ -457,9 +457,11 @@ mod test {
         transaction::{ApplicationTransaction, Transaction},
         vm::{TestVm, Vm},
     };
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use core::panic;
     use either::Either;
     use hotshot::types::{Event, EventType::Decide};
+    use hotshot_testing::test_builder::{TestBuilder, TestMetadata};
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Submit transaction to given handle, return clone of transaction
@@ -480,23 +482,45 @@ mod test {
         tx
     }
 
-    // TODO: `GeneralTestDescriptionBuilder` is currently commented out in hotshot.
-    // // Run a hotshot test with our types
-    // #[async_std::test]
-    // async fn general_hotshot_test() {
-    //     let builder = GeneralTestDescriptionBuilder {
-    //         num_succeeds: 3,
-    //         ..Default::default()
-    //     };
-    //     builder
-    //         .build::<SeqTypes, Node<network::Memory>>()
-    //         .execute()
-    //         .await
-    //         .unwrap();
-    // }
+    // Run a hotshot test with our types
+    //
+    // When run with other tests, this one fails with
+    //
+    // Message:  failed to set global default subscriber: SetGlobalDefaultError("a global default trace dispatcher has already been set")
+    // Location: ../tracing-subscriber-0.3.17/src/util.rs:91
+    //
+    // This happens when `run_test` calls `setup_logging`.
+    //
+    // The test passes if it's run by itself.
+    #[ignore]
+    #[async_std::test]
+    async fn hotshot_test() {
+        let builder = TestBuilder {
+            metadata: TestMetadata {
+                total_nodes: 10,
+                start_nodes: 10,
+                num_succeeds: 10,
+                min_transactions: 1,
+                failure_threshold: 3,
+                da_committee_size: 4,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        builder
+            .build::<SeqTypes, Node<network::Memory>>()
+            .launch()
+            .run_test()
+            .await
+            .unwrap();
+    }
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
+        setup_logging();
+        setup_backtrace();
+
         let mut handles = init_hotshot_handles().await;
         for handle in handles.iter() {
             handle.start().await;

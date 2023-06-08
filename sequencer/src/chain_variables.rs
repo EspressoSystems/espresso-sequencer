@@ -14,27 +14,19 @@ pub struct ChainVariables {
     ///
     /// The chain ID is set at genesis and never changes.
     pub chain_id: u16,
-
-    // TODO: MA: this is currently not used anywhere.
-    /// Committee size
-    pub committee_size: u64,
 }
 
 impl Default for ChainVariables {
     fn default() -> Self {
         Self::new(
             35353, // Arbitrarily chosen.
-            3,     // Arbitrarily chosen.
         )
     }
 }
 
 impl ChainVariables {
-    pub fn new(chain_id: u16, committee_size: u64) -> Self {
-        Self {
-            chain_id,
-            committee_size,
-        }
+    pub fn new(chain_id: u16) -> Self {
+        Self { chain_id }
     }
 }
 
@@ -42,7 +34,6 @@ impl Committable for ChainVariables {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("ChainVariables")
             .u64_field("chain_id", self.chain_id as u64)
-            .u64_field("committee_size", self.committee_size)
             .finalize()
     }
 }
