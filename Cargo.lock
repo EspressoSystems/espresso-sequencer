@@ -143,7 +143,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
 dependencies = [
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "once_cell",
  "version_check",
 ]
@@ -735,7 +735,7 @@ dependencies = [
  "num-traits",
  "rusticata-macros",
  "thiserror",
- "time 0.3.21",
+ "time 0.3.22",
 ]
 
 [[package]]
@@ -1571,7 +1571,7 @@ dependencies = [
  "bs58",
  "coins-core",
  "digest 0.10.7",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "hmac 0.12.1",
  "k256",
  "lazy_static",
@@ -1588,7 +1588,7 @@ checksum = "84f4d04ee18e58356accd644896aeb2094ddeafb6a713e056cef0c0a8e468c15"
 dependencies = [
  "bitvec 0.17.4",
  "coins-bip32",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "hmac 0.12.1",
  "once_cell",
  "pbkdf2 0.12.1",
@@ -2413,7 +2413,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a3d382e8464107391c8706b4c14b087808ecb909f6c15c34114bc42e53a9e4c"
 dependencies = [
  "ct-codecs",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
 ]
 
 [[package]]
@@ -3206,9 +3206,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c85e1d9ab2eadba7e5040d4e09cbd6d072b76a557ad64e797c2cb9d4da21d7e4"
+checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -3451,7 +3451,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "ark-ec 0.3.0",
@@ -3477,7 +3477,7 @@ dependencies = [
  "hotshot-consensus",
  "hotshot-orchestrator",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "hotshot-web-server",
  "itertools 0.10.5",
  "jf-primitives 0.1.3",
@@ -3492,14 +3492,14 @@ dependencies = [
  "serde",
  "snafu",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?branch=main)",
- "time 0.3.21",
+ "time 0.3.22",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
  "async-std",
@@ -3508,7 +3508,7 @@ dependencies = [
  "commit",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "libp2p-core",
  "libp2p-identity",
  "serde",
@@ -3521,7 +3521,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
  "async-lock",
@@ -3534,16 +3534,16 @@ dependencies = [
  "either",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "snafu",
- "time 0.3.21",
+ "time 0.3.22",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
  "async-lock",
@@ -3553,7 +3553,7 @@ dependencies = [
  "clap 4.3.2",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "libp2p",
  "libp2p-core",
  "libp2p-networking",
@@ -3584,7 +3584,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot)",
+ "hotshot-utils",
  "itertools 0.10.5",
  "prometheus",
  "serde",
@@ -3598,7 +3598,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
@@ -3611,7 +3611,7 @@ dependencies = [
  "hotshot",
  "hotshot-consensus",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "jf-primitives 0.1.3",
  "nll",
  "rand 0.8.5",
@@ -3624,7 +3624,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
@@ -3642,7 +3642,7 @@ dependencies = [
  "espresso-systems-common 0.4.1",
  "futures",
  "hex_fmt",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "jf-primitives 0.1.3",
  "libp2p-networking",
  "nll",
@@ -3650,22 +3650,14 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64 0.2.4",
- "time 0.3.21",
+ "time 0.3.22",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
-dependencies = [
- "bincode",
-]
-
-[[package]]
-name = "hotshot-utils"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#d4cee670a849b04169080e64882a855210572297"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "bincode",
 ]
@@ -3673,7 +3665,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
@@ -3683,7 +3675,7 @@ dependencies = [
  "clap 4.3.2",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "jf-primitives 0.1.3",
  "libp2p-core",
  "nll",
@@ -3833,9 +3825,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.56"
+version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0722cd7114b7de04316e7ea5456a0bbb20e4adb46fd27a3697adb812cff0f37c"
+checksum = "2fad5b825842d2b38bd206f3e81d6957625fd7f0a361e345c30e01a0ae2dd613"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -4432,7 +4424,7 @@ dependencies = [
  "bytes 1.4.0",
  "futures",
  "futures-timer",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "instant",
  "libp2p-allow-block-list",
  "libp2p-autonat",
@@ -4749,7 +4741,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f#b38b44ae488af497111201306d198f6f39d59f8f"
+source = "git+https://github.com/EspressoSystems/hotshot#f320ce2d7a7877533864cafe0ef1e4de91505ea3"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.2.0)",
  "async-lock",
@@ -4762,7 +4754,7 @@ dependencies = [
  "derive_builder",
  "either",
  "futures",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?rev=b38b44ae488af497111201306d198f6f39d59f8f)",
+ "hotshot-utils",
  "libp2p",
  "libp2p-identity",
  "libp2p-noise",
@@ -5787,7 +5779,7 @@ dependencies = [
  "libc",
  "redox_syscall 0.3.5",
  "smallvec",
- "windows-targets 0.48.0",
+ "windows-targets",
 ]
 
 [[package]]
@@ -6212,9 +6204,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.59"
+version = "1.0.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aeca18b86b413c660b781aa319e4e2648a3e6f9eadc9b47e9038e6fe9f3451b"
+checksum = "dec2b086b7a862cf4de201096214fa870344cf922b2b30c167badb3af3195406"
 dependencies = [
  "unicode-ident",
 ]
@@ -6400,7 +6392,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
 ]
 
 [[package]]
@@ -6442,7 +6434,7 @@ checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
 dependencies = [
  "pem",
  "ring",
- "time 0.3.21",
+ "time 0.3.22",
  "yasna",
 ]
 
@@ -6470,7 +6462,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "redox_syscall 0.2.16",
  "thiserror",
 ]
@@ -7000,9 +6992,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.163"
+version = "1.0.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2113ab51b87a539ae008b5c6c02dc020ffa39afd2d83cffcb3f4eb2722cebec2"
+checksum = "9e8c8cf938e98f769bc164923b06dce91cea1751522f46f8466461af04c9027d"
 dependencies = [
  "serde_derive",
 ]
@@ -7018,9 +7010,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.163"
+version = "1.0.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c805777e3930c8883389c602315a24224bcc738b63905ef87cd1420353ea93e"
+checksum = "d9735b638ccc51c28bf6914d90a2e9725b377144fc612c49a611fddd1b631d68"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7092,7 +7084,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with_macros",
- "time 0.3.21",
+ "time 0.3.22",
 ]
 
 [[package]]
@@ -7601,7 +7593,7 @@ dependencies = [
  "cfg-if",
  "encoding_rs",
  "futures-util",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "http-client",
  "http-types",
  "log",
@@ -7878,15 +7870,16 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.5.0"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9fbec84f381d5795b08656e4912bec604d162bff9291d6189a78f4c8ab87998"
+checksum = "31c0432476357e58790aaa47a8efb0c5138f137343f3b5f23bd36a27e3b0a6d6"
 dependencies = [
+ "autocfg",
  "cfg-if",
  "fastrand",
  "redox_syscall 0.3.5",
  "rustix",
- "windows-sys 0.45.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -8096,9 +8089,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.21"
+version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3403384eaacbca9923fa06940178ac13e4edb725486d70e8e15881d0c836cc"
+checksum = "ea9e1b3cf1243ae005d9e74085d4d542f3125458f3a81af210d901dcd7411efd"
 dependencies = [
  "itoa 1.0.6",
  "serde",
@@ -8649,7 +8642,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "serde",
 ]
 
@@ -8945,7 +8938,7 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e686886bc078bc1b0b600cac0147aadb815089b6e4da64016cbd754b6342700f"
 dependencies = [
- "windows-targets 0.48.0",
+ "windows-targets",
 ]
 
 [[package]]
@@ -8965,35 +8958,11 @@ dependencies = [
 
 [[package]]
 name = "windows-sys"
-version = "0.45.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75283be5efb2831d37ea142365f009c02ec203cd29a3ebecbc093d52315b66d0"
-dependencies = [
- "windows-targets 0.42.2",
-]
-
-[[package]]
-name = "windows-sys"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9"
 dependencies = [
- "windows-targets 0.48.0",
-]
-
-[[package]]
-name = "windows-targets"
-version = "0.42.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e5180c00cd44c9b1c88adb3693291f1cd93605ded80c250a75d472756b4d071"
-dependencies = [
- "windows_aarch64_gnullvm 0.42.2",
- "windows_aarch64_msvc 0.42.2",
- "windows_i686_gnu 0.42.2",
- "windows_i686_msvc 0.42.2",
- "windows_x86_64_gnu 0.42.2",
- "windows_x86_64_gnullvm 0.42.2",
- "windows_x86_64_msvc 0.42.2",
+ "windows-targets",
 ]
 
 [[package]]
@@ -9207,7 +9176,7 @@ dependencies = [
  "oid-registry",
  "rusticata-macros",
  "thiserror",
- "time 0.3.21",
+ "time 0.3.22",
 ]
 
 [[package]]
@@ -9258,7 +9227,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
- "time 0.3.21",
+ "time 0.3.22",
 ]
 
 [[package]]
@@ -9297,7 +9266,7 @@ dependencies = [
  "hmac 0.12.1",
  "pbkdf2 0.11.0",
  "sha1 0.10.5",
- "time 0.3.21",
+ "time 0.3.22",
  "zstd",
 ]
 
