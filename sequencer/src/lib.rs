@@ -39,7 +39,7 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use jf_primitives::signatures::BLSSignatureScheme;
+use jf_primitives::{aead::KeyPair, signatures::BLSSignatureScheme};
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -227,21 +227,19 @@ pub enum Error {
 type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
+#[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
-    private_key: PrivKey,
+    priv_key: PrivKey,
+    enc_key: KeyPair,
     da_channel: N::DAChannel<Node<N>>,
     quorum_channel: N::QuorumChannel<Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
-) -> HotShotHandle<SeqTypes, Node<N>>
-where
-    <N as network::Type>::QuorumChannel<Node<N>>: Debug,
-    <N as network::Type>::DAChannel<Node<N>>: Debug,
-{
+) -> HotShotHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
-    let public_key = PubKey::from_private(&private_key);
+    let public_key = PubKey::from_private(&priv_key);
 
     let storage = Storage::empty();
     let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
@@ -250,21 +248,18 @@ where
     .unwrap();
     let metrics = Box::<NoMetrics>::default();
 
-    // TODO: use a proper key
-    let enc_key = jf_primitives::aead::KeyPair::generate(&mut StdRng::seed_from_u64(0u64));
-
     let exchanges = SequencingExchanges::create(
         nodes_pub_keys.clone(),
         StaticElectionConfig {},
         (quorum_channel, da_channel),
         public_key.clone(),
-        private_key.clone(),
+        priv_key.clone(),
         enc_key,
     );
 
     HotShot::init(
         public_key,
-        private_key,
+        priv_key,
         node_id as u64,
         config,
         storage,
@@ -286,11 +281,14 @@ pub async fn init_node(
     let da_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
     let quorum_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
 
-    // Generate public keys and this node's private key.
+    // Generate public keys and this node's private keys.
+    //
+    // These are deterministic keys suitable *only* for testing and demo purposes.
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let sk = priv_keys[config.node_index as usize].clone();
+    let priv_key = priv_keys[config.node_index as usize].clone();
+    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
 
     // Wait for other nodes to connect.
     while !networking.run_ready() {
@@ -308,7 +306,8 @@ pub async fn init_node(
             pub_keys,
             genesis_block,
             config.node_index as usize,
-            sk,
+            priv_key,
+            enc_key,
             da_channel,
             quorum_channel,
             config.config,
@@ -343,13 +342,18 @@ pub mod testing {
 
         // Generate keys for the nodes.
         let nodes_key_pairs = (0..num_nodes)
-            .map(|_| SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap())
+            .map(|_| {
+                (
+                    SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap(),
+                    KeyPair::generate(&mut thread_rng()),
+                )
+            })
             .collect::<Vec<_>>();
 
         // Convert public keys to JfPubKey
         let nodes_pub_keys: Vec<PubKey> = nodes_key_pairs
             .iter()
-            .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
+            .map(|((_, ver_key), _)| JfPubKey::from_native(ver_key.clone()))
             .collect::<Vec<_>>();
 
         let mut handles = vec![];
@@ -374,8 +378,8 @@ pub mod testing {
         };
 
         // Create HotShot instances.
-        for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
-            let private_key = (sign_key.clone(), ver_key.clone());
+        for (node_id, ((sign_key, ver_key), enc_key)) in nodes_key_pairs.iter().enumerate() {
+            let priv_key = (sign_key.clone(), ver_key.clone());
             let public_key = JfPubKey::from_native(ver_key.clone());
 
             let network = MemoryNetwork::new(
@@ -392,7 +396,8 @@ pub mod testing {
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
-                private_key,
+                priv_key,
+                enc_key.clone(),
                 da_channel,
                 quorum_channel,
                 config.clone(),
