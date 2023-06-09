@@ -16,6 +16,8 @@ pkgs.mkShell rec {
     # Crate dependencies
     cargoDeps.openssl-sys
     protobuf # required by libp2p
+
+    openssh
   ];
   # Libraries essential to build the service binaries
   buildInputs = with pkgs; [

@@ -26,26 +26,28 @@ use hotshot::{
 };
 use hotshot_commitment::CommitmentTaskOptions;
 use hotshot_types::{
-    data::{CommitmentProposal, DAProposal, SequencingLeaf, ViewNumber},
+    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
+    message::SequencingMessage,
     traits::{
-        election::{CommitteeExchange, ConsensusExchange, QuorumExchange},
+        consensus_type::sequencing_consensus::SequencingConsensus,
+        election::{CommitteeExchange, QuorumExchange},
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
-        node_implementation::NodeType,
-        state::SequencingConsensus,
+        node_implementation::{ExchangesType, NodeType, SequencingExchanges},
     },
     vote::{DAVote, QuorumVote},
     HotShotConfig,
 };
 
-use jf_primitives::signatures::BLSSignatureScheme;
+use jf_primitives::{aead::KeyPair, signatures::BLSSignatureScheme};
+use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::{fmt::Debug, sync::Arc};
 use transaction::SequencerTransaction;
 use url::Url;
 
@@ -101,7 +103,7 @@ pub mod network {
         type QuorumChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
             SeqTypes,
             Message<SeqTypes, I>,
-            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumProposal<SeqTypes, Leaf>,
             QuorumVote<SeqTypes, Leaf>,
             Membership,
         >;
@@ -121,7 +123,7 @@ pub mod network {
         type QuorumChannel<I: NodeImplementation<SeqTypes>> = CentralizedCommChannel<
             SeqTypes,
             I,
-            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumProposal<SeqTypes, Leaf>,
             QuorumVote<SeqTypes, Leaf>,
             Membership,
         >;
@@ -141,7 +143,7 @@ pub mod network {
         type QuorumChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
             SeqTypes,
             I,
-            CommitmentProposal<SeqTypes, Leaf>,
+            QuorumProposal<SeqTypes, Leaf>,
             QuorumVote<SeqTypes, Leaf>,
             Membership,
         >;
@@ -149,7 +151,7 @@ pub mod network {
 }
 
 /// The Sequencer node is generic over the hotshot CommChannel.
-#[derive(Derivative)]
+#[derive(Derivative, Serialize, Deserialize)]
 #[derivative(
     Clone(bound = ""),
     Copy(bound = ""),
@@ -175,16 +177,20 @@ type ElectionConfig = StaticElectionConfig;
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
     type Leaf = Leaf;
     type Storage = Storage;
-    type QuorumExchange = QuorumExchange<
+    type ConsensusMessage = SequencingMessage<SeqTypes, Self>;
+    type Exchanges = SequencingExchanges<
         SeqTypes,
-        Leaf,
-        CommitmentProposal<SeqTypes, Leaf>,
-        Membership,
-        N::QuorumChannel<Self>,
         Message<SeqTypes, Self>,
+        QuorumExchange<
+            SeqTypes,
+            Leaf,
+            QuorumProposal<SeqTypes, Leaf>,
+            Membership,
+            N::QuorumChannel<Self>,
+            Message<SeqTypes, Self>,
+        >,
+        CommitteeExchange<SeqTypes, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>,
     >;
-    type CommitteeExchange =
-        CommitteeExchange<SeqTypes, Leaf, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>;
 }
 
 impl NodeType for SeqTypes {
@@ -221,17 +227,19 @@ pub enum Error {
 type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
+#[allow(clippy::too_many_arguments)]
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
-    private_key: PrivKey,
+    priv_key: PrivKey,
+    enc_key: KeyPair,
     da_channel: N::DAChannel<Node<N>>,
     quorum_channel: N::QuorumChannel<Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
 ) -> HotShotHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
-    let public_key = PubKey::from_private(&private_key);
+    let public_key = PubKey::from_private(&priv_key);
 
     let storage = Storage::empty();
     let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
@@ -240,30 +248,22 @@ async fn init_hotshot<N: network::Type>(
     .unwrap();
     let metrics = Box::<NoMetrics>::default();
 
-    let quorum_exchange = QuorumExchange::create(
+    let exchanges = SequencingExchanges::create(
         nodes_pub_keys.clone(),
-        ElectionConfig {},
-        quorum_channel,
+        StaticElectionConfig {},
+        (quorum_channel, da_channel),
         public_key.clone(),
-        private_key.clone(),
-    );
-
-    let committee_exchange = CommitteeExchange::create(
-        nodes_pub_keys,
-        ElectionConfig {},
-        da_channel,
-        public_key.clone(),
-        private_key.clone(),
+        priv_key.clone(),
+        enc_key,
     );
 
     HotShot::init(
         public_key,
-        private_key,
+        priv_key,
         node_id as u64,
         config,
         storage,
-        quorum_exchange,
-        committee_exchange,
+        exchanges,
         initializer,
         metrics,
     )
@@ -278,14 +278,17 @@ pub async fn init_node(
 ) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
-    let da_channel = CentralizedCommChannel::new(networking.clone());
-    let quorum_channel = CentralizedCommChannel::new(networking.clone());
+    let da_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
+    let quorum_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
 
-    // Generate public keys and this node's private key.
+    // Generate public keys and this node's private keys.
+    //
+    // These are deterministic keys suitable *only* for testing and demo purposes.
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let sk = priv_keys[config.node_index as usize].clone();
+    let priv_key = priv_keys[config.node_index as usize].clone();
+    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
 
     // Wait for other nodes to connect.
     while !networking.run_ready() {
@@ -303,7 +306,8 @@ pub async fn init_node(
             pub_keys,
             genesis_block,
             config.node_index as usize,
-            sk,
+            priv_key,
+            enc_key,
             da_channel,
             quorum_channel,
             config.config,
@@ -326,7 +330,7 @@ pub mod testing {
     use hotshot_types::{data::LeafType, ExecutionType};
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-    use std::time::Duration;
+    use std::{sync::Arc, time::Duration};
 
     pub async fn init_hotshot_handles() -> Vec<HotShotHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
@@ -338,13 +342,18 @@ pub mod testing {
 
         // Generate keys for the nodes.
         let nodes_key_pairs = (0..num_nodes)
-            .map(|_| SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap())
+            .map(|_| {
+                (
+                    SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap(),
+                    KeyPair::generate(&mut thread_rng()),
+                )
+            })
             .collect::<Vec<_>>();
 
         // Convert public keys to JfPubKey
         let nodes_pub_keys: Vec<PubKey> = nodes_key_pairs
             .iter()
-            .map(|(_sign_key, ver_key)| JfPubKey::from_native(ver_key.clone()))
+            .map(|((_, ver_key), _)| JfPubKey::from_native(ver_key.clone()))
             .collect::<Vec<_>>();
 
         let mut handles = vec![];
@@ -365,11 +374,12 @@ pub mod testing {
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(5),
             election_config: Some(ElectionConfig {}),
+            da_committee_nodes: nodes_pub_keys.clone(), // All nodes are in the DA committee.
         };
 
         // Create HotShot instances.
-        for (node_id, (sign_key, ver_key)) in nodes_key_pairs.iter().enumerate() {
-            let private_key = (sign_key.clone(), ver_key.clone());
+        for (node_id, ((sign_key, ver_key), enc_key)) in nodes_key_pairs.iter().enumerate() {
+            let priv_key = (sign_key.clone(), ver_key.clone());
             let public_key = JfPubKey::from_native(ver_key.clone());
 
             let network = MemoryNetwork::new(
@@ -379,14 +389,15 @@ pub mod testing {
                 None,
             );
 
-            let da_channel = MemoryCommChannel::new(network.clone());
-            let quorum_channel = MemoryCommChannel::new(network);
+            let da_channel = MemoryCommChannel::new(Arc::new(network.clone()));
+            let quorum_channel = MemoryCommChannel::new(Arc::new(network));
 
             let handle = init_hotshot(
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
-                private_key,
+                priv_key,
+                enc_key.clone(),
                 da_channel,
                 quorum_channel,
                 config.clone(),
@@ -446,10 +457,11 @@ mod test {
         transaction::{ApplicationTransaction, Transaction},
         vm::{TestVm, Vm},
     };
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use core::panic;
     use either::Either;
     use hotshot::types::{Event, EventType::Decide};
-    use hotshot_testing::test_description::GeneralTestDescriptionBuilder;
+    use hotshot_testing::test_builder::{TestBuilder, TestMetadata};
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Submit transaction to given handle, return clone of transaction
@@ -471,21 +483,44 @@ mod test {
     }
 
     // Run a hotshot test with our types
+    //
+    // When run with other tests, this one fails with
+    //
+    // Message:  failed to set global default subscriber: SetGlobalDefaultError("a global default trace dispatcher has already been set")
+    // Location: ../tracing-subscriber-0.3.17/src/util.rs:91
+    //
+    // This happens when `run_test` calls `setup_logging`.
+    //
+    // The test passes if it's run by itself.
+    #[ignore]
     #[async_std::test]
-    async fn general_hotshot_test() {
-        let builder = GeneralTestDescriptionBuilder {
-            num_succeeds: 3,
+    async fn hotshot_test() {
+        let builder = TestBuilder {
+            metadata: TestMetadata {
+                total_nodes: 10,
+                start_nodes: 10,
+                num_succeeds: 10,
+                min_transactions: 1,
+                failure_threshold: 3,
+                da_committee_size: 4,
+                ..Default::default()
+            },
             ..Default::default()
         };
+
         builder
             .build::<SeqTypes, Node<network::Memory>>()
-            .execute()
+            .launch()
+            .run_test()
             .await
             .unwrap();
     }
 
     #[async_std::test]
     async fn test_skeleton_instantiation() -> Result<(), ()> {
+        setup_logging();
+        setup_backtrace();
+
         let mut handles = init_hotshot_handles().await;
         for handle in handles.iter() {
             handle.start().await;

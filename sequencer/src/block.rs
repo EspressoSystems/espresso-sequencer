@@ -1,5 +1,4 @@
 use crate::{
-    state::State,
     transaction::{GenesisTransaction, SequencerTransaction},
     vm::Vm,
     Error,
@@ -8,11 +7,10 @@ use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_types::traits::state::TestableBlock;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    pub(crate) parent_state: Commitment<State>,
     pub(crate) transactions: Vec<SequencerTransaction>,
 }
 
@@ -25,7 +23,6 @@ impl HotShotBlock for Block {
         &self,
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
-        tracing::debug!("Adding raw transaction to block {tx:?}");
         let mut new = self.clone();
         new.transactions.push(tx.clone());
         Ok(new)
@@ -36,9 +33,7 @@ impl HotShotBlock for Block {
     }
 
     fn new() -> Self {
-        tracing::debug!("Creating new block");
         Self {
-            parent_state: State::default().commit(),
             transactions: vec![],
         }
     }
@@ -55,10 +50,17 @@ impl TestableBlock for Block {
     }
 }
 
+// Required for TestableBlock
+#[cfg(any(test, feature = "testing"))]
+impl Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:#?}")
+    }
+}
+
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Block Comm")
-            .field("Block parent", self.parent_state)
             .array_field(
                 "txns",
                 &self
@@ -72,16 +74,8 @@ impl Committable for Block {
 }
 
 impl Block {
-    pub fn next(parent_state: Commitment<State>) -> Self {
-        Self {
-            parent_state,
-            transactions: Default::default(),
-        }
-    }
-
     pub fn genesis(txn: GenesisTransaction) -> Self {
         Self {
-            parent_state: State::default().commit(),
             transactions: vec![SequencerTransaction::Genesis(txn)],
         }
     }
