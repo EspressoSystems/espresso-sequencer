@@ -483,16 +483,6 @@ mod test {
     }
 
     // Run a hotshot test with our types
-    //
-    // When run with other tests, this one fails with
-    //
-    // Message:  failed to set global default subscriber: SetGlobalDefaultError("a global default trace dispatcher has already been set")
-    // Location: ../tracing-subscriber-0.3.17/src/util.rs:91
-    //
-    // This happens when `run_test` calls `setup_logging`.
-    //
-    // The test passes if it's run by itself.
-    #[ignore]
     #[async_std::test]
     async fn hotshot_test() {
         let builder = TestBuilder {
