@@ -33,7 +33,7 @@ use hotshot_types::{
         election::{CommitteeExchange, QuorumExchange},
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
-        node_implementation::{ExchangesType, NodeType, SequencingExchanges},
+        node_implementation::{ChannelMaps, ExchangesType, NodeType, SequencingExchanges},
     },
     vote::{DAVote, QuorumVote},
     HotShotConfig,
@@ -191,6 +191,18 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
         >,
         CommitteeExchange<SeqTypes, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>,
     >;
+
+    fn new_channel_maps(
+        start_view: <SeqTypes as NodeType>::Time,
+    ) -> (
+        ChannelMaps<SeqTypes, Self>,
+        Option<ChannelMaps<SeqTypes, Self>>,
+    ) {
+        (
+            ChannelMaps::new(start_view),
+            Some(ChannelMaps::new(start_view)),
+        )
+    }
 }
 
 impl NodeType for SeqTypes {
