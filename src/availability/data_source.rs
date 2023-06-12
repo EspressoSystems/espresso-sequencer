@@ -10,7 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash};
+use super::query_data::{
+    BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
+    TransactionIndex,
+};
 use crate::{Block, Deltas, Resolvable};
 use futures::stream::Stream;
 use hotshot_types::traits::{
@@ -20,7 +23,10 @@ use hotshot_types::traits::{
 use std::error::Error;
 use std::fmt::Debug;
 
-pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>> {
+pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
+where
+    Block<Types>: QueryableBlock,
+{
     type Error: Error + Debug;
 
     type LeafIterType<'a>: 'a + Iterator<Item = Option<LeafQueryData<Types, I>>>
@@ -37,14 +43,20 @@ pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>> 
     fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_>;
     fn get_leaf_index_by_hash(&self, hash: LeafHash<Types, I>) -> Option<u64>;
     fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64>;
-    fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)>;
+    fn get_txn_index_by_hash(
+        &self,
+        hash: TransactionHash<Types>,
+    ) -> Option<(u64, TransactionIndex<Types>)>;
     fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64>;
 
     fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error>;
     fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error>;
 }
 
-pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>> {
+pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
+where
+    Block<Types>: QueryableBlock,
+{
     type Error: Error + Debug;
     fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where

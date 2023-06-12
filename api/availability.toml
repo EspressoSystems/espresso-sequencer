@@ -81,7 +81,6 @@ Returns
     "hash": TaggedBase64,
     "height": integer,
     "size": integer,
-    "txn_hashes": [TaggedBase64],
 }
 ```
 """
@@ -108,12 +107,21 @@ If specified, `:height` and `:index` represent the block containing the transact
 of the transaction within the block, respectively. Otherwise, `:hash` is the hash of the
 transaction.
 
+The response includes the hash of the block containing this transaction as well as an application-
+defined inclusion proof relative to the block hash. Applications may use `proof` to prove that the
+returned transaction is actually a member of its block, but note that the proof system used here
+will vary by application. Some may prove more (for example, a shared sequencer proving that the
+transaction belongs not only to the block but to a section of the block dedicated to a specific
+blockchain), some may prove less (for example, a trusted query service may return `null` for the
+proof).
+
 Returns
 ```
 {
     "transaction": application-specific transaction type,
+    "block_hash": TaggedBase64,
+    "proof": application-specific proof type,
     "height": integer,
-    "index": integer,
     "hash": TaggedBase64,
 }
 ```

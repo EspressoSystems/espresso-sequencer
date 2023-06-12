@@ -13,7 +13,10 @@
 use crate::{
     availability::{
         data_source::{AvailabilityDataSource, UpdateAvailabilityData},
-        query_data::{BlockHash, BlockQueryData, LeafHash, LeafQueryData, TransactionHash},
+        query_data::{
+            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
+            TransactionIndex,
+        },
     },
     ledger_log::LedgerLog,
     metrics::{MetricsError, PrometheusMetrics},
@@ -24,6 +27,7 @@ use crate::{
     Block, Deltas, Resolvable,
 };
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
+use commit::Committable;
 use futures::stream::BoxStream;
 use hotshot_types::traits::{
     metrics::Metrics,
@@ -67,10 +71,13 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// [AtomicStore::commit_version] alternate with calls to [QueryData::commit_version] or
 /// [QueryData::skip_version].
 #[derive(custom_debug::Debug)]
-pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData> {
+pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData>
+where
+    Block<Types>: QueryableBlock,
+{
     index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
-    index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, u64)>,
+    index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
@@ -80,7 +87,10 @@ pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData> {
     user_data: UserData,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
+{
     /// Create a new [QueryData] with storage at `path`.
     ///
     /// If there is already data at `path`, it will be archived.
@@ -173,9 +183,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I
             .flat_map(|block| {
                 let height = block.height();
                 block
-                    .into_iter()
+                    .block()
                     .enumerate()
-                    .map(move |(txn_id, txn_hash)| (txn_hash, (height, txn_id as u64)))
+                    .map(move |(txn_ix, txn)| (txn.commit(), (height, txn_ix)))
+                    .collect::<Vec<_>>()
             })
             .collect();
 
@@ -234,6 +245,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     fn as_ref(&self) -> &UserData {
         &self.user_data
@@ -242,6 +255,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsMut<UserData>
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     fn as_mut(&mut self) -> &mut UserData {
         &mut self.user_data
@@ -254,6 +269,8 @@ pub struct StreamError;
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     type Error = StreamError;
 
@@ -279,7 +296,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSo
         self.index_by_block_hash.get(&hash).cloned()
     }
 
-    fn get_txn_index_by_hash(&self, hash: TransactionHash<Types>) -> Option<(u64, u64)> {
+    fn get_txn_index_by_hash(
+        &self,
+        hash: TransactionHash<Types>,
+    ) -> Option<(u64, TransactionIndex<Types>)> {
         self.index_by_txn_hash.get(&hash).cloned()
     }
 
@@ -301,6 +321,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSo
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     type Error = PersistenceError;
 
@@ -323,16 +345,19 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailability
     fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
-        for (txn_id, txn_hash) in block.iter().enumerate() {
+        for (txn_ix, txn) in block.block().enumerate() {
             self.index_by_txn_hash
-                .insert(txn_hash, (block.height(), txn_id as u64));
+                .insert(txn.commit(), (block.height(), txn_ix));
         }
         Ok(())
     }
 }
 
 /// Metric-related functions.
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData> {
+impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
+{
     fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
         self.metrics.get_subgroup(["consensus"])
     }
@@ -340,6 +365,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     type Error = MetricsError;
 
@@ -373,6 +400,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateStatusData
     for QueryData<Types, I, UserData>
+where
+    Block<Types>: QueryableBlock,
 {
     fn metrics(&self) -> Box<dyn Metrics> {
         Box::new(self.metrics.clone())
@@ -434,10 +463,10 @@ mod test {
             );
             assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
 
-            for (j, txn_hash) in block.iter().enumerate() {
+            for (j, txn) in block.block().iter().enumerate() {
                 assert_eq!(
-                    qd.get_txn_index_by_hash(txn_hash).unwrap(),
-                    (i as u64, j as u64),
+                    qd.get_txn_index_by_hash(txn.commit()).unwrap(),
+                    (i as u64, j),
                 );
             }
         }
@@ -478,7 +507,6 @@ mod test {
         let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap().enumerate() };
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
-            let txn_hash = txn.commit();
             hotshot.submit_transaction(txn).await.unwrap();
 
             // Wait for the transaction to be finalized.
@@ -489,7 +517,6 @@ mod test {
                 }
             };
 
-            assert_eq!(block.iter().collect::<Vec<_>>(), vec![txn_hash]);
             assert_eq!(
                 qd.read()
                     .await

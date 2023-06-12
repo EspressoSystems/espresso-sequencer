@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::api::load_api;
+use crate::{api::load_api, Block};
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
@@ -162,6 +162,7 @@ pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types, I>,
+    Block<Types>: QueryableBlock,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -224,11 +225,7 @@ where
                             })?
                     }
                 };
-                state
-                    .get_nth_block_iter(height as usize)
-                    .next()
-                    .context(InvalidBlockHeightSnafu { height })?
-                    .context(MissingBlockSnafu { height })
+                get_block(state, height)
             }
             .boxed()
         })?
@@ -255,22 +252,31 @@ where
         })?
         .get("gettransaction", |req, state| {
             async move {
-                let (height, index) =
-                    match req.opt_blob_param("hash")? {
-                        Some(hash) => state.get_txn_index_by_hash(hash).context(
+                let (block, index) = match req.opt_blob_param("hash")? {
+                    Some(hash) => {
+                        let (height, index) = state.get_txn_index_by_hash(hash).context(
                             UnknownTransactionHashSnafu {
                                 hash: hash.to_string(),
                             },
-                        )?,
-                        None => (req.integer_param("height")?, req.integer_param("index")?),
-                    };
-                state
-                    .get_nth_block_iter(height as usize)
-                    .next()
-                    .context(InvalidBlockHeightSnafu { height })?
-                    .context(MissingBlockSnafu { height })?
-                    .transaction(index as usize)
-                    .context(InvalidTransactionIndexSnafu { height, index })
+                        )?;
+                        let block = get_block(state, height)?;
+                        (block, index)
+                    }
+                    None => {
+                        let height = req.integer_param("height")?;
+                        let block = get_block(state, height)?;
+                        let i = req.integer_param("index")?;
+                        let index = block.block().nth(i).context(InvalidTransactionIndexSnafu {
+                            height,
+                            index: i as u64,
+                        })?;
+                        (block, index)
+                    }
+                };
+                Ok(block
+                    .transaction(&index)
+                    // The computation of `index` above should ensure that it is a valid index.
+                    .unwrap())
             }
             .boxed()
         })?
@@ -304,6 +310,20 @@ where
             .boxed()
         })?;
     Ok(api)
+}
+
+fn get_block<State, Types, I>(state: &State, height: u64) -> Result<BlockQueryData<Types>, Error>
+where
+    State: AvailabilityDataSource<Types, I>,
+    Block<Types>: QueryableBlock,
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+{
+    state
+        .get_nth_block_iter(height as usize)
+        .next()
+        .context(InvalidBlockHeightSnafu { height })?
+        .context(MissingBlockSnafu { height })
 }
 
 #[cfg(test)]
@@ -445,25 +465,25 @@ mod test {
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
-            // TODO enable this test when HotShot supports getting transaction data from blocks.
-            // for (j, txn_hash) in block.iter().enumerate() {
-            //     let txn: TransactionQueryData<MockTypes> = client
-            //         .get(&format!("transaction/{}/{}", i, j))
-            //         .send()
-            //         .await
-            //         .unwrap();
-            //     assert_eq!(txn.height(), i);
-            //     assert_eq!(txn.index(), j as u64);
-            //     assert_eq!(txn.hash(), txn_hash);
-            //     assert_eq!(
-            //         txn,
-            //         client
-            //             .get(&format!("transaction/hash/{}", txn_hash))
-            //             .send()
-            //             .await
-            //             .unwrap()
-            //     );
-            // }
+            for (j, txn_from_block) in block.block().iter().enumerate() {
+                let txn: TransactionQueryData<MockTypes> = client
+                    .get(&format!("transaction/{}/{}", i, j))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(txn.height(), i);
+                assert_eq!(txn.block_hash(), block.hash());
+                assert_eq!(txn.hash(), txn_from_block.commit());
+                assert_eq!(txn.transaction(), txn_from_block);
+                assert_eq!(
+                    txn,
+                    client
+                        .get(&format!("transaction/hash/{}", txn_from_block.commit()))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+            }
         }
     }
 
@@ -499,7 +519,6 @@ mod test {
         let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
-            let txn_hash = txn.commit();
             hotshot.submit_transaction(txn).await.unwrap();
 
             // Wait for the transaction to be finalized.
@@ -515,7 +534,6 @@ mod test {
                     break (i, leaf, block);
                 }
             };
-            assert_eq!(block.iter().collect::<Vec<_>>(), vec![txn_hash]);
             assert_eq!(
                 leaf,
                 client.get(&format!("leaf/{}", i)).send().await.unwrap()
