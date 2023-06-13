@@ -30,7 +30,7 @@ use hotshot_types::{
         block_contents::Transaction,
         consensus_type::validating_consensus::ValidatingConsensus,
         election::QuorumExchange,
-        node_implementation::{NodeType, ValidatingExchanges},
+        node_implementation::{ChannelMaps, NodeType, ValidatingExchanges},
         signature_key::ed25519::Ed25519Pub,
         state::{State, TestableBlock, TestableState},
     },
@@ -311,4 +311,13 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
             Message<MockTypes, Self>,
         >,
     >;
+
+    fn new_channel_maps(
+        start_view: <MockTypes as NodeType>::Time,
+    ) -> (
+        ChannelMaps<MockTypes, Self>,
+        Option<ChannelMaps<MockTypes, Self>>,
+    ) {
+        (ChannelMaps::new(start_view), None)
+    }
 }
