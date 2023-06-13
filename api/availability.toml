@@ -112,8 +112,7 @@ defined inclusion proof relative to the block hash. Applications may use `proof`
 returned transaction is actually a member of its block, but note that the proof system used here
 will vary by application. Some may prove more (for example, a shared sequencer proving that the
 transaction belongs not only to the block but to a section of the block dedicated to a specific
-blockchain), some may prove less (for example, a trusted query service may return `null` for the
-proof).
+rollup), some may prove less (for example, a trusted query service may return `null` for the proof).
 
 Returns
 ```
