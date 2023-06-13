@@ -2879,7 +2879,7 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 name = "example-l2"
 version = "0.1.0"
 dependencies = [
- "ark-serialize 0.3.0",
+ "ark-serialize 0.4.2",
  "async-compatibility-layer",
  "async-std",
  "clap 4.3.3",
@@ -6964,7 +6964,7 @@ dependencies = [
 name = "sequencer-utils"
 version = "0.1.0"
 dependencies = [
- "ark-serialize 0.3.0",
+ "ark-serialize 0.4.2",
  "async-std",
  "commit",
  "ethers",

@@ -5,7 +5,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ark-serialize = { version = "0.3.0", features = ["derive"] }
+ark-serialize = { version = "0.4.2", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0" }
 async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.2.1"
