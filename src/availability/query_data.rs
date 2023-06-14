@@ -34,6 +34,13 @@ pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::Transaction
 pub type TransactionInclusionProof<Types> = <Block<Types> as QueryableBlock>::InclusionProof;
 
 /// A block whose contents (e.g. individual transactions) can be examined.
+///
+/// Note to implementors: this trait has only a few required methods. The provided methods, for
+/// querying transactions in various ways, are implemented in terms of the required
+/// [`iter`](Self::iter) and [`transaction_with_proof`](Self::transaction_with_proof) methods, and
+/// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
+/// unnecessary inclusion proof). It is good practice to override these default implementations if
+/// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
 pub trait QueryableBlock: traits::Block {
     /// An index which can be used to efficiently retrieve a transaction for the block.
     ///
