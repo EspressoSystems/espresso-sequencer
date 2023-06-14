@@ -130,7 +130,9 @@
 //! adding a UTXO index, it might look like this:
 //!
 //! ```
-//! # use hotshot_query_service::availability;
+//! # use hotshot_query_service::availability::{
+//! #     self, TransactionIndex,
+//! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
@@ -139,7 +141,7 @@
 //! #[derive(Default)]
 //! struct AppQueryData {
 //!     // Index mapping UTXO index to (block index, transaction index, output index)
-//!     utxo_index: HashMap<u64, (u64, u64, u64)>,
+//!     utxo_index: HashMap<u64, (u64, TransactionIndex<AppTypes>, u64)>,
 //! }
 //!
 //! type AvailabilityState = QueryData<AppTypes, AppNodeImpl, AppQueryData>;
@@ -152,7 +154,7 @@
 //! ```
 //! # use async_std::sync::RwLock;
 //! # use futures::FutureExt;
-//! # use hotshot_query_service::availability::{self, AvailabilityDataSource};
+//! # use hotshot_query_service::availability::{self, AvailabilityDataSource, TransactionIndex};
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
@@ -163,7 +165,7 @@
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
 //! #[derive(Default)]
 //! # struct AppQueryData {
-//! #     utxo_index: HashMap<u64, (usize, usize, usize)>,
+//! #     utxo_index: HashMap<u64, (usize, TransactionIndex<AppTypes>, usize)>,
 //! # }
 //! # type AvailabilityState = QueryData<AppTypes, AppNodeImpl, AppQueryData>;
 //! fn define_app_specific_availability_api<State>(
@@ -189,7 +191,7 @@
 //!                 status: StatusCode::NotFound,
 //!             })?;
 //!         let block = state.get_nth_block_iter(block_index).next().unwrap().unwrap();
-//!         let txn = block.transaction(txn_index).unwrap();
+//!         let txn = block.transaction(&txn_index).unwrap();
 //!         let utxo = // Application-specific logic to extract a UTXO from a transaction.
 //! #           todo!();
 //!         Ok(utxo)
@@ -242,7 +244,7 @@
 //! ```
 //! # use hotshot_types::traits::signature_key::EncodedPublicKey;
 //! # use hotshot_query_service::availability::{
-//! #   AvailabilityDataSource, BlockHash, LeafHash, TransactionHash,
+//! #   AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
@@ -283,7 +285,7 @@
 //! #   fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> { todo!() }
 //! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes, AppNodeImpl>) -> Option<u64> { todo!() }
 //! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
-//! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, u64)> { todo!() }
+//! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, TransactionIndex<AppTypes>)> { todo!() }
 //! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
 //! #   fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> { todo!() }
 //! #   fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> { todo!() }
@@ -397,6 +399,7 @@ pub mod status;
 pub mod testing;
 mod update;
 
+pub use availability::QueryableBlock;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
@@ -435,7 +438,10 @@ pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>>(
     _options: &Options,
     _data_source: QueryData<Types, I, ()>,
     _hotshot: HotShotHandle<Types, I>,
-) -> impl Future<Output = ()> + Send + Sync + 'static {
+) -> impl Future<Output = ()> + Send + Sync + 'static
+where
+    Block<Types>: QueryableBlock,
+{
     async move { unimplemented!() }
 }
 
@@ -443,7 +449,9 @@ pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>>(
 mod test {
     use super::*;
     use crate::{
-        availability::{AvailabilityDataSource, BlockHash, LeafHash, TransactionHash},
+        availability::{
+            AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
+        },
         status::{MempoolQueryData, StatusDataSource},
         testing::mocks::{MockNodeImpl, MockTypes},
     };
@@ -503,7 +511,10 @@ mod test {
         fn get_block_index_by_hash(&self, hash: BlockHash<MockTypes>) -> Option<u64> {
             self.hotshot_qs.get_block_index_by_hash(hash)
         }
-        fn get_txn_index_by_hash(&self, hash: TransactionHash<MockTypes>) -> Option<(u64, u64)> {
+        fn get_txn_index_by_hash(
+            &self,
+            hash: TransactionHash<MockTypes>,
+        ) -> Option<(u64, TransactionIndex<MockTypes>)> {
             self.hotshot_qs.get_txn_index_by_hash(hash)
         }
         fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {

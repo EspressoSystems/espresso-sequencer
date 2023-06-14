@@ -16,19 +16,139 @@ use commit::{Commitment, Committable};
 use hotshot_types::{
     data::LeafType,
     traits::{
+        self,
         election::SignedCertificate,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::EncodedPublicKey,
-        Block as _,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
+use std::fmt::Debug;
 
 pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
 pub type BlockHash<Types> = Commitment<Block<Types>>;
 pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
+pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::TransactionIndex;
+pub type TransactionInclusionProof<Types> = <Block<Types> as QueryableBlock>::InclusionProof;
+
+/// A block whose contents (e.g. individual transactions) can be examined.
+///
+/// Note to implementors: this trait has only a few required methods. The provided methods, for
+/// querying transactions in various ways, are implemented in terms of the required
+/// [`iter`](Self::iter) and [`transaction_with_proof`](Self::transaction_with_proof) methods, and
+/// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
+/// unnecessary inclusion proof). It is good practice to override these default implementations if
+/// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
+pub trait QueryableBlock: traits::Block {
+    /// An index which can be used to efficiently retrieve a transaction for the block.
+    ///
+    /// This is left abstract so that different block implementations can index transactions
+    /// internally however they want (e.g. by position or by hash). Meanwhile, many high-level
+    /// functions for querying transactions by different means can be implemented by returning a
+    /// `TransactionIndex` and then finally using it to retrieve the desired transaction.
+    type TransactionIndex: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned;
+
+    /// Enumerate the transactions in this block.
+    type Iter<'a>: Iterator<Item = Self::TransactionIndex>
+    where
+        Self: 'a;
+
+    /// A proof that a certain transaction exists in the block.
+    ///
+    /// The proof system and the statement which is proved will vary by application, with different
+    /// applications proving stronger or weaker statements depending on the trust assumptions at
+    /// play. Some may prove a very strong statement (for example, a shared sequencer proving that
+    /// the transaction belongs not only to the block but to a section of the block dedicated to a
+    /// specific rollup), otherws may prove something substantially weaker (for example, a trusted
+    /// query service may use `()` for the proof).
+    type InclusionProof: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned;
+
+    /// The number of transactions in the block.
+    fn len(&self) -> usize;
+
+    /// Whether this block is empty of transactions.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// List the transaction indices in the block.
+    fn iter(&self) -> Self::Iter<'_>;
+
+    /// Enumerate the transactions in the block with their indices.
+    fn enumerate(
+        &self,
+    ) -> Box<dyn '_ + Iterator<Item = (Self::TransactionIndex, &Self::Transaction)>> {
+        Box::new(self.iter().map(|ix| {
+            // `self.transaction` should always return `Some` if we are using an index which was
+            // yielded by `self.iter`.
+            let tx = self.transaction(&ix).unwrap();
+            (ix, tx)
+        }))
+    }
+
+    /// Get a transaction by its block-specific index, along with an inclusion proof.
+    fn transaction_with_proof(
+        &self,
+        index: &Self::TransactionIndex,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)>;
+
+    /// Get a transaction by its block-specific index.
+    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
+        Some(self.transaction_with_proof(index)?.0)
+    }
+
+    /// Get an inclusion proof for a transaction with a given index.
+    fn proof(&self, index: &Self::TransactionIndex) -> Option<Self::InclusionProof> {
+        Some(self.transaction_with_proof(index)?.1)
+    }
+
+    /// Get the index of the `nth` transaction.
+    fn nth(&self, n: usize) -> Option<Self::TransactionIndex> {
+        self.iter().nth(n)
+    }
+
+    /// Get the `nth` transaction.
+    fn nth_transaction(&self, n: usize) -> Option<&Self::Transaction> {
+        self.transaction(&self.nth(n)?)
+    }
+
+    /// Get the `nth` transaction, along with an inclusion proof.
+    fn nth_transaction_with_proof(
+        &self,
+        n: usize,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+        self.transaction_with_proof(&self.nth(n)?)
+    }
+
+    /// Get the index of the transaction with a given hash, if it is in the block.
+    fn by_hash(&self, hash: Commitment<Self::Transaction>) -> Option<Self::TransactionIndex> {
+        self.iter().find(|i| {
+            if let Some(tx) = self.transaction(i) {
+                tx.commit() == hash
+            } else {
+                false
+            }
+        })
+    }
+
+    /// Get the transaction with a given hash, if it is in the block.
+    fn transaction_by_hash(
+        &self,
+        hash: Commitment<Self::Transaction>,
+    ) -> Option<&Self::Transaction> {
+        self.transaction(&self.by_hash(hash)?)
+    }
+
+    /// Get the transaction with a given hash, if it is in the block, along with an inclusion proof.
+    fn transaction_by_hash_with_proof(
+        &self,
+        hash: Commitment<Self::Transaction>,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+        self.transaction_with_proof(&self.by_hash(hash)?)
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
@@ -93,12 +213,14 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct BlockQueryData<Types: NodeType> {
+pub struct BlockQueryData<Types: NodeType>
+where
+    Block<Types>: QueryableBlock,
+{
     block: Block<Types>,
     hash: BlockHash<Types>,
     height: u64,
     size: u64,
-    txn_hashes: Vec<TransactionHash<Types>>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -120,7 +242,10 @@ where
     },
 }
 
-impl<Types: NodeType> BlockQueryData<Types> {
+impl<Types: NodeType> BlockQueryData<Types>
+where
+    Block<Types>: QueryableBlock,
+{
     /// Collect information about a [`Block`].
     ///
     /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `block`.
@@ -136,7 +261,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
     ) -> Result<Self, InconsistentBlockError<Types, I>>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
-        Block<Types>: Serialize,
     {
         ensure!(
             qc.leaf_commitment() == leaf.commit(),
@@ -150,7 +274,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
             hash: block.commit(),
             height: leaf.get_height(),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
-            txn_hashes: block.contained_transactions().into_iter().collect(),
             block,
         })
     }
@@ -171,60 +294,43 @@ impl<Types: NodeType> BlockQueryData<Types> {
         self.size
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = TransactionHash<Types>> + '_ {
-        self.txn_hashes.iter().copied()
-    }
-
     pub fn len(&self) -> usize {
-        self.txn_hashes.len()
+        self.block().len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    pub fn transaction(&self, i: usize) -> Option<TransactionQueryData<Types>> {
-        if i >= self.len() {
-            return None;
-        }
-        #[allow(unreachable_code)]
+    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>> {
+        let (transaction, proof) = self.block.transaction_with_proof(i)?;
         Some(TransactionQueryData {
-            transaction: unimplemented!(), // TODO the block trait should expose some way of getting the `i`th transaction
-            height: self.height,
-            index: i as u64,
-            hash: self.txn_hashes[i],
+            transaction: transaction.clone(),
+            block_hash: self.hash(),
+            proof,
+            height: self.height(),
+            hash: transaction.commit(),
         })
-    }
-}
-
-impl<Types: NodeType> IntoIterator for BlockQueryData<Types> {
-    type Item = TransactionHash<Types>;
-    type IntoIter = <Vec<Self::Item> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.txn_hashes.into_iter()
-    }
-}
-
-impl<'a, Types: NodeType> IntoIterator for &'a BlockQueryData<Types> {
-    type Item = TransactionHash<Types>;
-    type IntoIter = std::iter::Copied<<&'a Vec<Self::Item> as IntoIterator>::IntoIter>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.txn_hashes.iter().copied()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct TransactionQueryData<Types: NodeType> {
+pub struct TransactionQueryData<Types: NodeType>
+where
+    Block<Types>: QueryableBlock,
+{
     transaction: Transaction<Types>,
+    block_hash: BlockHash<Types>,
+    proof: TransactionInclusionProof<Types>,
     height: u64,
-    index: u64,
     hash: TransactionHash<Types>,
 }
 
-impl<Types: NodeType> TransactionQueryData<Types> {
+impl<Types: NodeType> TransactionQueryData<Types>
+where
+    Block<Types>: QueryableBlock,
+{
     pub fn transaction(&self) -> &Transaction<Types> {
         &self.transaction
     }
@@ -233,11 +339,11 @@ impl<Types: NodeType> TransactionQueryData<Types> {
         self.height
     }
 
-    pub fn index(&self) -> u64 {
-        self.index
-    }
-
     pub fn hash(&self) -> TransactionHash<Types> {
         self.hash
+    }
+
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.block_hash
     }
 }

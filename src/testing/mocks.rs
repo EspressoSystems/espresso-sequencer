@@ -10,6 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::QueryableBlock;
 use async_std::sync::Arc;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Display, Index, IndexMut};
@@ -40,6 +41,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::collections::{BTreeSet, HashSet};
+use std::ops::Range;
 
 #[derive(Clone, Debug, Snafu)]
 pub enum MockError {
@@ -226,6 +228,27 @@ impl MockBlock {
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut MockTransaction> {
         self.transactions.iter_mut()
+    }
+}
+
+impl QueryableBlock for MockBlock {
+    type TransactionIndex = usize;
+    type Iter<'a> = Range<usize>;
+    type InclusionProof = ();
+
+    fn len(&self) -> usize {
+        self.transactions.len()
+    }
+
+    fn iter(&self) -> Self::Iter<'_> {
+        0..self.len()
+    }
+
+    fn transaction_with_proof(
+        &self,
+        index: &Self::TransactionIndex,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+        Some((self.transactions.get(*index)?, ()))
     }
 }
 

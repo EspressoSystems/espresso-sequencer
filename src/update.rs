@@ -13,7 +13,7 @@
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
 use crate::status::UpdateStatusData;
 use crate::{
-    availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+    availability::{BlockQueryData, LeafQueryData, QueryableBlock, UpdateAvailabilityData},
     Block, Deltas, Leaf, Resolvable,
 };
 use hotshot::types::{Event, EventType};
@@ -59,7 +59,8 @@ pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     /// a peer over the network, you must authenticate it first.
     fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
     where
-        Deltas<Types, I>: Resolvable<Block<Types>>;
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+        Block<Types>: QueryableBlock;
 }
 
 impl<
@@ -67,6 +68,8 @@ impl<
         I: NodeImplementation<Types>,
         T: UpdateAvailabilityData<Types, I> + UpdateStatusData + Send,
     > UpdateDataSource<Types, I> for T
+where
+    Block<Types>: QueryableBlock,
 {
     type Error = <Self as UpdateAvailabilityData<Types, I>>::Error;
 
@@ -77,6 +80,7 @@ impl<
     fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
+        Block<Types>: QueryableBlock,
     {
         if let EventType::Decide { leaf_chain, qc } = &event.event {
             // `qc` justifies the first (most recent) leaf...
