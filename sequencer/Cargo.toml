@@ -27,6 +27,7 @@ derive_more = "0.99.17"
 either = "1.8.1"
 ethers = "2.0"
 futures = "0.3"
+shell-words = "1.1"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
 hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }

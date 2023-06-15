@@ -15,6 +15,10 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
+      # Run the API server and the commitment task (with options taken from the environment)
+      - ESPRESSO_SEQUENCER_API=""
+      - ESPRESSO_SEQUENCER_COMMITMENT_TASK=""
+
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -31,6 +35,8 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
+      # Run the API server (with options taken from the environment)
+      - ESPRESSO_SEQUENCER_API=""
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -42,6 +48,8 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
+      # Run the API server (with options taken from the environment)
+      - ESPRESSO_SEQUENCER_API=""
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -53,6 +61,8 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
+      # Run the API server (with options taken from the environment)
+      - ESPRESSO_SEQUENCER_API=""
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -64,6 +74,8 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     environment:
+      # Run the API server (with options taken from the environment)
+      - ESPRESSO_SEQUENCER_API=""
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
