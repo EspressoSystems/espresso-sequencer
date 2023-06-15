@@ -33,7 +33,7 @@ use std::iter::once;
 /// If a type implements both [UpdateAvailabilityData] and [UpdateStatusData], then it can be fully
 /// kept up to date through two interfaces:
 /// * [metrics](UpdateDataSource::metrics), to get a handle for populating the status metrics, which
-///   should be used when initializing a [HotShotHandle](hotshot::types::HotShotHandle)
+///   should be used when initializing a [SystemContextHandle](hotshot::types::SystemContextHandle)
 /// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
 ///   emitted
 pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
@@ -42,7 +42,7 @@ pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     /// Get a handle for populating status metrics.
     ///
     /// This function should be called before creating a
-    /// [HotShotHandle](hotshot::types::HotShotHandle), and the resulting [Metrics] handle should be
+    /// [SystemContextHandle](hotshot::types::SystemContextHandle), and the resulting [Metrics] handle should be
     /// passed to HotShot, which will update it.
     fn metrics(&self) -> Box<dyn Metrics>;
 

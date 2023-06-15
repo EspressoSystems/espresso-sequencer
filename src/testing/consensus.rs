@@ -23,8 +23,8 @@ use hotshot::{
         implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
         NodeImplementation,
     },
-    types::{HotShotHandle, SignatureKey},
-    HotShot, HotShotInitializer,
+    types::{SignatureKey, SystemContextHandle},
+    HotShotInitializer, SystemContext,
 };
 use hotshot_types::{
     traits::{
@@ -40,7 +40,7 @@ use tempdir::TempDir;
 
 struct MockNode<UserData> {
     query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
-    hotshot: HotShotHandle<MockTypes, MockNodeImpl>,
+    hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
 }
 
 pub struct MockNetwork<UserData> {
@@ -111,7 +111,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                                 enc_key.clone(),
                             );
 
-                        let hotshot = HotShot::init(
+                        let hotshot = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
@@ -137,7 +137,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
 }
 
 impl<UserData> MockNetwork<UserData> {
-    pub fn handle(&self) -> HotShotHandle<MockTypes, MockNodeImpl> {
+    pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
 

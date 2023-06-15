@@ -20,7 +20,7 @@
 //! # Basic usage
 //!
 //! ```
-//! # use hotshot::types::HotShotHandle;
+//! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
@@ -33,7 +33,7 @@
 //! };
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
-//! use hotshot::HotShot;
+//! use hotshot::SystemContext;
 //! use hotshot_types::traits::consensus_type::validating_consensus::ValidatingConsensus;
 //! use tide_disco::App;
 //!
@@ -42,7 +42,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = HotShot::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
+//! let mut hotshot = SystemContext::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
@@ -84,11 +84,11 @@
 //!
 //! ```
 //! # use async_std::task::spawn;
-//! # use hotshot::types::HotShotHandle;
+//! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::{data_source::QueryData, Error, Options};
 //! # use hotshot_query_service::testing::mocks::{MockTypes, MockNodeImpl};
 //! # use std::path::Path;
-//! # fn doc(storage_path: &Path, options: &Options, hotshot: HotShotHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! # fn doc(storage_path: &Path, options: &Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let query_data = QueryData::create(storage_path, ()).map_err(Error::internal)?;
@@ -336,7 +336,7 @@
 //! ```
 //! # use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! # use atomic_store::{AtomicStore, AtomicStoreLoader};
-//! # use hotshot::types::HotShotHandle;
+//! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::Error;
 //! # use hotshot_query_service::data_source::{UpdateDataSource, QueryData};
 //! # use hotshot_query_service::testing::mocks::{
@@ -354,7 +354,7 @@
 //!
 //! fn init_server(
 //!     storage_path: &Path,
-//!     mut hotshot: HotShotHandle<AppTypes, AppNodeImpl>,
+//!     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 //! ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 //!     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 //!         .map_err(Error::internal)?;
@@ -405,7 +405,7 @@ pub use resolvable::Resolvable;
 
 use data_source::QueryData;
 use futures::Future;
-use hotshot::{certificate, types::HotShotHandle};
+use hotshot::{certificate, types::SystemContextHandle};
 use hotshot_types::{
     data::LeafType,
     traits::{
@@ -437,7 +437,7 @@ pub struct Options {
 pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>>(
     _options: &Options,
     _data_source: QueryData<Types, I, ()>,
-    _hotshot: HotShotHandle<Types, I>,
+    _hotshot: SystemContextHandle<Types, I>,
 ) -> impl Future<Output = ()> + Send + Sync + 'static
 where
     Block<Types>: QueryableBlock,
