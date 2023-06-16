@@ -14,7 +14,10 @@ async fn main() {
     setup_logging();
     setup_backtrace();
 
+    tracing::info!("sequencer starting up");
     let opt = Options::parse();
+    let modules = opt.modules();
+    tracing::info!("modules: {:?}", modules);
 
     // Create genesis block.
     let genesis = Block::genesis(GenesisTransaction {
@@ -35,7 +38,7 @@ async fn main() {
     // Inititialize HotShot. If the user requested the API module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    let (mut handle, api_port) = match opt.api {
+    let (mut handle, api_port) = match modules.api {
         Some(options) => {
             let port = options.port;
             let init_handle =
@@ -66,7 +69,7 @@ async fn main() {
     );
 
     // Register a task to run the HotShot commitment module, if requested.
-    if let Some(mut options) = opt.commitment_task {
+    if let Some(mut options) = modules.commitment_task {
         // If no query service is specified, use the one of this node.
         if options.query_service_url.is_none() {
             options.query_service_url = Some(
