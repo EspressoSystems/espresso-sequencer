@@ -7,7 +7,7 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use futures::{future::BoxFuture, FutureExt};
-use hotshot::types::HotShotHandle;
+use hotshot::types::SystemContextHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource},
@@ -22,17 +22,19 @@ use tide_disco::{Api, App};
 type NodeIndex = u64;
 
 pub struct SequencerNode<I: NodeImplementation<SeqTypes>> {
-    pub handle: HotShotHandle<SeqTypes, I>,
+    pub handle: SystemContextHandle<SeqTypes, I>,
     pub update_task: JoinHandle<io::Result<()>>,
     pub node_index: NodeIndex,
 }
 
 pub type HandleFromMetrics<I> = Box<
-    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
+    dyn FnOnce(
+        Box<dyn Metrics>,
+    ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, I>, NodeIndex)>,
 >;
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
-    pub submit_state: HotShotHandle<SeqTypes, I>,
+    pub submit_state: SystemContextHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
 }
 
