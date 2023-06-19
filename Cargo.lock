@@ -2553,7 +2553,7 @@ dependencies = [
  "rlp",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.24.1",
  "syn 2.0.18",
  "tempfile",
  "thiserror",
@@ -2718,7 +2718,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "strum",
+ "strum 0.25.0",
  "strum_macros",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.1)",
  "tempfile",
@@ -7200,6 +7200,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "strum"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
+
+[[package]]
 name = "strum_macros"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7578,7 +7584,7 @@ dependencies = [
  "signal-hook",
  "signal-hook-async-std",
  "snafu",
- "strum",
+ "strum 0.24.1",
  "strum_macros",
  "surf",
  "tagged-base64 0.2.4",
