@@ -204,11 +204,8 @@ mod tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let raw_tx = signed_transaction.encode();
         let txn = SeqTransaction::new(VM_ID.into(), raw_tx.to_vec());
-        wait_for_decide_on_handle(
-            handle.clone(),
-            sequencer::transaction::SequencerTransaction::Wrapped(txn),
-        )
-        .await
-        .unwrap()
+        wait_for_decide_on_handle(handle.clone(), txn)
+            .await
+            .unwrap()
     }
 }

@@ -1,12 +1,8 @@
 use commit::{Commitment, Committable};
-use derive_more::From;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    chain_variables::ChainVariables,
-    vm::{Vm, VmId, VmTransaction},
-};
+use crate::vm::{Vm, VmId, VmTransaction};
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 pub struct Transaction {
@@ -66,7 +62,7 @@ impl VmTransaction for ApplicationTransaction {
     }
 }
 
-impl HotShotTransaction for SequencerTransaction {}
+impl HotShotTransaction for Transaction {}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
@@ -74,43 +70,5 @@ impl Committable for Transaction {
             .u64_field("vm", self.vm.0)
             .var_size_bytes(&self.payload) // TODO how can we specify a field name like "payload"
             .finalize()
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct GenesisTransaction {
-    pub chain_variables: ChainVariables,
-}
-
-impl Committable for GenesisTransaction {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("GenesisTransaction")
-            .field("chain_variables", self.chain_variables.commit())
-            .finalize()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, From)]
-/// A transaction tht can be either a CAP transaction or a collect reward transaction
-pub enum SequencerTransaction {
-    Genesis(GenesisTransaction),
-    Wrapped(Transaction),
-}
-
-impl Committable for SequencerTransaction {
-    fn commit(&self) -> Commitment<Self> {
-        let bytes = bincode::serialize(self).unwrap(); // TODO not safe unwrap?
-        commit::RawCommitmentBuilder::new("SequencerTransaction")
-            .var_size_bytes(&bytes)
-            .finalize()
-    }
-}
-
-impl SequencerTransaction {
-    pub fn as_vm<V: Vm>(&self, vm: &V) -> Option<V::Transaction> {
-        match self {
-            Self::Genesis(_) => None,
-            Self::Wrapped(t) => t.as_vm(vm),
-        }
     }
 }

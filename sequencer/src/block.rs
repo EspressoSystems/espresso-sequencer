@@ -1,8 +1,4 @@
-use crate::{
-    transaction::{GenesisTransaction, SequencerTransaction},
-    vm::Vm,
-    Error,
-};
+use crate::{vm::Vm, Error, Transaction};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
@@ -12,7 +8,7 @@ use std::fmt::{Debug, Display};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    pub(crate) transactions: Vec<SequencerTransaction>,
+    pub(crate) transactions: Vec<Transaction>,
 }
 
 // TODO(#345) implement
@@ -44,7 +40,7 @@ impl QueryableBlock for Block {
 impl HotShotBlock for Block {
     type Error = Error;
 
-    type Transaction = SequencerTransaction;
+    type Transaction = Transaction;
 
     fn add_transaction_raw(
         &self,
@@ -69,7 +65,7 @@ impl HotShotBlock for Block {
 #[cfg(any(test, feature = "testing"))]
 impl TestableBlock for Block {
     fn genesis() -> Self {
-        Block::genesis(Default::default())
+        Block::genesis()
     }
 
     fn txn_count(&self) -> u64 {
@@ -101,14 +97,14 @@ impl Committable for Block {
 }
 
 impl Block {
-    pub fn genesis(txn: GenesisTransaction) -> Self {
+    pub fn genesis() -> Self {
         Self {
-            transactions: vec![SequencerTransaction::Genesis(txn)],
+            transactions: vec![],
         }
     }
 
     /// Visit all transactions in this block.
-    pub fn transactions(&self) -> impl ExactSizeIterator<Item = &SequencerTransaction> + '_ {
+    pub fn transactions(&self) -> impl ExactSizeIterator<Item = &Transaction> + '_ {
         self.transactions.iter()
     }
 

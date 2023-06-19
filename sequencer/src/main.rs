@@ -5,7 +5,7 @@ use hotshot_query_service::data_source::QueryData;
 use sequencer::{
     api::{serve, HandleFromMetrics, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, ChainVariables, GenesisTransaction, Options, SubCommand,
+    init_node, Block, Options, SubCommand,
 };
 use std::{net::ToSocketAddrs, path::Path};
 
@@ -17,9 +17,7 @@ async fn main() {
     let opt = Options::parse();
 
     // Create genesis block.
-    let genesis = Block::genesis(GenesisTransaction {
-        chain_variables: ChainVariables::new(opt.chain_id),
-    });
+    let genesis = Block::genesis();
 
     let cdn_addr = (
         opt.cdn_url.host_str().unwrap(),

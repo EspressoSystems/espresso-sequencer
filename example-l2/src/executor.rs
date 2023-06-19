@@ -163,7 +163,6 @@ mod test {
     use sequencer::api::SequencerNode;
     use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
     use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
-    use sequencer::transaction::SequencerTransaction;
     use sequencer::Vm;
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
     use std::path::Path;
@@ -364,7 +363,7 @@ mod test {
                 nonce,
             };
             let txn = SignedTransaction::new(txn, &alice).await;
-            let txn = SequencerTransaction::from(RollupVM.wrap(&txn));
+            let txn = RollupVM.wrap(&txn);
             nodes[0].submit_transaction(txn.clone()).await.unwrap();
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.

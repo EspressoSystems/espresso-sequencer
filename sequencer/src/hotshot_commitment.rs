@@ -200,7 +200,7 @@ pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{transaction::SequencerTransaction, Block, Leaf, Transaction};
+    use crate::{Block, Leaf, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
     use contract_bindings::{hot_shot::NewBlocksCall, TestL1System};
@@ -238,7 +238,7 @@ mod test {
         let num_batches = 2u64;
         let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
         for _ in 0..num_batches {
-            let txn = SequencerTransaction::Wrapped(Transaction::new(1.into(), vec![]));
+            let txn = Transaction::new(1.into(), vec![]);
             let block = Block::new().add_transaction_raw(&txn).unwrap();
 
             // Fake a leaf that sequences this block.
