@@ -42,13 +42,13 @@ pub struct Options {
     ///
     /// Modules are added by specifying the name of the module followed by it's arguments, as in
     ///
-    ///     sequencer [options] -- api --port 3000
+    /// sequencer [options] -- api --port 3000
     ///
     /// to run the API module with port 3000.
     ///
     /// To see a list of available modules and their arguments, use
     ///
-    ///     sequencer -- help
+    /// sequencer -- help
     ///
     /// Multiple modules can be specified, provided they are separated by --
     #[clap(raw = true)]
