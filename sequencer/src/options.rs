@@ -21,7 +21,7 @@ use url::Url;
 // help for individual modules by passing `help` as a subcommand, as in
 // `sequencer [options] -- help` or `sequencer [options] -- help <module>`. This means that IT IS
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
-// even if the user is only asking for help on a module. Try to give everye argument on this type a
+// even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
