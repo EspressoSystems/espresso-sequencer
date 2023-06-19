@@ -234,7 +234,7 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-type PubKey = JfPubKey<BLSSignatureScheme>;
+type PubKey = JfPubKey<SignatureSchemeType>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 #[allow(clippy::too_many_arguments)]
