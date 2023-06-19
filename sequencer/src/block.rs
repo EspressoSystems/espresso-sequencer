@@ -20,17 +20,24 @@ impl QueryableBlock for Block {
     type TransactionIndex = u64;
     type InclusionProof = ();
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
+
     fn len(&self) -> usize {
-        unimplemented!()
+        self.transactions.len()
     }
+
     fn transaction_with_proof(
         &self,
         _index: &Self::TransactionIndex,
     ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
         unimplemented!()
     }
+
+    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
+        self.transactions.get(*index as usize)
+    }
+
     fn iter(&self) -> Self::Iter<'_> {
-        unimplemented!()
+        Box::new(0..self.len() as u64)
     }
 }
 
