@@ -156,7 +156,6 @@ mod test {
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
-    use hotshot_query_service::data_source::QueryData;
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
@@ -166,7 +165,6 @@ mod test {
     use sequencer::transaction::SequencerTransaction;
     use sequencer::Vm;
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
-    use std::path::Path;
     use std::time::Duration;
     use surf_disco::{Client, Url};
     use tempfile::TempDir;
@@ -205,12 +203,18 @@ mod test {
         let nodes = init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
-        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
+        let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let query_data = QueryData::create(storage_path, ()).unwrap();
-        let SequencerNode { .. } = sequencer::api::serve(query_data, init_handle, sequencer_port)
-            .await
-            .unwrap();
+        let SequencerNode { .. } = sequencer::api::serve(
+            sequencer::api::Options {
+                storage_path,
+                port: sequencer_port,
+                reset_store: true,
+            },
+            init_handle,
+        )
+        .await
+        .unwrap();
         for node in &nodes {
             node.start().await;
         }
@@ -320,12 +324,18 @@ mod test {
         let nodes = init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
-        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
+        let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let query_data = QueryData::create(storage_path, ()).unwrap();
-        let SequencerNode { .. } = sequencer::api::serve(query_data, init_handle, sequencer_port)
-            .await
-            .unwrap();
+        let SequencerNode { .. } = sequencer::api::serve(
+            sequencer::api::Options {
+                storage_path,
+                port: sequencer_port,
+                reset_store: true,
+            },
+            init_handle,
+        )
+        .await
+        .unwrap();
         for node in &nodes {
             node.start().await;
         }

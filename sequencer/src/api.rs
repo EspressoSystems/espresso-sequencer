@@ -6,6 +6,7 @@ use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
 };
+use clap::Parser;
 use futures::{future::BoxFuture, FutureExt};
 use hotshot::types::SystemContextHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
@@ -16,8 +17,27 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::traits::metrics::Metrics;
-use std::{io, sync::Arc};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tide_disco::{Api, App};
+
+#[derive(Parser, Clone, Debug)]
+pub struct Options {
+    /// Port that the sequencer API will use.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    pub port: u16,
+
+    /// Storage path for HotShot query service data.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
+    pub storage_path: PathBuf,
+
+    /// Create new query storage instead of opening existing one.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    pub reset_store: bool,
+}
 
 type NodeIndex = u64;
 
@@ -129,12 +149,20 @@ impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
 }
 
 pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
-    query_state: QueryData<SeqTypes, I, ()>,
+    opt: Options,
     init_handle: HandleFromMetrics<I>,
-    port: u16,
 ) -> io::Result<SequencerNode<I>> {
     type StateType<I> = Arc<RwLock<AppState<I>>>;
 
+    let storage_path = Path::new(&opt.storage_path);
+    let query_state = {
+        if opt.reset_store {
+            QueryData::create(storage_path, ())
+        } else {
+            QueryData::open(storage_path, ())
+        }
+    }
+    .expect("Failed to initialize query data storage");
     let metrics: Box<dyn Metrics> = query_state.metrics();
 
     // Start up handle
@@ -197,7 +225,7 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
         .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
     let update_task = spawn(async move {
-        futures::join!(app.serve(format!("0.0.0.0:{port}")), async move {
+        futures::join!(app.serve(format!("0.0.0.0:{}", opt.port)), async move {
             tracing::debug!("waiting for event");
             while let Ok(event) = watch_handle.next_event().await {
                 tracing::debug!("got event {:?}", event);
@@ -232,16 +260,14 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use futures::FutureExt;
-    use hotshot_query_service::data_source::QueryData;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
-    use std::path::Path;
     use surf_disco::Client;
 
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
 
-    use super::SequencerNode;
+    use super::{Options, SequencerNode};
 
     #[async_std::test]
     async fn submit_test() {
@@ -265,11 +291,18 @@ mod test {
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
         let tmp_dir = TempDir::new().unwrap();
-        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
+        let storage_path = tmp_dir.path().join("tmp_storage");
 
-        let query_data = QueryData::create(storage_path, ()).unwrap();
-
-        let SequencerNode { handle, .. } = serve(query_data, init_handle, port).await.unwrap();
+        let SequencerNode { handle, .. } = serve(
+            Options {
+                storage_path,
+                port,
+                reset_store: true,
+            },
+            init_handle,
+        )
+        .await
+        .unwrap();
 
         client.connect(None).await;
 

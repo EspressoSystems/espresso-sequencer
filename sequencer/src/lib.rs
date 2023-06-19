@@ -2,12 +2,12 @@ pub mod api;
 mod block;
 mod chain_variables;
 pub mod hotshot_commitment;
+pub mod options;
 mod state;
 pub mod transaction;
 mod vm;
 
 use async_std::task::sleep;
-use clap::{Parser, Subcommand};
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -23,7 +23,6 @@ use hotshot::{
     types::{Message, SignatureKey, SystemContextHandle},
     HotShotInitializer, SystemContext,
 };
-use hotshot_commitment::CommitmentTaskOptions;
 use hotshot_types::{
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
     message::SequencingMessage,
@@ -44,49 +43,16 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use transaction::SequencerTransaction;
-use url::Url;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
+pub use options::Options;
 pub use state::State;
 pub use transaction::{GenesisTransaction, Transaction};
 pub use vm::{Vm, VmId, VmTransaction};
-
-#[derive(Parser, Clone, Debug)]
-pub struct Options {
-    /// Unique identifier for this instance of the sequencer network.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    pub chain_id: u16,
-
-    /// Port that the sequencer API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    pub port: u16,
-
-    /// URL of the HotShot CDN.
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CDN_URL")]
-    pub cdn_url: Url,
-
-    /// Storage path for HotShot query service data.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub storage_path: PathBuf,
-
-    /// Create new query storage instead of opening existing one.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
-    pub reset_store: bool,
-
-    /// If specified, the sequencer will post hotshot commitments to the L1
-    #[command(subcommand)]
-    pub hotshot_contract_options: Option<SubCommand>,
-}
-
-#[derive(Subcommand, Clone, Debug)]
-pub enum SubCommand {
-    CommitmentTask(CommitmentTaskOptions),
-}
 
 pub mod network {
     use super::*;

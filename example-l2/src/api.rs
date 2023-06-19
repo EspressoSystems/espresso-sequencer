@@ -102,14 +102,12 @@ mod tests {
     use async_std::task::spawn;
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
-    use hotshot_query_service::data_source::QueryData;
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::{
         api::SequencerNode, testing::wait_for_decide_on_handle, Transaction as SeqTransaction,
     };
-    use std::path::Path;
     use surf_disco::Client;
     use tempfile::TempDir;
 
@@ -153,13 +151,18 @@ mod tests {
         let nodes = sequencer::testing::init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
-        let storage_path: &Path = &(tmp_dir.path().join("tmp_storage"));
+        let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let query_data = QueryData::create(storage_path, ()).unwrap();
-        let SequencerNode { handle, .. } =
-            sequencer::api::serve(query_data, init_handle, sequencer_port)
-                .await
-                .unwrap();
+        let SequencerNode { handle, .. } = sequencer::api::serve(
+            sequencer::api::Options {
+                storage_path,
+                port: sequencer_port,
+                reset_store: true,
+            },
+            init_handle,
+        )
+        .await
+        .unwrap();
         for node in &nodes {
             node.start().await;
         }
