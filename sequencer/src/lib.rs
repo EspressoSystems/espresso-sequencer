@@ -7,7 +7,6 @@ mod state;
 pub mod transaction;
 mod vm;
 
-use ark_bls12_381::Parameters;
 use async_std::task::sleep;
 use derivative::Derivative;
 use hotshot::{
@@ -21,8 +20,8 @@ use hotshot::{
         },
         NodeImplementation,
     },
-    types::{HotShotHandle, Message, SignatureKey},
-    HotShot, HotShotInitializer,
+    types::{Message, SignatureKey, SystemContextHandle},
+    HotShotInitializer, SystemContext,
 };
 use hotshot_types::{
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
@@ -135,8 +134,7 @@ pub type Leaf = SequencingLeaf<SeqTypes>;
 pub type Membership = GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>;
 pub type Storage = MemoryStorage<SeqTypes, Leaf>;
 
-type Param381 = ark_bls12_381::Parameters;
-pub type SignatureSchemeType = BLSSignatureScheme<Param381>;
+pub type SignatureSchemeType = BLSSignatureScheme;
 pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
 type ElectionConfig = StaticElectionConfig;
 
@@ -202,7 +200,7 @@ pub enum Error {
     UnexpectedGenesis,
 }
 
-type PubKey = JfPubKey<BLSSignatureScheme<Parameters>>;
+type PubKey = JfPubKey<SignatureSchemeType>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 #[allow(clippy::too_many_arguments)]
@@ -215,7 +213,7 @@ async fn init_hotshot<N: network::Type>(
     da_channel: N::DAChannel<Node<N>>,
     quorum_channel: N::QuorumChannel<Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
-) -> HotShotHandle<SeqTypes, Node<N>> {
+) -> SystemContextHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&priv_key);
 
@@ -235,7 +233,7 @@ async fn init_hotshot<N: network::Type>(
         enc_key,
     );
 
-    HotShot::init(
+    SystemContext::init(
         public_key,
         priv_key,
         node_id as u64,
@@ -253,7 +251,10 @@ pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
+) -> (
+    SystemContextHandle<SeqTypes, Node<network::Centralized>>,
+    u64,
+) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
     let da_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
@@ -310,7 +311,8 @@ pub mod testing {
     use rand::thread_rng;
     use std::{sync::Arc, time::Duration};
 
-    pub async fn init_hotshot_handles() -> Vec<HotShotHandle<SeqTypes, Node<network::Memory>>> {
+    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
+    {
         setup_logging();
         setup_backtrace();
 
@@ -331,7 +333,7 @@ pub mod testing {
         // Convert public keys to JfPubKey
         let nodes_pub_keys: Vec<PubKey> = nodes_key_pairs
             .iter()
-            .map(|((_, ver_key), _)| JfPubKey::from_native(ver_key.clone()))
+            .map(|((_, ver_key), _)| JfPubKey::from_native(*ver_key))
             .collect::<Vec<_>>();
 
         let mut handles = vec![];
@@ -357,8 +359,8 @@ pub mod testing {
 
         // Create HotShot instances.
         for (node_id, ((sign_key, ver_key), enc_key)) in nodes_key_pairs.iter().enumerate() {
-            let priv_key = (sign_key.clone(), ver_key.clone());
-            let public_key = JfPubKey::from_native(ver_key.clone());
+            let priv_key = (sign_key.clone(), *ver_key);
+            let public_key = JfPubKey::from_native(*ver_key);
 
             let network = MemoryNetwork::new(
                 public_key.clone(),
@@ -389,7 +391,7 @@ pub mod testing {
 
     // Wait for decide event, make sure it matches submitted transaction
     pub async fn wait_for_decide_on_handle<N: network::Type>(
-        mut handle: HotShotHandle<SeqTypes, Node<N>>,
+        mut handle: SystemContextHandle<SeqTypes, Node<N>>,
         submitted_txn: SequencerTransaction,
     ) -> Result<(), ()> {
         let start_view = handle.get_current_view().await;
@@ -444,7 +446,7 @@ mod test {
 
     // Submit transaction to given handle, return clone of transaction
     async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
-        handle: HotShotHandle<SeqTypes, I>,
+        handle: SystemContextHandle<SeqTypes, I>,
         txn: &ApplicationTransaction,
     ) -> SequencerTransaction {
         let tx = SequencerTransaction::Wrapped(Transaction::new(

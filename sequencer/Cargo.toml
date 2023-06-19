@@ -28,23 +28,35 @@ either = "1.8.1"
 ethers = "2.0"
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
-hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = ["async-std-executor", "channel-async-std"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
+hotshot-centralized-server = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git" }
 
-jf-primitives = { features = [
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "36dceb6", features = [
     "std",
-], git = "https://github.com/EspressoSystems/jellyfish.git", tag = "0.1.2-patch.1" }
+] }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
 serde = { version = "1.0.163", features = ["derive"] }
 snafu = "0.7.4"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.0" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.0" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.1" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.1" }
 toml = "0.5"
 tracing = "0.1"
 url = "2.3"
