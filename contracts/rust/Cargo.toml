@@ -11,7 +11,11 @@ ark-ec = { version = "0.4.2" }
 ark-ff = "0.4.2"
 ark-serialize = "0.4.2"
 ark-std = { version = "0.4.0", default-features = false }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0", features = ["logging-utils", "async-std-executor", "channel-async-std"] }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0", features = [
+    "logging-utils",
+    "async-std-executor",
+    "channel-async-std",
+] }
 async-std = "1.12.0"
 contract-bindings = { path = "../../contract-bindings" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
@@ -23,9 +27,10 @@ hex = "0.4.3"
 # This crate requires a newer version than 0.1.2-patch.1 that's used elsewhere
 # in this workspace. However not pinning any revision currently breaks
 # dependency resolution.
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "483fb97324d42724720f9155f200973a3b83a7b4" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "36dceb6", features = [
+    "std",
+] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "483fb97324d42724720f9155f200973a3b83a7b4" }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.8", default-features = false }
 tokio = "1.28.1"
-

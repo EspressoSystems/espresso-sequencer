@@ -5,6 +5,7 @@ use crate::{
 };
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
+use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
@@ -12,6 +13,32 @@ use std::fmt::{Debug, Display};
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
     pub(crate) transactions: Vec<SequencerTransaction>,
+}
+
+// TODO(#345) implement
+impl QueryableBlock for Block {
+    type TransactionIndex = u64;
+    type InclusionProof = ();
+    type Iter<'a> = Box<dyn Iterator<Item = u64>>;
+
+    fn len(&self) -> usize {
+        self.transactions.len()
+    }
+
+    fn transaction_with_proof(
+        &self,
+        _index: &Self::TransactionIndex,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+        unimplemented!()
+    }
+
+    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
+        self.transactions.get(*index as usize)
+    }
+
+    fn iter(&self) -> Self::Iter<'_> {
+        Box::new(0..self.len() as u64)
+    }
 }
 
 impl HotShotBlock for Block {
