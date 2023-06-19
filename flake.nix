@@ -34,12 +34,9 @@
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
 
-  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils, flake-compat, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
+  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        info = builtins.split "\([a-zA-Z0-9_]+\)" system;
-        arch = (builtins.elemAt (builtins.elemAt info 1) 0);
-        os = (builtins.elemAt (builtins.elemAt info 3) 0);
         # node=error: disable noisy anvil output
         RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
 
