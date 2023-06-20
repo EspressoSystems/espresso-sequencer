@@ -14,6 +14,9 @@ use typenum::U2;
 
 type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
+// Supports 1K transactions
+pub const MAX_NMT_DEPTH: usize = 10;
+
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
     #[serde(
@@ -38,7 +41,7 @@ where
     use serde::de;
 
     let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
-    let nmt = TransactionNMT::from_elems(leaves.len(), leaves)
+    let nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, leaves)
         .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
     Ok(nmt)
 }
@@ -101,7 +104,7 @@ impl HotShotBlock for Block {
 
     fn new() -> Self {
         Self {
-            transaction_nmt: TransactionNMT::from_elems(0, &[]).unwrap(),
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
 }
@@ -143,7 +146,7 @@ impl Committable for Block {
 impl Block {
     pub fn genesis() -> Self {
         Self {
-            transaction_nmt: TransactionNMT::from_elems(0, &[]).unwrap(),
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
 

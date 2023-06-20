@@ -106,7 +106,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_CDN_SERVER_MAX_TRANSACTIONS",
-        default_value = "10000"
+        default_value = "1000"
     )]
     max_transactions: NonZeroUsize,
 }
