@@ -14,10 +14,15 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    # Run the API server (with options taken from the environment)
+    command: sequencer -- api
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
     depends_on:
       - cdn-server
@@ -30,6 +35,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    # Run the API server (with options taken from the environment)
+    command: sequencer -- api
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -41,6 +48,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    # Run the API server (with options taken from the environment)
+    command: sequencer -- api
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -52,6 +61,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    # Run the API server (with options taken from the environment)
+    command: sequencer -- api
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -63,6 +74,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    # Run the API server (with options taken from the environment)
+    command: sequencer -- api
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT

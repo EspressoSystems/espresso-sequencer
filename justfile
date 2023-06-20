@@ -1,5 +1,5 @@
 rollup-demo:
-    docker compose -f docker-compose-demo.yaml up   
+    docker compose -f docker-compose-demo.yaml up
 
 rollup-demo-down:
     docker compose -f docker-compose-demo.yaml down

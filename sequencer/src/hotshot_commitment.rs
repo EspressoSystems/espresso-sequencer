@@ -1,5 +1,5 @@
 use async_std::{sync::Arc, task::sleep};
-use clap::Args;
+use clap::Parser;
 use contract_bindings::HotShot;
 use ethers::prelude::*;
 use ethers::types::Address;
@@ -16,7 +16,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 
-#[derive(Args, Clone, Debug)]
+#[derive(Parser, Clone, Debug)]
 pub struct CommitmentTaskOptions {
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]

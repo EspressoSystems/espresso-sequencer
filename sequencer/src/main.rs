@@ -1,20 +1,23 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use futures::join;
-use hotshot_query_service::data_source::QueryData;
+use futures::future::{join_all, FutureExt};
+use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{serve, HandleFromMetrics, SequencerNode},
+    api::{serve, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, Options, SubCommand,
+    init_node, Block, Options,
 };
-use std::{net::ToSocketAddrs, path::Path};
+use std::net::ToSocketAddrs;
 
 #[async_std::main]
 async fn main() {
     setup_logging();
     setup_backtrace();
 
+    tracing::info!("sequencer starting up");
     let opt = Options::parse();
+    let modules = opt.modules();
+    tracing::info!("modules: {:?}", modules);
 
     // Create genesis block.
     let genesis = Block::genesis();
@@ -28,48 +31,63 @@ async fn main() {
         .next()
         .unwrap();
 
-    let init_handle: HandleFromMetrics<_> =
-        Box::new(move |metrics| Box::pin(init_node(cdn_addr, genesis, metrics)));
+    let mut tasks = vec![];
 
-    let storage_path = Path::new(&opt.storage_path);
-
-    let query_data = {
-        if opt.reset_store {
-            QueryData::create(storage_path, ())
-        } else {
-            QueryData::open(storage_path, ())
+    // Inititialize HotShot. If the user requested the API module, we must initialize the handle in
+    // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
+    // the handle directly, with no metrics.
+    let (mut handle, api_port) = match modules.api {
+        Some(options) => {
+            let port = options.port;
+            let init_handle =
+                Box::new(move |metrics| init_node(cdn_addr, genesis, metrics).boxed());
+            let SequencerNode { handle, .. } = serve(options, init_handle)
+                .await
+                .expect("Failed to initialize API");
+            (handle, Some(port))
         }
-    }
-    .expect("Failed to initialize query data storage");
-
-    let SequencerNode {
-        handle,
-        update_task,
-        ..
-    } = serve(query_data, init_handle, opt.port)
-        .await
-        .expect("Failed to initialize API");
-
-    let run_sequencer = async {
-        // Start doing consensus.
-        handle.start().await;
-
-        // Block on the API server.
-        update_task.await.expect("Error in API server");
+        None => (
+            init_node(cdn_addr, genesis, Box::new(NoMetrics)).await.0,
+            None,
+        ),
     };
+    // Register a task to run consensus.
+    tasks.push(
+        async move {
+            // Start doing consensus.
+            handle.start().await;
 
-    if let Some(SubCommand::CommitmentTask(hotshot_contract_options)) = opt.hotshot_contract_options
-    {
-        let mut options = hotshot_contract_options;
+            // Wait for events just to keep the process from exiting before consensus exits.
+            loop {
+                let event = handle.next_event().await;
+                tracing::debug!(?event);
+            }
+        }
+        .boxed(),
+    );
+
+    // Register a task to run the HotShot commitment module, if requested.
+    if let Some(mut options) = modules.commitment_task {
         // If no query service is specified, use the one of this node.
         if options.query_service_url.is_none() {
-            options.query_service_url =
-                Some(format!("http://localhost:{}", opt.port).parse().unwrap());
+            options.query_service_url = Some(
+                format!(
+                    "http://localhost:{}",
+                    api_port.expect("API port is required when running commitment task")
+                )
+                .parse()
+                .unwrap(),
+            );
         }
-        tracing::info!("Starting consensus and HotShot commitment task");
-        join!(run_sequencer, run_hotshot_commitment_task(&options));
-    } else {
-        tracing::info!("Starting consensus");
-        run_sequencer.await;
+        tasks.push(
+            async move {
+                tracing::info!("Starting HotShot commitment task");
+                run_hotshot_commitment_task(&options).await
+            }
+            .boxed(),
+        )
     }
+
+    // Run all tasks in parallel.
+    join_all(tasks).await;
 }
