@@ -27,7 +27,7 @@ hex = "0.4.3"
 # This crate requires a newer version than 0.1.2-patch.1 that's used elsewhere
 # in this workspace. However not pinning any revision currently breaks
 # dependency resolution.
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "36dceb6", features = [
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
     "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "483fb97324d42724720f9155f200973a3b83a7b4" }
