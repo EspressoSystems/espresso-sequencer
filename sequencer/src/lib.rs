@@ -415,8 +415,7 @@ pub mod testing {
                         Either::Left(block) => block
                             .transaction_nmt
                             .leaves()
-                            .collect::<Vec<&Transaction>>()
-                            .contains(&&submitted_txn),
+                            .any(|txn| txn == &submitted_txn),
                         Either::Right(_) => false,
                     }) {
                         return Ok(());

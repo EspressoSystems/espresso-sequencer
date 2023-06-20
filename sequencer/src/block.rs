@@ -26,6 +26,7 @@ pub struct Block {
     pub(crate) transaction_nmt: TransactionNMT,
 }
 
+// Serialize the NMT as a compact Vec<Transaction>
 fn serialize_nmt_as_leaves<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
