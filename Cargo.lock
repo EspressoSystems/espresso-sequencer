@@ -2719,7 +2719,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "strum 0.25.0",
- "strum_macros",
+ "strum_macros 0.25.0",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.1)",
  "tempfile",
  "tide-disco",
@@ -7196,7 +7196,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -7216,6 +7216,19 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe9f3bd7d2e45dcc5e265fbb88d6513e4747d8ef9444cf01a533119bce28a157"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.18",
 ]
 
 [[package]]
@@ -7585,7 +7598,7 @@ dependencies = [
  "signal-hook-async-std",
  "snafu",
  "strum 0.24.1",
- "strum_macros",
+ "strum_macros 0.24.3",
  "surf",
  "tagged-base64 0.2.4",
  "tide",
