@@ -8,7 +8,7 @@ use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NMT,
     AppendableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display};
 use typenum::U2;
 
@@ -16,13 +16,36 @@ type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
+    #[serde(
+        serialize_with = "serialize_nmt_as_leaves",
+        deserialize_with = "deserialize_nmt_from_leaves"
+    )]
     pub(crate) transaction_nmt: TransactionNMT,
 }
 
-// TODO(#345) implement
+fn serialize_nmt_as_leaves<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let leaves = nmt.leaves().cloned().collect::<Vec<Transaction>>();
+    leaves.serialize(s)
+}
+
+fn deserialize_nmt_from_leaves<'de, D>(deserializer: D) -> Result<TransactionNMT, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de;
+
+    let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
+    let nmt = TransactionNMT::from_elems(leaves.len(), leaves)
+        .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
+    Ok(nmt)
+}
+
 impl QueryableBlock for Block {
     type TransactionIndex = u64;
-    type InclusionProof = ();
+    type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
 
     fn len(&self) -> usize {
@@ -31,9 +54,12 @@ impl QueryableBlock for Block {
 
     fn transaction_with_proof(
         &self,
-        _index: &Self::TransactionIndex,
+        index: &Self::TransactionIndex,
     ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
-        unimplemented!()
+        match self.transaction_nmt.lookup(index) {
+            LookupResult::Ok(txn, proof) => Some((txn, proof)),
+            _ => None,
+        }
     }
 
     fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
