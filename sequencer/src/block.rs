@@ -1,14 +1,22 @@
-use crate::{vm::Vm, Error, Transaction};
+use crate::{vm::Vm, Error, Transaction, VmId};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
+use jf_primitives::merkle_tree::{
+    examples::{Sha3Digest, Sha3Node},
+    namespaced_merkle_tree::NMT,
+    AppendableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
+use typenum::U2;
+
+type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    pub(crate) transactions: Vec<Transaction>,
+    pub(crate) transaction_nmt: TransactionNMT,
 }
 
 // TODO(#345) implement
@@ -18,7 +26,7 @@ impl QueryableBlock for Block {
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
 
     fn len(&self) -> usize {
-        self.transactions.len()
+        self.transaction_nmt.num_leaves() as usize
     }
 
     fn transaction_with_proof(
@@ -29,7 +37,10 @@ impl QueryableBlock for Block {
     }
 
     fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
-        self.transactions.get(*index as usize)
+        match self.transaction_nmt.lookup(index) {
+            LookupResult::Ok(val, _) => Some(val),
+            _ => None,
+        }
     }
 
     fn iter(&self) -> Self::Iter<'_> {
@@ -47,17 +58,24 @@ impl HotShotBlock for Block {
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
         let mut new = self.clone();
-        new.transactions.push(tx.clone());
+        new.transaction_nmt
+            .push(tx.clone())
+            .map_err(|e| Error::MerkleTreeError {
+                error: e.to_string(),
+            })?;
         Ok(new)
     }
 
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        self.transactions.iter().map(|tx| tx.commit()).collect()
+        self.transaction_nmt
+            .leaves()
+            .map(|tx| tx.commit())
+            .collect()
     }
 
     fn new() -> Self {
         Self {
-            transactions: vec![],
+            transaction_nmt: TransactionNMT::from_elems(0, &[]).unwrap(),
         }
     }
 }
@@ -69,7 +87,7 @@ impl TestableBlock for Block {
     }
 
     fn txn_count(&self) -> u64 {
-        self.transactions.len() as u64
+        self.transaction_nmt.num_leaves()
     }
 }
 
@@ -87,8 +105,8 @@ impl Committable for Block {
             .array_field(
                 "txns",
                 &self
-                    .transactions
-                    .iter()
+                    .transaction_nmt
+                    .leaves()
                     .map(|x| x.commit())
                     .collect::<Vec<_>>(),
             )
@@ -99,13 +117,13 @@ impl Committable for Block {
 impl Block {
     pub fn genesis() -> Self {
         Self {
-            transactions: vec![],
+            transaction_nmt: TransactionNMT::from_elems(0, &[]).unwrap(),
         }
     }
 
     /// Visit all transactions in this block.
     pub fn transactions(&self) -> impl ExactSizeIterator<Item = &Transaction> + '_ {
-        self.transactions.iter()
+        self.transaction_nmt.leaves()
     }
 
     /// Visit the valid transactions for `V` in this block.

@@ -1,9 +1,26 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derive_more::From;
+use jf_primitives::merkle_tree::namespaced_merkle_tree::Namespace;
 use serde::{Deserialize, Serialize};
 
 use crate::transaction::{ApplicationTransaction, Transaction};
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, From)]
+#[derive(
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    From,
+    Default,
+    CanonicalDeserialize,
+    CanonicalSerialize,
+    PartialOrd,
+    Ord,
+)]
 pub struct VmId(pub(crate) u64);
 
 pub trait Vm {
@@ -12,6 +29,16 @@ pub trait Vm {
 
     fn wrap(&self, txn: &Self::Transaction) -> Transaction {
         Transaction::new(self.id(), txn.encode())
+    }
+}
+
+impl Namespace for VmId {
+    fn max() -> Self {
+        VmId(u64::max_value())
+    }
+
+    fn min() -> Self {
+        VmId(u64::min_value())
     }
 }
 

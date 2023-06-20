@@ -197,6 +197,9 @@ pub enum Error {
 
     // Genesis transaction in non-genesis block
     UnexpectedGenesis,
+
+    // Merkle tree error
+    MerkleTreeError { error: String },
 }
 
 type PubKey = JfPubKey<SignatureSchemeType>;
@@ -409,7 +412,11 @@ pub mod testing {
                     ..
                 }) => {
                     if leaf.iter().any(|leaf| match leaf.get_deltas() {
-                        Either::Left(block) => block.transactions.contains(&submitted_txn),
+                        Either::Left(block) => block
+                            .transaction_nmt
+                            .leaves()
+                            .collect::<Vec<&Transaction>>()
+                            .contains(&&submitted_txn),
                         Either::Right(_) => false,
                     }) {
                         return Ok(());

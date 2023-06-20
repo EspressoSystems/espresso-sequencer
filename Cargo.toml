@@ -8,3 +8,6 @@ members = [
   "sequencer",
   "utils",
 ]
+
+[patch."https://github.com/EspressoSystems/jellyfish"]
+jf-primitives = { path = "../jellyfish/primitives" }
