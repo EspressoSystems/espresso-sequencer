@@ -1,7 +1,4 @@
-use crate::{
-    transaction::{SequencerTransaction, Transaction},
-    Leaf, SeqTypes,
-};
+use crate::{transaction::Transaction, Leaf, SeqTypes};
 use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
@@ -198,10 +195,10 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
             async move {
                 state
                     .submit_state
-                    .submit_transaction(SequencerTransaction::Wrapped(
+                    .submit_transaction(
                         req.body_auto::<Transaction>()
                             .map_err(|err| Error::internal(err.to_string()))?,
-                    ))
+                    )
                     .await
                     .map_err(|err| Error::internal(err.to_string()))
             }
@@ -255,7 +252,7 @@ mod test {
     use crate::{
         api::serve,
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
-        transaction::{SequencerTransaction, Transaction},
+        transaction::Transaction,
         vm::VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -315,7 +312,7 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(handle.clone(), SequencerTransaction::Wrapped(txn))
+        wait_for_decide_on_handle(handle.clone(), txn)
             .await
             .unwrap()
     }

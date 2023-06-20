@@ -1,7 +1,4 @@
-use crate::{
-    block::Block, chain_variables::ChainVariables, transaction::SequencerTransaction, Error,
-    Transaction,
-};
+use crate::{block::Block, chain_variables::ChainVariables, Error, Transaction};
 use commit::{Commitment, Committable};
 use hotshot::traits::State as HotShotState;
 use hotshot_types::{
@@ -61,7 +58,7 @@ impl TestableState for State {
         rng: &mut dyn rand::RngCore,
         _padding: u64,
     ) -> <Self::BlockType as hotshot::traits::Block>::Transaction {
-        SequencerTransaction::Wrapped(Transaction::random(rng))
+        Transaction::random(rng)
     }
 }
 

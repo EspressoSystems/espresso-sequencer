@@ -45,13 +45,12 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
-use transaction::SequencerTransaction;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
 pub use options::Options;
 pub use state::State;
-pub use transaction::{GenesisTransaction, Transaction};
+pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
 pub mod network {
@@ -175,7 +174,7 @@ impl NodeType for SeqTypes {
     type BlockType = Block;
     type SignatureKey = SignatureKeyType;
     type VoteTokenType = StaticVoteToken<SignatureKeyType>;
-    type Transaction = SequencerTransaction;
+    type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;
     type StateType = State;
 }
@@ -316,7 +315,7 @@ pub mod testing {
         setup_logging();
         setup_backtrace();
 
-        let genesis_block = Block::genesis(Default::default());
+        let genesis_block = Block::genesis();
 
         let num_nodes = 5;
 
@@ -392,7 +391,7 @@ pub mod testing {
     // Wait for decide event, make sure it matches submitted transaction
     pub async fn wait_for_decide_on_handle<N: network::Type>(
         mut handle: SystemContextHandle<SeqTypes, Node<N>>,
-        submitted_txn: SequencerTransaction,
+        submitted_txn: Transaction,
     ) -> Result<(), ()> {
         let start_view = handle.get_current_view().await;
 
@@ -448,11 +447,8 @@ mod test {
     async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
         handle: SystemContextHandle<SeqTypes, I>,
         txn: &ApplicationTransaction,
-    ) -> SequencerTransaction {
-        let tx = SequencerTransaction::Wrapped(Transaction::new(
-            TestVm::default().id(),
-            bincode::serialize(txn).unwrap(),
-        ));
+    ) -> Transaction {
+        let tx = Transaction::new(TestVm::default().id(), bincode::serialize(txn).unwrap());
 
         handle
             .submit_transaction(tx.clone())
@@ -509,10 +505,7 @@ mod test {
             }) => {
                 // Exactly one leaf, and it contains the genesis block
                 assert_eq!(leaf.len(), 1);
-                assert_eq!(
-                    leaf[0].deltas,
-                    Either::Left(Block::genesis(Default::default()))
-                );
+                assert_eq!(leaf[0].deltas, Either::Left(Block::genesis()));
             }
             _ => panic!(),
         }

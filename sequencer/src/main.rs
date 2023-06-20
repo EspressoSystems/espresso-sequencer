@@ -5,7 +5,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{serve, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, ChainVariables, GenesisTransaction, Options,
+    init_node, Block, Options,
 };
 use std::net::ToSocketAddrs;
 
@@ -20,9 +20,7 @@ async fn main() {
     tracing::info!("modules: {:?}", modules);
 
     // Create genesis block.
-    let genesis = Block::genesis(GenesisTransaction {
-        chain_variables: ChainVariables::new(opt.chain_id),
-    });
+    let genesis = Block::genesis();
 
     let cdn_addr = (
         opt.cdn_url.host_str().unwrap(),
