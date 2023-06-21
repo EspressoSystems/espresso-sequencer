@@ -1,10 +1,22 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use commit::{Commitment, Committable};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
+use jf_primitives::merkle_tree::namespaced_merkle_tree::Namespaced;
 use serde::{Deserialize, Serialize};
 
 use crate::vm::{Vm, VmId, VmTransaction};
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(
+    Clone,
+    Serialize,
+    Deserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+)]
 pub struct Transaction {
     vm: VmId,
     payload: Vec<u8>,
@@ -63,6 +75,13 @@ impl VmTransaction for ApplicationTransaction {
 }
 
 impl HotShotTransaction for Transaction {}
+
+impl Namespaced for Transaction {
+    type Namespace = VmId;
+    fn get_namespace(&self) -> Self::Namespace {
+        self.vm
+    }
+}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {

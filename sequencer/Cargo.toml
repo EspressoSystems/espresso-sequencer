@@ -14,6 +14,7 @@ tempfile = "3.4.0"
 
 [dependencies]
 ark-bls12-381 = "0.3.0"
+ark-serialize = { version = "0.4.0", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0" }
 async-std = "1.12.0"
 async-trait = "0.1.61"
@@ -47,7 +48,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features =
 
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git" }
 
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", rev = "36dceb6", features = [
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
     "std",
 ] }
 nll = { git = "https://github.com/EspressoSystems/nll" }
@@ -59,4 +60,7 @@ surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.1" }
 toml = "0.5"
 tracing = "0.1"
+typenum = { version = "1.15.0", default-features = false, features = [
+    "no_std",
+] }
 url = "2.3"

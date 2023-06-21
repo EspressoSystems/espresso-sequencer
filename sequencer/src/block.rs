@@ -1,35 +1,67 @@
-use crate::{vm::Vm, Error, Transaction};
+use crate::{vm::Vm, Error, Transaction, VmId, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
-use serde::{Deserialize, Serialize};
+use jf_primitives::merkle_tree::{
+    examples::{Sha3Digest, Sha3Node},
+    namespaced_merkle_tree::NMT,
+    AppendableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
+};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display};
+use typenum::U2;
+
+type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    pub(crate) transactions: Vec<Transaction>,
+    #[serde(with = "nmt_serializer")]
+    pub(crate) transaction_nmt: TransactionNMT,
 }
 
-// TODO(#345) implement
+mod nmt_serializer {
+    use super::*;
+
+    // Serialize the NMT as a compact Vec<Transaction>
+    pub fn serialize<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let leaves = nmt.leaves().cloned().collect::<Vec<Transaction>>();
+        leaves.serialize(s)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<TransactionNMT, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de;
+
+        let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
+        let nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, leaves)
+            .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
+        Ok(nmt)
+    }
+}
+
 impl QueryableBlock for Block {
     type TransactionIndex = u64;
-    type InclusionProof = ();
+    type InclusionProof = <TransactionNMT as MerkleTreeScheme>::MembershipProof;
     type Iter<'a> = Box<dyn Iterator<Item = u64>>;
 
     fn len(&self) -> usize {
-        self.transactions.len()
+        self.transaction_nmt.num_leaves() as usize
     }
 
     fn transaction_with_proof(
         &self,
-        _index: &Self::TransactionIndex,
+        index: &Self::TransactionIndex,
     ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
-        unimplemented!()
-    }
-
-    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
-        self.transactions.get(*index as usize)
+        match self.transaction_nmt.lookup(index) {
+            LookupResult::Ok(txn, proof) => Some((txn, proof)),
+            _ => None,
+        }
     }
 
     fn iter(&self) -> Self::Iter<'_> {
@@ -47,17 +79,24 @@ impl HotShotBlock for Block {
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
         let mut new = self.clone();
-        new.transactions.push(tx.clone());
+        new.transaction_nmt
+            .push(tx.clone())
+            .map_err(|e| Error::MerkleTreeError {
+                error: e.to_string(),
+            })?;
         Ok(new)
     }
 
     fn contained_transactions(&self) -> std::collections::HashSet<Commitment<Self::Transaction>> {
-        self.transactions.iter().map(|tx| tx.commit()).collect()
+        self.transaction_nmt
+            .leaves()
+            .map(|tx| tx.commit())
+            .collect()
     }
 
     fn new() -> Self {
         Self {
-            transactions: vec![],
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
 }
@@ -69,7 +108,7 @@ impl TestableBlock for Block {
     }
 
     fn txn_count(&self) -> u64 {
-        self.transactions.len() as u64
+        self.transaction_nmt.num_leaves()
     }
 }
 
@@ -87,8 +126,8 @@ impl Committable for Block {
             .array_field(
                 "txns",
                 &self
-                    .transactions
-                    .iter()
+                    .transaction_nmt
+                    .leaves()
                     .map(|x| x.commit())
                     .collect::<Vec<_>>(),
             )
@@ -99,13 +138,13 @@ impl Committable for Block {
 impl Block {
     pub fn genesis() -> Self {
         Self {
-            transactions: vec![],
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
 
     /// Visit all transactions in this block.
     pub fn transactions(&self) -> impl ExactSizeIterator<Item = &Transaction> + '_ {
-        self.transactions.iter()
+        self.transaction_nmt.leaves()
     }
 
     /// Visit the valid transactions for `V` in this block.

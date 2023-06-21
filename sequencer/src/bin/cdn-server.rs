@@ -3,7 +3,7 @@ use clap::Parser;
 use cld::ClDuration;
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot_centralized_server::{config::RoundConfig, NetworkConfig, Server};
-use sequencer::SignatureKeyType;
+use sequencer::{SignatureKeyType, MAX_NMT_DEPTH};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
 use std::num::{NonZeroUsize, ParseIntError};
@@ -103,12 +103,8 @@ struct Args {
     round_start_delay: Duration,
 
     /// Maximum number of transactions in a block.
-    #[arg(
-        long,
-        env = "ESPRESSO_CDN_SERVER_MAX_TRANSACTIONS",
-        default_value = "10000"
-    )]
-    max_transactions: NonZeroUsize,
+    #[arg(long, env = "ESPRESSO_CDN_SERVER_MAX_TRANSACTIONS")]
+    max_transactions: Option<NonZeroUsize>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -182,7 +178,9 @@ async fn main() {
         ..Default::default()
     };
     config.config.total_nodes = args.num_nodes;
-    config.config.max_transactions = args.max_transactions;
+    config.config.max_transactions = args
+        .max_transactions
+        .unwrap_or(NonZeroUsize::new(2_usize.pow(MAX_NMT_DEPTH as u32)).unwrap());
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;

@@ -53,6 +53,9 @@ pub use state::State;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
+// Supports 1K transactions
+pub const MAX_NMT_DEPTH: usize = 10;
+
 pub mod network {
     use super::*;
 
@@ -197,6 +200,9 @@ pub enum Error {
 
     // Genesis transaction in non-genesis block
     UnexpectedGenesis,
+
+    // Merkle tree error
+    MerkleTreeError { error: String },
 }
 
 type PubKey = JfPubKey<SignatureSchemeType>;
@@ -409,7 +415,10 @@ pub mod testing {
                     ..
                 }) => {
                     if leaf.iter().any(|leaf| match leaf.get_deltas() {
-                        Either::Left(block) => block.transactions.contains(&submitted_txn),
+                        Either::Left(block) => block
+                            .transaction_nmt
+                            .leaves()
+                            .any(|txn| txn == &submitted_txn),
                         Either::Right(_) => false,
                     }) {
                         return Ok(());

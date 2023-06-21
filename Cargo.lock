@@ -80,9 +80,9 @@ dependencies = [
 
 [[package]]
 name = "aes"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "433cfd6710c9986c576a25ca913c39d66a6474107b406f34f91d4a8923395241"
+checksum = "ac1f845298e95f983ff1944b728ae08b8cebab80d684f0a832ed0fc74dfa27e2"
 dependencies = [
  "cfg-if",
  "cipher 0.4.4",
@@ -586,9 +586,9 @@ checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
 
 [[package]]
 name = "arrayvec"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8868f09ff8cea88b079da74ae569d9b8c62a23c68c746240b704ee6f7525c89c"
+checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "ascii-canvas"
@@ -1347,9 +1347,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.3.4"
+version = "4.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80672091db20273a15cf9fdd4e47ed43b5091ec9841bf4c6145c9dfbbcae09ed"
+checksum = "2686c4115cb0810d9a984776e197823d08ec94f176549a89a9efded477c456dc"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1358,9 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.3.4"
+version = "4.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1458a1df40e1e2afebb7ab60ce55c1fa8f431146205aa5f4887e0b111c27636"
+checksum = "2e53afce1efce6ed1f633cf0e57612fe51db54a1ee4fd8f8503d078fe02d69ae"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e4c1eaa2012c47becbbad2ab175484c2a84d1185b566fb2cc5b8707343dfe58"
+checksum = "03e69e28e9f7f77debdedbaafa2866e1de9ba56df55a8bd7cfc724c25a09987c"
 dependencies = [
  "libc",
 ]
@@ -2380,7 +2380,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fda3bf123be441da5260717e0661c25a2fd9cb2b2c1d20bf2e05580047158ab"
 dependencies = [
- "aes 0.8.2",
+ "aes 0.8.3",
  "ctr 0.9.2",
  "digest 0.10.7",
  "hex",
@@ -3349,7 +3349,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.6"
-source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git#9b7def672e92f31afac116365f25318666c06a5d"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-query-service.git#59859b67fb3b6ae996e62c40b72d35dea1af2454"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3886,7 +3886,7 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 [[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?rev=36dceb6#36dceb63aa5b452b9551c0139bc5512d17f780cf"
+source = "git+https://github.com/EspressoSystems//jellyfish?rev=e6024a7#e6024a7043ce668581b8ac5653e3f83e44cefc3e"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381 0.4.0",
@@ -3909,6 +3909,7 @@ dependencies = [
  "displaydoc",
  "espresso-systems-common 0.4.0",
  "generic-array",
+ "hashbrown 0.13.2",
  "itertools 0.10.5",
  "jf-relation",
  "jf-utils 0.4.0-pre.0",
@@ -3920,7 +3921,7 @@ dependencies = [
  "serde",
  "sha2 0.10.7",
  "sha3",
- "tagged-base64 0.3.0",
+ "tagged-base64 0.3.3",
  "typenum",
  "zeroize",
 ]
@@ -3928,7 +3929,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?rev=36dceb6#36dceb63aa5b452b9551c0139bc5512d17f780cf"
+source = "git+https://github.com/EspressoSystems//jellyfish?rev=e6024a7#e6024a7043ce668581b8ac5653e3f83e44cefc3e"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381 0.4.0",
@@ -3969,7 +3970,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?rev=36dceb6#36dceb63aa5b452b9551c0139bc5512d17f780cf"
+source = "git+https://github.com/EspressoSystems//jellyfish?rev=e6024a7#e6024a7043ce668581b8ac5653e3f83e44cefc3e"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -3979,7 +3980,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha2 0.10.7",
- "tagged-base64 0.3.0",
+ "tagged-base64 0.3.3",
 ]
 
 [[package]]
@@ -5382,9 +5383,9 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec"
-version = "3.6.0"
+version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "430d26d62e66cbff6ae144e8eebd43c0235922dec7e3aa0d2016c32d4575bf45"
+checksum = "2287753623c76f953acd29d15d8100bcab84d29db78fb6f352adb3c53e83b967"
 dependencies = [
  "arrayvec",
  "bitvec 1.0.1",
@@ -5396,9 +5397,9 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec-derive"
-version = "3.6.0"
+version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1620b1e3fc72ebaee01ff56fca838bab537c5d093a18b3549c3bbea374aa0b6"
+checksum = "2b6937b5e67bfba3351b87b040d48352a2fcb6ad72f81855412ce97b45c8f110"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5534,9 +5535,9 @@ checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
 
 [[package]]
 name = "pest"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e68e84bfb01f0507134eac1e9b410a12ba379d064eab48c50ba4ce329a527b70"
+checksum = "16833386b02953ca926d19f64af613b9bf742c48dcd5e09b32fbfc9740bf84e2"
 dependencies = [
  "thiserror",
  "ucd-trie",
@@ -5544,9 +5545,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b79d4c71c865a25a4322296122e3924d30bc8ee0834c8bfc8b95f7f054afbfb"
+checksum = "7763190f9406839f99e5197afee8c9e759969f7dbfa40ad3b8dbee8757b745b5"
 dependencies = [
  "pest",
  "pest_generator",
@@ -5554,9 +5555,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c435bf1076437b851ebc8edc3a18442796b30f1728ffea6262d59bbe28b077e"
+checksum = "249061b22e99973da1f5f5f1410284419e283bb60b79255bf5f42a94b66a2e00"
 dependencies = [
  "pest",
  "pest_meta",
@@ -5567,9 +5568,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745a452f8eb71e39ffd8ee32b3c5f51d03845f99786fa9b68db6ff509c505411"
+checksum = "457c310cfc9cf3f22bc58901cc7f0d3410ac5d6298e432a4f9a6138565cb6df6"
 dependencies = [
  "once_cell",
  "pest",
@@ -5797,9 +5798,9 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "prettyplease"
-version = "0.2.6"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b69d39aab54d069e7f2fe8cb970493e7834601ca2d8c65fd7bbd183578080d1"
+checksum = "f2b0377b720bde721213a46cda1289b2f34abf0a436907cad91578c20de0454d"
 dependencies = [
  "proc-macro2",
  "syn 2.0.18",
@@ -6599,6 +6600,7 @@ name = "sequencer"
 version = "0.1.0"
 dependencies = [
  "ark-bls12-381 0.3.0",
+ "ark-serialize 0.4.2",
  "async-compatibility-layer",
  "async-std",
  "async-trait",
@@ -6629,6 +6631,7 @@ dependencies = [
  "tide-disco",
  "toml 0.5.11",
  "tracing",
+ "typenum",
  "url",
 ]
 
@@ -7466,6 +7469,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tagged-base64"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50189d4e81e3a3850799299cc908f28fb15740adccf8bd620f855be396e6e730"
+dependencies = [
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "base64 0.13.1",
+ "crc-any",
+ "serde",
+ "snafu",
+ "tagged-base64-macros 0.3.3",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "tagged-base64-macros"
 version = "0.2.0"
 source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
@@ -7479,6 +7498,16 @@ dependencies = [
 name = "tagged-base64-macros"
 version = "0.3.0"
 source = "git+https://github.com/espressosystems/tagged-base64?tag=0.3.0#19381b3f14b1f94269c8c783288a63694b6dd12a"
+dependencies = [
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "tagged-base64-macros"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71636a96f40b6ea3d969182ce22ad8042d5a38839ce448fff3cef4dec80f7589"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -7849,9 +7878,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.24"
+version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f57e3ca2a01450b1a921183a9c9cbfda207fd822cef4ccb00a65402cbba7a74"
+checksum = "8803eee176538f94ae9a14b55b2804eb7e1441f8210b1c31290b3bccdccff73b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8771,7 +8800,7 @@ version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
 dependencies = [
- "aes 0.8.2",
+ "aes 0.8.3",
  "byteorder",
  "bzip2",
  "constant_time_eq 0.1.5",
