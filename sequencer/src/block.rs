@@ -1,4 +1,4 @@
-use crate::{vm::Vm, Error, Transaction, VmId};
+use crate::{vm::Vm, Error, Transaction, VmId, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
@@ -14,37 +14,35 @@ use typenum::U2;
 
 type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
-// Supports 1K transactions
-pub const MAX_NMT_DEPTH: usize = 10;
-
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    #[serde(
-        serialize_with = "serialize_nmt_as_leaves",
-        deserialize_with = "deserialize_nmt_from_leaves"
-    )]
+    #[serde(with = "nmt_serializer")]
     pub(crate) transaction_nmt: TransactionNMT,
 }
 
-// Serialize the NMT as a compact Vec<Transaction>
-fn serialize_nmt_as_leaves<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let leaves = nmt.leaves().cloned().collect::<Vec<Transaction>>();
-    leaves.serialize(s)
-}
+mod nmt_serializer {
+    use super::*;
 
-fn deserialize_nmt_from_leaves<'de, D>(deserializer: D) -> Result<TransactionNMT, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de;
+    // Serialize the NMT as a compact Vec<Transaction>
+    pub fn serialize<S>(nmt: &TransactionNMT, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let leaves = nmt.leaves().cloned().collect::<Vec<Transaction>>();
+        leaves.serialize(s)
+    }
 
-    let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
-    let nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, leaves)
-        .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
-    Ok(nmt)
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<TransactionNMT, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de;
+
+        let leaves = <Vec<Transaction>>::deserialize(deserializer)?;
+        let nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, leaves)
+            .map_err(|_| de::Error::custom("Failed to build NMT from serialized leaves"))?;
+        Ok(nmt)
+    }
 }
 
 impl QueryableBlock for Block {
@@ -62,13 +60,6 @@ impl QueryableBlock for Block {
     ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
         match self.transaction_nmt.lookup(index) {
             LookupResult::Ok(txn, proof) => Some((txn, proof)),
-            _ => None,
-        }
-    }
-
-    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
-        match self.transaction_nmt.lookup(index) {
-            LookupResult::Ok(val, _) => Some(val),
             _ => None,
         }
     }

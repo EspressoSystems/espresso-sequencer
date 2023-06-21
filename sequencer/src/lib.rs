@@ -53,6 +53,9 @@ pub use state::State;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
+// Supports 1K transactions
+pub const MAX_NMT_DEPTH: usize = 10;
+
 pub mod network {
     use super::*;
 
