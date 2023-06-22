@@ -4,7 +4,8 @@ use commit::Commitment;
 use contract_bindings::example_rollup as bindings;
 use derive_more::Into;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
-use sequencer::SeqTypes;
+use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespacedMerkleTreeScheme;
+use sequencer::{SeqTypes, TransactionNMT};
 use sequencer_utils::{commitment_to_u256, u256_to_commitment};
 use snafu::Snafu;
 
@@ -31,10 +32,13 @@ pub(crate) struct Proof {
 }
 
 impl Proof {
+    /// The namespace proof is a private input to the mock proof, showing that
+    /// the proof of the state transition accounts for every transaction in the rollup's namespace
     pub fn generate(
         block: &BlockQueryData<SeqTypes>,
         state_commitment: Commitment<State>,
         previous_state_commitment: Commitment<State>,
+        _namespace_proof: <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
     ) -> Self {
         Self {
             block: block.hash(),

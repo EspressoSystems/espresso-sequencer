@@ -1,18 +1,14 @@
-use crate::{vm::Vm, Error, Transaction, VmId, MAX_NMT_DEPTH};
+use crate::{vm::Vm, Error, Transaction, TransactionNMT, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
 use jf_primitives::merkle_tree::{
-    examples::{Sha3Digest, Sha3Node},
-    namespaced_merkle_tree::NMT,
-    AppendableMerkleTreeScheme, LookupResult, MerkleTreeScheme,
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
+    MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display};
-use typenum::U2;
-
-type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
@@ -147,11 +143,18 @@ impl Block {
         self.transaction_nmt.leaves()
     }
 
-    /// Visit the valid transactions for `V` in this block.
-    pub fn vm_transactions<'a, V: Vm>(
-        &'a self,
-        vm: &'a V,
-    ) -> impl Iterator<Item = V::Transaction> + 'a {
-        self.transactions().filter_map(|txn| txn.as_vm(vm))
+    /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
+    /// and the root of the NMT
+    pub fn get_namespace_proof<V: Vm>(
+        &self,
+        vm: &V,
+    ) -> (
+        <TransactionNMT as MerkleTreeScheme>::NodeValue,
+        <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
+    ) {
+        (
+            self.transaction_nmt.commitment().digest(),
+            self.transaction_nmt.get_namespace_proof(vm.id()),
+        )
     }
 }

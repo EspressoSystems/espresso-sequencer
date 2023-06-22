@@ -15,6 +15,9 @@ derive_more = "0.99.17"
 ethers = { version = "2.0.4", features = ["ws"] }
 futures = "0.3.28"
 hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
+    "std",
+] }
 rand = "0.8.5"
 rand_chacha = "0.3"
 sequencer = { path = "../sequencer", features = ["testing"] }

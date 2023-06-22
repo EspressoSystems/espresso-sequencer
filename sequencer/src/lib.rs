@@ -45,9 +45,14 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
+use typenum::U2;
 
 pub use block::Block;
 pub use chain_variables::ChainVariables;
+use jf_primitives::merkle_tree::{
+    examples::{Sha3Digest, Sha3Node},
+    namespaced_merkle_tree::NMT,
+};
 pub use options::Options;
 pub use state::State;
 pub use transaction::Transaction;
@@ -55,6 +60,8 @@ pub use vm::{Vm, VmId, VmTransaction};
 
 // Supports 1K transactions
 pub const MAX_NMT_DEPTH: usize = 10;
+
+pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 
 pub mod network {
     use super::*;
