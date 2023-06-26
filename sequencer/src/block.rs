@@ -1,11 +1,12 @@
-use crate::{vm::Vm, Error, Transaction, TransactionNMT, MAX_NMT_DEPTH};
+use crate::{vm::Vm, Error, NMTRoot, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
 use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeScheme,
+    examples::{Sha3Digest, Sha3Node},
+    namespaced_merkle_tree::{BindNamespace, NamespacedMerkleTreeScheme},
+    AppendableMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display};
@@ -118,15 +119,21 @@ impl Display for Block {
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
+        let nmt_root = NMTRoot(self.transaction_nmt.commitment().digest());
         commit::RawCommitmentBuilder::new("Block Comm")
-            .array_field(
-                "txns",
-                &self
-                    .transaction_nmt
-                    .leaves()
-                    .map(|x| x.commit())
-                    .collect::<Vec<_>>(),
-            )
+            .field("NMT Root", nmt_root.commit())
+            .finalize()
+    }
+}
+
+impl Committable for NMTRoot {
+    fn commit(&self) -> Commitment<Self> {
+        let comm_bytes =
+            <Sha3Digest as BindNamespace<Transaction, VmId, Sha3Node, _>>::generate_namespaced_commitment(
+                self.0,
+            );
+        commit::RawCommitmentBuilder::new("NMT Root Comm")
+            .var_size_bytes(comm_bytes.as_ref())
             .finalize()
     }
 }
@@ -148,13 +155,15 @@ impl Block {
     pub fn get_namespace_proof<V: Vm>(
         &self,
         vm: &V,
-    ) -> (
-        <TransactionNMT as MerkleTreeScheme>::NodeValue,
-        <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
-    ) {
-        (
-            self.transaction_nmt.commitment().digest(),
-            self.transaction_nmt.get_namespace_proof(vm.id()),
-        )
+    ) -> <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof {
+        self.transaction_nmt.get_namespace_proof(vm.id())
+    }
+
+    /// Currently, HotShot consensus does not enforce any relationship between
+    /// the NMT root and the block commitment. This returns the NMT root of the block,
+    /// mocking the consistency check between the block and NMT commitments.
+    pub fn get_nmt_root(&self, _comm: Commitment<Self>) -> Result<NMTRoot, Error> {
+        let raw_root = self.transaction_nmt.commitment().digest();
+        Ok(NMTRoot(raw_root))
     }
 }

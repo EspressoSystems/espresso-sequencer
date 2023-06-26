@@ -154,9 +154,13 @@ impl State {
 
     pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
         let state_commitment = self.commit();
-        let (root, namespace_proof) = block.block().get_namespace_proof(&RollupVM);
+        let namespace_proof = block.block().get_namespace_proof(&RollupVM);
+        let root = block
+            .block()
+            .get_nmt_root(block.hash())
+            .expect("Block commitment should be consistent with the NMT root");
         namespace_proof
-            .verify(&root, VM_ID.into())
+            .verify(&root.root(), VM_ID.into())
             .expect("Namespace proof failure, cannot continue")
             .expect("Namespace proof failure, cannot continue");
         let transactions = namespace_proof.get_namespace_leaves();
@@ -166,13 +170,15 @@ impl State {
                 if let Err(err) = res {
                     tracing::error!("Transaction invalid: {}", err)
                 }
+            } else {
+                tracing::error!("NMT transaction is malformed")
             }
         }
         self.block_hash = Some(block.hash());
         self.prev_state_commitment = Some(state_commitment);
 
         Proof::generate(
-            block,
+            root,
             self.commit(),
             self.prev_state_commitment.unwrap(),
             namespace_proof,

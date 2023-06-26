@@ -52,15 +52,17 @@ contract ExampleRollup {
     // forces the prover to execute the correct chain of blocks without explicitly taking this
     // entire chain as a public input (which would be expensive). This holds up to collision
     // resistance of the hash function used to link each HotShot block to its parent.
+    //
+    // The proof would also verify consistency between the NMT block roots stored in the
+    // BatchProof and the committed hotshot blocks.
     function _verifyProof(
-        uint256 firstBlock,
-        uint256 lastBlock,
+        uint256, /*firstBlock */
+        uint256, /*lastBlock */
         uint256 oldState,
         uint256 newState,
         BatchProof calldata proof
     ) private pure returns (bool) {
-        return firstBlock == proof.firstBlock && lastBlock == proof.lastBlock && oldState == proof.oldState
-            && newState == proof.newState;
+        return oldState == proof.oldState && newState == proof.newState;
     }
 
     function verifyBlocks(uint64 count, uint256 nextStateCommitment, BatchProof calldata proof) external {

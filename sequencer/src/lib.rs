@@ -37,7 +37,7 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use jf_primitives::{aead::KeyPair, signatures::BLSSignatureScheme};
+use jf_primitives::{aead::KeyPair, merkle_tree::MerkleTreeScheme, signatures::BLSSignatureScheme};
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -62,6 +62,15 @@ pub use vm::{Vm, VmId, VmTransaction};
 pub const MAX_NMT_DEPTH: usize = 10;
 
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
+
+#[derive(Clone, Debug)]
+pub struct NMTRoot(<TransactionNMT as MerkleTreeScheme>::NodeValue);
+
+impl NMTRoot {
+    pub fn root(&self) -> <TransactionNMT as MerkleTreeScheme>::NodeValue {
+        self.0
+    }
+}
 
 pub mod network {
     use super::*;
