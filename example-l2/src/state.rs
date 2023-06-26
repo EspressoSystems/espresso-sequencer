@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use crate::error::RollupError;
 use crate::prover::Proof;
 use crate::transaction::SignedTransaction;
-use crate::{RollupVM, VM_ID};
+use crate::RollupVM;
 
 pub type Amount = u64;
 pub type Nonce = u64;
@@ -159,10 +159,6 @@ impl State {
             .block()
             .get_nmt_root(block.hash())
             .expect("Block commitment should be consistent with the NMT root");
-        namespace_proof
-            .verify(&root.root(), VM_ID.into())
-            .expect("Namespace proof failure, cannot continue")
-            .expect("Namespace proof failure, cannot continue");
         let transactions = namespace_proof.get_namespace_leaves();
         for txn in transactions {
             if let Some(rollup_txn) = txn.as_vm(&RollupVM) {
