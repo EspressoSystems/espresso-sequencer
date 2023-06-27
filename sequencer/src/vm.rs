@@ -1,5 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use derive_more::From;
+use derive_more::{From, Into};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::Namespace;
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ use crate::transaction::{ApplicationTransaction, Transaction};
     PartialEq,
     Eq,
     Hash,
+    Into,
     From,
     Default,
     CanonicalDeserialize,

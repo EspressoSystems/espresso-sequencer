@@ -8,8 +8,8 @@ use example_l2::{
     executor::{run_executor, ExecutorOptions},
     seed::{SeedIdentity, INITIAL_BALANCE},
     state::State,
-    utils::deploy_example_contracts,
-    Options,
+    utils::{deploy_example_contract, deploy_hotshot_contract},
+    Options, RollupVM,
 };
 use futures::join;
 use rand::SeedableRng;
@@ -24,13 +24,17 @@ async fn main() {
     setup_backtrace();
 
     let opt = Options::parse();
+    let vm = RollupVM::new(1.into());
 
     let mut initial_balances = vec![];
     for identity in SeedIdentity::iter() {
         let address = LocalWallet::new(&mut ChaChaRng::seed_from_u64(identity as u64)).address();
         initial_balances.push((address, INITIAL_BALANCE))
     }
-    let state = Arc::new(RwLock::new(State::from_initial_balances(initial_balances)));
+    let state = Arc::new(RwLock::new(State::from_initial_balances(
+        initial_balances,
+        vm,
+    )));
 
     let api_options = APIOptions {
         api_port: opt.api_port,
@@ -62,7 +66,8 @@ async fn main() {
     let initial_state = { state.read().await.commit() };
 
     tracing::info!("Deploying HotShot and Rollup contracts");
-    deploy_example_contracts(&opt.l1_provider, initial_state).await;
+    deploy_example_contract(&opt.l1_provider, initial_state).await;
+    deploy_hotshot_contract(&opt.l1_provider).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
     join!(

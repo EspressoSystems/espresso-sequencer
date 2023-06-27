@@ -6,11 +6,11 @@ use derive_more::Into;
 use jf_primitives::merkle_tree::namespaced_merkle_tree::{
     NamespaceProof, NamespacedMerkleTreeScheme,
 };
-use sequencer::{NMTRoot, TransactionNMT};
+use sequencer::{NMTRoot, TransactionNMT, Vm};
 use sequencer_utils::{commitment_to_u256, u256_to_commitment};
 use snafu::Snafu;
 
-use crate::{state::State, VM_ID};
+use crate::{state::State, RollupVM};
 
 /// An error that occurs while generating proofs.
 #[derive(Clone, Debug, Snafu)]
@@ -40,9 +40,10 @@ impl Proof {
         state_commitment: Commitment<State>,
         previous_state_commitment: Commitment<State>,
         namespace_proof: <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
+        rollup_vm: &RollupVM,
     ) -> Self {
         namespace_proof
-            .verify(&block.root(), VM_ID.into())
+            .verify(&block.root(), rollup_vm.id())
             .expect("Namespace proof failure, cannot continue")
             .expect("Namespace proof failure, cannot continue");
         Self {

@@ -2,13 +2,13 @@ use async_std::sync::RwLock;
 use ethers::abi::Address;
 use futures::FutureExt;
 use sequencer::Transaction;
-use sequencer::VmTransaction;
+use sequencer::{Vm, VmTransaction};
 use std::io;
 use std::sync::Arc;
 use surf_disco::{error::ClientError, Url};
 use tide_disco::{error::ServerError, Api, App};
 
-use crate::VM_ID;
+use crate::RollupVM;
 use crate::{state::State, transaction::SignedTransaction};
 
 #[derive(Clone, Debug)]
@@ -20,9 +20,10 @@ pub struct APIOptions {
 async fn submit_transaction(
     submit_url: Url,
     transaction: SignedTransaction,
+    vm: &RollupVM,
 ) -> Result<(), ServerError> {
     let raw_tx = transaction.encode();
-    let txn = Transaction::new(VM_ID.into(), raw_tx.to_vec());
+    let txn = Transaction::new(vm.id(), raw_tx.to_vec());
     let client = surf_disco::Client::<ClientError>::new(submit_url);
     client
         .post::<()>("submit/submit")
@@ -45,7 +46,7 @@ pub async fn serve(options: &APIOptions, state: Arc<RwLock<State>>) -> io::Resul
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     let mut api = Api::<StateType, ServerError>::new(toml).map_err(error_mapper)?;
 
-    api.post("submit",  move|req, _| {
+    api.post("submit",  move|req, state| {
         let url = sequencer_url.clone();
         async move {
             let transaction = req
@@ -54,7 +55,7 @@ pub async fn serve(options: &APIOptions, state: Arc<RwLock<State>>) -> io::Resul
                 status: tide_disco::StatusCode::BadRequest,
                 message: "Malformed transaction. Ensure that the transaction is a JSON serialized SignedTransaction".into()
             })?;
-            submit_transaction(url, transaction).await
+            submit_transaction(url, transaction, &state.vm).await
         }
         .boxed()
     })
@@ -117,11 +118,12 @@ mod tests {
     async fn query_test() {
         let mut rng = rand::thread_rng();
         let genesis_wallet = LocalWallet::new(&mut rng);
+        let vm = RollupVM::new(1.into());
         let genesis_address = genesis_wallet.address();
-        let state = Arc::new(RwLock::new(State::from_initial_balances([(
-            genesis_address,
-            GENESIS_BALANCE,
-        )])));
+        let state = Arc::new(RwLock::new(State::from_initial_balances(
+            [(genesis_address, GENESIS_BALANCE)],
+            vm,
+        )));
         let port = pick_unused_port().expect("No ports free");
         let api_url: Url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError> = Client::new(api_url.clone());
@@ -148,6 +150,7 @@ mod tests {
     async fn submit_test() {
         // Start a sequencer network.
         let sequencer_port = pick_unused_port().unwrap();
+        let vm = RollupVM::new(1.into());
         let nodes = sequencer::testing::init_hotshot_handles().await;
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
@@ -174,10 +177,10 @@ mod tests {
             .unwrap();
         let genesis_wallet = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
         let genesis_address = genesis_wallet.address();
-        let state = Arc::new(RwLock::new(State::from_initial_balances([(
-            genesis_address,
-            GENESIS_BALANCE,
-        )])));
+        let state = Arc::new(RwLock::new(State::from_initial_balances(
+            [(genesis_address, GENESIS_BALANCE)],
+            vm,
+        )));
         let options = APIOptions {
             api_port,
             sequencer_url,
@@ -206,7 +209,7 @@ mod tests {
 
         // Wait for a Decide event containing transaction matching the one we sent
         let raw_tx = signed_transaction.encode();
-        let txn = SeqTransaction::new(VM_ID.into(), raw_tx.to_vec());
+        let txn = SeqTransaction::new(vm.id(), raw_tx.to_vec());
         wait_for_decide_on_handle(handle.clone(), txn)
             .await
             .unwrap()
