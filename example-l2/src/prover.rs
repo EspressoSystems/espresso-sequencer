@@ -1,14 +1,16 @@
 extern crate derive_more;
 use ark_serialize::SerializationError;
-use commit::Commitment;
+use commit::{Commitment, Committable};
 use contract_bindings::example_rollup as bindings;
 use derive_more::Into;
-use hotshot_query_service::availability::{BlockHash, BlockQueryData};
-use sequencer::SeqTypes;
+use jf_primitives::merkle_tree::namespaced_merkle_tree::{
+    NamespaceProof, NamespacedMerkleTreeScheme,
+};
+use sequencer::{NMTRoot, TransactionNMT};
 use sequencer_utils::{commitment_to_u256, u256_to_commitment};
 use snafu::Snafu;
 
-use crate::state::State;
+use crate::{state::State, VM_ID};
 
 /// An error that occurs while generating proofs.
 #[derive(Clone, Debug, Snafu)]
@@ -25,19 +27,26 @@ pub enum ProofError {
 /// previous_state_commitment when the transactions in a given block are applied.
 #[derive(Debug, Clone)]
 pub(crate) struct Proof {
-    block: BlockHash<SeqTypes>,
+    block: Commitment<NMTRoot>,
     old_state: Commitment<State>,
     new_state: Commitment<State>,
 }
 
 impl Proof {
+    /// The namespace proof is a private input to the mock proof, showing that
+    /// the proof of the state transition accounts for every transaction in the rollup's namespace
     pub fn generate(
-        block: &BlockQueryData<SeqTypes>,
+        block: NMTRoot,
         state_commitment: Commitment<State>,
         previous_state_commitment: Commitment<State>,
+        namespace_proof: <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
     ) -> Self {
+        namespace_proof
+            .verify(&block.root(), VM_ID.into())
+            .expect("Namespace proof failure, cannot continue")
+            .expect("Namespace proof failure, cannot continue");
         Self {
-            block: block.hash(),
+            block: block.commit(),
             old_state: previous_state_commitment,
             new_state: state_commitment,
         }
@@ -47,8 +56,8 @@ impl Proof {
 /// A mock proof aggregating a batch of proofs for a range of blocks.
 #[derive(Debug, Clone, Into)]
 pub(crate) struct BatchProof {
-    first_block: BlockHash<SeqTypes>,
-    last_block: BlockHash<SeqTypes>,
+    first_block: Commitment<NMTRoot>,
+    last_block: Commitment<NMTRoot>,
     old_state: Commitment<State>,
     new_state: Commitment<State>,
 }

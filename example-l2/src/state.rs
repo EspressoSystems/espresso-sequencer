@@ -1,6 +1,7 @@
 use commit::{Commitment, Committable};
 use ethers::abi::Address;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
+use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use sequencer::SeqTypes;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -153,16 +154,31 @@ impl State {
 
     pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
         let state_commitment = self.commit();
-        for txn in block.block().vm_transactions(&RollupVM) {
-            let res = self.apply_transaction(&txn);
-            if let Err(err) = res {
-                tracing::error!("Transaction invalid: {}", err)
+        let namespace_proof = block.block().get_namespace_proof(&RollupVM);
+        let root = block
+            .block()
+            .get_nmt_root(block.hash())
+            .expect("Block commitment should be consistent with the NMT root");
+        let transactions = namespace_proof.get_namespace_leaves();
+        for txn in transactions {
+            if let Some(rollup_txn) = txn.as_vm(&RollupVM) {
+                let res = self.apply_transaction(&rollup_txn);
+                if let Err(err) = res {
+                    tracing::error!("Transaction invalid: {}", err)
+                }
+            } else {
+                tracing::error!("NMT transaction is malformed")
             }
         }
         self.block_hash = Some(block.hash());
         self.prev_state_commitment = Some(state_commitment);
 
-        Proof::generate(block, self.commit(), self.prev_state_commitment.unwrap())
+        Proof::generate(
+            root,
+            self.commit(),
+            self.prev_state_commitment.unwrap(),
+            namespace_proof,
+        )
     }
 }
 #[cfg(test)]

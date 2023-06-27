@@ -2710,6 +2710,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot-query-service",
+ "jf-primitives",
  "portpicker",
  "rand 0.8.5",
  "rand_chacha 0.3.1",

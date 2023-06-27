@@ -42,15 +42,16 @@ contract ExampleRollupTest is Test {
         comms[0] = 576467464341;
         qcs[0] = "0x3333";
         hotshot.newBlocks(comms, qcs);
+        uint256 invalidState = 523124;
 
         // Send an invalid state update to the rollup
         ExampleRollup.BatchProof memory proof =
             ExampleRollup.BatchProof({firstBlock: comms[0], lastBlock: 0, oldState: 0, newState: 523123});
         vm.expectRevert(
             abi.encodeWithSelector(
-                ExampleRollup.InvalidProof.selector, comms[0], comms[0], proof.oldState, proof.newState, proof
+                ExampleRollup.InvalidProof.selector, comms[0], comms[0], proof.oldState, invalidState, proof
             )
         );
-        rollup.verifyBlocks(1, proof.newState, proof);
+        rollup.verifyBlocks(1, invalidState, proof);
     }
 }
