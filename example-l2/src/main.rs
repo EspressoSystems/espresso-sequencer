@@ -66,8 +66,8 @@ async fn main() {
     let initial_state = { state.read().await.commit() };
 
     tracing::info!("Deploying HotShot and Rollup contracts");
-    deploy_example_contract(&opt.l1_provider, initial_state).await;
-    deploy_hotshot_contract(&opt.l1_provider).await;
+    let (hotshot_contract, _) = deploy_hotshot_contract(&opt.l1_provider).await;
+    deploy_example_contract(&opt.l1_provider, initial_state, &hotshot_contract).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
     join!(
