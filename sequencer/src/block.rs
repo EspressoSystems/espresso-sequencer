@@ -133,7 +133,7 @@ impl Committable for NMTRoot {
                 self.0,
             );
         commit::RawCommitmentBuilder::new("NMT Root Comm")
-            .var_size_bytes(comm_bytes.as_ref())
+            .var_size_field("NMT Root", comm_bytes.as_ref())
             .finalize()
     }
 }
