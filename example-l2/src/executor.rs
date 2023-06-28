@@ -177,6 +177,7 @@ mod test {
         contract: ExampleRollupContract,
         vm: RollupVM,
         socket_provider: Provider<Ws>,
+        l1_url: Url,
         alice: Wallet<SigningKey>,
         state: Arc<RwLock<State>>,
         bob: Wallet<SigningKey>,
@@ -209,9 +210,16 @@ mod test {
                 vm,
                 socket_provider,
                 alice,
+                l1_url,
                 bob,
                 state,
             }
+        }
+
+        pub async fn reset_socket_connnection(&mut self) {
+            let mut ws_url = self.l1_url.clone();
+            ws_url.set_scheme("ws").unwrap();
+            self.socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
         }
 
         pub async fn subscribe(&self) -> SubscriptionStream<'_, Ws, Log> {
@@ -355,7 +363,7 @@ mod test {
         // Start a test HotShot and Rollup contract.
         let mut anvil = AnvilOptions::default().spawn().await;
         let (hotshot_contract, clients) = deploy_hotshot_contract(&anvil.url()).await;
-        let test_rollup = TestRollupInstance::launch(
+        let mut test_rollup = TestRollupInstance::launch(
             anvil.url().clone(),
             1.into(),
             alice,
@@ -368,6 +376,9 @@ mod test {
         anvil
             .restart(AnvilOptions::default().block_time(Duration::from_secs(30)))
             .await;
+
+        test_rollup.reset_socket_connnection().await;
+        let mut stream = test_rollup.subscribe().await;
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -429,7 +440,6 @@ mod test {
         }
 
         // Wait for the rollup contract to process all state updates
-        let mut stream = test_rollup.subscribe().await;
         loop {
             // Wait for an event. This stream should not end until our events have been processed.
             stream.next().await.unwrap();
