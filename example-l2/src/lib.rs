@@ -1,4 +1,5 @@
 use clap::Parser;
+use derive_more::{From, Into};
 use ethers::types::Address;
 use sequencer::{Vm, VmId};
 use surf_disco::Url;
@@ -12,9 +13,6 @@ pub mod seed;
 pub mod state;
 pub mod transaction;
 pub mod utils;
-
-// The VmID helps Rollups find their transactions in the sequenced block.
-pub const VM_ID: u64 = 1;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
@@ -56,13 +54,19 @@ pub struct Options {
     pub rollup_account_index: u32,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RollupVM;
+#[derive(Clone, Copy, Debug, Default, Into, From)]
+pub struct RollupVM(VmId);
+
+impl RollupVM {
+    pub fn new(id: VmId) -> Self {
+        RollupVM(id)
+    }
+}
 
 impl Vm for RollupVM {
     type Transaction = SignedTransaction;
 
     fn id(&self) -> VmId {
-        VM_ID.into()
+        self.0
     }
 }

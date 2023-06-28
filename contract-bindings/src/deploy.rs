@@ -8,7 +8,7 @@ use ethers::{
 };
 use std::sync::Arc;
 
-type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
+pub type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 #[async_trait::async_trait]
 pub trait Deploy<M: Middleware> {

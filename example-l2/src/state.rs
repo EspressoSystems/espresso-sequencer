@@ -2,7 +2,7 @@ use commit::{Commitment, Committable};
 use ethers::abi::Address;
 use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
-use sequencer::SeqTypes;
+use sequencer::{SeqTypes, Vm};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -30,6 +30,7 @@ pub struct State {
     accounts: BTreeMap<Address, Account>,
     block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
     prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
+    pub(crate) vm: RollupVM,
 }
 
 impl Committable for State {
@@ -57,6 +58,7 @@ impl Committable for State {
                     .collect::<Vec<_>>(),
             )
             .var_size_field("accounts", serialized_accounts.as_bytes())
+            .u64_field("VM ID", self.vm.id().into())
             .finalize()
     }
 }
@@ -65,6 +67,7 @@ impl State {
     /// Create new VM state seeded with some initial balances
     pub fn from_initial_balances(
         initial_balances: impl IntoIterator<Item = (Address, Amount)>,
+        vm: RollupVM,
     ) -> Self {
         let mut accounts = BTreeMap::new();
         for (addr, amount) in initial_balances.into_iter() {
@@ -80,6 +83,7 @@ impl State {
             accounts,
             block_hash: None,
             prev_state_commitment: None,
+            vm,
         }
     }
 
@@ -154,14 +158,14 @@ impl State {
 
     pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
         let state_commitment = self.commit();
-        let namespace_proof = block.block().get_namespace_proof(&RollupVM);
+        let namespace_proof = block.block().get_namespace_proof(&self.vm);
         let root = block
             .block()
             .get_nmt_root(block.hash())
             .expect("Block commitment should be consistent with the NMT root");
         let transactions = namespace_proof.get_namespace_leaves();
         for txn in transactions {
-            if let Some(rollup_txn) = txn.as_vm(&RollupVM) {
+            if let Some(rollup_txn) = txn.as_vm(&self.vm) {
                 let res = self.apply_transaction(&rollup_txn);
                 if let Err(err) = res {
                     tracing::error!("Transaction invalid: {}", err)
@@ -178,6 +182,7 @@ impl State {
             self.commit(),
             self.prev_state_commitment.unwrap(),
             namespace_proof,
+            &self.vm,
         )
     }
 }
@@ -191,10 +196,11 @@ mod tests {
     #[async_std::test]
     async fn smoke_test() {
         let mut rng = rand::thread_rng();
+        let vm = RollupVM::new(1.into());
         let alice = LocalWallet::new(&mut rng);
         let bob = LocalWallet::new(&mut rng);
         let seed_data = [(alice.address(), 100), (bob.address(), 100)];
-        let mut state = State::from_initial_balances(seed_data);
+        let mut state = State::from_initial_balances(seed_data, vm);
         let mut transaction = Transaction {
             amount: 110,
             destination: bob.address(),

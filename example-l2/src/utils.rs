@@ -2,29 +2,22 @@ use std::time::Duration;
 
 use crate::state::State;
 use commit::Commitment;
-use contract_bindings::{example_rollup::ExampleRollup, HotShot, TestClients};
-use ethers::{
-    prelude::{k256::ecdsa::SigningKey, *},
-    providers::Provider,
-};
+use contract_bindings::{example_rollup::ExampleRollup, EthMiddleware, HotShot, TestClients};
+use ethers::{prelude::*, providers::Provider};
 use sequencer_utils::commitment_to_u256;
 use surf_disco::Url;
-type HotShotContract = HotShot<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
-type ExampleRollupContract = ExampleRollup<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
+pub type HotShotContract = HotShot<EthMiddleware>;
+pub type ExampleRollupContract = ExampleRollup<EthMiddleware>;
 
-pub async fn deploy_example_contracts(
+pub async fn deploy_example_contract(
     url: &Url,
     initial_state: Commitment<State>,
-) -> (HotShotContract, ExampleRollupContract, TestClients) {
+    hotshot_contract: &HotShotContract,
+) -> (ExampleRollupContract, TestClients) {
     let mut provider = Provider::try_from(url.to_string()).unwrap();
     provider.set_interval(Duration::from_millis(10));
     let chain_id = provider.get_chainid().await.unwrap().as_u64();
     let clients = TestClients::new(&provider, chain_id);
-    let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
-        .unwrap()
-        .send()
-        .await
-        .unwrap();
     let rollup_contract = ExampleRollup::deploy(
         clients.deployer.provider.clone(),
         (
@@ -37,5 +30,19 @@ pub async fn deploy_example_contracts(
     .await
     .unwrap();
 
-    (hotshot_contract, rollup_contract, clients)
+    (rollup_contract, clients)
+}
+
+pub async fn deploy_hotshot_contract(url: &Url) -> (HotShotContract, TestClients) {
+    let mut provider = Provider::try_from(url.to_string()).unwrap();
+    provider.set_interval(Duration::from_millis(10));
+    let chain_id = provider.get_chainid().await.unwrap().as_u64();
+    let clients = TestClients::new(&provider, chain_id);
+    let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+
+    (hotshot_contract, clients)
 }
