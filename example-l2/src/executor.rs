@@ -145,6 +145,7 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
 #[cfg(test)]
 mod test {
+    use crate::state::{Amount, Nonce};
     use crate::transaction::{SignedTransaction, Transaction};
     use crate::utils::{
         deploy_example_contract, deploy_hotshot_contract, ExampleRollupContract, HotShotContract,
@@ -193,11 +194,9 @@ mod test {
         ) -> Self {
             // Create mock rollup state
             let vm = RollupVM::new(vm_id);
-            let state = Arc::new(RwLock::new(State::from_initial_balances(
-                [(alice.address(), 9999)],
-                vm,
-            )));
-            let initial_state = { state.read().await.commit() };
+            let state = State::from_initial_balances([(alice.address(), 9999)], vm);
+            let initial_state = state.commit();
+            let state = Arc::new(RwLock::new(state));
             tracing::info!("initial state: {initial_state}");
             let mut ws_url = l1_url.clone();
             ws_url.set_scheme("ws").unwrap();
@@ -230,11 +229,15 @@ mod test {
                 .unwrap()
         }
 
-        pub async fn test_transaction(&self) -> sequencer::Transaction {
+        pub async fn test_transaction(
+            &self,
+            amount: Amount,
+            nonce: Nonce,
+        ) -> sequencer::Transaction {
             let txn = Transaction {
-                amount: 100,
+                amount,
                 destination: self.bob.address(),
-                nonce: 1,
+                nonce,
             };
             let txn = SignedTransaction::new(txn, &self.alice).await;
             self.vm.wrap(&txn)
@@ -291,7 +294,7 @@ mod test {
 
         // Submit transaction to sequencer
         let client: Client<ServerError> = Client::new(sequencer_url.clone());
-        let txn = test_rollup.test_transaction().await;
+        let txn = test_rollup.test_transaction(100, 1).await;
         client.connect(None).await;
         client
             .post::<()>("submit/submit")
@@ -429,7 +432,7 @@ mod test {
 
         // Submit transactions to sequencer
         for nonce in 1..=num_txns {
-            let txn = test_rollup.test_transaction().await;
+            let txn = test_rollup.test_transaction(1, nonce).await;
             nodes[0].submit_transaction(txn.clone()).await.unwrap();
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.

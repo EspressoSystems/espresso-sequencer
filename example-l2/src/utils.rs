@@ -2,16 +2,12 @@ use std::time::Duration;
 
 use crate::state::State;
 use commit::Commitment;
-use contract_bindings::{example_rollup::ExampleRollup, HotShot, TestClients};
-use ethers::{
-    prelude::{k256::ecdsa::SigningKey, *},
-    providers::Provider,
-};
+use contract_bindings::{example_rollup::ExampleRollup, EthMiddleware, HotShot, TestClients};
+use ethers::{prelude::*, providers::Provider};
 use sequencer_utils::commitment_to_u256;
 use surf_disco::Url;
-pub type HotShotContract = HotShot<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
-pub type ExampleRollupContract =
-    ExampleRollup<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
+pub type HotShotContract = HotShot<EthMiddleware>;
+pub type ExampleRollupContract = ExampleRollup<EthMiddleware>;
 
 pub async fn deploy_example_contract(
     url: &Url,
