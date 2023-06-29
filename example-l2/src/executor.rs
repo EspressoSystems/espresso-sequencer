@@ -394,7 +394,7 @@ mod test {
             .parse()
             .unwrap();
 
-        // Submit transaction to sequencer
+        // Submit transactions to sequencer
         let client: Client<ServerError> = Client::new(sequencer_url.clone());
         for i in 0..num_rollups {
             let txn = test_rollups[i as usize].test_transaction(100, 1).await;
@@ -408,7 +408,7 @@ mod test {
                 .unwrap();
         }
 
-        // Spawn hotshot commitment and executor tasks
+        // Spawn hotshot commitment task
         let hotshot_opt = CommitmentTaskOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
@@ -434,7 +434,7 @@ mod test {
             spawn(async move { run_executor(&rollup_opt, state_lock).await });
         }
 
-        // Wait for all rollup contracts to process all state updates
+        // Wait for all rollup contracts to process state updates
         for i in 0..num_rollups {
             let test_rollup = &test_rollups[i as usize];
             let mut stream = test_rollup.subscribe().await;
