@@ -22,7 +22,7 @@ pub async fn deploy_example_contract(
     .unwrap()
 }
 
-pub async fn create_provider(l1_url: &Url) -> Provider<Http> {
+pub fn create_provider(l1_url: &Url) -> Provider<Http> {
     let mut provider = Provider::try_from(l1_url.to_string()).unwrap();
     provider.set_interval(Duration::from_millis(10));
     provider

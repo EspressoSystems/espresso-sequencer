@@ -254,7 +254,7 @@ mod test {
         let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
 
         // Deploy hotshot contract
-        let provider = create_provider(&anvil.url()).await;
+        let provider = create_provider(&anvil.url());
         let test_l1 = TestL1System::deploy(provider).await.unwrap();
 
         // Start a test Rollup instance
@@ -351,7 +351,7 @@ mod test {
         let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
         let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
         // Deploy hotshot contract
-        let provider = create_provider(&anvil.url()).await;
+        let provider = create_provider(&anvil.url());
         let test_l1 = TestL1System::deploy(provider).await.unwrap();
 
         // Start test Rollup instances
@@ -478,7 +478,7 @@ mod test {
 
         // Start a test HotShot and Rollup contract.
         let mut anvil = AnvilOptions::default().spawn().await;
-        let provider = create_provider(&anvil.url()).await;
+        let provider = create_provider(&anvil.url());
         let test_l1 = TestL1System::deploy(provider).await.unwrap();
         let mut test_rollup =
             TestRollupInstance::launch(anvil.url().clone(), 1.into(), alice, bob, &test_l1).await;
