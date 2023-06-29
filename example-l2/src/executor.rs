@@ -147,14 +147,13 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 mod test {
     use crate::state::{Amount, Nonce};
     use crate::transaction::{SignedTransaction, Transaction};
-    use crate::utils::{
-        deploy_example_contract, deploy_hotshot_contract, ExampleRollupContract, HotShotContract,
-    };
+    use crate::utils::{create_provider, deploy_example_contract, ExampleRollupContract};
     use crate::RollupVM;
 
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
+    use contract_bindings::TestL1System;
     use ethers::prelude::k256::ecdsa::SigningKey;
     use ethers::providers::{Middleware, Provider};
     use ethers::signers::{LocalWallet, Signer};
@@ -190,7 +189,7 @@ mod test {
             vm_id: VmId,
             alice: Wallet<SigningKey>,
             bob: Wallet<SigningKey>,
-            hotshot_contract: &HotShotContract,
+            test_l1: &TestL1System,
         ) -> Self {
             // Create mock rollup state
             let vm = RollupVM::new(vm_id);
@@ -201,8 +200,7 @@ mod test {
             let mut ws_url = l1_url.clone();
             ws_url.set_scheme("ws").unwrap();
             let socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
-            let (rollup_contract, _) =
-                deploy_example_contract(&l1_url, initial_state, hotshot_contract).await;
+            let rollup_contract = deploy_example_contract(test_l1, initial_state).await;
 
             Self {
                 contract: rollup_contract,
@@ -256,17 +254,12 @@ mod test {
         let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
 
         // Deploy hotshot contract
-        let (hotshot_contract, clients) = deploy_hotshot_contract(&anvil.url()).await;
+        let provider = create_provider(&anvil.url()).await;
+        let test_l1 = TestL1System::deploy(provider).await.unwrap();
 
         // Start a test Rollup instance
-        let test_rollup = TestRollupInstance::launch(
-            anvil.url().clone(),
-            1.into(),
-            alice,
-            bob,
-            &hotshot_contract,
-        )
-        .await;
+        let test_rollup =
+            TestRollupInstance::launch(anvil.url().clone(), 1.into(), alice, bob, &test_l1).await;
 
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
@@ -308,18 +301,18 @@ mod test {
         let hotshot_opt = CommitmentTaskOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
-            sequencer_account_index: clients.funded[0].index,
-            hotshot_address: hotshot_contract.address(),
+            sequencer_account_index: test_l1.clients.funded[0].index,
+            hotshot_address: test_l1.hotshot.address(),
             l1_chain_id: None,
             query_service_url: Some(sequencer_url.clone()),
         };
 
         let rollup_opt = ExecutorOptions {
             sequencer_url,
-            rollup_account_index: clients.funded[1].index,
+            rollup_account_index: test_l1.clients.funded[1].index,
             l1_provider: anvil.url(),
             rollup_mnemonic: TEST_MNEMONIC.to_string(),
-            hotshot_address: hotshot_contract.address(),
+            hotshot_address: test_l1.hotshot.address(),
             rollup_address: test_rollup.contract.address(),
         };
 
@@ -353,6 +346,126 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_execute_multi_rollup() {
+        let anvil = AnvilOptions::default().spawn().await;
+        let alice = LocalWallet::new(&mut ChaChaRng::seed_from_u64(0));
+        let bob = LocalWallet::new(&mut ChaChaRng::seed_from_u64(1));
+        // Deploy hotshot contract
+        let provider = create_provider(&anvil.url()).await;
+        let test_l1 = TestL1System::deploy(provider).await.unwrap();
+
+        // Start test Rollup instances
+        let num_rollups = 3;
+        let mut test_rollups = Vec::new();
+        for i in 1..num_rollups + 1 {
+            // To keep nonces consistent for the underlying provider, we must await these iteratively
+            let test_rollup = TestRollupInstance::launch(
+                anvil.url().clone(),
+                i.into(),
+                alice.clone(),
+                bob.clone(),
+                &test_l1,
+            )
+            .await;
+            test_rollups.push(test_rollup);
+        }
+
+        // Start a test HotShot configuration
+        let sequencer_port = pick_unused_port().unwrap();
+        let nodes = init_hotshot_handles().await;
+        let api_node = nodes[0].clone();
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path = tmp_dir.path().join("tmp_storage");
+        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
+        let SequencerNode { .. } = sequencer::api::serve(
+            sequencer::api::Options {
+                storage_path,
+                port: sequencer_port,
+                reset_store: true,
+            },
+            init_handle,
+        )
+        .await
+        .unwrap();
+        for node in &nodes {
+            node.start().await;
+        }
+        let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
+            .parse()
+            .unwrap();
+
+        // Submit transaction to sequencer
+        let client: Client<ServerError> = Client::new(sequencer_url.clone());
+        for i in 0..num_rollups {
+            let txn = test_rollups[i as usize].test_transaction(100, 1).await;
+            client.connect(None).await;
+            client
+                .post::<()>("submit/submit")
+                .body_json(&txn)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+        }
+
+        // Spawn hotshot commitment and executor tasks
+        let hotshot_opt = CommitmentTaskOptions {
+            l1_provider: anvil.url(),
+            sequencer_mnemonic: TEST_MNEMONIC.to_string(),
+            sequencer_account_index: test_l1.clients.funded[0].index,
+            hotshot_address: test_l1.hotshot.address(),
+            l1_chain_id: None,
+            query_service_url: Some(sequencer_url.clone()),
+        };
+        spawn(async move { run_hotshot_commitment_task(&hotshot_opt).await });
+
+        // Spawn all rollup executors
+        for i in 0..num_rollups {
+            let test_rollup = &test_rollups[i as usize];
+            let state_lock = test_rollup.state.clone();
+            let rollup_opt = ExecutorOptions {
+                sequencer_url: sequencer_url.clone(),
+                rollup_account_index: test_l1.clients.funded[1].index,
+                l1_provider: anvil.url(),
+                rollup_mnemonic: TEST_MNEMONIC.to_string(),
+                hotshot_address: test_l1.hotshot.address(),
+                rollup_address: test_rollup.contract.address(),
+            };
+            spawn(async move { run_executor(&rollup_opt, state_lock).await });
+        }
+
+        // Wait for all rollup contracts to process all state updates
+        for i in 0..num_rollups {
+            let test_rollup = &test_rollups[i as usize];
+            let mut stream = test_rollup.subscribe().await;
+            loop {
+                // Wait for an event. This stream should not end until our events have been processed.
+                let bob_balance = test_rollup.get_bob_balance().await;
+                stream.next().await.unwrap();
+                if bob_balance == 100 {
+                    break;
+                } else {
+                    tracing::info!("Bob's balance is {bob_balance}/100");
+                }
+            }
+        }
+
+        // Ensure that the state commitments match each rollup contract's state commitment
+        for i in 0..num_rollups {
+            let test_rollup = &test_rollups[i as usize];
+            let state_comm = test_rollup.state.read().await.commit();
+            let state_comm = commitment_to_u256(state_comm);
+            let contract_state_comm = test_rollup
+                .contract
+                .state_commitment()
+                .call()
+                .await
+                .unwrap();
+            assert_eq!(state_comm, contract_state_comm);
+        }
+    }
+
+    #[async_std::test]
     async fn test_execute_batched_updates_to_slow_l1() {
         setup_logging();
         setup_backtrace();
@@ -365,15 +478,10 @@ mod test {
 
         // Start a test HotShot and Rollup contract.
         let mut anvil = AnvilOptions::default().spawn().await;
-        let (hotshot_contract, clients) = deploy_hotshot_contract(&anvil.url()).await;
-        let mut test_rollup = TestRollupInstance::launch(
-            anvil.url().clone(),
-            1.into(),
-            alice,
-            bob,
-            &hotshot_contract,
-        )
-        .await;
+        let provider = create_provider(&anvil.url()).await;
+        let test_l1 = TestL1System::deploy(provider).await.unwrap();
+        let mut test_rollup =
+            TestRollupInstance::launch(anvil.url().clone(), 1.into(), alice, bob, &test_l1).await;
 
         // Once the contracts have been deployed, restart the L1 with a slow block time.
         anvil
@@ -411,8 +519,8 @@ mod test {
         let hotshot_opt = CommitmentTaskOptions {
             l1_provider: anvil.url(),
             sequencer_mnemonic: TEST_MNEMONIC.to_string(),
-            sequencer_account_index: clients.funded[0].index,
-            hotshot_address: hotshot_contract.address(),
+            sequencer_account_index: test_l1.clients.funded[0].index,
+            hotshot_address: test_l1.hotshot.address(),
             l1_chain_id: None,
             query_service_url: Some(sequencer_url.clone()),
         };
@@ -420,9 +528,9 @@ mod test {
         let rollup_opt = ExecutorOptions {
             sequencer_url,
             l1_provider: anvil.url(),
-            rollup_account_index: clients.funded[1].index,
+            rollup_account_index: test_l1.clients.funded[1].index,
             rollup_mnemonic: TEST_MNEMONIC.to_string(),
-            hotshot_address: hotshot_contract.address(),
+            hotshot_address: test_l1.hotshot.address(),
             rollup_address: test_rollup.contract.address(),
         };
 

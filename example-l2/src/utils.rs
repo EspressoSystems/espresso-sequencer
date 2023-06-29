@@ -2,47 +2,28 @@ use std::time::Duration;
 
 use crate::state::State;
 use commit::Commitment;
-use contract_bindings::{example_rollup::ExampleRollup, EthMiddleware, HotShot, TestClients};
+use contract_bindings::{example_rollup::ExampleRollup, EthMiddleware, TestL1System};
 use ethers::{prelude::*, providers::Provider};
 use sequencer_utils::commitment_to_u256;
 use surf_disco::Url;
-pub type HotShotContract = HotShot<EthMiddleware>;
 pub type ExampleRollupContract = ExampleRollup<EthMiddleware>;
 
 pub async fn deploy_example_contract(
-    url: &Url,
+    test_l1: &TestL1System,
     initial_state: Commitment<State>,
-    hotshot_contract: &HotShotContract,
-) -> (ExampleRollupContract, TestClients) {
-    let mut provider = Provider::try_from(url.to_string()).unwrap();
-    provider.set_interval(Duration::from_millis(10));
-    let chain_id = provider.get_chainid().await.unwrap().as_u64();
-    let clients = TestClients::new(&provider, chain_id);
-    let rollup_contract = ExampleRollup::deploy(
-        clients.deployer.provider.clone(),
-        (
-            hotshot_contract.address(),
-            commitment_to_u256(initial_state),
-        ),
+) -> ExampleRollupContract {
+    ExampleRollup::deploy(
+        test_l1.clients.deployer.provider.clone(),
+        (test_l1.hotshot.address(), commitment_to_u256(initial_state)),
     )
     .unwrap()
     .send()
     .await
-    .unwrap();
-
-    (rollup_contract, clients)
+    .unwrap()
 }
 
-pub async fn deploy_hotshot_contract(url: &Url) -> (HotShotContract, TestClients) {
-    let mut provider = Provider::try_from(url.to_string()).unwrap();
+pub async fn create_provider(l1_url: &Url) -> Provider<Http> {
+    let mut provider = Provider::try_from(l1_url.to_string()).unwrap();
     provider.set_interval(Duration::from_millis(10));
-    let chain_id = provider.get_chainid().await.unwrap().as_u64();
-    let clients = TestClients::new(&provider, chain_id);
-    let hotshot_contract = HotShot::deploy(clients.deployer.provider.clone(), ())
-        .unwrap()
-        .send()
-        .await
-        .unwrap();
-
-    (hotshot_contract, clients)
+    provider
 }

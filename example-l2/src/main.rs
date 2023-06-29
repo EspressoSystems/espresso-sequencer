@@ -2,13 +2,14 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::sync::RwLock;
 use clap::Parser;
 use commit::Committable;
+use contract_bindings::TestL1System;
 use ethers::signers::{LocalWallet, Signer};
 use example_l2::{
     api::{serve, APIOptions},
     executor::{run_executor, ExecutorOptions},
     seed::{SeedIdentity, INITIAL_BALANCE},
     state::State,
-    utils::{deploy_example_contract, deploy_hotshot_contract},
+    utils::{create_provider, deploy_example_contract},
     Options, RollupVM,
 };
 use futures::join;
@@ -66,8 +67,9 @@ async fn main() {
     let initial_state = { state.read().await.commit() };
 
     tracing::info!("Deploying HotShot and Rollup contracts");
-    let (hotshot_contract, _) = deploy_hotshot_contract(&opt.l1_provider).await;
-    deploy_example_contract(&opt.l1_provider, initial_state, &hotshot_contract).await;
+    let provider = create_provider(&opt.l1_provider).await;
+    let test_system = TestL1System::deploy(provider).await.unwrap();
+    deploy_example_contract(&test_system, initial_state).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
     join!(
