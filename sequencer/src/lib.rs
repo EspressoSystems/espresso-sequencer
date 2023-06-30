@@ -7,6 +7,7 @@ mod state;
 pub mod transaction;
 mod vm;
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use async_std::task::sleep;
 use derivative::Derivative;
 use hotshot::{
@@ -37,7 +38,11 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use jf_primitives::{aead::KeyPair, merkle_tree::MerkleTreeScheme, signatures::BLSSignatureScheme};
+use jf_primitives::{
+    aead::KeyPair,
+    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
+    signatures::BLSSignatureScheme,
+};
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -62,13 +67,44 @@ pub use vm::{Vm, VmId, VmTransaction};
 pub const MAX_NMT_DEPTH: usize = 10;
 
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
+pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
-#[derive(Clone, Debug)]
-pub struct NMTRoot(<TransactionNMT as MerkleTreeScheme>::NodeValue);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NMTRoot {
+    #[serde(with = "nmt_root_serializer")]
+    root: <TransactionNMT as MerkleTreeScheme>::NodeValue,
+}
+
+mod nmt_root_serializer {
+    use serde::{Deserializer, Serializer};
+
+    use super::*;
+
+    pub fn serialize<A, S>(a: &A, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        A: CanonicalSerialize,
+    {
+        let mut bytes = vec![];
+        a.serialize_with_mode(&mut bytes, ark_serialize::Compress::Yes)
+            .map_err(serde::ser::Error::custom)?;
+        s.serialize_bytes(&bytes)
+    }
+
+    pub fn deserialize<'de, D, A>(deserializer: D) -> Result<A, D::Error>
+    where
+        D: Deserializer<'de>,
+        A: CanonicalDeserialize,
+    {
+        let s: Vec<u8> = serde::de::Deserialize::deserialize(deserializer)?;
+        let a = A::deserialize_with_mode(s.as_slice(), Compress::Yes, Validate::Yes);
+        a.map_err(serde::de::Error::custom)
+    }
+}
 
 impl NMTRoot {
     pub fn root(&self) -> <TransactionNMT as MerkleTreeScheme>::NodeValue {
-        self.0
+        self.root
     }
 }
 

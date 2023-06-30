@@ -8,7 +8,8 @@ use contract_bindings::{
     HotShot,
 };
 use ethers::prelude::*;
-use hotshot_query_service::availability::BlockQueryData;
+use hotshot_query_service::availability::BlockHeaderQueryData;
+use sequencer::{NMTRoot, NamespaceProofType, Vm};
 use std::sync::Arc;
 use surf_disco::Url;
 
@@ -68,11 +69,11 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
         .await
         .expect("Unable to subscribe to L1 log stream");
 
-    let mut blocks_stream = hotshot
-        .socket("stream/blocks/0")
+    let mut block_height_stream = hotshot
+        .socket("stream/block/headers/0")
         .subscribe()
         .await
-        .expect("Unable to subscribe to HotShot block stream");
+        .expect("Unable to subscribe to HotShot block header stream");
 
     while let Some(event) = commits_stream.next().await {
         let (first_block, num_blocks) = match event {
@@ -88,10 +89,10 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
         // When HotShot introduces optimistic DA, full block content may not be available immediately
         // so wait for all blocks to be ready before building the batch proof
-        let blocks: Vec<BlockQueryData<SeqTypes>> = blocks_stream
+        let headers: Vec<BlockHeaderQueryData<SeqTypes>> = block_height_stream
             .by_ref()
             .take(num_blocks as usize)
-            .map(|block| block.expect("Error fetching HotShot block"))
+            .map(|result| result.expect("Error fetching block header"))
             .collect()
             .await;
 
@@ -112,13 +113,24 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 .expect("Unable to read commitment");
             let block_commitment =
                 u256_to_commitment(commitment).expect("Unable to deserialize block commitment");
-            let block = &blocks[i as usize];
 
-            if block.block().commit() != block_commitment {
+            if headers[i as usize].hash() != block_commitment {
                 panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
-            proofs.push(state.execute_block(block).await);
+            let vm_id: u64 = state.vm.id().into();
+
+            let (namespace_proof, nmt_root): (NamespaceProofType, NMTRoot) = hotshot
+                .get(&format!(
+                    "block/height/{}/namespace/{}",
+                    first_block.as_u64() + i,
+                    vm_id
+                ))
+                .send()
+                .await
+                .unwrap();
+
+            proofs.push(state.execute_block(nmt_root, namespace_proof).await);
         }
 
         // Compute an aggregate proof.

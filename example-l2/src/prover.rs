@@ -3,10 +3,8 @@ use ark_serialize::SerializationError;
 use commit::{Commitment, Committable};
 use contract_bindings::example_rollup as bindings;
 use derive_more::Into;
-use jf_primitives::merkle_tree::namespaced_merkle_tree::{
-    NamespaceProof, NamespacedMerkleTreeScheme,
-};
-use sequencer::{NMTRoot, TransactionNMT, Vm};
+use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
+use sequencer::{NMTRoot, NamespaceProofType, Vm};
 use sequencer_utils::{commitment_to_u256, u256_to_commitment};
 use snafu::Snafu;
 
@@ -36,18 +34,18 @@ impl Proof {
     /// The namespace proof is a private input to the mock proof, showing that
     /// the proof of the state transition accounts for every transaction in the rollup's namespace
     pub fn generate(
-        block: NMTRoot,
+        nmt_comm: NMTRoot,
         state_commitment: Commitment<State>,
         previous_state_commitment: Commitment<State>,
-        namespace_proof: <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof,
+        namespace_proof: NamespaceProofType,
         rollup_vm: &RollupVM,
     ) -> Self {
         namespace_proof
-            .verify(&block.root(), rollup_vm.id())
+            .verify(&nmt_comm.root(), rollup_vm.id())
             .expect("Namespace proof failure, cannot continue")
             .expect("Namespace proof failure, cannot continue");
         Self {
-            block: block.commit(),
+            block: nmt_comm.commit(),
             old_state: previous_state_commitment,
             new_state: state_commitment,
         }
