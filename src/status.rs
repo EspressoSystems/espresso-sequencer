@@ -106,7 +106,6 @@ mod test {
     use futures::FutureExt;
     use hotshot_utils::bincode::bincode_opts;
     use portpicker::pick_unused_port;
-    use std::fs;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;

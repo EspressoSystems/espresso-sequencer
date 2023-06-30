@@ -364,7 +364,6 @@ mod test {
     use futures::FutureExt;
     use hotshot::types::{ed25519::Ed25519Pub, SignatureKey};
     use portpicker::pick_unused_port;
-    use std::fs;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
