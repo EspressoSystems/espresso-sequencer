@@ -40,7 +40,7 @@ pub struct Options {
         env = "HOTSHOT_AVAILABILITY_EXTENSIONS",
         value_delimiter = ','
     )]
-    pub extensions: Vec<PathBuf>,
+    pub extensions: Vec<toml::Value>,
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
@@ -204,6 +204,27 @@ where
                                     reason: err.to_string(),
                                 })?
                                 .map(Ok))
+                        }
+                        .boxed()
+                    })
+                    .await
+            }
+            .try_flatten_stream()
+            .boxed()
+        })?
+        .stream("streamblockheaders", |req, state| {
+            async move {
+                let height = req.integer_param("height")?;
+                state
+                    .read(|state| {
+                        async move {
+                            Ok(state
+                                .subscribe_blocks(height)
+                                .map_err(|err| Error::LeafStream {
+                                    height: height as u64,
+                                    reason: err.to_string(),
+                                })?
+                                .map(|block| Ok(block.header())))
                         }
                         .boxed()
                     })
@@ -556,7 +577,6 @@ mod test {
         let query_data = QueryData::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
         // Create the API extensions specification.
-        let extensions_path = dir.path().join("extensions.toml");
         let extensions = toml! {
             [route.post_ext]
             PATH = ["/ext/:val"]
@@ -567,12 +587,11 @@ mod test {
             PATH = ["/ext"]
             METHOD = "GET"
         };
-        fs::write(&extensions_path, extensions.to_string().as_bytes()).unwrap();
 
         let mut api =
             define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>, MockTypes, MockNodeImpl>(
                 &Options {
-                    extensions: vec![extensions_path],
+                    extensions: vec![extensions],
                     ..Default::default()
                 },
             )

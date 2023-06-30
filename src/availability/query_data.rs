@@ -223,6 +223,14 @@ where
     size: u64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct BlockHeaderQueryData<Types: NodeType> {
+    hash: BlockHash<Types>,
+    height: u64,
+    size: u64,
+}
+
 #[derive(Clone, Debug, Snafu)]
 pub enum InconsistentBlockError<Types: NodeType, I: NodeImplementation<Types>>
 where
@@ -302,6 +310,14 @@ where
         self.len() == 0
     }
 
+    pub fn header(&self) -> BlockHeaderQueryData<Types> {
+        BlockHeaderQueryData {
+            hash: self.hash,
+            height: self.height,
+            size: self.size,
+        }
+    }
+
     pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>> {
         let (transaction, proof) = self.block.transaction_with_proof(i)?;
         Some(TransactionQueryData {
@@ -311,6 +327,20 @@ where
             height: self.height(),
             hash: transaction.commit(),
         })
+    }
+}
+
+impl<Types: NodeType> BlockHeaderQueryData<Types> {
+    pub fn hash(&self) -> BlockHash<Types> {
+        self.hash
+    }
+
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
     }
 }
 
