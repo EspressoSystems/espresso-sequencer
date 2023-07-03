@@ -61,6 +61,24 @@ Subscribe to a stream of leaves in the order they are sequenced, starting at `:h
 Opens a WebSockets connection and sends a stream of the same data type returned by `leaf/:height`.
 """
 
+[route.streamblockheaders]
+PATH = ["stream/block/headers/:height"]
+METHOD = "SOCKET"
+":height" = "Integer"
+DOC = """
+Subscribe to a stream that returns the metadata of available blocks, starting at `:height`.
+Useful for applications like rollups that do not need to fetch the entire block.
+
+Opens a WebSocket connection and sends a stream of block headers:
+```
+{
+    "hash": TaggedBase64,
+    "height": integer,
+    "size": integer,
+}
+```
+"""
+
 [route.getblock]
 PATH = ["block/:height", "block/hash/:hash"]
 ":height" = "Integer"

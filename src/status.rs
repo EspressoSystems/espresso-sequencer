@@ -39,7 +39,7 @@ pub struct Options {
         env = "HOTSHOT_STATUS_EXTENSIONS",
         value_delimiter = ','
     )]
-    pub extensions: Vec<PathBuf>,
+    pub extensions: Vec<toml::Value>,
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
@@ -71,7 +71,7 @@ where
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
         include_str!("../api/status.toml"),
-        &options.extensions,
+        options.extensions.clone(),
     )?;
     api.with_version("0.0.1".parse().unwrap())
         .get("latest_block_height", |_, state| {
@@ -106,7 +106,6 @@ mod test {
     use futures::FutureExt;
     use hotshot_utils::bincode::bincode_opts;
     use portpicker::pick_unused_port;
-    use std::fs;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
@@ -219,8 +218,6 @@ mod test {
         let dir = TempDir::new("test_status_extensions").unwrap();
         let query_data = QueryData::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
-        // Create the API extensions specification.
-        let extensions_path = dir.path().join("extensions.toml");
         let extensions = toml! {
             [route.post_ext]
             PATH = ["/ext/:val"]
@@ -231,10 +228,9 @@ mod test {
             PATH = ["/ext"]
             METHOD = "GET"
         };
-        fs::write(&extensions_path, extensions.to_string().as_bytes()).unwrap();
 
         let mut api = define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>>(&Options {
-            extensions: vec![extensions_path],
+            extensions: vec![extensions],
             ..Default::default()
         })
         .unwrap();
