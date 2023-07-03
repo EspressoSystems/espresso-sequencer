@@ -9,7 +9,7 @@ use contract_bindings::{
 };
 use ethers::prelude::*;
 use hotshot_query_service::availability::BlockHeaderQueryData;
-use sequencer::{NMTRoot, NamespaceProofType, Vm};
+use sequencer::{api::NamespaceProofQueryData, Block, Vm};
 use std::sync::Arc;
 use surf_disco::Url;
 
@@ -69,7 +69,7 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
         .await
         .expect("Unable to subscribe to L1 log stream");
 
-    let mut block_height_stream = hotshot
+    let mut block_header_stream = hotshot
         .socket("stream/block/headers/0")
         .subscribe()
         .await
@@ -89,7 +89,7 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
         // When HotShot introduces optimistic DA, full block content may not be available immediately
         // so wait for all blocks to be ready before building the batch proof
-        let headers: Vec<BlockHeaderQueryData<SeqTypes>> = block_height_stream
+        let headers: Vec<BlockHeaderQueryData<SeqTypes>> = block_header_stream
             .by_ref()
             .take(num_blocks as usize)
             .map(|result| result.expect("Error fetching block header"))
@@ -120,15 +120,22 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
             let vm_id: u64 = state.vm.id().into();
 
-            let (namespace_proof, nmt_root): (NamespaceProofType, NMTRoot) = hotshot
+            let namespace_proof_query: NamespaceProofQueryData = hotshot
                 .get(&format!(
-                    "block/height/{}/namespace/{}",
+                    "block/{}/namespace/{}",
                     first_block.as_u64() + i,
                     vm_id
                 ))
                 .send()
                 .await
                 .unwrap();
+            let nmt_root = namespace_proof_query.nmt_root().clone();
+            let namespace_proof = namespace_proof_query.proof().clone();
+
+            // Check that the NMT root is consistent with the HotShot block committment
+            let derived_block_comm = Block::commitment_from_opening(&nmt_root);
+
+            assert_eq!(derived_block_comm, block_commitment);
 
             proofs.push(state.execute_block(nmt_root, namespace_proof).await);
         }

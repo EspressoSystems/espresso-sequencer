@@ -14,6 +14,3 @@ members = [
 # https://github.com/EspressoSystems/jellyfish/commit/36dceb63aa5b452b9551c0139bc5512d17f780cf
 [patch."https://github.com/EspressoSystems/jellyfish"]
 jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", rev = "e6024a7" }
-
-[patch."ssh://git@github.com/EspressoSystems/hotshot-query-service.git"]
-hotshot-query-service = { path = "../hotshot-query-service" }

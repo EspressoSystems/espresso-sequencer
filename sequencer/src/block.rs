@@ -122,9 +122,7 @@ impl Committable for Block {
         let nmt_root = NMTRoot {
             root: self.transaction_nmt.commitment().digest(),
         };
-        commit::RawCommitmentBuilder::new("Block Comm")
-            .field("NMT Root", nmt_root.commit())
-            .finalize()
+        Self::commitment_from_opening(&nmt_root)
     }
 }
 
@@ -165,5 +163,12 @@ impl Block {
         NMTRoot {
             root: self.transaction_nmt.commitment().digest(),
         }
+    }
+
+    /// Derives a block commitment from the NMTRoot
+    pub fn commitment_from_opening(nmt_root: &NMTRoot) -> Commitment<Self> {
+        commit::RawCommitmentBuilder::new("Block Comm")
+            .field("NMT Root", nmt_root.commit())
+            .finalize()
     }
 }

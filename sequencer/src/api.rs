@@ -1,4 +1,4 @@
-use crate::{transaction::Transaction, Leaf, SeqTypes};
+use crate::{transaction::Transaction, Leaf, NMTRoot, NamespaceProofType, SeqTypes};
 use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
@@ -16,6 +16,7 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::traits::metrics::Metrics;
+use serde::{Deserialize, Serialize};
 use std::{
     io,
     path::{Path, PathBuf},
@@ -55,6 +56,22 @@ pub type HandleFromMetrics<I> = Box<
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: SystemContextHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NamespaceProofQueryData {
+    proof: NamespaceProofType,
+    nmt_root: NMTRoot,
+}
+
+impl NamespaceProofQueryData {
+    pub fn proof(&self) -> &NamespaceProofType {
+        &self.proof
+    }
+
+    pub fn nmt_root(&self) -> &NMTRoot {
+        &self.nmt_root
+    }
 }
 
 impl<I: NodeImplementation<SeqTypes, Leaf = Leaf>> AppState<I> {
@@ -232,9 +249,9 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
                     .ok_or(AvailabilityError::InvalidLeafHeight { height })?
                     .ok_or(AvailabilityError::MissingBlock { height })?;
 
-                let namespace_proof = block.block().get_namespace_proof(namespace.into());
+                let proof = block.block().get_namespace_proof(namespace.into());
                 let nmt_root = block.block().get_nmt_root();
-                Ok((namespace_proof, nmt_root))
+                Ok(NamespaceProofQueryData { nmt_root, proof })
             }
             .boxed()
         })

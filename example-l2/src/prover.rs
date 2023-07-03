@@ -33,6 +33,9 @@ pub(crate) struct Proof {
 impl Proof {
     /// The namespace proof is a private input to the mock proof, showing that
     /// the proof of the state transition accounts for every transaction in the rollup's namespace
+    ///
+    /// Transaction data comes from the 'get_namespaced_leaves' method of the NamespaceProof interface.
+    /// A real prover would incorporate this data during proof construction.
     pub fn generate(
         nmt_comm: NMTRoot,
         state_commitment: Commitment<State>,
