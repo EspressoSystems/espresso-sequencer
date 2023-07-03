@@ -1,8 +1,7 @@
 use commit::{Commitment, Committable};
 use ethers::abi::Address;
-use hotshot_query_service::availability::{BlockHash, BlockQueryData};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
-use sequencer::{SeqTypes, Vm};
+use sequencer::{NMTRoot, NamespaceProofType, Vm};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -28,7 +27,7 @@ pub struct State {
     // without knowledge of the entire account state. Such "light clients" are less constrained by bandwidth
     // because they do not need to constantly sync up with a full node.
     accounts: BTreeMap<Address, Account>,
-    block_hash: Option<BlockHash<SeqTypes>>, // Hash of most recent hotshot consensus block
+    nmt_comm: Option<Commitment<NMTRoot>>, // Commitment to the most recent transaction NMT
     prev_state_commitment: Option<Commitment<State>>, // Previous state commitment, used to create a chain linking state committments
     pub(crate) vm: RollupVM,
 }
@@ -42,10 +41,10 @@ impl Committable for State {
             .array_field(
                 "block_hash",
                 &self
-                    .block_hash
+                    .nmt_comm
                     .iter()
                     .cloned()
-                    .map(BlockHash::<SeqTypes>::from)
+                    .map(Commitment::<NMTRoot>::from)
                     .collect::<Vec<_>>(),
             )
             .array_field(
@@ -81,7 +80,7 @@ impl State {
         }
         State {
             accounts,
-            block_hash: None,
+            nmt_comm: None,
             prev_state_commitment: None,
             vm,
         }
@@ -156,13 +155,12 @@ impl State {
             .unwrap_or(0)
     }
 
-    pub(crate) async fn execute_block(&mut self, block: &BlockQueryData<SeqTypes>) -> Proof {
+    pub(crate) async fn execute_block(
+        &mut self,
+        nmt_root: NMTRoot,
+        namespace_proof: NamespaceProofType,
+    ) -> Proof {
         let state_commitment = self.commit();
-        let namespace_proof = block.block().get_namespace_proof(&self.vm);
-        let root = block
-            .block()
-            .get_nmt_root(block.hash())
-            .expect("Block commitment should be consistent with the NMT root");
         let transactions = namespace_proof.get_namespace_leaves();
         for txn in transactions {
             if let Some(rollup_txn) = txn.as_vm(&self.vm) {
@@ -174,11 +172,11 @@ impl State {
                 tracing::error!("NMT transaction is malformed")
             }
         }
-        self.block_hash = Some(block.hash());
+        self.nmt_comm = Some(nmt_root.commit());
         self.prev_state_commitment = Some(state_commitment);
 
         Proof::generate(
-            root,
+            nmt_root,
             self.commit(),
             self.prev_state_commitment.unwrap(),
             namespace_proof,

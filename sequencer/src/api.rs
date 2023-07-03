@@ -1,4 +1,4 @@
-use crate::{transaction::Transaction, Leaf, SeqTypes};
+use crate::{transaction::Transaction, Leaf, NMTRoot, NamespaceProofType, SeqTypes};
 use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
@@ -8,12 +8,15 @@ use futures::{future::BoxFuture, FutureExt};
 use hotshot::types::SystemContextHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
 use hotshot_query_service::{
-    availability::{self, AvailabilityDataSource},
+    availability::{
+        self, AvailabilityDataSource, Error as AvailabilityError, Options as AvailabilityOptions,
+    },
     data_source::{QueryData, UpdateDataSource},
     status::{self, StatusDataSource},
     Error,
 };
 use hotshot_types::traits::metrics::Metrics;
+use serde::{Deserialize, Serialize};
 use std::{
     io,
     path::{Path, PathBuf},
@@ -53,6 +56,22 @@ pub type HandleFromMetrics<I> = Box<
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: SystemContextHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NamespaceProofQueryData {
+    proof: NamespaceProofType,
+    nmt_root: NMTRoot,
+}
+
+impl NamespaceProofQueryData {
+    pub fn proof(&self) -> &NamespaceProofType {
+        &self.proof
+    }
+
+    pub fn nmt_root(&self) -> &NMTRoot {
+        &self.nmt_root
+    }
 }
 
 impl<I: NodeImplementation<SeqTypes, Leaf = Leaf>> AppState<I> {
@@ -185,6 +204,10 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
     let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
+    let namespace_extension =
+        toml::from_str::<toml::value::Value>(include_str!("namespace_api.toml"))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
     // Initialize submit API
     let mut submit_api = Api::<StateType<I>, hotshot_query_service::Error>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
@@ -206,12 +229,33 @@ pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
         })
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
+    let mut options: AvailabilityOptions = Default::default();
+    options.extensions.push(namespace_extension);
+
     // Initialize availability and status APIs
-    let availability_api =
-        availability::define_api::<StateType<I>, SeqTypes, I>(&Default::default())
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let mut availability_api = availability::define_api::<StateType<I>, SeqTypes, I>(&options)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     let status_api = status::define_api::<StateType<I>>(&Default::default())
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    availability_api
+        .get("getnamespaceproof", |req, state| {
+            async move {
+                let height: u64 = req.integer_param("height")?;
+                let namespace: u64 = req.integer_param("namespace")?;
+                let block = state
+                    .get_nth_block_iter(height as usize)
+                    .next()
+                    .ok_or(AvailabilityError::InvalidLeafHeight { height })?
+                    .ok_or(AvailabilityError::MissingBlock { height })?;
+
+                let proof = block.block().get_namespace_proof(namespace.into());
+                let nmt_root = block.block().get_nmt_root();
+                Ok(NamespaceProofQueryData { nmt_root, proof })
+            }
+            .boxed()
+        })
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
     // Register modules in app
     app.register_module("submit", submit_api)

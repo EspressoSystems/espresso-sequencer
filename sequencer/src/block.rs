@@ -1,4 +1,4 @@
-use crate::{vm::Vm, Error, NMTRoot, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
+use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
 use commit::{Commitment, Committable};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
@@ -119,10 +119,10 @@ impl Display for Block {
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        let nmt_root = NMTRoot(self.transaction_nmt.commitment().digest());
-        commit::RawCommitmentBuilder::new("Block Comm")
-            .field("NMT Root", nmt_root.commit())
-            .finalize()
+        let nmt_root = NMTRoot {
+            root: self.transaction_nmt.commitment().digest(),
+        };
+        Self::commitment_from_opening(&nmt_root)
     }
 }
 
@@ -130,7 +130,7 @@ impl Committable for NMTRoot {
     fn commit(&self) -> Commitment<Self> {
         let comm_bytes =
             <Sha3Digest as BindNamespace<Transaction, VmId, Sha3Node, _>>::generate_namespaced_commitment(
-                self.0,
+                self.root,
             );
         commit::RawCommitmentBuilder::new("NMT Root Comm")
             .var_size_field("NMT Root", comm_bytes.as_ref())
@@ -152,18 +152,23 @@ impl Block {
 
     /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
     /// and the root of the NMT
-    pub fn get_namespace_proof<V: Vm>(
-        &self,
-        vm: &V,
-    ) -> <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof {
-        self.transaction_nmt.get_namespace_proof(vm.id())
+    pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
+        self.transaction_nmt.get_namespace_proof(vm_id)
     }
 
     /// Currently, HotShot consensus does not enforce any relationship between
     /// the NMT root and the block commitment. This returns the NMT root of the block,
     /// mocking the consistency check between the block and NMT commitments.
-    pub fn get_nmt_root(&self, _comm: Commitment<Self>) -> Result<NMTRoot, Error> {
-        let raw_root = self.transaction_nmt.commitment().digest();
-        Ok(NMTRoot(raw_root))
+    pub fn get_nmt_root(&self) -> NMTRoot {
+        NMTRoot {
+            root: self.transaction_nmt.commitment().digest(),
+        }
+    }
+
+    /// Derives a block commitment from the NMTRoot
+    pub fn commitment_from_opening(nmt_root: &NMTRoot) -> Commitment<Self> {
+        commit::RawCommitmentBuilder::new("Block Comm")
+            .field("NMT Root", nmt_root.commit())
+            .finalize()
     }
 }
