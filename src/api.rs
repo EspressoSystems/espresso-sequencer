@@ -18,7 +18,7 @@ use toml::{map::Entry, Value};
 pub(crate) fn load_api<State, Error>(
     path: Option<impl AsRef<Path>>,
     default: &str,
-    extensions: &[Value],
+    extensions: impl IntoIterator<Item = Value>,
 ) -> Result<Api<State, Error>, ApiError> {
     let mut toml = match path {
         Some(path) => load_toml(path.as_ref())?,
@@ -27,7 +27,7 @@ pub(crate) fn load_api<State, Error>(
         })?,
     };
     for extension in extensions {
-        merge_toml(&mut toml, extension.clone());
+        merge_toml(&mut toml, extension);
     }
     Api::new(toml)
 }

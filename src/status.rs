@@ -71,7 +71,7 @@ where
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
         include_str!("../api/status.toml"),
-        &options.extensions,
+        options.extensions.clone(),
     )?;
     api.with_version("0.0.1".parse().unwrap())
         .get("latest_block_height", |_, state| {
