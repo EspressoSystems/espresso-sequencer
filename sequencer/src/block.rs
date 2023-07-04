@@ -109,8 +109,6 @@ impl TestableBlock for Block {
     }
 }
 
-// Required for TestableBlock
-#[cfg(any(test, feature = "testing"))]
 impl Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
