@@ -391,7 +391,5 @@ where
 }
 
 fn parse_timestamp(ns: i128) -> Timestamp {
-    let s = (ns / 1000000000) as i64;
-    let ns = (ns % 1000000000) as i64;
-    Timestamp::from_unix_timestamp(s).unwrap() + time::Duration::nanoseconds(ns)
+    Timestamp::from_unix_timestamp_nanos(ns).expect("HotShot timestamp out of range")
 }
