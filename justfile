@@ -4,8 +4,11 @@ rollup-demo:
 rollup-demo-down:
     docker compose -f docker-compose-demo.yaml down
 
-rollup-cli *cmd:
+docker-cli *cmd:
     docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
+
+cli *cmd:
+    target/release/cli {{cmd}}
 
 pull-rollup-demo:
     docker compose -f docker-compose-demo.yaml pull
