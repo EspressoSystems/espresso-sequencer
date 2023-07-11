@@ -91,7 +91,7 @@ single example rollup transaction.
 4. The executor service receives notification of the new block commitment via a subscription to a query service provided
    by a sequencer node.
 5. The executor fetches transaction data from the sequencer. The transaction data is returned with a namespace proof that the set of transactions is complete for the rollup namesapce, along with an [NMT root](https://github.com/celestiaorg/nmt). The executor verifies that the NMT root is consistent with the block commitment from the sequencer contract. The executor then
-   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L158) the block,
+   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L158) the transactions,
    performing the following steps:
    1. The executor applies transactions to the VM state. Before application, each transaction is validated, and invalid
       transactions are discarded (a real rollup would eventually include proofs of transaction invalidity). In our case,
@@ -114,7 +114,7 @@ single example rollup transaction.
 
 The state of the example rollup consists of:
 
-- **Acccounts**: A mapping of ECDSA (EVM-style) addresses to balances of a dummy token.
+- **Accounts**: A mapping of ECDSA (EVM-style) addresses to balances of a dummy token.
 - **NMT commitment**: A cryptographic commitment to the latest transaction NMT.
 - **Previous state commitment**: A cryptographic commitment to the state of the rollup prior to the most recent
   execution step.
