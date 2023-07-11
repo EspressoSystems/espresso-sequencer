@@ -27,10 +27,30 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 1. Build all executables: `cargo build --release`
 2. Run the cdn: `just dev-cdn`
 3. Run the sequencer: `just dev-sequencer`
-4. Run a test Anvil node: `just dev-l1`
+4. Run a test Anvil node: `just anvil`
 5. Once the Sequencer HotShot network is running (there is a 10 second delay), run the demo: `just dev-demo`
 
 ### Interacting with the Demo
+
+## CLI
+
+We have built a simple CLI to interact with the demo using a few preseeded identities (Alice, Bob, Charlie). With the CLI, you can perform asset transfers and check balances.
+```console
+❯ just cli check-balance Alice
+target/release/cli check-balance Alice
+Balance of 0x885ee92eebda03540066a25a57cc625bbee15d5a: 9999
+
+❯ just cli transfer Alice Bob 1000
+target/release/cli transfer Alice Bob 1000
+Submitting Transaction to Rollup API: Transferring 1000 tokens from 0x885e…5d5a to 0xf236…69ca
+
+❯ just cli check-balance Alice
+target/release/cli check-balance Alice
+Balance of 0x885ee92eebda03540066a25a57cc625bbee15d5a: 8999
+```
+Run `just cli --help` for more information. If you are running the demo using Docker, use the command `just docker-cli`. 
+
+## Curl
 
 With the demo running, navigate to http://localhost:8082/ for API documentation.
 
@@ -70,19 +90,16 @@ single example rollup transaction.
    block commitment to a contract on the L1, which verifies that consensus has been reached on the block.
 4. The executor service receives notification of the new block commitment via a subscription to a query service provided
    by a sequencer node.
-5. The executor fetches block data from the sequencer. The executor verifies that the block hash matches the commitment
-   from the sequencer contract. The executor then
-   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L141) the block,
+5. The executor fetches transaction data from the sequencer. The transaction data is returned with a namespace proof that the set of transactions is complete for the rollup namesapce, along with an [NMT root](https://github.com/celestiaorg/nmt). The executor verifies that the NMT root is consistent with the block commitment from the sequencer contract. The executor then
+   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L158) the block,
    performing the following steps:
-   1. The executor filters the blog by VM ID. This step is necessary because the HotShot block may contain transactions
-      belonging to other rollups.
-   2. The executor applies transactions to the VM state. Before application, each transaction is validated, and invalid
+   1. The executor applies transactions to the VM state. Before application, each transaction is validated, and invalid
       transactions are discarded (a real rollup would eventually include proofs of transaction invalidity). In our case,
       the block contains a single transaction from Alice to Bob. Since the transaction contains a valid signature and
       Alice has sufficient balance, the transaction is successfully applied and balances are updated.
-   3. After transaction application, the executor updates the VM state with the new block commitment and previous state
+   2. After transaction application, the executor updates the VM state with the new block commitment and previous state
       commitment.
-   4. The executor computes a new state commitment, and generates a mock proof that the state was updated correctly with
+   3. The executor computes a new state commitment, and generates a mock proof that the state was updated correctly with
       respect to the HotShot block commitment.
 6. The executor posts the proof to the rollup contract.
 7. The rollup contract verifies the proof by querying the latest certified block commitment from the sequencer contract.
@@ -97,14 +114,15 @@ single example rollup transaction.
 
 The state of the example rollup consists of:
 
-- **Balances**: A mapping of ECDSA (EVM-style) addresses to balances of a dummy token.
-- **Block commitment**: A cryptographic commitment to the latest HotShot block executed.
+- **Acccounts**: A mapping of ECDSA (EVM-style) addresses to balances of a dummy token.
+- **NMT commitment**: A cryptographic commitment to the latest transaction NMT.
 - **Previous state commitment**: A cryptographic commitment to the state of the rollup prior to the most recent
   execution step.
+- **VM**: Information about the Rollup VM. Right now, this is a simple ID. 
 
 **[Executor](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/executor.rs)**
 
-The executor is a service responsible for fetching blocks of ordered transactions from the sequencer, applying
+The executor is a service responsible for subscribing to block commitments posted to the L1 contract, applying
 transactions to the rollup state, and submitting
 [mock proofs](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/prover.rs) to the rollup
 contract. Rollups often separate the roles of executor and prover into two distinct services, but this example combines
@@ -113,7 +131,7 @@ them for the sake of simplicity.
 **[Rollup API](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/api.rs)**
 
 The rollup API is a REST API that includes a `submit` and `query` endpoint. With the containerized example rollup
-running, visit (TODO) for API documentation.
+running, visit http://localhost:8082/ for API documentation.
 
 **[Rollup Contract](https://github.com/EspressoSystems/espresso-sequencer/blob/main/contracts/src/ExampleRollup.sol)**
 
