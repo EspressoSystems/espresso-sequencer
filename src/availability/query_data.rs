@@ -12,7 +12,6 @@
 
 use crate::{Block, Deltas, Leaf, QuorumCertificate, Resolvable, Transaction};
 use bincode::Options;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::LeafType,
@@ -33,6 +32,8 @@ pub type BlockHash<Types> = Commitment<Block<Types>>;
 pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
 pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::TransactionIndex;
 pub type TransactionInclusionProof<Types> = <Block<Types> as QueryableBlock>::InclusionProof;
+
+pub type Timestamp = time::OffsetDateTime;
 
 /// A block whose contents (e.g. individual transactions) can be examined.
 ///
@@ -196,7 +197,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         self.leaf.get_height()
     }
 
-    pub fn timestamp(&self) -> DateTime<Utc> {
+    pub fn timestamp(&self) -> Timestamp {
         parse_timestamp(self.leaf.get_timestamp())
     }
 
@@ -305,7 +306,7 @@ where
         self.height
     }
 
-    pub fn timestamp(&self) -> DateTime<Utc> {
+    pub fn timestamp(&self) -> Timestamp {
         parse_timestamp(self.timestamp)
     }
 
@@ -389,10 +390,8 @@ where
     }
 }
 
-fn parse_timestamp(nanos: i128) -> DateTime<Utc> {
-    DateTime::from_utc(
-        NaiveDateTime::from_timestamp_opt((nanos / 1000000000) as i64, (nanos % 1000000000) as u32)
-            .unwrap(),
-        Utc,
-    )
+fn parse_timestamp(ns: i128) -> Timestamp {
+    let s = (ns / 1000000000) as i64;
+    let ns = (ns % 1000000000) as i64;
+    Timestamp::from_unix_timestamp(s).unwrap() + time::Duration::nanoseconds(ns)
 }

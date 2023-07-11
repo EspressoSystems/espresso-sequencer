@@ -49,7 +49,7 @@ jobs:
           args: --workspace --all-features --all-targets -- -D warnings
 
       - name: Audit
-        run: cargo audit --ignore RUSTSEC-2023-0018 --ignore RUSTSEC-2020-0071
+        run: cargo audit --ignore RUSTSEC-2023-0018
 
       - name: Build
         run: |
