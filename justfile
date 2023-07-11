@@ -17,7 +17,7 @@ docker-stop-rm:
     docker stop $(docker ps -aq); docker rm $(docker ps -aq)
 
 anvil *args:
-    docker run ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
+    docker run -p 127.0.0.1:8545/8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
     cargo test --release --all-features
@@ -27,10 +27,7 @@ dev-cdn:
     target/release/cdn-server -p 8080 -n 1 
 
 dev-sequencer:
-    target/release/sequencer --cdn-url tcp://127.0.0.1:8080 --port 8081 --storage-path storage
-
-dev-l1:
-    docker compose -f docker-compose-anvil.yaml up
+    target/release/sequencer --cdn-url tcp://127.0.0.1:8080 -- api --port 8081 --storage-path storage
 
 dev-demo:
      target/release/example-l2 --sequencer-url http://localhost:8081 \
