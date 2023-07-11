@@ -33,6 +33,8 @@ pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
 pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::TransactionIndex;
 pub type TransactionInclusionProof<Types> = <Block<Types> as QueryableBlock>::InclusionProof;
 
+pub type Timestamp = time::OffsetDateTime;
+
 /// A block whose contents (e.g. individual transactions) can be examined.
 ///
 /// Note to implementors: this trait has only a few required methods. The provided methods, for
@@ -195,6 +197,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         self.leaf.get_height()
     }
 
+    pub fn timestamp(&self) -> Timestamp {
+        parse_timestamp(self.leaf.get_timestamp())
+    }
+
     pub fn hash(&self) -> LeafHash<Types, I> {
         self.leaf.commit()
     }
@@ -220,6 +226,7 @@ where
     block: Block<Types>,
     hash: BlockHash<Types>,
     height: u64,
+    timestamp: i128,
     size: u64,
 }
 
@@ -281,6 +288,7 @@ where
         Ok(Self {
             hash: block.commit(),
             height: leaf.get_height(),
+            timestamp: leaf.get_timestamp(),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
             block,
         })
@@ -296,6 +304,10 @@ where
 
     pub fn height(&self) -> u64 {
         self.height
+    }
+
+    pub fn timestamp(&self) -> Timestamp {
+        parse_timestamp(self.timestamp)
     }
 
     pub fn size(&self) -> u64 {
@@ -376,4 +388,10 @@ where
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }
+}
+
+fn parse_timestamp(ns: i128) -> Timestamp {
+    let s = (ns / 1000000000) as i64;
+    let ns = (ns % 1000000000) as i64;
+    Timestamp::from_unix_timestamp(s).unwrap() + time::Duration::nanoseconds(ns)
 }

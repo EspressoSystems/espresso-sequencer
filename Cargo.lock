@@ -582,7 +582,7 @@ dependencies = [
  "num-traits",
  "rusticata-macros",
  "thiserror",
- "time 0.3.22",
+ "time 0.3.23",
 ]
 
 [[package]]
@@ -2442,7 +2442,7 @@ dependencies = [
  "serde",
  "snafu",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?branch=main)",
- "time 0.3.22",
+ "time 0.3.23",
  "tracing",
 ]
 
@@ -2486,7 +2486,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "snafu",
- "time 0.3.22",
+ "time 0.3.23",
  "tracing",
 ]
 
@@ -2546,6 +2546,7 @@ dependencies = [
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?tag=v0.4.1)",
  "tempdir",
  "tide-disco",
+ "time 0.3.23",
  "toml 0.5.11",
  "tracing",
 ]
@@ -2580,7 +2581,7 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64 0.2.4",
- "time 0.3.22",
+ "time 0.3.23",
  "tracing",
 ]
 
@@ -4865,7 +4866,7 @@ checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
 dependencies = [
  "pem",
  "ring",
- "time 0.3.22",
+ "time 0.3.23",
  "yasna",
 ]
 
@@ -5289,7 +5290,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with_macros",
- "time 0.3.22",
+ "time 0.3.23",
 ]
 
 [[package]]
@@ -6074,14 +6075,14 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.22"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea9e1b3cf1243ae005d9e74085d4d542f3125458f3a81af210d901dcd7411efd"
+checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
 dependencies = [
  "itoa 1.0.6",
  "serde",
  "time-core",
- "time-macros 0.2.9",
+ "time-macros 0.2.10",
 ]
 
 [[package]]
@@ -6102,9 +6103,9 @@ dependencies = [
 
 [[package]]
 name = "time-macros"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "372950940a5f07bf38dbe211d7283c9e6d7327df53794992d293e534c733d09b"
+checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
 dependencies = [
  "time-core",
 ]
@@ -6975,7 +6976,7 @@ dependencies = [
  "oid-registry",
  "rusticata-macros",
  "thiserror",
- "time 0.3.22",
+ "time 0.3.23",
 ]
 
 [[package]]
@@ -7007,7 +7008,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
- "time 0.3.22",
+ "time 0.3.23",
 ]
 
 [[package]]
