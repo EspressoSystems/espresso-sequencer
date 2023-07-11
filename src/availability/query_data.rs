@@ -12,6 +12,7 @@
 
 use crate::{Block, Deltas, Leaf, QuorumCertificate, Resolvable, Transaction};
 use bincode::Options;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::LeafType,
@@ -195,6 +196,10 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         self.leaf.get_height()
     }
 
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        parse_timestamp(self.leaf.get_timestamp())
+    }
+
     pub fn hash(&self) -> LeafHash<Types, I> {
         self.leaf.commit()
     }
@@ -220,6 +225,7 @@ where
     block: Block<Types>,
     hash: BlockHash<Types>,
     height: u64,
+    timestamp: i128,
     size: u64,
 }
 
@@ -281,6 +287,7 @@ where
         Ok(Self {
             hash: block.commit(),
             height: leaf.get_height(),
+            timestamp: leaf.get_timestamp(),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
             block,
         })
@@ -296,6 +303,10 @@ where
 
     pub fn height(&self) -> u64 {
         self.height
+    }
+
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        parse_timestamp(self.timestamp)
     }
 
     pub fn size(&self) -> u64 {
@@ -376,4 +387,12 @@ where
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }
+}
+
+fn parse_timestamp(nanos: i128) -> DateTime<Utc> {
+    DateTime::from_utc(
+        NaiveDateTime::from_timestamp_opt((nanos / 1000000000) as i64, (nanos % 1000000000) as u32)
+            .unwrap(),
+        Utc,
+    )
 }
