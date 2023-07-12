@@ -38,7 +38,7 @@ end note
 
 Exec -> API
 note right of link
-5. Fetch block data
+5. Fetch transaction data
 end note
 
 Exec -> Rollup_L1
