@@ -504,7 +504,7 @@ mod test {
 
         // Once the contracts have been deployed, restart the L1 with a slow block time.
         anvil
-            .restart(AnvilOptions::default().block_time(Duration::from_secs(30)))
+            .restart(AnvilOptions::default().block_time(Duration::from_secs(5)))
             .await;
 
         test_rollup.reset_socket_connnection().await;
