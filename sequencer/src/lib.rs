@@ -409,7 +409,7 @@ pub mod testing {
             start_delay: Duration::from_millis(1).as_millis() as u64,
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
-            propose_max_round_time: Duration::from_secs(5),
+            propose_max_round_time: Duration::from_secs(1),
             election_config: Some(ElectionConfig {}),
             da_committee_nodes: nodes_pub_keys.clone(), // All nodes are in the DA committee.
         };
