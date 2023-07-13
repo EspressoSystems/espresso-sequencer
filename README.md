@@ -4,9 +4,11 @@
 
 ![Architecture diagram](./doc/architecture.svg)
 
-# Running
+# Running the demo
 
-Refer to [example-l2/README.md](example-l2/README.md) for how to run the example rollup demo.
+Refer to [example-l2/README.md](example-l2/README.md) for instructions on how to
+run a dockerized Espresso Sequencer network with an example Layer 2 rollup
+application.
 
 # Development
 
@@ -23,15 +25,10 @@ Refer to [example-l2/README.md](example-l2/README.md) for how to run the example
 
     make doc
 
-## Run the sequencer locally
-
-A sequencer network can be run locally for easy experimentation and testing. Docker images and a `docker-compose.yaml`
-are provided for convenience. The Docker-based demo fetches the images from the `ghcr` repository, where they are
-updated with every push to `main` on GitHub. For testing uncommitted changes, you can also run the same demo by manually
-building and running the services.
-
-
-### Running natively
+## Building and running
+Docker images and the [docker-compose-demo.yaml](docker-compose-demo.yaml) file are provided for convenience. The
+Docker-based demo fetches the images from the `ghcr` repository, where they are updated with every push to `main` on
+GitHub. For testing uncommitted changes, you can also run the binaries by manually building and running the services.
 
 Build all executables with `cargo build --release`. You may then start a single CDN server and connect as many sequencer
 nodes as you'd like. To start the CDN, choose a port `$PORT` to run it on and decide how many sequencer nodes `$N` you
