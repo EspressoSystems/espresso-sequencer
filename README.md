@@ -1,6 +1,6 @@
 # Espresso Sequencer
 
-Documentation: https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme
+[Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
 ![Architecture diagram](./doc/architecture.svg)
 
