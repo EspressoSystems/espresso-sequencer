@@ -17,11 +17,8 @@ env:
 
 jobs:
   build:
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: ubuntu-latest
     steps:
-
       - uses: styfle/cancel-workflow-action@0.11.0
         name: Cancel Outdated Builds
         with:
@@ -42,11 +39,8 @@ jobs:
       - name: Format Check
         run: cargo fmt -- --check
 
-      - uses: actions-rs/clippy-check@v1
-        name: Clippy
-        with:
-          token: ${{ github.token }}
-          args: --workspace --all-features --all-targets -- -D warnings
+      - name: Check
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
       - name: Audit
         run: cargo audit --ignore RUSTSEC-2020-0159 --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2022-0006 --ignore RUSTSEC-2022-0040
