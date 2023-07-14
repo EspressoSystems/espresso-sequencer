@@ -91,3 +91,12 @@ This is only necessary to fetch private images.
 - Generate a new token
   - for the scope options of the token, tick the _repo_ box.
 - Run `docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>`
+
+# License
+## Copyright
+**(c) 2022 Espresso Systems**
+`espresso-sequencer` was developed by Espresso Systems. While we plan to adopt an open source license, we have not yet selected one. As such, all rights are reserved for the time being. Please reach out to us if you have thoughts on licensing.
+
+# Disclaimer
+
+**DISCLAIMER:** This software is provided "as is" and its security has not been externally audited. Use at your own risk.
