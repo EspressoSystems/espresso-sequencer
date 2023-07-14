@@ -34,12 +34,6 @@ jobs:
         name: Checkout Repository
         with:
           submodules: true
-          token: ${{ secrets.ORG_GITHUB_PAT }}
-
-      - name: Configure Git
-        run: |
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching

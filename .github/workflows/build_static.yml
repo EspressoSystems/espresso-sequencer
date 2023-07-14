@@ -44,11 +44,6 @@ jobs:
       - name: Fix Git Security Issue
         run: git config --global --add safe.directory "$PWD"
 
-      - name: Configure Git
-        run: |
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
-
       - name: Compile all executables
         # timeout-minutes: 120
         run: |
