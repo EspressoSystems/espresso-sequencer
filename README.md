@@ -1,8 +1,18 @@
-# espresso-sequencer
+# Espresso Sequencer
+
+The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale. Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees, and robust infrastructure.
+
+[Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
 ![Architecture diagram](./doc/architecture.svg)
 
-## Development
+# Running the demo
+
+Refer to [example-l2/README.md](example-l2/README.md) for instructions on how to
+run a dockerized Espresso Sequencer network with an example Layer 2 rollup
+application.
+
+# Development
 
 - Obtain code: `git clone --recursive git@github.com:EspressoSystems/espresso-sequencer`.
 - Make sure [nix](https://nixos.org/download.html) is installed.
@@ -17,41 +27,10 @@
 
     make doc
 
-## Run the sequencer locally
-
-A sequencer network can be run locally for easy experimentation and testing. Docker images and a `docker-compose.yaml`
-are provided for convenience. The Docker-based demo fetches the images from the `ghcr` repository, where they are
-updated with every push to `main` on GitHub. For testing uncommitted changes, you can also run the same demo by manually
-building and running the services.
-
-### Running with Docker
-
-#### Authenticate with GitHub container registry
-
-- Go to your github profile
-- Developer Settings > Personal access tokens > Personal access tokens (classic)
-- Generate a new token
-  - for the scope options of the token, tick the _repo_ box.
-- Run `docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>`
-
-#### Run the demo
-
-To get the latest images: `just pull`
-
-To start the demo: `just demo`. Note: currently broken due to failing genesis check in the synchronizer.
-
-To start the demo in the background: `just demo-background`. This can be useful because the command should exit
-sucessfully only once the demo is running.
-
-To stop the demo: `just down`
-
-To build the docker images locally: `just build-docker`. To revert to the CI docker images: `just pull`.
-
-#### Run the integration tests
-
-- `cargo test --all-features end_to_end`
-
-### Running natively
+## Building and running
+Docker images and the [docker-compose-demo.yaml](docker-compose-demo.yaml) file are provided for convenience. The
+Docker-based demo fetches the images from the `ghcr` repository, where they are updated with every push to `main` on
+GitHub. For testing uncommitted changes, you can also run the binaries by manually building and running the services.
 
 Build all executables with `cargo build --release`. You may then start a single CDN server and connect as many sequencer
 nodes as you'd like. To start the CDN, choose a port `$PORT` to run it on and decide how many sequencer nodes `$N` you
@@ -102,3 +81,13 @@ To generate documentation in `./docs` for solidity code run
 ```shell
 forge doc
 ```
+
+## Misc
+### Authenticate with GitHub container registry
+This is only necessary to fetch private images.
+
+- Go to your github profile
+- Developer Settings > Personal access tokens > Personal access tokens (classic)
+- Generate a new token
+  - for the scope options of the token, tick the _repo_ box.
+- Run `docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>`

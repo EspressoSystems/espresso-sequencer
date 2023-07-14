@@ -1,3 +1,6 @@
+default:
+    just --list
+
 rollup-demo:
     docker compose -f docker-compose-demo.yaml up
 
