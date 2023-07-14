@@ -15,7 +15,7 @@ contract-bindings = { path = "../contract-bindings" }
 derive_more = "0.99.17"
 ethers = { version = "2.0.4", features = ["ws"] }
 futures = "0.3.28"
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
     "std",
 ] }

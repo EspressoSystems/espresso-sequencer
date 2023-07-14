@@ -47,7 +47,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features =
     "channel-async-std",
 ] }
 
-hotshot-query-service = { git = "ssh://git@github.com/EspressoSystems/hotshot-query-service.git" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
     "std",
