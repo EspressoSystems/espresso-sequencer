@@ -25,11 +25,6 @@ jobs:
           all_but_latest: true
           access_token: ${{ github.token }}
 
-      - name: Configure Git
-        run: |
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
-          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
-
       - name: Install Nix
         uses: cachix/install-nix-action@v22
 
@@ -45,7 +40,6 @@ jobs:
         name: Checkout Repository
         with:
           submodules: recursive
-          token: ${{ secrets.ORG_GITHUB_PAT }}
 
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
