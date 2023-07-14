@@ -17,10 +17,15 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 
 ## Running the Example
 
+### Prerequisites
+1. Docker
+2. Nix (refer to development steps [here](https://github.com/EspressoSystems/espresso-sequencer#development))
+
 ### With Docker
 
 1. Start the demo: `just rollup-demo`
 2. Stop the demo: `just rollup-demo-down`
+3. Pull the latest version of the demo: `just pull-rollup-demo`
 
 ### Natively
 
@@ -34,7 +39,7 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 
 ## CLI
 
-We have built a simple CLI to interact with the demo using a few preseeded identities (Alice, Bob, Charlie). With the CLI, you can perform asset transfers and check balances.
+We have built a simple CLI to interact with the demo using a few preseeded identities (Alice, Bob, Charlie). With the CLI, you can perform asset transfers and check balances. With the demo running, open another terminal and try transferring some dummy tokens:
 ```console
 ❯ just cli check-balance Alice
 target/release/cli check-balance Alice
