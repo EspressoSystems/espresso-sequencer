@@ -233,7 +233,7 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
 }
 
 pub async fn contract_send<T: Detokenize>(
-    call: ContractCall<Middleware, T>,
+    call: &ContractCall<Middleware, T>,
 ) -> Option<(TransactionReceipt, u64)> {
     let pending = match call.send().await {
         Ok(pending) => pending,

@@ -8,7 +8,7 @@ import {BN256G2} from "./libraries//BN256G2.sol";
 contract HotShot {
     event NewStakingKey(BN254.G2Point stakingKey, uint256 amount, uint256 index);
 
-    uint256 public constant MAX_BLOCKS = 1000;
+    uint256 public constant MAX_BLOCKS = 500;
     mapping(uint256 blockHeight => uint256 commitment) public commitments;
     uint256 public blockHeight;
 
