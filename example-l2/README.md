@@ -23,9 +23,9 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 
 ### With Docker
 
-1. Start the demo: `just rollup-demo`
-2. Stop the demo: `just rollup-demo-down`
-3. Pull the latest version of the demo: `just pull-rollup-demo`
+1. Pull the latest version of the demo: `just pull-rollup-demo`
+2. Start the demo: `just rollup-demo`
+3. Stop the demo: `just rollup-demo-down`
 
 ### Natively
 
