@@ -76,7 +76,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: arm-executables
-          path: release
+          path: target/release
 
       - name: Set linker/loader to not be nix
         run: |
