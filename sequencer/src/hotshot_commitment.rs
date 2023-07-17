@@ -2,7 +2,6 @@ use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
 use contract_bindings::HotShot;
 use ethers::prelude::*;
-use ethers::types::Address;
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
 use hotshot_types::traits::node_implementation::NodeImplementation;
@@ -165,26 +164,40 @@ async fn sequence_batches<I: NodeImplementation<SeqTypes>>(
 ) where
     Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
 {
-    let (block_comms, qcs): (Vec<_>, Vec<_>) = leaves
+    let txn = build_sequence_batches_txn(contract, leaves);
+
+    // Send the block commitments and QCs to L1. This operation must succeed before we go any
+    // further, because sequencing the next batch will depend on having successfully sequenced this
+    // one. Thus we will retry until it succeeds.
+    while contract_send(&txn).await.is_none() {
+        tracing::warn!("failed to sequence batches, retrying");
+        sleep(RETRY_DELAY).await;
+    }
+}
+
+fn build_sequence_batches_txn<I: NodeImplementation<SeqTypes>, M: ethers::prelude::Middleware>(
+    contract: &HotShot<M>,
+    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
+) -> ContractCall<M, ()>
+where
+    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
+{
+    let (block_comms, qcs) = leaves
         .into_iter()
         .map(|leaf| {
             (
                 commitment_to_u256(leaf.block_hash()),
-                Bytes::from(bincode::serialize(&leaf.qc()).unwrap()),
+                // The QC validation part of the contract is currently mocked out, so it doesn't
+                // matter what we send here. For realism of gas usage, we want to send something of
+                // the correct size. The plan for on-chain QC validation is for the contract to only
+                // take a few 32-byte words of the QC, with the rest replaced by a short commitment,
+                // since the contract doesn't need all the fields of the QC and storing the whole
+                // QC in calldata can be expensive (or even run into RPC size limits).
+                [0; 32 * 3].into(),
             )
         })
         .unzip();
-
-    // Send teh block commitments and QCs to L1. This operation must succeed before we go any
-    // further, because sequencing the next batch will depend on having successfully sequenced this
-    // one. Thus we will retry until it succeeds.
-    while contract_send(contract.new_blocks(block_comms.clone(), qcs.clone()))
-        .await
-        .is_none()
-    {
-        tracing::warn!("failed to sequence batches, retrying");
-        sleep(RETRY_DELAY).await;
-    }
+    contract.new_blocks(block_comms, qcs)
 }
 
 pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> {
@@ -235,7 +248,7 @@ mod test {
         .unwrap();
 
         // Create a few test batches.
-        let num_batches = 2u64;
+        let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_u64();
         let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
         for _ in 0..num_batches {
             let txn = Transaction::new(1.into(), vec![]);
@@ -251,6 +264,12 @@ mod test {
 
         // Connect to the HotShot contract with the expected L1 client.
         let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
+
+        // Ensure the transaction we're going to execute is less than the Geth RPC size limit.
+        let txn = build_sequence_batches_txn(&l1.hotshot, leaves.clone()).tx;
+        let size = txn.rlp().len();
+        tracing::info!("transaction is {size} bytes");
+        assert!(size < 131072);
 
         // Sequence them in the HotShot contract.
         sequence_batches(&hotshot, leaves.clone()).await;

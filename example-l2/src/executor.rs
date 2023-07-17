@@ -152,10 +152,8 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
             proof,
         );
         let proof = example_rollup::BatchProof::from(proof);
-        while contract_send(rollup_contract.verify_blocks(num_blocks, state_comm, proof.clone()))
-            .await
-            .is_none()
-        {
+        let call = rollup_contract.verify_blocks(num_blocks, state_comm, proof);
+        while contract_send(&call).await.is_none() {
             tracing::warn!("Failed to submit proof to contract, retrying");
             sleep(std::time::Duration::from_secs(1)).await;
         }
