@@ -27,6 +27,8 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 2. Start the demo: `just rollup-demo`
 3. Stop the demo: `just rollup-demo-down`
 
+> :warning: We have not yet published ARM-based images, so the Docker demo cannot run on an M1 Mac. 
+
 ### Natively
 
 1. Build all executables: `cargo build --release`
