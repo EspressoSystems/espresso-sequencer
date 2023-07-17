@@ -206,7 +206,7 @@
           in
           import ./cross-shell.nix { inherit pkgs; };
 
-        devShell.rustShell =
+        devShells.rustShell =
           let
             stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
               extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
