@@ -16,7 +16,7 @@ env:
   RUST_TEST_THREADS: 1
 
 jobs:
-  build:
+  arm-build:
     runs-on: [self-hosted, arm64]
     container:
       image: ghcr.io/espressosystems/nix:main
@@ -67,7 +67,7 @@ jobs:
 
   arm-dockers:
     runs-on: ubuntu-latest
-    needs: static-build
+    needs: arm-build
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
