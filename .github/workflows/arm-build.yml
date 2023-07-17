@@ -39,9 +39,6 @@ jobs:
       - name: Work around git issue after git CVE-2022-24765 fix.
         run: git config --global --add safe.directory "$PWD"
 
-      - name: Initialize Nix Shell
-        run: nix-shell --run "echo Init"
-
       - name: Cache cargo
         uses: actions/cache@v3
         with:
@@ -54,7 +51,7 @@ jobs:
           key: arm-sequencer-v0-${{ hashFiles('Cargo.lock') }}
 
       - name: Build all executables
-        run: nix-shell --run "cargo build --release"
+        run: nix develop .#rustShell --command cargo build --release
 
       - uses: actions/upload-artifact@v3
         with:

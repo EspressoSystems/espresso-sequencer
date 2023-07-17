@@ -196,7 +196,8 @@
           in
           import ./cross-shell.nix { inherit pkgs; };
 
-        devShells.armCrossShell = let
+        devShells.armCrossShell =
+          let
             localSystem = system;
             crossSystem = { config = "aarch64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
             pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
@@ -204,6 +205,24 @@
             };
           in
           import ./cross-shell.nix { inherit pkgs; };
+
+        devShell.rustShell =
+          let
+            stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
+              extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+            };
+          in
+          mkShell
+            {
+              buildInputs = [
+                # Rust dependencies
+                pkgconfig
+                openssl
+                curl
+                protobuf # to compile libp2p-autonat
+                stableToolchain
+              ];
+            };
       }
     );
 }
