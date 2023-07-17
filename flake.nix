@@ -195,6 +195,15 @@
             };
           in
           import ./cross-shell.nix { inherit pkgs; };
+
+        devShells.armCrossShell = let
+            localSystem = system;
+            crossSystem = { config = "aarch64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
+            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+              inherit overlays localSystem crossSystem;
+            };
+          in
+          import ./cross-shell.nix { inherit pkgs; };
       }
     );
 }
