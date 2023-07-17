@@ -77,10 +77,10 @@ jobs:
 
       - name: Set linker/loader to not be nix
         run: |
-          patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 ./target/release/cdn-server
-          patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 ./target/release/sequencer
-          patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 ./target/release/example-l2
-          patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 ./target/release/cli
+          patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./target/release/cdn-server
+          patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./target/release/sequencer
+          patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./target/release/example-l2
+          patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./target/release/cli
 
       - uses: docker/setup-qemu-action@v2
         with:
