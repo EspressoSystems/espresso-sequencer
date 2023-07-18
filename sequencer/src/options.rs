@@ -29,14 +29,14 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: u16,
 
-    /// URL of the HotShot CDN.
+    /// URL of the HotShot web server.
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_CDN_URL",
+        env = "ESPRESSO_SEQUENCER_WEB_SERVER_URL",
         default_value = "http://localhost:50000"
     )]
-    pub cdn_url: Url,
+    pub web_server_url: Url,
 
     /// Add optional modules to the service.
     ///

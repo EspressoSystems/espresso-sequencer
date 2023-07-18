@@ -129,13 +129,6 @@
                 types_or = [ "solidity" ];
                 pass_filenames = false;
               };
-              prettier-fmt = {
-                enable = true;
-                description = "Enforce markdown formatting";
-                entry = "prettier -w";
-                types_or = [ "markdown" ];
-                pass_filenames = true;
-              };
             };
           };
         };

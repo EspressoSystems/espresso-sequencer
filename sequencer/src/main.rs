@@ -22,9 +22,9 @@ async fn main() {
     // Create genesis block.
     let genesis = Block::genesis();
 
-    let cdn_addr = (
-        opt.cdn_url.host_str().unwrap(),
-        opt.cdn_url.port_or_known_default().unwrap(),
+    let web_server_addr = (
+        opt.web_server_url.host_str().unwrap(),
+        opt.web_server_url.port_or_known_default().unwrap(),
     )
         .to_socket_addrs()
         .unwrap()
@@ -40,14 +40,16 @@ async fn main() {
         Some(options) => {
             let port = options.port;
             let init_handle =
-                Box::new(move |metrics| init_node(cdn_addr, genesis, metrics).boxed());
+                Box::new(move |metrics| init_node(web_server_addr, genesis, metrics).boxed());
             let SequencerNode { handle, .. } = serve(options, init_handle)
                 .await
                 .expect("Failed to initialize API");
             (handle, Some(port))
         }
         None => (
-            init_node(cdn_addr, genesis, Box::new(NoMetrics)).await.0,
+            init_node(web_server_addr, genesis, Box::new(NoMetrics))
+                .await
+                .0,
             None,
         ),
     };

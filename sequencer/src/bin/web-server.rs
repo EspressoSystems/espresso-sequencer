@@ -13,15 +13,15 @@ use std::time::Duration;
 #[derive(Parser)]
 struct Args {
     /// Port to run the server on.
-    #[clap(short, long, env = "ESPRESSO_CDN_SERVER_PORT")]
+    #[clap(short, long, env = "ESPRESSO_WEB_SERVER_PORT")]
     port: u16,
 
     /// Number of nodes in the network.
-    #[clap(short, long, env = "ESPRESSO_CDN_SERVER_NUM_NODES")]
+    #[clap(short, long, env = "ESPRESSO_WEB_SERVER_NUM_NODES")]
     num_nodes: NonZeroUsize,
 
     /// Duration to wait after all nodes are connected before starting the run.
-    #[clap(long, env = "ESPRESSO_CDN_SERVER_START_DELAY", default_value = "10s", value_parser = parse_duration)]
+    #[clap(long, env = "ESPRESSO_WEB_SERVER_START_DELAY", default_value = "10s", value_parser = parse_duration)]
     start_delay: Duration,
 
     /// Minimum time to wait for submitted transactions before proposing a block.
@@ -36,7 +36,7 @@ struct Args {
     /// `min-transactions` to something small to handle low-volume conditions.
     #[arg(
         long,
-        env = "ESPRESSO_CDN_SERVER_MIN_PROPOSE_TIME",
+        env = "ESPRESSO_WEB_SERVER_MIN_PROPOSE_TIME",
         default_value = "1s",
         value_parser = parse_duration
     )]
@@ -49,7 +49,7 @@ struct Args {
     /// does have.
     #[arg(
         long,
-        env = "ESPRESSO_CDN_SERVER_MAX_PROPOSE_TIME",
+        env = "ESPRESSO_WEB_SERVER_MAX_PROPOSE_TIME",
         default_value = "30s",
         value_parser = parse_duration
     )]
@@ -71,7 +71,7 @@ struct Args {
     /// latency in high-volume conditions.
     #[clap(
         long,
-        env = "ESPRESSO_CDN_SERVER_MIN_TRANSACTIONS",
+        env = "ESPRESSO_WEB_SERVER_MIN_TRANSACTIONS",
         default_value = "1"
     )]
     min_transactions: usize,
@@ -79,7 +79,7 @@ struct Args {
     /// Base duration for next-view timeout.
     #[arg(
         long,
-        env = "ESPRESSO_CDN_SERVER_NEXT_VIEW_TIMEOUT",
+        env = "ESPRESSO_WEB_SERVER_NEXT_VIEW_TIMEOUT",
         default_value = "60s",
         value_parser = parse_duration
     )]
@@ -88,7 +88,7 @@ struct Args {
     /// The exponential backoff ratio for the next-view timeout.
     #[arg(
         long,
-        env = "ESPRESSO_CDN_SERVER_TIMEOUT_RATIO",
+        env = "ESPRESSO_WEB_SERVER_TIMEOUT_RATIO",
         default_value = "11:10"
     )]
     timeout_ratio: Ratio,
@@ -96,14 +96,14 @@ struct Args {
     /// The delay a leader inserts before starting pre-commit.
     #[arg(
         long,
-        env = "ESPRESSO_CDN_SERVER_ROUND_START_DELAY",
+        env = "ESPRESSO_WEB_SERVER_ROUND_START_DELAY",
         default_value = "1ms",
         value_parser = parse_duration
     )]
     round_start_delay: Duration,
 
     /// Maximum number of transactions in a block.
-    #[arg(long, env = "ESPRESSO_CDN_SERVER_MAX_TRANSACTIONS")]
+    #[arg(long, env = "ESPRESSO_WEB_SERVER_MAX_TRANSACTIONS")]
     max_transactions: Option<NonZeroUsize>,
 }
 
@@ -189,11 +189,11 @@ async fn main() {
     config.config.propose_max_round_time = args.max_propose_time;
     config.config.min_transactions = args.min_transactions;
 
-    tracing::info!("starting CDN server on port {}", args.port);
+    tracing::info!("starting web server on port {}", args.port);
     Server::<SignatureKeyType, StaticElectionConfig>::new("0.0.0.0".parse().unwrap(), args.port)
         .await
         .with_round_config(RoundConfig::new(vec![config]))
         .run()
         .await;
-    tracing::info!("CDN server exiting");
+    tracing::info!("Web server exiting");
 }

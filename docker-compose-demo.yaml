@@ -1,13 +1,13 @@
 version: "1"
 services:
-  cdn-server:
-    image: ghcr.io/espressosystems/espresso-sequencer/cdn-server:main
+  web-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
-      - "$ESPRESSO_CDN_SERVER_PORT:$ESPRESSO_CDN_SERVER_PORT"
+      - "$ESPRESSO_WEB_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
-      - ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_CDN_SERVER_NUM_NODES=5
-      - ESPRESSO_CDN_SERVER_START_DELAY=5s
+      - ESPRESSO_WEB_SERVER_PORT
+      - ESPRESSO_WEB_SERVER_NUM_NODES=5
+      - ESPRESSO_WEB_SERVER_START_DELAY=5s
       - RUST_LOG
 
   sequencer0:
@@ -17,7 +17,7 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- api
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -25,7 +25,7 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
     depends_on:
-      - cdn-server
+      - web-server
     healthcheck:
       test: curl --fail http://localhost:$ESPRESSO_SEQUENCER_API_PORT  || exit 1
       interval: 5s
@@ -38,12 +38,12 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- api
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      - web-server
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -51,12 +51,12 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- api
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      - web-server
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -64,12 +64,12 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- api
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      - web-server
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -77,12 +77,12 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- api
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      - web-server
 
   demo-l1-network:
     image: ghcr.io/foundry-rs/foundry:latest

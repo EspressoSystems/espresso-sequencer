@@ -33,7 +33,7 @@ cleanup(){
 }
 
 mkdir -p ${WORKDIR}/target/release
-cp -v target/${TARGET}/release/cdn-server ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/web-server ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/sequencer ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/example-l2 ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/cli ${WORKDIR}/target/release
@@ -43,6 +43,6 @@ cp -v target/${TARGET}/release/cli ${WORKDIR}/target/release
 # for another platform.
 docker pull --platform $PLATFORM ubuntu:jammy
 
-docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/cdn-server:main -f docker/cdn-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile ${WORKDIR}

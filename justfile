@@ -29,11 +29,11 @@ test:
     cargo test --release --all-features
 
 # Helpful shortcuts for local development
-dev-cdn:
-    target/release/cdn-server -p 8080 -n 1 
+dev-web-server:
+    target/release/web-server -p 8080 -n 1 
 
 dev-sequencer:
-    target/release/sequencer --cdn-url tcp://127.0.0.1:8080 -- api --port 8081 --storage-path storage
+    target/release/sequencer --web-server-url tcp://127.0.0.1:8080 -- api --port 8081 --storage-path storage
 
 dev-demo:
      target/release/example-l2 --sequencer-url http://localhost:8081 \

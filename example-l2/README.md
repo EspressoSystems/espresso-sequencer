@@ -32,7 +32,7 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 ### Natively
 
 1. Build all executables: `cargo build --release`
-2. Run the cdn: `just dev-cdn`
+2. Run the web server: `just dev-web-server`
 3. Run the sequencer: `just dev-sequencer`
 4. Run a test Anvil node: `just anvil`
 5. Once the Sequencer HotShot network is running (there is a 10 second delay), run the demo: `just dev-demo`
