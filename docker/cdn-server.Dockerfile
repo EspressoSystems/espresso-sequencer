@@ -1,10 +1,12 @@
 FROM ubuntu:jammy
 
+ARG TARGETARCH
+
 RUN apt-get update \
 &&  apt-get install -y curl wait-for-it \
 &&  rm -rf /var/lib/apt/lists/*
 
-COPY target/release/cdn-server /bin/cdn-server
+COPY target/$TARGETARCH/release/cdn-server /bin/cdn-server
 RUN chmod +x /bin/cdn-server
 
 ENV ESPRESSO_CDN_SERVER_PORT=50000
