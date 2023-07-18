@@ -22,8 +22,8 @@ jobs:
           - amd
           - arm
     steps:
-      - name: Prepare ADM
-        if: ${{ matrix.arch == 'linux/amd' }}
+      - name: Prepare AMD
+        if: ${{ matrix.arch == 'amd' }}
         run: |
           echo "TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
           echo "DEVSHELL=.#crossShell" >> $GITHUB_ENV
