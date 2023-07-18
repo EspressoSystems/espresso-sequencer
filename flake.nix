@@ -64,6 +64,15 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        crossShell = { config }:
+          let
+            localSystem = system;
+            crossSystem = { inherit config; useLLVM = true; isStatic = true; };
+            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+              inherit overlays localSystem crossSystem;
+            };
+          in
+          import ./cross-shell.nix { inherit pkgs; };
       in
       with pkgs;
       {
@@ -186,26 +195,8 @@
               inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
             };
-        devShells.crossShell =
-          let
-            localSystem = system;
-            crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
-            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
-              inherit overlays localSystem crossSystem;
-            };
-          in
-          import ./cross-shell.nix { inherit pkgs; };
-
-        devShells.armCrossShell =
-          let
-            localSystem = system;
-            crossSystem = { config = "aarch64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
-            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
-              inherit overlays localSystem crossSystem;
-            };
-          in
-          import ./cross-shell.nix { inherit pkgs; };
-
+        devShells.crossShell = crossShell { config = "x86_64-unknown-linux-musl"; };
+        devShells.armCrossShell = crossShell { config = "aarch64-unknown-linux-musl"; };
         devShells.rustShell =
           let
             stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
