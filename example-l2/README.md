@@ -18,18 +18,35 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 ## Running the Example
 
 ### Prerequisites
-1. Docker
-2. Nix (refer to development steps [here](https://github.com/EspressoSystems/espresso-sequencer#development))
+
+Ensure `docker` is installed on your system.
+
+For linux distributions follow official instructions of your linux distribution or see
+[the official docker instructions](https://docs.docker.com/engine/install/).
+
+On MacOS the most convenient way to install docker is via:
+
+    brew install colima docker docker-compose
+    colima start
+
+On Windows follow these steps instead.
+
+1. Install WSL.
+2. Install Docker Desktop.
+3. Run all the commands below in a WSL shell. To start a WSL shell run wsl in a PowerShell prompt.
+
+Note that we haven't tested on windows, please open an issue if you're running into problems.
 
 ### With Docker
 
-1. Pull the latest version of the demo: `just pull-rollup-demo`
-2. Start the demo: `just rollup-demo`
-3. Stop the demo: `just rollup-demo-down`
-
-> :warning: We have not yet published ARM-based images, so the Docker demo cannot run on an M1 Mac. 
+1. Pull the latest version of the demo: `docker compose pull`
+2. Start the demo: `docker compose up`. Alternatively, to start a fresh demo from scratch run
+   `docker compose up --force-recreate`.
+3. Stop the demo: `docker compose down`
 
 ### Natively
+
+Make sure nix is installed. See instructions [here](https://github.com/EspressoSystems/espresso-sequencer#development).
 
 1. Build all executables: `cargo build --release`
 2. Run the cdn: `just dev-cdn`
@@ -41,21 +58,23 @@ rollups, read our [blog post](https://hackmd.io/@EspressoSystems/EspressoSequenc
 
 ## CLI
 
-We have built a simple CLI to interact with the demo using a few preseeded identities (Alice, Bob, Charlie). With the CLI, you can perform asset transfers and check balances. With the demo running, open another terminal and try transferring some dummy tokens:
+We have built a simple CLI to interact with the demo using a few preseeded identities (Alice, Bob, Charlie). With the
+CLI, you can perform asset transfers and check balances. With the demo running, open another terminal and try
+transferring some dummy tokens:
+
 ```console
-❯ just cli check-balance Alice
-target/release/cli check-balance Alice
+> scripts/cli check-balance Alice
 Balance of 0x885ee92eebda03540066a25a57cc625bbee15d5a: 9999
 
-❯ just cli transfer Alice Bob 1000
-target/release/cli transfer Alice Bob 1000
+> scripts/cli transfer Alice Bob 1000
 Submitting Transaction to Rollup API: Transferring 1000 tokens from 0x885e…5d5a to 0xf236…69ca
 
-❯ just cli check-balance Alice
-target/release/cli check-balance Alice
+> scripts/cli check-balance Alice
 Balance of 0x885ee92eebda03540066a25a57cc625bbee15d5a: 8999
 ```
-Run `just cli --help` for more information. If you are running the demo using Docker, use the command `just docker-cli`. 
+
+Run `scripts/cli --help` for more information. If you are running the demo natively replace `scripts/cli` with
+`just cli`.
 
 ## Curl
 
@@ -97,9 +116,12 @@ single example rollup transaction.
    block commitment to a contract on the L1, which verifies that consensus has been reached on the block.
 4. The executor service receives notification of the new block commitment via a subscription to a query service provided
    by a sequencer node.
-5. The executor fetches transaction data from the sequencer. The transaction data is returned with a namespace proof that the set of transactions is complete for the rollup namesapce, along with an [NMT root](https://github.com/celestiaorg/nmt). The executor verifies that the NMT root is consistent with the block commitment from the sequencer contract. The executor then
-   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L158) the transactions,
-   performing the following steps:
+5. The executor fetches transaction data from the sequencer. The transaction data is returned with a namespace proof
+   that the set of transactions is complete for the rollup namesapce, along with an
+   [NMT root](https://github.com/celestiaorg/nmt). The executor verifies that the NMT root is consistent with the block
+   commitment from the sequencer contract. The executor then
+   [processes](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/state.rs#L158) the
+   transactions, performing the following steps:
    1. The executor applies transactions to the VM state. Before application, each transaction is validated, and invalid
       transactions are discarded (a real rollup would eventually include proofs of transaction invalidity). In our case,
       the block contains a single transaction from Alice to Bob. Since the transaction contains a valid signature and
@@ -125,7 +147,7 @@ The state of the example rollup consists of:
 - **NMT commitment**: A cryptographic commitment to the latest transaction NMT.
 - **Previous state commitment**: A cryptographic commitment to the state of the rollup prior to the most recent
   execution step.
-- **VM**: Information about the Rollup VM. Right now, this is a simple ID. 
+- **VM**: Information about the Rollup VM. Right now, this is a simple ID.
 
 **[Executor](https://github.com/EspressoSystems/espresso-sequencer/blob/main/example-l2/src/executor.rs)**
 
