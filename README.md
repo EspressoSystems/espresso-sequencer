@@ -1,6 +1,9 @@
 # Espresso Sequencer
 
-The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale. Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees, and robust infrastructure.
+The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
+Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2
+rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
+and robust infrastructure.
 
 [Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
@@ -8,13 +11,12 @@ The Espresso Sequencer offers rollups credible neutrality and enhanced interoper
 
 # Running the demo
 
-Refer to [example-l2/README.md](example-l2/README.md) for instructions on how to
-run a dockerized Espresso Sequencer network with an example Layer 2 rollup
-application.
+Refer to [example-l2/README.md](example-l2/README.md) for instructions on how to run a dockerized Espresso Sequencer
+network with an example Layer 2 rollup application.
 
 # Development
 
-- Obtain code: `git clone --recursive git@github.com:EspressoSystems/espresso-sequencer`.
+- Obtain code: `git clone git@github.com:EspressoSystems/espresso-sequencer`.
 - Make sure [nix](https://nixos.org/download.html) is installed.
 - Activate the environment with `nix-shell`, or `nix develop`, or `direnv allow` if using [direnv](https://direnv.net/).
 
@@ -28,6 +30,7 @@ application.
     make doc
 
 ## Building and running
+
 Docker images and the [docker-compose-demo.yaml](docker-compose-demo.yaml) file are provided for convenience. The
 Docker-based demo fetches the images from the `ghcr` repository, where they are updated with every push to `main` on
 GitHub. For testing uncommitted changes, you can also run the binaries by manually building and running the services.
@@ -83,7 +86,9 @@ forge doc
 ```
 
 ## Misc
+
 ### Authenticate with GitHub container registry
+
 This is only necessary to fetch private images.
 
 - Go to your github profile
@@ -93,10 +98,14 @@ This is only necessary to fetch private images.
 - Run `docker login ghcr.io --username <you_github_id> --password <your_personal_access_token>`
 
 # License
+
 ## Copyright
-**(c) 2022 Espresso Systems**
-`espresso-sequencer` was developed by Espresso Systems. While we plan to adopt an open source license, we have not yet selected one. As such, all rights are reserved for the time being. Please reach out to us if you have thoughts on licensing.
+
+**(c) 2022 Espresso Systems** `espresso-sequencer` was developed by Espresso Systems. While we plan to adopt an open
+source license, we have not yet selected one. As such, all rights are reserved for the time being. Please reach out to
+us if you have thoughts on licensing.
 
 # Disclaimer
 
-**DISCLAIMER:** This software is provided "as is" and its security has not been externally audited. Use at your own risk.
+**DISCLAIMER:** This software is provided "as is" and its security has not been externally audited. Use at your own
+risk.
