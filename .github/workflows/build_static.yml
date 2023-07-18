@@ -157,6 +157,7 @@ jobs:
           labels: ${{ steps.example-rollup.outputs.labels }}
 
   push-manifest:
+    needs: static-dockers
     runs-on: ubuntu-latest
     steps:
       - name: Login to Github Container Repo
@@ -173,14 +174,14 @@ jobs:
           inputs: |
             ghcr.io/espressosystems/espresso-sequencer/sequencer:amd-${{ github.sha }},
             ghcr.io/espressosystems/espresso-sequencer/sequencer:arm-${{ github.sha }}
-          outputs: ghcr.io/espressosystems/espresso-sequencer/sequencer:${{ github.sha }}
+          images: ghcr.io/espressosystems/espresso-sequencer/sequencer:${{ github.sha }}
           push: true
 
-      - name: Create and push manifest images, latest
-        uses: Noelware/docker-manifest-action@master
-        with:
-          inputs: |
-            ghcr.io/espressosystems/espresso-sequencer/sequencer:amd-latest,
-            ghcr.io/espressosystems/espresso-sequencer/sequencer:arm-latest
-          outputs: ghcr.io/espressosystems/espresso-sequencer/sequencer:latest
-          push: true
+      # - name: Create and push manifest images, latest
+      #   uses: Noelware/docker-manifest-action@master
+      #   with:
+      #     inputs: |
+      #       ghcr.io/espressosystems/espresso-sequencer/sequencer:amd-latest,
+      #       ghcr.io/espressosystems/espresso-sequencer/sequencer:arm-latest
+      #     images: ghcr.io/espressosystems/espresso-sequencer/sequencer:latest
+      #     push: true
