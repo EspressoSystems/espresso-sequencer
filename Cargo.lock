@@ -475,6 +475,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-pallas"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "760ecac12a00211188c9101b63bd284b80da5abcc5d97d9d2b3803bca1f63a52"
+dependencies = [
+ "ark-ec 0.4.2",
+ "ark-ff 0.4.2",
+ "ark-std 0.4.0",
+]
+
+[[package]]
 name = "ark-poly"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1080,6 +1091,7 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium 0.7.0",
+ "serde",
  "tap",
  "wyz",
 ]
@@ -3238,7 +3250,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "ark-ec 0.3.0",
@@ -3264,10 +3276,11 @@ dependencies = [
  "hotshot-centralized-server",
  "hotshot-consensus",
  "hotshot-orchestrator",
+ "hotshot-primitives",
  "hotshot-types",
  "hotshot-utils",
  "hotshot-web-server",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "jf-primitives",
  "libp2p",
  "libp2p-identity",
@@ -3287,7 +3300,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3309,7 +3322,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3331,7 +3344,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3356,9 +3369,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-primitives"
+version = "0.1.0"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0#c99b58d234d390519f020e68c5642e7be78f35f8"
+dependencies = [
+ "anyhow",
+ "ark-bls12-381 0.4.0",
+ "ark-bn254",
+ "ark-ec 0.4.2",
+ "ark-ff 0.4.2",
+ "ark-pallas",
+ "ark-poly",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "bincode",
+ "bitvec 1.0.1",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "ethereum-types",
+ "generic-array",
+ "jf-primitives",
+ "jf-utils 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?rev=c07a87f)",
+ "serde",
+ "sha3",
+ "tagged-base64 0.3.0",
+ "thiserror",
+ "typenum",
+]
+
+[[package]]
 name = "hotshot-query-service"
 version = "0.0.6"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service#ed67a231d38e99c8096c7caa6b602e14035a5822"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3379,7 +3421,6 @@ dependencies = [
  "snafu",
  "spin_sleep",
  "tide-disco",
- "time 0.3.23",
  "toml 0.5.11",
  "tracing",
 ]
@@ -3387,7 +3428,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -3399,6 +3440,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-consensus",
+ "hotshot-primitives",
  "hotshot-types",
  "hotshot-utils",
  "jf-primitives",
@@ -3413,13 +3455,12 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
  "ark-std 0.4.0",
  "async-compatibility-layer",
- "async-lock",
  "async-std",
  "async-trait",
  "bincode",
@@ -3432,6 +3473,7 @@ dependencies = [
  "espresso-systems-common 0.4.1",
  "futures",
  "hex_fmt",
+ "hotshot-primitives",
  "hotshot-utils",
  "jf-primitives",
  "libp2p-networking",
@@ -3447,7 +3489,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "bincode",
 ]
@@ -3455,7 +3497,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -3464,6 +3506,7 @@ dependencies = [
  "bincode",
  "clap",
  "futures",
+ "hotshot-primitives",
  "hotshot-types",
  "hotshot-utils",
  "jf-primitives",
@@ -3891,15 +3934,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3940,7 +3974,7 @@ dependencies = [
  "hashbrown 0.13.2",
  "itertools 0.10.5",
  "jf-relation",
- "jf-utils 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0 (git+https://github.com/EspressoSystems//jellyfish?rev=e6024a7)",
  "merlin",
  "num-bigint",
  "num-traits",
@@ -3974,7 +4008,7 @@ dependencies = [
  "dyn-clone",
  "hashbrown 0.13.2",
  "itertools 0.10.5",
- "jf-utils 0.4.0-pre.0",
+ "jf-utils 0.4.0-pre.0 (git+https://github.com/EspressoSystems//jellyfish?rev=e6024a7)",
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
@@ -3990,6 +4024,22 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "digest 0.10.7",
+ "serde",
+ "sha2 0.10.7",
+ "tagged-base64 0.3.0",
+]
+
+[[package]]
+name = "jf-utils"
+version = "0.4.0-pre.0"
+source = "git+https://github.com/EspressoSystems/jellyfish?rev=c07a87f#c07a87f1469aaf761a3e909e9bd8b692b8ed6740"
+dependencies = [
+ "ark-ec 0.4.2",
+ "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "digest 0.10.7",
+ "rayon",
  "serde",
  "sha2 0.10.7",
  "tagged-base64 0.3.0",
@@ -4454,7 +4504,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#4754551604f02d8fda93518b857f3c93f5c589f4"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",

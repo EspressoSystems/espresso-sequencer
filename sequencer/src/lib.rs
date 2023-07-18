@@ -21,18 +21,18 @@ use hotshot::{
         },
         NodeImplementation,
     },
-    types::{Message, SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    types::{HotShotHandle, Message, SignatureKey},
+    HotShot, HotShotInitializer,
 };
 use hotshot_types::{
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
     message::SequencingMessage,
     traits::{
         consensus_type::sequencing_consensus::SequencingConsensus,
-        election::{CommitteeExchange, QuorumExchange},
+        election::{CommitteeExchange, Membership as MembershipTrait, QuorumExchange},
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
-        node_implementation::{ChannelMaps, ExchangesType, NodeType, SequencingExchanges},
+        node_implementation::{ExchangesType, NodeType, SequencingExchanges},
     },
     vote::{DAVote, QuorumVote},
     HotShotConfig,
@@ -113,19 +113,19 @@ pub mod network {
 
     pub trait Type: 'static {
         type DAChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
-            SeqTypes,
-            Message<SeqTypes, I>,
-            DAProposal<SeqTypes>,
-            DAVote<SeqTypes, Leaf>,
-            Membership,
-        >;
+                SeqTypes,
+                Message<SeqTypes, I>,
+                DAProposal<SeqTypes>,
+                DAVote<SeqTypes, Leaf>,
+                Membership,
+            > + Debug;
         type QuorumChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
-            SeqTypes,
-            Message<SeqTypes, I>,
-            QuorumProposal<SeqTypes, Leaf>,
-            QuorumVote<SeqTypes, Leaf>,
-            Membership,
-        >;
+                SeqTypes,
+                Message<SeqTypes, I>,
+                QuorumProposal<SeqTypes, Leaf>,
+                QuorumVote<SeqTypes, Leaf>,
+                Membership,
+            > + Debug;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -209,18 +209,6 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
         >,
         CommitteeExchange<SeqTypes, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>,
     >;
-
-    fn new_channel_maps(
-        start_view: <SeqTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<SeqTypes, Self>,
-        Option<ChannelMaps<SeqTypes, Self>>,
-    ) {
-        (
-            ChannelMaps::new(start_view),
-            Some(ChannelMaps::new(start_view)),
-        )
-    }
 }
 
 impl NodeType for SeqTypes {
@@ -270,7 +258,7 @@ async fn init_hotshot<N: network::Type>(
     da_channel: N::DAChannel<Node<N>>,
     quorum_channel: N::QuorumChannel<Node<N>>,
     config: HotShotConfig<PubKey, ElectionConfig>,
-) -> SystemContextHandle<SeqTypes, Node<N>> {
+) -> HotShotHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&priv_key);
 
@@ -280,17 +268,19 @@ async fn init_hotshot<N: network::Type>(
     )
     .unwrap();
     let metrics = Box::<NoMetrics>::default();
+    let num_nodes = nodes_pub_keys.len() as u64;
+    let election_config = Membership::default_election_config(num_nodes);
 
     let exchanges = SequencingExchanges::create(
         nodes_pub_keys.clone(),
-        StaticElectionConfig {},
+        (election_config.clone(), election_config),
         (quorum_channel, da_channel),
         public_key.clone(),
         priv_key.clone(),
         enc_key,
     );
 
-    SystemContext::init(
+    HotShot::init(
         public_key,
         priv_key,
         node_id as u64,
@@ -308,10 +298,7 @@ pub async fn init_node(
     addr: SocketAddr,
     genesis_block: Block,
     metrics: Box<dyn Metrics>,
-) -> (
-    SystemContextHandle<SeqTypes, Node<network::Centralized>>,
-    u64,
-) {
+) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
     let (config, _, networking) =
         CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
     let da_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
@@ -366,10 +353,9 @@ pub mod testing {
     use hotshot_types::{data::LeafType, ExecutionType};
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-    use std::{sync::Arc, time::Duration};
+    use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
-    {
+    pub async fn init_hotshot_handles() -> Vec<HotShotHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
         setup_backtrace();
 
@@ -410,8 +396,8 @@ pub mod testing {
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(1),
-            election_config: Some(ElectionConfig {}),
-            da_committee_nodes: nodes_pub_keys.clone(), // All nodes are in the DA committee.
+            election_config: Some(Membership::default_election_config(num_nodes as u64)),
+            da_committee_size: NonZeroUsize::new(num_nodes).unwrap(),
         };
 
         // Create HotShot instances.
@@ -448,7 +434,7 @@ pub mod testing {
 
     // Wait for decide event, make sure it matches submitted transaction
     pub async fn wait_for_decide_on_handle<N: network::Type>(
-        mut handle: SystemContextHandle<SeqTypes, Node<N>>,
+        mut handle: HotShotHandle<SeqTypes, Node<N>>,
         submitted_txn: Transaction,
     ) -> Result<(), ()> {
         let start_view = handle.get_current_view().await;
@@ -506,7 +492,7 @@ mod test {
 
     // Submit transaction to given handle, return clone of transaction
     async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
-        handle: SystemContextHandle<SeqTypes, I>,
+        handle: HotShotHandle<SeqTypes, I>,
         txn: &ApplicationTransaction,
     ) -> Transaction {
         let tx = Transaction::new(TestVm::default().id(), bincode::serialize(txn).unwrap());
