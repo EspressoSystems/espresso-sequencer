@@ -1,5 +1,4 @@
 name: Static Build
-
 on:
   push:
     branches:
@@ -16,7 +15,27 @@ on:
 jobs:
   static-build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd
+          - arm
     steps:
+      - name: Prepare ADM
+        if: ${{ matrix.arch == 'linux/amd' }}
+        run: |
+          echo "TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
+          echo "DEVSHELL=.#crossShell" >> $GITHUB_ENV
+          echo "PLATFORM=linux/amd64" >> $GITHUB_ENV
+
+      - name: Prepare ARM
+        if: ${{ matrix.arch == 'arm' }}
+        run: |
+          echo "TARGET=aarch64-unknown-linux-musl" >> $GITHUB_ENV
+          echo "DEVSHELL=.#armCrossShell" >> $GITHUB_ENV
+          echo "PLATFORM=arm64" >> $GITHUB_ENV
+
       - name: Checkout Repository
         uses: actions/checkout@v3
 
@@ -28,7 +47,7 @@ jobs:
         continue-on-error: true
         with:
           name: espresso-systems-private
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           extraPullNames: nix-community
 
       - name: Cache cargo
@@ -39,7 +58,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git
             target
-          key: espresso-sequencer-static-v4-${{ hashFiles('Cargo.lock') }}
+          key: espresso-sequencer-static-${{matrix.platform}}-v4-${{ hashFiles('Cargo.lock') }}
 
       - name: Fix Git Security Issue
         run: git config --global --add safe.directory "$PWD"
@@ -47,17 +66,17 @@ jobs:
       - name: Compile all executables
         # timeout-minutes: 120
         run: |
-          nix develop .#crossShell --accept-flake-config --option sandbox relaxed -c cargo build --release
+          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: x86_64-unknown-linux-musl-services
+          name: ${{ env.TARGET }}-services
           path: |
-            target/x86_64-unknown-linux-musl/release/cdn-server
-            target/x86_64-unknown-linux-musl/release/sequencer
-            target/x86_64-unknown-linux-musl/release/example-l2
-            target/x86_64-unknown-linux-musl/release/cli
+            target/${{ env.TARGET }}/release/cdn-server
+            target/${{ env.TARGET }}/release/sequencer
+            target/${{ env.TARGET }}/release/example-l2
+            target/${{ env.TARGET }}/release/cli
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -97,7 +116,7 @@ jobs:
 
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v4
-        id: example-rollup 
+        id: example-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
 
@@ -106,9 +125,11 @@ jobs:
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.sequencer.outputs.tags }}
+          platforms: ${{ env.PLATFORM }}
+          # push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            espressosystems/espresso-sequencer/sequencer:${{ matrix.arch }}-${{ github.sha }}
+            espressosystems/espresso-sequencer/sequencer:${{ matrix.arch }}-latest
           labels: ${{ steps.sequencer.outputs.labels }}
 
       - name: Build and push cdn-server docker
@@ -116,9 +137,11 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-server.Dockerfile
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.cdn-server.outputs.tags }}
+          platforms: ${{ env.PLATFORM }}
+          # push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            espressosystems/espresso-sequencer/cdn-server:${{ matrix.arch }}-${{ github.sha }}
+            espressosystems/espresso-sequencer/cdn-server:${{ matrix.arch }}-latest
           labels: ${{ steps.cdn-server.outputs.labels }}
 
       - name: Build and push example-rollup docker
@@ -126,7 +149,38 @@ jobs:
         with:
           context: ./
           file: ./docker/example-rollup.Dockerfile
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.example-rollup.outputs.tags }}
+          platforms: ${{ env.PLATFORM }}
+          # push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            espressosystems/espresso-sequencer/example-rollup:${{ matrix.arch }}-${{ github.sha }}
+            espressosystems/espresso-sequencer/example-rollup:${{ matrix.arch }}-latest
           labels: ${{ steps.example-rollup.outputs.labels }}
+
+  push-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v2
+        # if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest images, commit
+        uses: Noelware/docker-manifest-action@master
+        with:
+          inputs: |
+            ghcr.io/espressosystems/espresso-sequencer/sequencer:amd-${{ github.sha }},
+            ghcr.io/espressosystems/espresso-sequencer/sequencer:arm-${{ github.sha }}
+          outputs: ghcr.io/espressosystems/espresso-sequencer/sequencer:${{ github.sha }}
+          push: true
+
+      - name: Create and push manifest images, latest
+        uses: Noelware/docker-manifest-action@master
+        with:
+          inputs: |
+            ghcr.io/espressosystems/espresso-sequencer/sequencer:amd-latest,
+            ghcr.io/espressosystems/espresso-sequencer/sequencer:arm-latest
+          outputs: ghcr.io/espressosystems/espresso-sequencer/sequencer:latest
+          push: true
