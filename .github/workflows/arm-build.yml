@@ -1,3 +1,15 @@
+# This file is almost identical to build_static.yml, the main difference is that
+# the target system for cross compilation is aarch64.
+#
+# When we have time we could use
+# https://docs.github.com/en/actions/using-workflows/reusing-workflows to make a
+# single workflow out of it.
+#
+# The config that differs:
+#
+# nix dev shell: {.#crossShell,.#armCrossShell}
+# Platform: {linux/amd64,arm64}
+# Name of the artifact: {aarch64,x86_64}-unknown-linux-musl-services
 name: Static ARM Build
 
 on:
@@ -23,9 +35,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v22
 
       - uses: cachix/cachix-action@v12
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
@@ -81,7 +90,7 @@ jobs:
 
       - name: Login to Github Container Repo
         uses: docker/login-action@v2
-        # if: github.event_name != 'pull_request' # TODO uncomment
+        if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -111,8 +120,7 @@ jobs:
           context: ./
           file: ./docker/sequencer.Dockerfile
           platforms: arm64
-          # push: ${{ github.event_name != 'pull_request' }}
-          push: true # TODO: remove
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
 
@@ -122,8 +130,7 @@ jobs:
           context: ./
           file: ./docker/cdn-server.Dockerfile
           platforms: arm64
-          # push: ${{ github.event_name != 'pull_request' }}
-          push: true # TODO: remove
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-server.outputs.tags }}
           labels: ${{ steps.cdn-server.outputs.labels }}
 
@@ -133,7 +140,6 @@ jobs:
           context: ./
           file: ./docker/example-rollup.Dockerfile
           platforms: arm64
-          # push: ${{ github.event_name != 'pull_request' }}
-          push: true # TODO: remove
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.example-rollup.outputs.tags }}
           labels: ${{ steps.example-rollup.outputs.labels }}

@@ -42,5 +42,11 @@ dev-demo:
      --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
      --rollup-mnemonic "test test test test test test test test test test test junk"
 
-build-docker-images:
-    scripts/build-docker-images
+build-docker-amd:
+    nix develop .#crossShell --command cargo build --release
+    scripts/build-docker-images amd64
+
+build-docker-arm:
+    nix develop .#armCrossShell --command cargo build --release
+    scripts/build-docker-images arm64
+
