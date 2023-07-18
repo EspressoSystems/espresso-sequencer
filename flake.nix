@@ -64,6 +64,15 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        crossShell = { config }:
+          let
+            localSystem = system;
+            crossSystem = { inherit config; useLLVM = true; isStatic = true; };
+            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+              inherit overlays localSystem crossSystem;
+            };
+          in
+          import ./cross-shell.nix { inherit pkgs; };
       in
       with pkgs;
       {
@@ -186,15 +195,25 @@
               inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
             };
-        devShells.crossShell =
+        devShells.crossShell = crossShell { config = "x86_64-unknown-linux-musl"; };
+        devShells.armCrossShell = crossShell { config = "aarch64-unknown-linux-musl"; };
+        devShells.rustShell =
           let
-            localSystem = system;
-            crossSystem = { config = "x86_64-unknown-linux-musl"; useLLVM = true; isStatic = true; };
-            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
-              inherit overlays localSystem crossSystem;
+            stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
+              extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
             };
           in
-          import ./cross-shell.nix { inherit pkgs; };
+          mkShell
+            {
+              buildInputs = [
+                # Rust dependencies
+                pkgconfig
+                openssl
+                curl
+                protobuf # to compile libp2p-autonat
+                stableToolchain
+              ];
+            };
       }
     );
 }

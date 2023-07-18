@@ -1,8 +1,48 @@
 #!/usr/bin/env bash
-set -e
+# USAGE
+#
+#    ./build-docker-images [arm64,amd64]
+#
+set -euxo pipefail
 
-nix develop .#crossShell --ignore-environment --keep HOME --keep SSH_AUTH_SOCK --command cargo build --release
+case $1 in
 
-docker build -t ghcr.io/espressosystems/espresso-sequencer/cdn-server:main -f docker/cdn-server.Dockerfile .
-docker build -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile .
-docker build -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile .
+  "arm64")
+    PLATFORM="arm64"
+    TARGET="aarch64-unknown-linux-musl"
+    ;;
+
+  "amd64")
+    PLATFORM="linux/amd64"
+    TARGET="x86_64-unknown-linux-musl"
+    ;;
+
+  *)
+    echo "Usage: $0 [arm64,amd64]"
+    exit 1
+    ;;
+esac
+
+# Copy binaries to a temporary directory.
+WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
+
+trap "exit" INT TERM
+trap cleanup EXIT
+cleanup(){
+    rm -rfv ${WORKDIR}
+}
+
+mkdir -p ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/cdn-server ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/sequencer ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/example-l2 ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/cli ${WORKDIR}/target/release
+
+# Ensure we have the latest base image for the desired platform. Not pulling
+# here seems to default to using the image that was last pulled, which may be
+# for another platform.
+docker pull --platform $PLATFORM ubuntu:jammy
+
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/cdn-server:main -f docker/cdn-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile ${WORKDIR}
