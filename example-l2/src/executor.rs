@@ -98,12 +98,11 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
         // Execute new blocks, generating proofs.
         let mut proofs = vec![];
-        let mut state = state.write().await;
         tracing::info!(
             "executing blocks {}-{}, state is {}",
             first_block,
             first_block + num_blocks - 1,
-            state.commit()
+            state.read().await.commit()
         );
         for i in 0..num_blocks {
             let commitment = hotshot_contract
@@ -118,7 +117,7 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
-            let vm_id: u64 = state.vm.id().into();
+            let vm_id: u64 = state.read().await.vm.id().into();
 
             let namespace_proof_query: NamespaceProofQueryData = hotshot
                 .get(&format!(
@@ -137,12 +136,18 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
             assert_eq!(derived_block_comm, block_commitment);
 
-            proofs.push(state.execute_block(nmt_root, namespace_proof).await);
+            proofs.push(
+                state
+                    .write()
+                    .await
+                    .execute_block(nmt_root, namespace_proof)
+                    .await,
+            );
         }
 
         // Compute an aggregate proof.
         let proof = BatchProof::generate(&proofs).expect("Error generating batch proof");
-        let state_comm = commitment_to_u256(state.commit());
+        let state_comm = commitment_to_u256(state.read().await.commit());
 
         // Send the batch proof to L1.
         tracing::info!(
