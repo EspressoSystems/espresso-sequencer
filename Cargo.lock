@@ -3348,6 +3348,7 @@ source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarki
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
+ "async-std",
  "async-trait",
  "bincode",
  "blake3",
@@ -6704,6 +6705,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot",
+ "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-testing",
  "hotshot-types",

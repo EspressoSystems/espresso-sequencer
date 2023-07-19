@@ -34,6 +34,10 @@ hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_
     "async-std-executor",
     "channel-async-std",
 ] }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",

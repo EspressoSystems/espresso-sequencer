@@ -1,15 +1,19 @@
 version: "1"
 services:
-  web-server:
+  da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
-      - "$ESPRESSO_WEB_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
+      - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
       - ESPRESSO_WEB_SERVER_PORT
-      - ESPRESSO_WEB_SERVER_NUM_NODES=5
-      - ESPRESSO_WEB_SERVER_START_DELAY=5s
       - RUST_LOG
-
+  consensus-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
+    ports:
+      - "$ESPRESSO_CONSENSUS_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
+    environment:
+      - ESPRESSO_WEB_SERVER_PORT
+      - RUST_LOG
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:

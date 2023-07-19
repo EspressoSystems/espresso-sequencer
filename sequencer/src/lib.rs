@@ -3,12 +3,13 @@ mod block;
 mod chain_variables;
 pub mod hotshot_commitment;
 pub mod options;
+use url::Url;
+mod orchestrator_client;
 mod state;
 pub mod transaction;
 mod vm;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use async_std::task::sleep;
 use derivative::Derivative;
 use hotshot::{
     traits::{
@@ -16,9 +17,7 @@ use hotshot::{
             static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
             vrf::JfPubKey,
         },
-        implementations::{
-            CentralizedCommChannel, CentralizedServerNetwork, MemoryCommChannel, MemoryStorage,
-        },
+        implementations::{MemoryCommChannel, MemoryStorage, WebCommChannel, WebServerNetwork},
         NodeImplementation,
     },
     types::{HotShotHandle, Message, SignatureKey},
@@ -46,10 +45,10 @@ use jf_primitives::{
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::marker::PhantomData;
-use std::net::SocketAddr;
+use std::net::Ipv4Addr;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
+use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
 pub use block::Block;
@@ -62,6 +61,8 @@ pub use options::Options;
 pub use state::State;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
+
+use crate::orchestrator_client::{OrchestratorClient, ValidatorArgs};
 
 // Supports 1K transactions
 pub const MAX_NMT_DEPTH: usize = 10;
@@ -129,17 +130,12 @@ pub mod network {
     }
 
     #[derive(Clone, Copy, Debug, Default)]
-    pub struct Centralized;
+    pub struct Web;
 
-    impl Type for Centralized {
-        type DAChannel<I: NodeImplementation<SeqTypes>> = CentralizedCommChannel<
-            SeqTypes,
-            I,
-            DAProposal<SeqTypes>,
-            DAVote<SeqTypes, Leaf>,
-            Membership,
-        >;
-        type QuorumChannel<I: NodeImplementation<SeqTypes>> = CentralizedCommChannel<
+    impl Type for Web {
+        type DAChannel<I: NodeImplementation<SeqTypes>> =
+            WebCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes, Leaf>, Membership>;
+        type QuorumChannel<I: NodeImplementation<SeqTypes>> = WebCommChannel<
             SeqTypes,
             I,
             QuorumProposal<SeqTypes, Leaf>,
@@ -294,16 +290,37 @@ async fn init_hotshot<N: network::Type>(
     .unwrap()
 }
 
-pub async fn init_node(
-    addr: SocketAddr,
-    genesis_block: Block,
-    metrics: Box<dyn Metrics>,
-) -> (HotShotHandle<SeqTypes, Node<network::Centralized>>, u64) {
-    let (config, _, networking) =
-        CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
-    let da_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
-    let quorum_channel = CentralizedCommChannel::new(Arc::new(networking.clone()));
+pub struct NetworkParams {
+    pub da_server_url: Url,
+    pub consensus_server_url: Url,
+    pub orchestrator_url: Url,
+}
 
+pub async fn init_node(
+    network_params: NetworkParams,
+    genesis_block: Block,
+    _metrics: Box<dyn Metrics>,
+) -> (HotShotHandle<SeqTypes, Node<network::Web>>, u64) {
+    // Orchestrator client
+    let validator_args = ValidatorArgs {
+        host: network_params.orchestrator_url.host().unwrap().to_string(),
+        port: network_params.orchestrator_url.port().unwrap(),
+        public_ip: None,
+    };
+    let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
+    let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let node_index: u16 = orchestrator_client
+        .identify_with_orchestrator(public_ip.to_string())
+        .await;
+
+    let config = orchestrator_client
+        .get_config_from_orchestrator::<SeqTypes>(node_index)
+        .await;
+
+    // let (config, _, networking) =
+    //     CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
+    // // Initialize web comm channels
+    // let
     // Generate public keys and this node's private keys.
     //
     // These are deterministic keys suitable *only* for testing and demo purposes.
@@ -313,16 +330,31 @@ pub async fn init_node(
     let priv_key = priv_keys[config.node_index as usize].clone();
     let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
 
-    // Wait for other nodes to connect.
-    while !networking.run_ready() {
-        let connected = networking.get_connected_client_count().await;
-        tracing::info!(
-            "waiting for start signal ({}/{} connected)",
-            connected,
-            config.config.total_nodes,
-        );
-        sleep(Duration::from_secs(1)).await;
-    }
+    // // Wait for other nodes to connect.
+    orchestrator_client
+        .wait_for_all_nodes_ready(node_index.into())
+        .await;
+    let wait_time = Duration::from_secs(1);
+    let da_network = WebServerNetwork::create(
+        &network_params.da_server_url.host().unwrap().to_string(),
+        network_params.da_server_url.port().unwrap(),
+        wait_time,
+        pub_keys[config.node_index as usize].clone(),
+        pub_keys.clone(),
+    );
+    let consensus_network = WebServerNetwork::create(
+        &network_params
+            .consensus_server_url
+            .host()
+            .unwrap()
+            .to_string(),
+        network_params.consensus_server_url.port().unwrap(),
+        wait_time,
+        pub_keys[config.node_index as usize].clone(),
+        pub_keys.clone(),
+    );
+    let da_channel = WebCommChannel::new(Arc::new(da_network));
+    let quorum_channel = WebCommChannel::new(Arc::new(consensus_network));
 
     (
         init_hotshot(

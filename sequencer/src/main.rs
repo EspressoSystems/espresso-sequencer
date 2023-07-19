@@ -5,9 +5,8 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{serve, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, Options,
+    init_node, Block, NetworkParams, Options,
 };
-use std::net::ToSocketAddrs;
 
 #[async_std::main]
 async fn main() {
@@ -22,16 +21,12 @@ async fn main() {
     // Create genesis block.
     let genesis = Block::genesis();
 
-    let web_server_addr = (
-        opt.web_server_url.host_str().unwrap(),
-        opt.web_server_url.port_or_known_default().unwrap(),
-    )
-        .to_socket_addrs()
-        .unwrap()
-        .next()
-        .unwrap();
-
     let mut tasks = vec![];
+    let network_params = NetworkParams {
+        da_server_url: opt.da_server_url,
+        consensus_server_url: opt.consensus_server_url,
+        orchestrator_url: opt.orchestrator_url,
+    };
 
     // Inititialize HotShot. If the user requested the API module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -40,14 +35,14 @@ async fn main() {
         Some(options) => {
             let port = options.port;
             let init_handle =
-                Box::new(move |metrics| init_node(web_server_addr, genesis, metrics).boxed());
+                Box::new(move |metrics| init_node(network_params, genesis, metrics).boxed());
             let SequencerNode { handle, .. } = serve(options, init_handle)
                 .await
                 .expect("Failed to initialize API");
             (handle, Some(port))
         }
         None => (
-            init_node(web_server_addr, genesis, Box::new(NoMetrics))
+            init_node(network_params, genesis, Box::new(NoMetrics))
                 .await
                 .0,
             None,
