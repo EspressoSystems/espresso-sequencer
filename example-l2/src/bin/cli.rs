@@ -21,7 +21,7 @@ type RollupClient = Client<ServerError>;
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// Url of the Rollup client
-    #[clap(short, long, default_value = "http://localhost:8082")]
+    #[clap(short, long, default_value = "http://localhost:8084")]
     pub rollup_url: Url,
 
     #[command(subcommand)]

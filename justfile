@@ -29,14 +29,24 @@ test:
     cargo test --release --all-features
 
 # Helpful shortcuts for local development
-dev-web-server:
-    target/release/web-server -p 8080 -n 1 
+dev-da-server:
+    target/release/web-server -p 8081
+
+dev-consensus-server:
+    target/release/web-server -p 8082
+
+dev-orchestrator:
+    target/release/orchestrator -p 8080 -n 1 
 
 dev-sequencer:
-    target/release/sequencer --web-server-url tcp://127.0.0.1:8080 -- api --port 8081 --storage-path storage
+    target/release/sequencer \
+    --orchestrator-url http://localhost:8080 \
+    --da-server-url http://localhost:8081 \
+    --consensus-server-url http://localhost:8082 \
+    -- api --port 8083 --storage-path storage
 
 dev-demo:
-     target/release/example-l2 --sequencer-url http://localhost:8081 \
+     target/release/example-l2 --sequencer-url http://localhost:8083 \
      --l1-provider http://localhost:8545 \
      --hotshot-address 0x5fbdb2315678afecb367f032d93f642f64180aa3 \
      --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
