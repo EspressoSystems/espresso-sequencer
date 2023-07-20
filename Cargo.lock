@@ -3404,6 +3404,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.6"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service#07780f564843d47d9c3005e352f3336bee7a214e"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3424,6 +3425,7 @@ dependencies = [
  "snafu",
  "spin_sleep",
  "tide-disco",
+ "time 0.3.23",
  "toml 0.5.11",
  "tracing",
 ]
