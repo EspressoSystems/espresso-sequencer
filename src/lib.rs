@@ -33,7 +33,7 @@
 //! };
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
-//! use hotshot::SystemContext;
+//! use hotshot::HotShot;
 //! use hotshot_types::traits::consensus_type::validating_consensus::ValidatingConsensus;
 //! use tide_disco::App;
 //!
@@ -42,7 +42,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = SystemContext::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
+//! let mut hotshot = HotShot::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
