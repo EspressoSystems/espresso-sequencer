@@ -14,8 +14,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- api
+    # Run the API server (with options taken from the environment) and the optional submission API
+    command: sequencer -- http -- query -- submit
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -36,7 +36,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- api
+    command: sequencer -- http -- query
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -49,7 +49,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- api
+    command: sequencer -- http -- query
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -62,7 +62,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- api
+    command: sequencer -- http -- query
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
@@ -75,7 +75,7 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- api
+    command: sequencer -- http -- query
     environment:
       - ESPRESSO_SEQUENCER_CDN_URL
       - ESPRESSO_SEQUENCER_API_PORT
