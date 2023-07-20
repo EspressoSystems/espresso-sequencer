@@ -41,7 +41,7 @@ will use, then run `target/release/orchestrator -p $PORT -n $N`.
 The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
-options. Next, you must two `web-server` instances, which are necessary to facillate consensus. One web server is for data availability, while the other actually coordinates consensus among sequencer nodes. Pick a `$DA_PORT` and a `$CONSENSUS_PORT` and run:
+options. Next, you must launch two `web-server` instances, which are necessary to facilitate consensus. One web server is for data availability, while the other coordinates consensus among sequencer nodes. Pick a `$DA_PORT` and a `$CONSENSUS_PORT` and run:
 ```bash
 target/release/web-server -p $DA_PORT
 target/release/web-server -p $CONSENSUS_PORT

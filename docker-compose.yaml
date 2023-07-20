@@ -52,7 +52,9 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -65,7 +67,9 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -78,7 +82,9 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
@@ -91,7 +97,9 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
