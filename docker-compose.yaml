@@ -26,11 +26,6 @@ services:
       - RUST_LOG
     depends_on:
       - cdn-server
-    healthcheck:
-      test: curl --fail http://localhost:$ESPRESSO_SEQUENCER_API_PORT  || exit 1
-      interval: 5s
-      retries: 5
-      timeout: 20s
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
