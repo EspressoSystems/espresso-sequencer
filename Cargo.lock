@@ -3250,6 +3250,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "ark-ec 0.3.0",
@@ -3299,6 +3300,7 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3320,6 +3322,7 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3341,6 +3344,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3425,6 +3429,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -3451,6 +3456,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
@@ -3484,6 +3490,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "bincode",
 ]
@@ -3491,6 +3498,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -4498,6 +4506,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#c27ecea7a1aeb73e501977cd0f98b134f086e2cf"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",

@@ -14,23 +14,6 @@ members = [
 # https://github.com/EspressoSystems/jellyfish/commit/36dceb63aa5b452b9551c0139bc5512d17f780cf
 [patch."https://github.com/EspressoSystems/jellyfish"]
 jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", rev = "e6024a7" }
-# [patch."https://github.com/EspressoSystems/hotshot"]
-# hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "paper_benchmarking", features = [
-#   "async-std-executor",
-#   "channel-async-std",
-# ] }
-# hotshot-centralized-server = { git = "https://github.com/EspressoSystems//hotshot", branch = "paper_benchmarking", features = [
-#   "async-std-executor",
-#   "channel-async-std",
-# ] }
-# hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "paper_benchmarking", features = [
-#   "async-std-executor",
-#   "channel-async-std",
-# ] }
-# hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "paper_benchmarking", features = [
-#   "async-std-executor",
-#   "channel-async-std",
-# ] }
 
 [patch."https://github.com/EspressoSystems/hotshot-query-service"]
 hotshot-query-service = { path = "../hotshot-query-service" }

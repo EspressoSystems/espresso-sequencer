@@ -30,43 +30,23 @@ either = "1.8.1"
 ethers = "2.0"
 futures = "0.3"
 
-# hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
-#     "async-std-executor",
-#     "channel-async-std",
-# ] }
-# hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
-#     "async-std-executor",
-#     "channel-async-std",
-# ] }
-# hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
-#     "async-std-executor",
-#     "channel-async-std",
-# ] }
-# hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
-#     "async-std-executor",
-#     "channel-async-std",
-# ] }
-# hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
-#     "async-std-executor",
-#     "channel-async-std",
-# ] }
-hotshot = { path = "../../hotshot", features = [
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-orchestrator = { path = "../../hotshot/orchestrator", features = [
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-testing = { path = "../../hotshot/testing", features = [
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-types = { path = "../../hotshot/types", features = [
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-web-server = { path = "../../hotshot/web_server", features = [
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
