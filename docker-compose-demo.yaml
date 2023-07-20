@@ -1,6 +1,6 @@
 version: "1"
 services:
-  orchestrator-server:
+  orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
     ports:
       - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_WEB_SERVER_PORT"

@@ -34,16 +34,16 @@ pub struct Options {
         short,
         long,
         env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
-        default_value = "http://localhost:50000"
+        default_value = "http://localhost:40003"
     )]
     pub da_server_url: Url,
 
-    /// URL of the HotShot server.
+    /// URL of the HotShot consensus web server.
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL",
-        default_value = "http://localhost:50001"
+        default_value = "http://localhost:40002"
     )]
     pub consensus_server_url: Url,
 
@@ -51,8 +51,8 @@ pub struct Options {
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL",
-        default_value = "http://localhost:49999"
+        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
+        default_value = "http://localhost:40001"
     )]
     pub orchestrator_url: Url,
 
