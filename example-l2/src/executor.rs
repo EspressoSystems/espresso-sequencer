@@ -181,14 +181,16 @@ mod test {
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
+    use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use sequencer::api::SequencerNode;
+    use sequencer::api::{HttpOptions, QueryOptions};
     use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
     use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
-    use sequencer::{Vm, VmId};
+    use sequencer::{Leaf, Vm, VmId};
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
+    use std::path::PathBuf;
     use std::time::Duration;
     use surf_disco::{Client, Url};
     use tempfile::TempDir;
@@ -268,6 +270,23 @@ mod test {
         }
     }
 
+    async fn start_query_service<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+        port: u16,
+        storage_path: PathBuf,
+        node: SystemContextHandle<SeqTypes, I>,
+    ) {
+        let init_handle = Box::new(move |_| (ready((node, 0)).boxed()));
+        sequencer::api::Options::from(HttpOptions { port })
+            .submit(Default::default())
+            .query(QueryOptions {
+                storage_path,
+                reset_store: true,
+            })
+            .serve(init_handle)
+            .await
+            .unwrap();
+    }
+
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
     #[async_std::test]
     async fn test_execute() {
@@ -289,17 +308,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }
@@ -398,17 +407,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }
@@ -519,17 +518,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }
