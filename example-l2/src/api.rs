@@ -107,7 +107,9 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::{
-        api::SequencerNode, testing::wait_for_decide_on_handle, Transaction as SeqTransaction,
+        api::{HttpOptions, QueryOptions, SequencerNode},
+        testing::wait_for_decide_on_handle,
+        Transaction as SeqTransaction,
     };
     use surf_disco::Client;
     use tempfile::TempDir;
@@ -156,14 +158,15 @@ mod tests {
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { handle, .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
+        let SequencerNode { handle, .. } = sequencer::api::Options::from(HttpOptions {
+            port: sequencer_port,
+        })
+        .submit(Default::default())
+        .query(QueryOptions {
+            storage_path,
+            reset_store: true,
+        })
+        .serve(init_handle)
         .await
         .unwrap();
         for node in &nodes {

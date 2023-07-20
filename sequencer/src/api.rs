@@ -15,21 +15,30 @@ use hotshot_query_service::{
     status::{self, StatusDataSource},
     Error,
 };
-use hotshot_types::traits::metrics::Metrics;
+use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Borrow,
     io,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tide_disco::{Api, App};
 
+/// The minimal HTTP API.
+///
+/// The API automatically includes health and version endpoints. Additional API modules can be
+/// added by including the query-api or submit-api modules.
 #[derive(Parser, Clone, Debug)]
-pub struct Options {
-    /// Port that the sequencer API will use.
+pub struct HttpOptions {
+    /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
     pub port: u16,
+}
 
+/// Options for the query API module.
+#[derive(Parser, Clone, Debug)]
+pub struct QueryOptions {
     /// Storage path for HotShot query service data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
     pub storage_path: PathBuf,
@@ -37,6 +46,211 @@ pub struct Options {
     /// Create new query storage instead of opening existing one.
     #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
     pub reset_store: bool,
+}
+
+/// Options for the submission API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct SubmitOptions;
+
+impl SubmitOptions {
+    fn init<S, I: NodeImplementation<SeqTypes>>(
+        self,
+        app: &mut App<S, hotshot_query_service::Error>,
+    ) -> io::Result<()>
+    where
+        S: 'static + Send + Sync + tide_disco::method::WriteState,
+        S::State: Send + Sync + Borrow<SystemContextHandle<SeqTypes, I>>,
+    {
+        // Include API specification in binary
+        let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        // Initialize submit API
+        let mut submit_api = Api::<S, hotshot_query_service::Error>::new(toml)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        // Define submit route for submit API
+        submit_api
+            .post("submit", |req, state| {
+                async move {
+                    let state = Borrow::<SystemContextHandle<SeqTypes, I>>::borrow(state);
+                    state
+                        .submit_transaction(
+                            req.body_auto::<Transaction>()
+                                .map_err(|err| Error::internal(err.to_string()))?,
+                        )
+                        .await
+                        .map_err(|err| Error::internal(err.to_string()))
+                }
+                .boxed()
+            })
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        // Register modules in app
+        app.register_module("submit", submit_api)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Options {
+    pub http: HttpOptions,
+    pub query: Option<QueryOptions>,
+    pub submit: Option<SubmitOptions>,
+}
+
+impl From<HttpOptions> for Options {
+    fn from(http: HttpOptions) -> Self {
+        Self {
+            http,
+            query: None,
+            submit: None,
+        }
+    }
+}
+
+impl Options {
+    /// Add a query API module.
+    pub fn query(mut self, opt: QueryOptions) -> Self {
+        self.query = Some(opt);
+        self
+    }
+
+    /// Add a submit API module.
+    pub fn submit(mut self, opt: SubmitOptions) -> Self {
+        self.submit = Some(opt);
+        self
+    }
+
+    pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+        self,
+        init_handle: HandleFromMetrics<I>,
+    ) -> io::Result<SequencerNode<I>> {
+        // The server state type depends on whether we are running a query API or not, so we handle
+        // the two cases differently.
+        let (handle, node_index, update_task) = if let Some(query) = self.query {
+            type StateType<I> = Arc<RwLock<AppState<I>>>;
+
+            let storage_path = Path::new(&query.storage_path);
+            let query_state = {
+                if query.reset_store {
+                    QueryData::create(storage_path, ())
+                } else {
+                    QueryData::open(storage_path, ())
+                }
+            }
+            .expect("Failed to initialize query data storage");
+            let metrics: Box<dyn Metrics> = query_state.metrics();
+
+            // Start up handle
+            let (handle, node_index) = init_handle(metrics).await;
+
+            // Get a clone the handle to use for populating the query data with consensus events.
+            //
+            // We must do this _before_ starting consensus on the handle, otherwise we could miss
+            // the first events emitted by consensus.
+            let mut watch_handle = handle.clone();
+
+            let state = Arc::new(RwLock::new(AppState::<I> {
+                submit_state: handle.clone(),
+                query_state,
+            }));
+
+            let mut app = App::<_, hotshot_query_service::Error>::with_state(state.clone());
+
+            // Initialize submit API
+            if let Some(submit) = self.submit {
+                submit.init(&mut app)?;
+            }
+
+            // Initialize availability and status APIs
+            let mut options: AvailabilityOptions = Default::default();
+            let namespace_extension =
+                toml::from_str::<toml::value::Value>(include_str!("namespace_api.toml"))
+                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+            options.extensions.push(namespace_extension);
+            let mut availability_api =
+                availability::define_api::<StateType<I>, SeqTypes, I>(&options)
+                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+            let status_api = status::define_api::<StateType<I>>(&Default::default())
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+            availability_api
+                .get("getnamespaceproof", |req, state| {
+                    async move {
+                        let height: u64 = req.integer_param("height")?;
+                        let namespace: u64 = req.integer_param("namespace")?;
+                        let block = state
+                            .get_nth_block_iter(height as usize)
+                            .next()
+                            .ok_or(AvailabilityError::InvalidLeafHeight { height })?
+                            .ok_or(AvailabilityError::MissingBlock { height })?;
+
+                        let proof = block.block().get_namespace_proof(namespace.into());
+                        let nmt_root = block.block().get_nmt_root();
+                        Ok(NamespaceProofQueryData { nmt_root, proof })
+                    }
+                    .boxed()
+                })
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
+
+            // Register modules in app
+            app.register_module("availability", availability_api)
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                .register_module("status", status_api)
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
+
+            let task = spawn(async move {
+                futures::join!(
+                    app.serve(format!("0.0.0.0:{}", self.http.port)),
+                    async move {
+                        tracing::debug!("waiting for event");
+                        while let Ok(event) = watch_handle.next_event().await {
+                            tracing::debug!("got event {:?}", event);
+                            // If update results in an error, program state is unrecoverable
+                            if let Err(err) = state.write().await.update(&event).await {
+                                tracing::error!(
+                                    "failed to update event {:?}: {}; updater task will exit",
+                                    event,
+                                    err
+                                );
+                                panic!();
+                            }
+                        }
+                        tracing::warn!("end of HotShot event stream, updater task will exit");
+                    }
+                )
+                .0
+            });
+
+            (handle, node_index, task)
+        } else {
+            let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
+            let mut app =
+                App::<_, hotshot_query_service::Error>::with_state(RwLock::new(handle.clone()));
+
+            // Initialize submit API
+            if let Some(submit) = self.submit {
+                submit.init::<_, I>(&mut app)?;
+            }
+
+            (
+                handle,
+                node_index,
+                spawn(app.serve(format!("0.0.0.0:{}", self.http.port))),
+            )
+        };
+
+        // Start consensus.
+        handle.start().await;
+
+        Ok(SequencerNode {
+            handle,
+            update_task,
+            node_index,
+        })
+    }
 }
 
 type NodeIndex = u64;
@@ -56,6 +270,12 @@ pub type HandleFromMetrics<I> = Box<
 struct AppState<I: NodeImplementation<SeqTypes>> {
     pub submit_state: SystemContextHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
+}
+
+impl<I: NodeImplementation<SeqTypes>> Borrow<SystemContextHandle<SeqTypes, I>> for AppState<I> {
+    fn borrow(&self) -> &SystemContextHandle<SeqTypes, I> {
+        &self.submit_state
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -164,137 +384,9 @@ impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
     }
 }
 
-pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
-    opt: Options,
-    init_handle: HandleFromMetrics<I>,
-) -> io::Result<SequencerNode<I>> {
-    type StateType<I> = Arc<RwLock<AppState<I>>>;
-
-    let storage_path = Path::new(&opt.storage_path);
-    let query_state = {
-        if opt.reset_store {
-            QueryData::create(storage_path, ())
-        } else {
-            QueryData::open(storage_path, ())
-        }
-    }
-    .expect("Failed to initialize query data storage");
-    let metrics: Box<dyn Metrics> = query_state.metrics();
-
-    // Start up handle
-    let (handle, node_index) = init_handle(metrics).await;
-
-    // Get a clone the handle to use for populating the query data with consensus events.
-    //
-    // We must do this _before_ starting consensus on the handle, otherwise we could miss the first
-    // events emitted by consensus.
-    let mut watch_handle = handle.clone();
-
-    // Start consensus.
-    handle.start().await;
-
-    let state = Arc::new(RwLock::new(AppState::<I> {
-        submit_state: handle.clone(),
-        query_state,
-    }));
-
-    let mut app = App::<StateType<I>, hotshot_query_service::Error>::with_state(state.clone());
-
-    // Include API specification in binary
-    let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    let namespace_extension =
-        toml::from_str::<toml::value::Value>(include_str!("namespace_api.toml"))
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    // Initialize submit API
-    let mut submit_api = Api::<StateType<I>, hotshot_query_service::Error>::new(toml)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    // Define submit route for submit API
-    submit_api
-        .post("submit", |req, state| {
-            async move {
-                state
-                    .submit_state
-                    .submit_transaction(
-                        req.body_auto::<Transaction>()
-                            .map_err(|err| Error::internal(err.to_string()))?,
-                    )
-                    .await
-                    .map_err(|err| Error::internal(err.to_string()))
-            }
-            .boxed()
-        })
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    let mut options: AvailabilityOptions = Default::default();
-    options.extensions.push(namespace_extension);
-
-    // Initialize availability and status APIs
-    let mut availability_api = availability::define_api::<StateType<I>, SeqTypes, I>(&options)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-    let status_api = status::define_api::<StateType<I>>(&Default::default())
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    availability_api
-        .get("getnamespaceproof", |req, state| {
-            async move {
-                let height: u64 = req.integer_param("height")?;
-                let namespace: u64 = req.integer_param("namespace")?;
-                let block = state
-                    .get_nth_block_iter(height as usize)
-                    .next()
-                    .ok_or(AvailabilityError::InvalidLeafHeight { height })?
-                    .ok_or(AvailabilityError::MissingBlock { height })?;
-
-                let proof = block.block().get_namespace_proof(namespace.into());
-                let nmt_root = block.block().get_nmt_root();
-                Ok(NamespaceProofQueryData { nmt_root, proof })
-            }
-            .boxed()
-        })
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
-
-    // Register modules in app
-    app.register_module("submit", submit_api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-        .register_module("availability", availability_api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
-        .register_module("status", status_api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
-
-    let update_task = spawn(async move {
-        futures::join!(app.serve(format!("0.0.0.0:{}", opt.port)), async move {
-            tracing::debug!("waiting for event");
-            while let Ok(event) = watch_handle.next_event().await {
-                tracing::debug!("got event {:?}", event);
-                // If update results in an error, program state is unrecoverable
-                if let Err(err) = state.write().await.update(&event).await {
-                    tracing::error!(
-                        "failed to update event {:?}: {}; updater task will exit",
-                        event,
-                        err
-                    );
-                    panic!();
-                }
-            }
-            tracing::warn!("end of HotShot event stream, updater task will exit");
-        })
-        .0
-    });
-    Ok(SequencerNode {
-        handle,
-        update_task,
-        node_index,
-    })
-}
-
 #[cfg(test)]
 mod test {
     use crate::{
-        api::serve,
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         transaction::Transaction,
         vm::VmId,
@@ -306,12 +398,51 @@ mod test {
     use surf_disco::Client;
 
     use tempfile::TempDir;
-    use tide_disco::error::ServerError;
+    use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
-    use super::{Options, SequencerNode};
+    use super::{HttpOptions, Options, QueryOptions, SequencerNode};
 
     #[async_std::test]
-    async fn submit_test() {
+    async fn test_healthcheck() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.start().await;
+        }
+        let init_handle =
+            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
+
+        let options = Options::from(HttpOptions { port });
+        options.serve(init_handle).await.unwrap();
+
+        client.connect(None).await;
+        let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
+        assert_eq!(health.status, HealthStatus::Available);
+    }
+
+    #[async_std::test]
+    async fn submit_test_with_query_module() {
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path = tmp_dir.path().join("tmp_storage");
+        submit_test_helper(Some(QueryOptions {
+            storage_path,
+            reset_store: true,
+        }))
+        .await
+    }
+
+    #[async_std::test]
+    async fn submit_test_without_query_module() {
+        submit_test_helper(None).await
+    }
+
+    async fn submit_test_helper(query_opt: Option<QueryOptions>) {
         setup_logging();
         setup_backtrace();
 
@@ -331,19 +462,11 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
-
-        let SequencerNode { handle, .. } = serve(
-            Options {
-                storage_path,
-                port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        let mut options = Options::from(HttpOptions { port }).submit(Default::default());
+        if let Some(query) = query_opt {
+            options = options.query(query);
+        }
+        let SequencerNode { handle, .. } = options.serve(init_handle).await.unwrap();
 
         client.connect(None).await;
 

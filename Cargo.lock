@@ -2720,6 +2720,7 @@ dependencies = [
  "derive_more",
  "ethers",
  "futures",
+ "hotshot",
  "hotshot-query-service",
  "jf-primitives",
  "portpicker",
