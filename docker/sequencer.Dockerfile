@@ -9,4 +9,6 @@ RUN apt-get update \
 COPY target/$TARGETARCH/release/sequencer /bin/sequencer
 RUN chmod +x /bin/sequencer
 
-CMD [ "/bin/sequencer"]
+CMD ["/bin/sequencer", "--", "http"]
+HEALTHCHECK CMD curl --fail http://localhost:$ESPRESSO_SEQUENCER_API_PORT/healthcheck  || exit 1
+EXPOSE $ESPRESSO_SEQUENCER_API_PORT
