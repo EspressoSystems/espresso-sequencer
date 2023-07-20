@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{MockBlock, MockNodeImpl, MockTypes};
+use super::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTypes};
 use crate::{data_source::QueryData, update::UpdateDataSource};
 use async_std::{
     sync::{Arc, RwLock},
@@ -19,15 +19,15 @@ use async_std::{
 use futures::future::join_all;
 use hotshot::{
     traits::{
-        election::static_committee::StaticElectionConfig,
         implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
         NodeImplementation,
     },
-    types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    types::{HotShotHandle, SignatureKey},
+    HotShot, HotShotInitializer,
 };
 use hotshot_types::{
     traits::{
+        election::Membership,
         node_implementation::ExchangesType,
         signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
     },
@@ -40,7 +40,7 @@ use tempdir::TempDir;
 
 struct MockNode<UserData> {
     query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
-    hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
+    hotshot: HotShotHandle<MockTypes, MockNodeImpl>,
 }
 
 pub struct MockNetwork<UserData> {
@@ -61,6 +61,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             .map(Ed25519Pub::from_private)
             .collect::<Vec<_>>();
         let master_map = MasterMap::new();
+        let num_nodes = pub_keys.len();
         let config = HotShotConfig {
             total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
             known_nodes: pub_keys.clone(),
@@ -75,7 +76,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             num_bootstrap: 0,
             execution_type: ExecutionType::Continuous,
             election_config: None,
-            da_committee_nodes: pub_keys.clone(),
+            da_committee_size: NonZeroUsize::new(num_nodes).unwrap(),
         };
         let nodes = join_all(
             priv_keys
@@ -87,6 +88,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                     let pub_keys = pub_keys.clone();
                     let config = config.clone();
                     let master_map = master_map.clone();
+                    let election_config = MockMembership::default_election_config(num_nodes as u64);
 
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();
@@ -104,14 +106,14 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                         let exchanges =
                             <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
                                 pub_keys.clone(),
-                                StaticElectionConfig {},
+                                (election_config.clone(), ()),
                                 (channel, ()),
                                 pub_keys[node_id],
                                 priv_key.clone(),
                                 enc_key.clone(),
                             );
 
-                        let hotshot = SystemContext::init(
+                        let hotshot = HotShot::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
@@ -137,7 +139,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
 }
 
 impl<UserData> MockNetwork<UserData> {
-    pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
+    pub fn handle(&self) -> HotShotHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
 
