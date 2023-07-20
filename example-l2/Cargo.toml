@@ -9,7 +9,7 @@ edition = "2021"
 ark-serialize = { version = "0.3.0", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0" }
 async-std = { version = "1.12", features = ["attributes"] }
-clap = "4.3.10"
+clap = "4.3.17"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = "0.99.17"
