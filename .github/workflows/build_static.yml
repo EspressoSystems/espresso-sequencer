@@ -71,17 +71,11 @@ jobs:
         with:
           name: ${{ env.TARGET }}-services
           path: |
-<<<<<<< HEAD
-            target/x86_64-unknown-linux-musl/release/web-server
-            target/x86_64-unknown-linux-musl/release/sequencer
-            target/x86_64-unknown-linux-musl/release/example-l2
-            target/x86_64-unknown-linux-musl/release/cli
-=======
-            target/${{ env.TARGET }}/release/cdn-server
+            target/${{ env.TARGET }}/release/orchestrator
+            target/${{ env.TARGET }}/release/web-server
             target/${{ env.TARGET }}/release/sequencer
             target/${{ env.TARGET }}/release/example-l2
             target/${{ env.TARGET }}/release/cli
->>>>>>> main
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -151,13 +145,8 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./
-<<<<<<< HEAD
           file: ./docker/web-server.Dockerfile
-          platforms: linux/amd64
-=======
-          file: ./docker/cdn-server.Dockerfile
           platforms: linux/amd64,arm64
->>>>>>> main
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.web-server.outputs.tags }}
           labels: ${{ steps.web-server.outputs.labels }}

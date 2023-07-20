@@ -316,10 +316,6 @@ pub async fn init_node(
         .get_config_from_orchestrator::<SeqTypes>(node_index)
         .await;
 
-    // let (config, _, networking) =
-    //     CentralizedServerNetwork::connect_with_server_config(metrics, addr).await;
-    // // Initialize web comm channels
-    // let
     // Generate public keys and this node's private keys.
     //
     // These are deterministic keys suitable *only* for testing and demo purposes.
