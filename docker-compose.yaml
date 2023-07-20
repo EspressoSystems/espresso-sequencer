@@ -34,7 +34,9 @@ services:
     # Run the API server (with options taken from the environment) and the optional submission API
     command: sequencer -- http -- query -- submit
     environment:
-      - ESPRESSO_SEQUENCER_WEB_SERVER_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -43,11 +45,6 @@ services:
       - RUST_LOG
     depends_on:
       - orchestrator-server
-    healthcheck:
-      test: curl --fail http://localhost:$ESPRESSO_SEQUENCER_API_PORT  || exit 1
-      interval: 5s
-      retries: 5
-      timeout: 20s
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:

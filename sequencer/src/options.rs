@@ -30,12 +30,21 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: u16,
 
+    /// URL of the HotShot orchestrator.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
+        default_value = "http://localhost:8080"
+    )]
+    pub orchestrator_url: Url,
+
     /// URL of the HotShot DA web server.
     #[clap(
         short,
         long,
         env = "ESPRESSO_SEQUENCER_DA_SERVER_URL",
-        default_value = "http://localhost:40003"
+        default_value = "http://localhost:8081"
     )]
     pub da_server_url: Url,
 
@@ -44,18 +53,9 @@ pub struct Options {
         short,
         long,
         env = "ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL",
-        default_value = "http://localhost:40002"
+        default_value = "http://localhost:8082"
     )]
     pub consensus_server_url: Url,
-
-    /// URL of the HotShot orchestrator.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
-        default_value = "http://localhost:40001"
-    )]
-    pub orchestrator_url: Url,
 
     /// Add optional modules to the service.
     ///

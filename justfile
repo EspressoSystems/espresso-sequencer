@@ -29,14 +29,14 @@ test:
     cargo test --release --all-features
 
 # Helpful shortcuts for local development
+dev-orchestrator:
+    target/release/orchestrator -p 8080 -n 1 
+
 dev-da-server:
     target/release/web-server -p 8081
 
 dev-consensus-server:
     target/release/web-server -p 8082
-
-dev-orchestrator:
-    target/release/orchestrator -p 8080 -n 1 
 
 dev-sequencer:
     target/release/sequencer \
