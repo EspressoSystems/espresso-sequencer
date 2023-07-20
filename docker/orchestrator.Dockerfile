@@ -1,11 +1,15 @@
 FROM ubuntu:jammy
 
+ARG TARGETARCH
+
 RUN apt-get update \
     &&  apt-get install -y curl wait-for-it \
     &&  rm -rf /var/lib/apt/lists/*
 
-COPY target/release/orchestrator /bin/orchestrator
+COPY target/$TARGETARCH/release/orchestrator /bin/orchestrator
 RUN chmod +x /bin/orchestrator
+
+ENV ESPRESSO_WEB_SERVER_PORT=50000
 
 # Set up view timing for optimal performance in high volume conditions. We set a fairly long minimum
 # propose time to wait to build up a large block before proposing.

@@ -3,7 +3,7 @@ use clap::Parser;
 use futures::future::{join_all, FutureExt};
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{serve, SequencerNode},
+    api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
     init_node, Block, NetworkParams, Options,
 };
@@ -28,18 +28,34 @@ async fn main() {
         orchestrator_url: opt.orchestrator_url,
     };
 
-    // Inititialize HotShot. If the user requested the API module, we must initialize the handle in
+    // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    let (mut handle, api_port) = match modules.api {
-        Some(options) => {
-            let port = options.port;
+    let (mut handle, query_api_port) = match modules.http {
+        Some(opt) => {
+            // Add optional API modules as requested.
+            let mut opt = api::Options::from(opt);
+            if let Some(query) = modules.query {
+                opt = opt.query(query);
+            }
+            if let Some(submit) = modules.submit {
+                opt = opt.submit(submit);
+            }
+
+            // Save the port if we are running a query API. This can be used later when starting the
+            // commitment task; otherwise the user must give us the URL of an external query API.
+            let query_api_port = if opt.query.is_some() {
+                Some(opt.http.port)
+            } else {
+                None
+            };
             let init_handle =
                 Box::new(move |metrics| init_node(network_params, genesis, metrics).boxed());
-            let SequencerNode { handle, .. } = serve(options, init_handle)
+            let SequencerNode { handle, .. } = opt
+                .serve(init_handle)
                 .await
                 .expect("Failed to initialize API");
-            (handle, Some(port))
+            (handle, query_api_port)
         }
         None => (
             init_node(network_params, genesis, Box::new(NoMetrics))
@@ -70,7 +86,8 @@ async fn main() {
             options.query_service_url = Some(
                 format!(
                     "http://localhost:{}",
-                    api_port.expect("API port is required when running commitment task")
+                    query_api_port
+                        .expect("Query API port is required when running commitment task")
                 )
                 .parse()
                 .unwrap(),

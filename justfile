@@ -2,10 +2,10 @@ default:
     just --list
 
 rollup-demo:
-    docker compose -f docker-compose-demo.yaml up
+    docker compose up
 
 rollup-demo-down:
-    docker compose -f docker-compose-demo.yaml down
+    docker compose down
 
 docker-cli *cmd:
     docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
@@ -14,7 +14,7 @@ cli *cmd:
     target/release/cli {{cmd}}
 
 pull-rollup-demo:
-    docker compose -f docker-compose-demo.yaml pull
+    docker compose pull
 
 update-contract-bindings:
     cargo run --bin gen-bindings
@@ -52,11 +52,5 @@ dev-demo:
      --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
      --rollup-mnemonic "test test test test test test test test test test test junk"
 
-build-docker-amd:
-    nix develop .#crossShell --command cargo build --release
-    scripts/build-docker-images amd64
-
-build-docker-arm:
-    nix develop .#armCrossShell --command cargo build --release
-    scripts/build-docker-images arm64
-
+build-docker-images:
+    scripts/build-docker-images

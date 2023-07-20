@@ -34,6 +34,10 @@ toml = "0.5"
 tracing = "0.1"
 
 [dev-dependencies]
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 portpicker = "0.1.1"
 sequencer-utils = { path = "../utils" }
 tempfile = "3.4.0"

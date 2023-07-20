@@ -98,12 +98,11 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
         // Execute new blocks, generating proofs.
         let mut proofs = vec![];
-        let mut state = state.write().await;
         tracing::info!(
             "executing blocks {}-{}, state is {}",
             first_block,
             first_block + num_blocks - 1,
-            state.commit()
+            state.read().await.commit()
         );
         for i in 0..num_blocks {
             let commitment = hotshot_contract
@@ -118,7 +117,7 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 panic!("Block commitment does not match hash of received block, the executor cannot continue");
             }
 
-            let vm_id: u64 = state.vm.id().into();
+            let vm_id: u64 = state.read().await.vm.id().into();
 
             let namespace_proof_query: NamespaceProofQueryData = hotshot
                 .get(&format!(
@@ -137,12 +136,18 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
             assert_eq!(derived_block_comm, block_commitment);
 
-            proofs.push(state.execute_block(nmt_root, namespace_proof).await);
+            proofs.push(
+                state
+                    .write()
+                    .await
+                    .execute_block(nmt_root, namespace_proof)
+                    .await,
+            );
         }
 
         // Compute an aggregate proof.
         let proof = BatchProof::generate(&proofs).expect("Error generating batch proof");
-        let state_comm = commitment_to_u256(state.commit());
+        let state_comm = commitment_to_u256(state.read().await.commit());
 
         // Send the batch proof to L1.
         tracing::info!(
@@ -176,14 +181,16 @@ mod test {
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
+    use hotshot::{traits::NodeImplementation, types::HotShotHandle};
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use sequencer::api::SequencerNode;
+    use sequencer::api::{HttpOptions, QueryOptions};
     use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
     use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
-    use sequencer::{Vm, VmId};
+    use sequencer::{Leaf, Vm, VmId};
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
+    use std::path::PathBuf;
     use std::time::Duration;
     use surf_disco::{Client, Url};
     use tempfile::TempDir;
@@ -263,6 +270,23 @@ mod test {
         }
     }
 
+    async fn start_query_service<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+        port: u16,
+        storage_path: PathBuf,
+        node: HotShotHandle<SeqTypes, I>,
+    ) {
+        let init_handle = Box::new(move |_| (ready((node, 0)).boxed()));
+        sequencer::api::Options::from(HttpOptions { port })
+            .submit(Default::default())
+            .query(QueryOptions {
+                storage_path,
+                reset_store: true,
+            })
+            .serve(init_handle)
+            .await
+            .unwrap();
+    }
+
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
     #[async_std::test]
     async fn test_execute() {
@@ -284,17 +308,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }
@@ -393,17 +407,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }
@@ -514,17 +518,7 @@ mod test {
         let api_node = nodes[0].clone();
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { .. } = sequencer::api::serve(
-            sequencer::api::Options {
-                storage_path,
-                port: sequencer_port,
-                reset_store: true,
-            },
-            init_handle,
-        )
-        .await
-        .unwrap();
+        start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
             node.start().await;
         }

@@ -1,5 +1,6 @@
 use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use std::collections::HashSet;
 use std::iter::once;
 use url::Url;
 
@@ -93,6 +94,7 @@ impl ModuleArgs {
     fn try_parse(&self) -> Result<Modules, clap::Error> {
         let mut modules = Modules::default();
         let mut curr = self.0.clone();
+        let mut provided = Default::default();
 
         while !curr.is_empty() {
             // The first argument (the program name) is used only for help generation. We include a
@@ -102,9 +104,11 @@ impl ModuleArgs {
                 once("sequencer --").chain(curr.iter().map(|s| s.as_str())),
             )?;
             match module {
-                SequencerModule::Api(m) => curr = m.add("api", &mut modules.api)?,
+                SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
+                SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
+                SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
                 SequencerModule::CommitmentTask(m) => {
-                    curr = m.add("commitment-task", &mut modules.commitment_task)?
+                    curr = m.add(&mut modules.commitment_task, &mut provided)?
                 }
             }
         }
@@ -113,8 +117,30 @@ impl ModuleArgs {
     }
 }
 
+trait ModuleInfo: Args + FromArgMatches {
+    const NAME: &'static str;
+    fn requires() -> Vec<&'static str>;
+}
+
+macro_rules! module {
+    ($name:expr, $opt:ty $(,requires: $($req:expr),*)?) => {
+        impl ModuleInfo for $opt {
+            const NAME: &'static str = $name;
+
+            fn requires() -> Vec<&'static str> {
+                vec![$($($req),*)?]
+            }
+        }
+    };
+}
+
+module!("http", api::HttpOptions);
+module!("query", api::QueryOptions, requires: "http");
+module!("submit", api::SubmitOptions, requires: "http");
+module!("commitment-task", CommitmentTaskOptions);
+
 #[derive(Clone, Debug, Args)]
-struct Module<Options: Args + FromArgMatches> {
+struct Module<Options: ModuleInfo> {
     #[clap(flatten)]
     options: Box<Options>,
 
@@ -123,28 +149,57 @@ struct Module<Options: Args + FromArgMatches> {
     modules: Vec<String>,
 }
 
-impl<Options: Args + FromArgMatches> Module<Options> {
+impl<Options: ModuleInfo> Module<Options> {
     /// Add this as an optional module. Return the next optional module args.
-    fn add(self, name: &str, options: &mut Option<Options>) -> Result<Vec<String>, clap::Error> {
+    fn add(
+        self,
+        options: &mut Option<Options>,
+        provided: &mut HashSet<&'static str>,
+    ) -> Result<Vec<String>, clap::Error> {
         if options.is_some() {
             return Err(clap::Error::raw(
                 ErrorKind::TooManyValues,
-                format!("optional module {name} can only be started once"),
+                format!("optional module {} can only be started once", Options::NAME),
             ));
         }
+        for req in Options::requires() {
+            if !provided.contains(&req) {
+                return Err(clap::Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    format!("module {} is missing required module {req}", Options::NAME),
+                ));
+            }
+        }
         *options = Some(*self.options);
+        provided.insert(Options::NAME);
         Ok(self.modules)
     }
 }
 
 #[derive(Clone, Debug, Parser)]
 enum SequencerModule {
-    Api(Module<api::Options>),
+    /// Run an HTTP server.
+    ///
+    /// The basic HTTP server comes with healthcheck and version endpoints. Add additional endpoints
+    /// by enabling additional modules:
+    /// * query: add query service endpoints
+    /// * submit: add transaction submission endpoints
+    Http(Module<api::HttpOptions>),
+    /// Run the query service API module.
+    ///
+    /// This modules requires the http module to be started.
+    Query(Module<api::QueryOptions>),
+    /// Run the transaction submission API module.
+    ///
+    /// This modules requires the http module to be started.
+    Submit(Module<api::SubmitOptions>),
     CommitmentTask(Module<CommitmentTaskOptions>),
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Modules {
-    pub api: Option<api::Options>,
+    pub http: Option<api::HttpOptions>,
+    pub query: Option<api::QueryOptions>,
+    pub submit: Option<api::SubmitOptions>,
     pub commitment_task: Option<CommitmentTaskOptions>,
 }

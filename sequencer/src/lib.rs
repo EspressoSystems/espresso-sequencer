@@ -526,7 +526,7 @@ mod test {
         handle: HotShotHandle<SeqTypes, I>,
         txn: &ApplicationTransaction,
     ) -> Transaction {
-        let tx = Transaction::new(TestVm::default().id(), bincode::serialize(txn).unwrap());
+        let tx = Transaction::new(TestVm {}.id(), bincode::serialize(txn).unwrap());
 
         handle
             .submit_transaction(tx.clone())
