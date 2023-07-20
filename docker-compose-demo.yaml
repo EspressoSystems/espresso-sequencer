@@ -1,5 +1,14 @@
 version: "1"
 services:
+  orchestrator-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
+    ports:
+      - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_WEB_SERVER_PORT"
+    environment:
+      - ESPRESSO_WEB_SERVER_PORT
+      - ESPRESSO_ORCHESTRATOR_NUM_NODES=5
+      - ESPRESSO_ORCHESTRATOR_START_DELAY=5s
+      - RUST_LOG
   da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
@@ -7,6 +16,8 @@ services:
     environment:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
+    depends_on:
+      - orchestrator-server
   consensus-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
@@ -14,6 +25,8 @@ services:
     environment:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
+    depends_on:
+      - orchestrator-server
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -29,7 +42,7 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
     depends_on:
-      - web-server
+      - orchestrator-server
     healthcheck:
       test: curl --fail http://localhost:$ESPRESSO_SEQUENCER_API_PORT  || exit 1
       interval: 5s
@@ -47,7 +60,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - web-server
+      - orchestrator-server
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -60,7 +73,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - web-server
+      - orchestrator-server
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -73,7 +86,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - web-server
+      - orchestrator-server
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -86,7 +99,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - web-server
+      - orchestrator-server
 
   demo-l1-network:
     image: ghcr.io/foundry-rs/foundry:latest

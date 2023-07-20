@@ -4,7 +4,6 @@ mod chain_variables;
 pub mod hotshot_commitment;
 pub mod options;
 use url::Url;
-mod orchestrator_client;
 mod state;
 pub mod transaction;
 mod vm;
@@ -62,7 +61,7 @@ pub use state::State;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
 
-use crate::orchestrator_client::{OrchestratorClient, ValidatorArgs};
+use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
 
 // Supports 1K transactions
 pub const MAX_NMT_DEPTH: usize = 10;

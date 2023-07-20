@@ -3250,7 +3250,6 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "ark-ec 0.3.0",
@@ -3300,7 +3299,6 @@ dependencies = [
 [[package]]
 name = "hotshot-centralized-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
@@ -3322,7 +3320,6 @@ dependencies = [
 [[package]]
 name = "hotshot-consensus"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3344,7 +3341,6 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3429,7 +3425,6 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -3456,7 +3451,6 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
@@ -3490,7 +3484,6 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "bincode",
 ]
@@ -3498,7 +3491,6 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
@@ -4506,7 +4498,6 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=paper_benchmarking#bced80a56856f15a69c23e23aaa8a0a4144ade0c"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -7534,7 +7525,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64"
 version = "0.2.4"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
 dependencies = [
  "ark-serialize 0.3.0",
  "base64 0.13.1",
@@ -7578,7 +7569,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64-macros"
 version = "0.2.0"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
 dependencies = [
  "ark-std 0.3.0",
  "quote",

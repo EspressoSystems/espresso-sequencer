@@ -34,6 +34,7 @@ cleanup(){
 
 mkdir -p ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/web-server ${WORKDIR}/target/release
+cp -v target/${TARGET}/release/orchestrator ${WORKDIR}/target/orchestrator
 cp -v target/${TARGET}/release/sequencer ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/example-l2 ${WORKDIR}/target/release
 cp -v target/${TARGET}/release/cli ${WORKDIR}/target/release
@@ -44,5 +45,6 @@ cp -v target/${TARGET}/release/cli ${WORKDIR}/target/release
 docker pull --platform $PLATFORM ubuntu:jammy
 
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator-server:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile ${WORKDIR}
