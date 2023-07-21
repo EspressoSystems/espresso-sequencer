@@ -307,7 +307,10 @@ pub async fn init_node(
         public_ip: None,
     };
     let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
+
+    // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
     let node_index: u16 = orchestrator_client
         .identify_with_orchestrator(public_ip.to_string())
         .await;
