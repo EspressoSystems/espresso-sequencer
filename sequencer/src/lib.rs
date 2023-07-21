@@ -332,7 +332,7 @@ pub async fn init_node(
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
-    let wait_time = Duration::from_secs(1);
+    let wait_time = Duration::from_millis(100);
     let da_network = WebServerNetwork::create(
         &network_params.da_server_url.host().unwrap().to_string(),
         network_params.da_server_url.port().unwrap(),
