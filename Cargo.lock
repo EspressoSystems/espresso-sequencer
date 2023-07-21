@@ -3278,7 +3278,7 @@ dependencies = [
  "hotshot-centralized-server",
  "hotshot-consensus",
  "hotshot-orchestrator",
- "hotshot-primitives",
+ "hotshot-primitives 0.1.0 (git+https://github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0)",
  "hotshot-types",
  "hotshot-utils",
  "hotshot-web-server",
@@ -3374,6 +3374,36 @@ dependencies = [
 [[package]]
 name = "hotshot-primitives"
 version = "0.1.0"
+source = "git+ssh://git@github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0#4b139286575cdc1a57a52fffd2f9933e67d86743"
+dependencies = [
+ "anyhow",
+ "ark-bls12-381 0.4.0",
+ "ark-bn254",
+ "ark-ec 0.4.2",
+ "ark-ff 0.4.2",
+ "ark-pallas",
+ "ark-poly",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "bincode",
+ "bitvec 1.0.1",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "ethereum-types",
+ "generic-array",
+ "jf-primitives",
+ "jf-utils 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?rev=c07a87f)",
+ "serde",
+ "sha3",
+ "tagged-base64 0.3.0",
+ "thiserror",
+ "typenum",
+]
+
+[[package]]
+name = "hotshot-primitives"
+version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0#4b139286575cdc1a57a52fffd2f9933e67d86743"
 dependencies = [
  "anyhow",
@@ -3445,7 +3475,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-consensus",
- "hotshot-primitives",
+ "hotshot-primitives 0.1.0 (git+ssh://git@github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0)",
  "hotshot-types",
  "hotshot-utils",
  "jf-primitives",
@@ -3478,7 +3508,7 @@ dependencies = [
  "espresso-systems-common 0.4.1",
  "futures",
  "hex_fmt",
- "hotshot-primitives",
+ "hotshot-primitives 0.1.0 (git+ssh://git@github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0)",
  "hotshot-utils",
  "jf-primitives",
  "libp2p-networking",
@@ -3512,7 +3542,7 @@ dependencies = [
  "bincode",
  "clap",
  "futures",
- "hotshot-primitives",
+ "hotshot-primitives 0.1.0 (git+ssh://git@github.com/EspressoSystems/hotshot-primitives.git?branch=update_jellyfish_0.4.0_pre.0)",
  "hotshot-types",
  "hotshot-utils",
  "jf-primitives",
