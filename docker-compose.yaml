@@ -13,9 +13,9 @@ services:
   da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
-      - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_DA_SERVER_PORT"
+      - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
-      - ESPRESSO_DA_SERVER_PORT
+      - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
     depends_on:
       orchestrator:
@@ -24,7 +24,7 @@ services:
   consensus-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
-      - "$ESPRESSO_WEB_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
+      - "$ESPRESSO_CONSENSUS_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
