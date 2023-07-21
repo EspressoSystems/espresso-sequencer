@@ -240,7 +240,20 @@ mod test {
         pub async fn reset_socket_connnection(&mut self) {
             let mut ws_url = self.l1_url.clone();
             ws_url.set_scheme("ws").unwrap();
-            self.socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
+            // Occasionally the connection fails, so we retry a few times.
+            for _ in 0..10 {
+                match Provider::<Ws>::connect(ws_url.clone()).await {
+                    Ok(provider) => {
+                        self.socket_provider = provider;
+                        return;
+                    }
+                    Err(_) => {
+                        tracing::warn!("Failed to connect to websocket, retrying");
+                        sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+            panic!("Failed to connect to websocket server: {:?}", ws_url);
         }
 
         pub async fn subscribe(&self) -> SubscriptionStream<'_, Ws, Log> {
