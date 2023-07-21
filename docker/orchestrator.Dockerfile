@@ -25,5 +25,7 @@ ENV ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME=30s
 # failure).
 ENV ESPRESSO_ORCHESTRATOR_NEXT_VIEW_TIMEOUT=5m
 
-
 CMD [ "/bin/orchestrator"]
+HEALTHCHECK --interval=1s --timeout=1s --retries=100 CMD curl --fail http://localhost:${ESPRESSO_ORCHESTRATOR_PORT}/healthcheck || exit 1
+
+EXPOSE ${ESPRESSO_ORCHESTRATOR_PORT}
