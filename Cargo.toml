@@ -14,3 +14,7 @@ members = [
 # https://github.com/EspressoSystems/jellyfish/commit/36dceb63aa5b452b9551c0139bc5512d17f780cf
 [patch."https://github.com/EspressoSystems/jellyfish"]
 jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", rev = "e6024a7" }
+
+# SSH URLs don't work on CI now that the repo is public.
+[patch."ssh://git@github.com/EspressoSystems/hotshot-primitives.git"]
+hotshot-primitives = { git = "https://github.com/EspressoSystems/hotshot-primitives.git", branch = "update_jellyfish_0.4.0_pre.0" }
