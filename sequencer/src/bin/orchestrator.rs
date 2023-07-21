@@ -188,6 +188,6 @@ async fn main() {
     config.config.propose_max_round_time = args.max_propose_time;
     config.config.min_transactions = args.min_transactions;
 
-    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
     run_orchestrator(config, ip, args.port).await.unwrap();
 }

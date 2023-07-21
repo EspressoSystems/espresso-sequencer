@@ -3,12 +3,13 @@ services:
   orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
     ports:
-      - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_WEB_SERVER_PORT"
+      - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_ORCHESTRATOR_PORT"
     environment:
-      - ESPRESSO_WEB_SERVER_PORT
+      - ESPRESSO_ORCHESTRATOR_PORT
       - ESPRESSO_ORCHESTRATOR_NUM_NODES=5
       - ESPRESSO_ORCHESTRATOR_START_DELAY=5s
       - RUST_LOG
+
   da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
@@ -17,7 +18,9 @@ services:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
+
   consensus-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
     ports:
@@ -26,7 +29,9 @@ services:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
+
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -44,7 +49,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -59,7 +65,8 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -74,7 +81,8 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -89,7 +97,8 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -104,7 +113,8 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - orchestrator-server
+      orchestrator:
+        condition: service_healthy
 
   demo-l1-network:
     image: ghcr.io/foundry-rs/foundry:latest
