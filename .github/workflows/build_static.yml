@@ -71,7 +71,8 @@ jobs:
         with:
           name: ${{ env.TARGET }}-services
           path: |
-            target/${{ env.TARGET }}/release/cdn-server
+            target/${{ env.TARGET }}/release/orchestrator
+            target/${{ env.TARGET }}/release/web-server
             target/${{ env.TARGET }}/release/sequencer
             target/${{ env.TARGET }}/release/example-l2
             target/${{ env.TARGET }}/release/cli
@@ -112,11 +113,17 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
 
-      - name: Generate cdn-server docker metadata
+      - name: Generate web-server docker metadata
         uses: docker/metadata-action@v4
-        id: cdn-server
+        id: web-server
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/cdn-server
+          images: ghcr.io/espressosystems/espresso-sequencer/web-server
+
+      - name: Generate orchestrator docker metadata
+        uses: docker/metadata-action@v4
+        id: orchestrator
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
 
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v4
@@ -134,15 +141,25 @@ jobs:
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
 
-      - name: Build and push cdn-server docker
+      - name: Build and push web-server docker
         uses: docker/build-push-action@v4
         with:
           context: ./
-          file: ./docker/cdn-server.Dockerfile
+          file: ./docker/web-server.Dockerfile
           platforms: linux/amd64,arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.cdn-server.outputs.tags }}
-          labels: ${{ steps.cdn-server.outputs.labels }}
+          tags: ${{ steps.web-server.outputs.tags }}
+          labels: ${{ steps.web-server.outputs.labels }}
+
+      - name: Build and push orchestrator docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/orchestrator.Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.orchestrator.outputs.tags }}
+          labels: ${{ steps.orchestrator.outputs.labels }}
 
       - name: Build and push example-rollup docker
         uses: docker/build-push-action@v4

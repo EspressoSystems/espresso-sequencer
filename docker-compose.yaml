@@ -1,14 +1,36 @@
 version: "1"
 services:
-  cdn-server:
-    image: ghcr.io/espressosystems/espresso-sequencer/cdn-server:main
+  orchestrator:
+    image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
     ports:
-      - "$ESPRESSO_CDN_SERVER_PORT:$ESPRESSO_CDN_SERVER_PORT"
+      - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_ORCHESTRATOR_PORT"
     environment:
-      - ESPRESSO_CDN_SERVER_PORT
-      - ESPRESSO_CDN_SERVER_NUM_NODES=5
-      - ESPRESSO_CDN_SERVER_START_DELAY=5s
+      - ESPRESSO_ORCHESTRATOR_PORT
+      - ESPRESSO_ORCHESTRATOR_NUM_NODES=5
+      - ESPRESSO_ORCHESTRATOR_START_DELAY=5s
       - RUST_LOG
+
+  da-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
+    ports:
+      - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
+    environment:
+      - ESPRESSO_WEB_SERVER_PORT
+      - RUST_LOG
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  consensus-server:
+    image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
+    ports:
+      - "$ESPRESSO_CONSENSUS_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
+    environment:
+      - ESPRESSO_WEB_SERVER_PORT
+      - RUST_LOG
+    depends_on:
+      orchestrator:
+        condition: service_healthy
 
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -17,7 +39,9 @@ services:
     # Run the API server (with options taken from the environment) and the optional submission API
     command: sequencer -- http -- query -- submit
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -25,7 +49,8 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RUST_LOG
     depends_on:
-      - cdn-server
+      orchestrator:
+        condition: service_healthy
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -33,12 +58,15 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      orchestrator:
+        condition: service_healthy
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -46,12 +74,15 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      orchestrator:
+        condition: service_healthy
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -59,12 +90,15 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      orchestrator:
+        condition: service_healthy
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -72,12 +106,15 @@ services:
     # Run the API server (with options taken from the environment)
     command: sequencer -- http -- query
     environment:
-      - ESPRESSO_SEQUENCER_CDN_URL
+      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - RUST_LOG
     depends_on:
-      - cdn-server
+      orchestrator:
+        condition: service_healthy
 
   demo-l1-network:
     image: ghcr.io/foundry-rs/foundry:latest

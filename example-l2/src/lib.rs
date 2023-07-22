@@ -17,7 +17,7 @@ pub mod utils;
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// Port where the Rollup API will be served
-    #[clap(short, long, env = "ESPRESSO_DEMO_ROLLUP_PORT", default_value = "8082")]
+    #[clap(short, long, env = "ESPRESSO_DEMO_ROLLUP_PORT", default_value = "8084")]
     pub api_port: u16,
 
     /// URL of a HotShot sequencer node.

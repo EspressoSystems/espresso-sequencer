@@ -5,7 +5,7 @@ use async_std::{
 };
 use clap::Parser;
 use futures::{future::BoxFuture, FutureExt};
-use hotshot::types::SystemContextHandle;
+use hotshot::types::HotShotHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
 use hotshot_query_service::{
     availability::{
@@ -59,7 +59,7 @@ impl SubmitOptions {
     ) -> io::Result<()>
     where
         S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + Borrow<SystemContextHandle<SeqTypes, I>>,
+        S::State: Send + Sync + Borrow<HotShotHandle<SeqTypes, I>>,
     {
         // Include API specification in binary
         let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
@@ -73,7 +73,7 @@ impl SubmitOptions {
         submit_api
             .post("submit", |req, state| {
                 async move {
-                    let state = Borrow::<SystemContextHandle<SeqTypes, I>>::borrow(state);
+                    let state = Borrow::<HotShotHandle<SeqTypes, I>>::borrow(state);
                     state
                         .submit_transaction(
                             req.body_auto::<Transaction>()
@@ -256,24 +256,22 @@ impl Options {
 type NodeIndex = u64;
 
 pub struct SequencerNode<I: NodeImplementation<SeqTypes>> {
-    pub handle: SystemContextHandle<SeqTypes, I>,
+    pub handle: HotShotHandle<SeqTypes, I>,
     pub update_task: JoinHandle<io::Result<()>>,
     pub node_index: NodeIndex,
 }
 
 pub type HandleFromMetrics<I> = Box<
-    dyn FnOnce(
-        Box<dyn Metrics>,
-    ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, I>, NodeIndex)>,
+    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
 >;
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
-    pub submit_state: SystemContextHandle<SeqTypes, I>,
+    pub submit_state: HotShotHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
 }
 
-impl<I: NodeImplementation<SeqTypes>> Borrow<SystemContextHandle<SeqTypes, I>> for AppState<I> {
-    fn borrow(&self) -> &SystemContextHandle<SeqTypes, I> {
+impl<I: NodeImplementation<SeqTypes>> Borrow<HotShotHandle<SeqTypes, I>> for AppState<I> {
+    fn borrow(&self) -> &HotShotHandle<SeqTypes, I> {
         &self.submit_state
     }
 }

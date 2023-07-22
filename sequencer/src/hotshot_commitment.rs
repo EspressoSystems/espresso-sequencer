@@ -92,7 +92,7 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
             panic!("hotshot commitment task will exit");
         }
     };
-    sequence::<Node<network::Centralized>>(from, max, hotshot, contract).await;
+    sequence::<Node<network::Web>>(from, max, hotshot, contract).await;
 }
 
 async fn sequence<I: NodeImplementation<SeqTypes>>(

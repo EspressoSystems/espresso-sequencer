@@ -181,7 +181,7 @@ mod test {
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
-    use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
+    use hotshot::{traits::NodeImplementation, types::HotShotHandle};
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
@@ -286,7 +286,7 @@ mod test {
     async fn start_query_service<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
         port: u16,
         storage_path: PathBuf,
-        node: SystemContextHandle<SeqTypes, I>,
+        node: HotShotHandle<SeqTypes, I>,
     ) {
         let init_handle = Box::new(move |_| (ready((node, 0)).boxed()));
         sequencer::api::Options::from(HttpOptions { port })
