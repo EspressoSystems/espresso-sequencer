@@ -117,7 +117,7 @@ mod test {
         setup_test();
 
         // Create the consensus network.
-        let network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::init(()).await;
         let hotshot = network.handle();
 
         // Start the web server.

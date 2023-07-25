@@ -142,7 +142,8 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
         // placeholders.
         let len = self.store.iter().len();
         let target_len = std::cmp::max(index, len);
-        for _ in len..target_len {
+        for i in len..target_len {
+            tracing::debug!("storing placeholders for position {}/{target_len}", len + i);
             if let Err(err) = self.store_resource(None) {
                 warn!("Failed to store placeholder: {}", err);
                 return Err(err);
@@ -159,6 +160,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
             // This is an object earlier in the chain that we are now receiving asynchronously.
             // Update the placeholder with the actual contents of the object.
             // TODO update persistent storage once AppendLog supports updates.
+            warn!("skipping out-of-order object; random inserts not yet supported");
 
             // Update the object in cache if necessary.
             if index >= self.cache_start {

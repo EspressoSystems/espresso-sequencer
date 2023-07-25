@@ -35,7 +35,8 @@ use hotshot_types::traits::{
     signature_key::EncodedPublicKey,
 };
 use snafu::Snafu;
-use std::collections::HashMap;
+use std::collections::hash_map::{Entry, HashMap};
+use std::hash::Hash;
 use std::iter::Skip;
 use std::path::Path;
 
@@ -173,22 +174,18 @@ where
                     .entry(leaf.proposer())
                     .or_insert_with(Vec::new)
                     .push(leaf.height());
-                index_by_block_hash.insert(leaf.block_hash(), leaf.height());
+                update_index_by_hash(&mut index_by_block_hash, leaf.block_hash(), leaf.height());
                 (leaf.hash(), leaf.height())
             })
             .collect();
-        let index_by_txn_hash = block_storage
-            .iter()
-            .flatten()
-            .flat_map(|block| {
-                let height = block.height();
-                block
-                    .block()
-                    .enumerate()
-                    .map(move |(txn_ix, txn)| (txn.commit(), (height, txn_ix)))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+
+        let mut index_by_txn_hash = HashMap::new();
+        for block in block_storage.iter().flatten() {
+            let height = block.height();
+            for (txn_ix, txn) in block.block().enumerate() {
+                update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
+            }
+        }
 
         Ok(QueryData {
             index_by_leaf_hash,
@@ -333,8 +330,11 @@ where
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
-        self.index_by_block_hash
-            .insert(leaf.block_hash(), leaf.height());
+        update_index_by_hash(
+            &mut self.index_by_block_hash,
+            leaf.block_hash(),
+            leaf.height(),
+        );
         self.index_by_proposer_id
             .entry(leaf.proposer())
             .or_insert_with(Vec::new)
@@ -346,10 +346,31 @@ where
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
         for (txn_ix, txn) in block.block().enumerate() {
-            self.index_by_txn_hash
-                .insert(txn.commit(), (block.height(), txn_ix));
+            update_index_by_hash(
+                &mut self.index_by_txn_hash,
+                txn.commit(),
+                (block.height(), txn_ix),
+            );
         }
         Ok(())
+    }
+}
+
+/// Update an index mapping hashes of objects to their positions in the ledger.
+///
+/// This function will insert the mapping from `hash` to `pos` into `index`, _unless_ there is
+/// already an entry for `hash` at an earlier position in the ledger.
+fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H, pos: P) {
+    match index.entry(hash) {
+        Entry::Occupied(mut e) => {
+            if &pos < e.get() {
+                // Overwrite the existing entry if the new object was sequenced first.
+                e.insert(pos);
+            }
+        }
+        Entry::Vacant(e) => {
+            e.insert(pos);
+        }
     }
 }
 
@@ -443,7 +464,10 @@ mod test {
     async fn validate<UserData>(qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>) {
         let qd = qd.read().await;
 
-        // Check the consistency of every block/leaf pair.
+        // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
+        // we've seen so we can detect duplicates.
+        let mut seen_blocks = HashMap::new();
+        let mut seen_transactions = HashMap::new();
         for (i, leaf) in qd.get_nth_leaf_iter(0).enumerate() {
             let Some(leaf) = leaf else { continue; };
             assert_eq!(leaf.height(), i as u64);
@@ -461,13 +485,20 @@ mod test {
                 block.size(),
                 bincode_opts().serialized_size(block.block()).unwrap()
             );
-            assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), i as u64);
+
+            // We should be able to look up the block by hash unless it is a duplicate. For
+            // duplicate blocks, this function returns the index of the first duplicate.
+            let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
+            assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), *ix);
 
             for (j, txn) in block.block().iter().enumerate() {
-                assert_eq!(
-                    qd.get_txn_index_by_hash(txn.commit()).unwrap(),
-                    (i as u64, j),
-                );
+                // We should be able to look up the transaction by hash unless it is a duplicate.
+                // For duplicate transactions, this function returns the index of the first
+                // duplicate.
+                let ix = seen_transactions
+                    .entry(txn.commit())
+                    .or_insert((i as u64, j));
+                assert_eq!(qd.get_txn_index_by_hash(txn.commit()).unwrap(), *ix);
             }
         }
 
@@ -495,7 +526,7 @@ mod test {
     async fn test_update() {
         setup_test();
 
-        let network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::init(()).await;
         let hotshot = network.handle();
         let qd = network.query_data();
 
@@ -511,10 +542,12 @@ mod test {
 
             // Wait for the transaction to be finalized.
             let (i, block) = loop {
+                tracing::info!("waiting for block {nonce}");
                 let (i, block) = blocks.next().await.unwrap();
                 if !block.is_empty() {
                     break (i, block);
                 }
+                tracing::info!("block {i} is empty");
             };
 
             assert_eq!(
@@ -536,7 +569,7 @@ mod test {
     async fn test_metrics() {
         setup_test();
 
-        let network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::init(()).await;
         let hotshot = network.handle();
         let qd = network.query_data();
 

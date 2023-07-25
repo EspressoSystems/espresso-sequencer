@@ -25,33 +25,28 @@ use hotshot::{
     types::Message,
 };
 use hotshot_types::{
-    data::{ValidatingLeaf, ValidatingProposal, ViewNumber},
-    message::ValidatingMessage,
+    certificate::ViewSyncCertificate,
+    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
+    message::SequencingMessage,
     traits::{
         block_contents::Transaction,
-        consensus_type::validating_consensus::ValidatingConsensus,
-        election::QuorumExchange,
-        node_implementation::{NodeType, ValidatingExchanges},
+        consensus_type::sequencing_consensus::SequencingConsensus,
+        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
+        node_implementation::{ChannelMaps, NodeType, SequencingExchanges},
         signature_key::ed25519::Ed25519Pub,
         state::{State, TestableBlock, TestableState},
     },
-    vote::QuorumVote,
+    vote::{DAVote, QuorumVote, ViewSyncVote},
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::Snafu;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Range;
 
 #[derive(Clone, Debug, Snafu)]
 pub enum MockError {
-    InvalidBlockParent {
-        last_block: Commitment<MockBlock>,
-        parent: Commitment<MockBlock>,
-    },
-    DoubleSpend {
-        nonce: u64,
-    },
+    DoubleSpend { nonce: u64 },
 }
 
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -83,7 +78,7 @@ pub struct MockState {
 impl Default for MockState {
     fn default() -> Self {
         Self {
-            last_block: MockBlock::genesis().parent,
+            last_block: MockBlock::genesis().commit(),
             spent: Default::default(),
         }
     }
@@ -104,13 +99,6 @@ impl Committable for MockState {
 
 impl MockState {
     fn validate(&self, block: &MockBlock) -> Result<(), MockError> {
-        ensure!(
-            block.parent == self.last_block,
-            InvalidBlockParentSnafu {
-                last_block: self.last_block,
-                parent: block.parent,
-            }
-        );
         if let Some(txn) = block.iter().find(|txn| self.spent.contains(&txn.nonce)) {
             return Err(DoubleSpendSnafu { nonce: txn.nonce }.build());
         }
@@ -123,12 +111,8 @@ impl State for MockState {
     type BlockType = MockBlock;
     type Time = ViewNumber;
 
-    fn next_block(prev_commitment: Option<Self>) -> Self::BlockType {
-        MockBlock::new(
-            prev_commitment
-                .expect("No previous state commitment")
-                .last_block,
-        )
+    fn next_block(_prev_commitment: Option<Self>) -> Self::BlockType {
+        MockBlock::default()
     }
 
     fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
@@ -173,10 +157,11 @@ impl TestableState for MockState {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Display, Index, IndexMut)]
+#[derive(
+    PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Default, Display, Index, IndexMut,
+)]
 #[display(fmt = "{:?}", self)]
 pub struct MockBlock {
-    pub parent: Commitment<MockBlock>,
     #[index]
     #[index_mut]
     pub transactions: Vec<MockTransaction>,
@@ -185,7 +170,6 @@ pub struct MockBlock {
 impl Committable for MockBlock {
     fn commit(&self) -> Commitment<Self> {
         RawCommitmentBuilder::new("MockBlock")
-            .field("parent", self.parent)
             .array_field(
                 "transactions",
                 &self
@@ -203,15 +187,8 @@ impl Committable for MockBlock {
 }
 
 impl MockBlock {
-    pub fn new(parent: Commitment<MockBlock>) -> Self {
-        Self {
-            parent,
-            transactions: Default::default(),
-        }
-    }
-
     pub fn genesis() -> Self {
-        Self::new(RawCommitmentBuilder::new("GenesisMockBlock").finalize())
+        Self::default()
     }
 
     pub fn len(&self) -> usize {
@@ -295,7 +272,7 @@ impl TestableBlock for MockBlock {
 pub struct MockTypes;
 
 impl NodeType for MockTypes {
-    type ConsensusType = ValidatingConsensus;
+    type ConsensusType = SequencingConsensus;
     type Time = ViewNumber;
     type BlockType = MockBlock;
     type SignatureKey = Ed25519Pub;
@@ -305,13 +282,29 @@ impl NodeType for MockTypes {
     type StateType = MockState;
 }
 
-pub type MockLeaf = ValidatingLeaf<MockTypes>;
+pub type MockLeaf = SequencingLeaf<MockTypes>;
 pub type MockMembership =
     GeneralStaticCommittee<MockTypes, MockLeaf, <MockTypes as NodeType>::SignatureKey>;
-pub type MockNetwork =
-    MemoryCommChannel<MockTypes, MockNodeImpl, MockProposal, MockVote, MockMembership>;
-pub type MockProposal = ValidatingProposal<MockTypes, MockLeaf>;
-pub type MockVote = QuorumVote<MockTypes, MockLeaf>;
+
+pub type MockQuorumProposal = QuorumProposal<MockTypes, MockLeaf>;
+pub type MockQuorumVote = QuorumVote<MockTypes, MockLeaf>;
+pub type MockQuorumNetwork =
+    MemoryCommChannel<MockTypes, MockNodeImpl, MockQuorumProposal, MockQuorumVote, MockMembership>;
+
+pub type MockViewSyncProposal = ViewSyncCertificate<MockTypes>;
+pub type MockViewSyncVote = ViewSyncVote<MockTypes>;
+pub type MockViewSyncNetwork = MemoryCommChannel<
+    MockTypes,
+    MockNodeImpl,
+    MockViewSyncProposal,
+    MockViewSyncVote,
+    MockMembership,
+>;
+
+pub type MockDAProposal = DAProposal<MockTypes>;
+pub type MockDAVote = DAVote<MockTypes>;
+pub type MockDANetwork =
+    MemoryCommChannel<MockTypes, MockNodeImpl, MockDAProposal, MockDAVote, MockMembership>;
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -321,17 +314,34 @@ pub struct MockNodeImpl;
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes, Self::Leaf>;
     type Leaf = MockLeaf;
-    type ConsensusMessage = ValidatingMessage<MockTypes, Self>;
-    type Exchanges = ValidatingExchanges<
+    type ConsensusMessage = SequencingMessage<MockTypes, Self>;
+    type Exchanges = SequencingExchanges<
         MockTypes,
         Message<MockTypes, Self>,
         QuorumExchange<
             MockTypes,
             Self::Leaf,
-            MockProposal,
+            MockQuorumProposal,
             MockMembership,
-            MockNetwork,
+            MockQuorumNetwork,
+            Message<MockTypes, Self>,
+        >,
+        CommitteeExchange<MockTypes, MockMembership, MockDANetwork, Message<MockTypes, Self>>,
+        ViewSyncExchange<
+            MockTypes,
+            MockViewSyncProposal,
+            MockMembership,
+            MockViewSyncNetwork,
             Message<MockTypes, Self>,
         >,
     >;
+
+    fn new_channel_maps(
+        start_view: ViewNumber,
+    ) -> (
+        ChannelMaps<MockTypes, Self>,
+        Option<ChannelMaps<MockTypes, Self>>,
+    ) {
+        (ChannelMaps::new(start_view), None)
+    }
 }
