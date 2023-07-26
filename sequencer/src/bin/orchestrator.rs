@@ -2,6 +2,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
 use hotshot::traits::election::static_committee::StaticElectionConfig;
+use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{SignatureKeyType, MAX_NMT_DEPTH};
 use snafu::Snafu;
@@ -51,7 +52,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME",
-        default_value = "30s",
+        default_value = "5s",
         value_parser = parse_duration
     )]
     max_propose_time: Duration,
@@ -81,7 +82,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_NEXT_VIEW_TIMEOUT",
-        default_value = "60s",
+        default_value = "30s",
         value_parser = parse_duration
     )]
     next_view_timeout: Duration,
@@ -176,6 +177,9 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
+    let (pub_keys, _): (Vec<_>, Vec<_>) = (0..args.num_nodes.into())
+        .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
+        .unzip();
     config.config.total_nodes = args.num_nodes;
     config.config.max_transactions = args
         .max_transactions
@@ -186,7 +190,9 @@ async fn main() {
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.propose_min_round_time = args.min_propose_time;
     config.config.propose_max_round_time = args.max_propose_time;
+    config.config.da_committee_size = args.num_nodes;
     config.config.min_transactions = args.min_transactions;
+    config.config.known_nodes = pub_keys;
 
     let ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
     run_orchestrator(config, ip, args.port).await.unwrap();
