@@ -33,8 +33,9 @@
 //! };
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
-//! use hotshot::HotShot;
-//! use hotshot_types::traits::consensus_type::validating_consensus::ValidatingConsensus;
+//! use futures::StreamExt;
+//! use hotshot::SystemContext;
+//! use hotshot_types::traits::consensus_type::sequencing_consensus::SequencingConsensus;
 //! use tide_disco::App;
 //!
 //! // Create or open query data.
@@ -42,7 +43,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = HotShot::<ValidatingConsensus, AppTypes, AppNodeImpl>::init(
+//! let mut hotshot = SystemContext::<SequencingConsensus, AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
@@ -67,7 +68,8 @@
 //! spawn(app.serve("0.0.0.0:8080"));
 //!
 //! // Update query data using HotShot events.
-//! while let Ok(event) = hotshot.next_event().await {
+//! let mut events = hotshot.get_event_stream(Default::default()).await.0;
+//! while let Some(event) = events.next().await {
 //!     // Re-lock the mutex each time we get a new event.
 //!     let mut query_data = query_data.write().await;
 //!
@@ -336,6 +338,7 @@
 //! ```
 //! # use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! # use atomic_store::{AtomicStore, AtomicStoreLoader};
+//! # use futures::StreamExt;
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::Error;
 //! # use hotshot_query_service::data_source::{UpdateDataSource, QueryData};
@@ -372,7 +375,8 @@
 //!     // Register API modules.
 //!
 //!     spawn(async move {
-//!         while let Ok(event) = hotshot.next_event().await {
+//! 		let mut events = hotshot.get_event_stream(Default::default()).await.0;
+//!         while let Some(event) = events.next().await {
 //!             let mut state = state.write().await;
 //!             state.hotshot_qs.update(&event).unwrap();
 //!             // Update other modules' states based on `event`.
