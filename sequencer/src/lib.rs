@@ -325,10 +325,10 @@ pub async fn init_node(
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let priv_key = priv_keys[config.node_index as usize].clone();
+    let priv_key = priv_keys[node_index as usize].clone();
     let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
 
-    // // Wait for other nodes to connect.
+    // Wait for other nodes to connect.
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
@@ -337,7 +337,7 @@ pub async fn init_node(
         &network_params.da_server_url.host().unwrap().to_string(),
         network_params.da_server_url.port().unwrap(),
         wait_time,
-        pub_keys[config.node_index as usize].clone(),
+        pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
     );
     let consensus_network = WebServerNetwork::create(
@@ -348,7 +348,7 @@ pub async fn init_node(
             .to_string(),
         network_params.consensus_server_url.port().unwrap(),
         wait_time,
-        pub_keys[config.node_index as usize].clone(),
+        pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
     );
     let da_channel = WebCommChannel::new(Arc::new(da_network));
@@ -358,7 +358,7 @@ pub async fn init_node(
         init_hotshot(
             pub_keys,
             genesis_block,
-            config.node_index as usize,
+            node_index as usize,
             priv_key,
             enc_key,
             da_channel,
@@ -366,7 +366,7 @@ pub async fn init_node(
             config.config,
         )
         .await,
-        config.node_index,
+        node_index.into(),
     )
 }
 
