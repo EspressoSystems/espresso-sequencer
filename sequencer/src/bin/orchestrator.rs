@@ -52,7 +52,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME",
-        default_value = "5s",
+        default_value = "30s",
         value_parser = parse_duration
     )]
     max_propose_time: Duration,
@@ -82,7 +82,7 @@ struct Args {
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_NEXT_VIEW_TIMEOUT",
-        default_value = "30s",
+        default_value = "60s",
         value_parser = parse_duration
     )]
     next_view_timeout: Duration,
