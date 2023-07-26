@@ -375,7 +375,7 @@
 //!     // Register API modules.
 //!
 //!     spawn(async move {
-//! 		let mut events = hotshot.get_event_stream(Default::default()).await.0;
+//!         let mut events = hotshot.get_event_stream(Default::default()).await.0;
 //!         while let Some(event) = events.next().await {
 //!             let mut state = state.write().await;
 //!             state.hotshot_qs.update(&event).unwrap();
