@@ -468,6 +468,7 @@ mod test {
             options = options.query(query);
         }
         let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
+        let mut events = handle.get_event_stream(Default::default()).await.0;
 
         client.connect(None).await;
 
@@ -480,6 +481,6 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut handle, txn).await.unwrap()
+        wait_for_decide_on_handle(&mut events, txn).await.unwrap()
     }
 }
