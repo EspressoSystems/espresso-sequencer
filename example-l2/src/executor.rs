@@ -257,7 +257,11 @@ mod test {
         }
 
         pub async fn subscribe(&self) -> SubscriptionStream<'_, Ws, Log> {
-            let state_update_filter = self.contract.state_update_filter().filter;
+            let state_update_filter = self
+                .contract
+                .state_update_filter()
+                .filter
+                .address(self.contract.address());
             self.socket_provider
                 .subscribe_logs(&state_update_filter)
                 .await
