@@ -1,10 +1,10 @@
 default:
     just --list
 
-rollup-demo:
+demo:
     docker compose up
 
-rollup-demo-down:
+down:
     docker compose down
 
 docker-cli *cmd:
@@ -13,7 +13,7 @@ docker-cli *cmd:
 cli *cmd:
     target/release/cli {{cmd}}
 
-pull-rollup-demo:
+pull:
     docker compose pull
 
 update-contract-bindings:

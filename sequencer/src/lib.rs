@@ -421,10 +421,10 @@ pub async fn init_node(
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let priv_key = priv_keys[config.node_index as usize].clone();
-    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
+    let priv_key = priv_keys[node_index as usize].clone();
+    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(node_index.into()));
 
-    // // Wait for other nodes to connect.
+    // Wait for other nodes to connect.
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
@@ -433,14 +433,14 @@ pub async fn init_node(
         init_hotshot(
             pub_keys.clone(),
             genesis_block,
-            config.node_index as usize,
+            node_index as usize,
             priv_key,
             enc_key,
-            CommChannels::web(network_params, pub_keys, config.node_index as usize),
+            CommChannels::web(network_params, pub_keys, node_index as usize),
             config.config,
         )
         .await,
-        config.node_index,
+        node_index.into(),
     )
 }
 
