@@ -303,7 +303,10 @@ pub async fn init_node(
     // Orchestrator client
     let validator_args = ValidatorArgs {
         host: network_params.orchestrator_url.host().unwrap().to_string(),
-        port: network_params.orchestrator_url.port().unwrap(),
+        port: network_params
+            .orchestrator_url
+            .port_or_known_default()
+            .unwrap(),
         public_ip: None,
     };
     let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
@@ -335,7 +338,10 @@ pub async fn init_node(
     let wait_time = Duration::from_millis(100);
     let da_network = WebServerNetwork::create(
         &network_params.da_server_url.host().unwrap().to_string(),
-        network_params.da_server_url.port().unwrap(),
+        network_params
+            .da_server_url
+            .port_or_known_default()
+            .unwrap(),
         wait_time,
         pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
@@ -346,7 +352,10 @@ pub async fn init_node(
             .host()
             .unwrap()
             .to_string(),
-        network_params.consensus_server_url.port().unwrap(),
+        network_params
+            .consensus_server_url
+            .port_or_known_default()
+            .unwrap(),
         wait_time,
         pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
