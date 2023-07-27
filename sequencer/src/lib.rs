@@ -564,7 +564,9 @@ mod test {
         vm::{TestVm, Vm},
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use hotshot_testing::test_builder::{TestBuilder, TestMetadata};
+    use hotshot_testing::{
+        overall_safety_task::OverallSafetyPropertiesDescription, test_builder::TestMetadata,
+    };
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Submit transaction to given handle, return clone of transaction
@@ -583,29 +585,29 @@ mod test {
     }
 
     // Run a hotshot test with our types
-    // TODO re-enable this after the HotShot test harness is fixed
-    #[ignore]
     #[async_std::test]
     async fn hotshot_test() {
-        let builder = TestBuilder {
-            metadata: TestMetadata {
-                total_nodes: 10,
-                start_nodes: 10,
-                num_succeeds: 10,
-                min_transactions: 1,
-                failure_threshold: 3,
-                da_committee_size: 4,
+        setup_logging();
+        setup_backtrace();
+
+        let metadata = TestMetadata {
+            // TODO reenable these settings once HotShot test harness is stable.
+            total_nodes: 10,
+            start_nodes: 10,
+            da_committee_size: 10,
+            min_transactions: 1,
+            overall_safety_properties: OverallSafetyPropertiesDescription {
+                num_successful_views: 10,
+                num_failed_views: 3,
                 ..Default::default()
             },
             ..Default::default()
         };
-
-        builder
-            .build::<SeqTypes, Node<network::Memory>>()
+        metadata
+            .gen_launcher::<SeqTypes, Node<network::Memory>>()
             .launch()
             .run_test()
-            .await
-            .unwrap();
+            .await;
     }
 
     #[async_std::test]
