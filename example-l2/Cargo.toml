@@ -34,6 +34,7 @@ toml = "0.5"
 tracing = "0.1"
 
 [dev-dependencies]
+derivative = "2.2"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
     "async-std-executor",
     "channel-async-std",

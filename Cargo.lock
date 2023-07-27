@@ -2763,6 +2763,7 @@ dependencies = [
  "clap",
  "commit",
  "contract-bindings",
+ "derivative",
  "derive_more",
  "ethers",
  "futures",
