@@ -8,6 +8,8 @@ services:
       - ESPRESSO_ORCHESTRATOR_PORT
       - ESPRESSO_ORCHESTRATOR_NUM_NODES=5
       - ESPRESSO_ORCHESTRATOR_START_DELAY=5s
+      - ESPRESSO_ORCHESTRATOR_NEXT_VIEW_TIMEOUT=10s
+      - ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME=5s
       - RUST_LOG
 
   da-server:
@@ -16,7 +18,7 @@ services:
       - "$ESPRESSO_DA_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
       - ESPRESSO_WEB_SERVER_PORT
-      - RUST_LOG
+      - RUST_LOG=error
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -27,7 +29,7 @@ services:
       - "$ESPRESSO_CONSENSUS_SERVER_PORT:$ESPRESSO_WEB_SERVER_PORT"
     environment:
       - ESPRESSO_WEB_SERVER_PORT
-      - RUST_LOG
+      - RUST_LOG=error
     depends_on:
       orchestrator:
         condition: service_healthy
