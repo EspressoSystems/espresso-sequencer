@@ -198,14 +198,20 @@ mod test {
             tracing::info!("waiting for transaction to be finalized");
             sleep(Duration::from_secs(1)).await;
         }
-        assert!(
-            client
-                .get::<u64>("latest_block_height")
-                .send()
-                .await
-                .unwrap()
-                > 0
-        );
+
+        // Check updated block height. There can be a brief delay between the mempool statistics
+        // being updated and the decide event being published. Retry this a few times until it
+        // succeeds.
+        while client
+            .get::<u64>("latest_block_height")
+            .send()
+            .await
+            .unwrap()
+            == 0
+        {
+            tracing::info!("waiting for block height to update");
+            sleep(Duration::from_secs(1)).await;
+        }
         assert!(client.get::<f64>("success_rate").send().await.unwrap() > 0.0);
 
         network.shut_down().await;

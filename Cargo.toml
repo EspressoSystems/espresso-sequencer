@@ -22,7 +22,7 @@ default = []
 testing = ["rand", "tempdir", "jf-primitives"]
 
 [dependencies]
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.2.0", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.3.0", features = [
     "async-std-executor",
     "logging-utils",
 ] }
