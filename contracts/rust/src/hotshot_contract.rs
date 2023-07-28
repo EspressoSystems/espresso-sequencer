@@ -48,6 +48,11 @@ mod test {
         let (event, meta) = &hotshot
             .new_blocks_filter()
             .from_block(0)
+            // Ethers does not set the contract address on filters created via contract bindings.
+            // This seems like a bug and I have reported it:
+            // https://github.com/gakonst/ethers-rs/issues/2528. In the mean time we can work around
+            // by setting the address manually.
+            .address(hotshot.address().into())
             .query_with_meta()
             .await
             .unwrap()[0];
