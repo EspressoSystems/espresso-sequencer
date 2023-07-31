@@ -1,10 +1,10 @@
 default:
     just --list
 
-rollup-demo:
+demo:
     docker compose up
 
-rollup-demo-down:
+down:
     docker compose down
 
 docker-cli *cmd:
@@ -13,7 +13,7 @@ docker-cli *cmd:
 cli *cmd:
     target/release/cli {{cmd}}
 
-pull-rollup-demo:
+pull:
     docker compose pull
 
 update-contract-bindings:
@@ -43,7 +43,7 @@ dev-sequencer:
     --orchestrator-url http://localhost:8080 \
     --da-server-url http://localhost:8081 \
     --consensus-server-url http://localhost:8082 \
-    -- api --port 8083 --storage-path storage
+    -- http --port 8083  -- query --storage-path storage
 
 dev-demo:
      target/release/example-l2 --sequencer-url http://localhost:8083 \

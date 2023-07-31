@@ -53,7 +53,7 @@ target/release/sequencer \
     --orchestrator-url http://localhost:$PORT \
     --da-server-url http://localhost:$DA_PORT \
     --consensus-server-url http://localhost:$CONSENSUS_PORT \
-    -- api --port 8083 --storage-path storage
+    -- http --port 8083 -- query --storage-path storage -- submit
 ```
 A useful Bash snippet for running `$N` nodes simultaneously in the background of your shell is:
 
