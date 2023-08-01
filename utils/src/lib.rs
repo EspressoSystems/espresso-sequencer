@@ -242,19 +242,46 @@ pub async fn contract_send<T: Detokenize>(
             return None;
         }
     };
-    let receipt = match pending.await {
+
+    let hash = pending.tx_hash();
+    let provider = pending.provider();
+    tracing::debug!("submitted contract call {}", hash);
+
+    // Wait for the transaction to get mined.
+    loop {
+        match provider.get_transaction(hash).await {
+            Err(err) => {
+                tracing::error!("contract call {hash}: error getting transaction status: {err}");
+                return None;
+            }
+            Ok(None) => {
+                tracing::error!("contract call {hash} missing from mempool, failing transaction");
+                return None;
+            }
+            Ok(Some(tx)) if tx.block_number.is_none() => {
+                let interval = provider.get_interval();
+                tracing::debug!(
+                    "contract call {hash} still pending, will try again in {interval:?}"
+                );
+                sleep(interval).await;
+            }
+            Ok(Some(_)) => break,
+        }
+    }
+
+    let receipt = match provider.get_transaction_receipt(hash).await {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
-            tracing::error!("transaction not mined");
+            tracing::error!("contract call {hash}: no receipt");
             return None;
         }
         Err(err) => {
-            tracing::error!("error waiting for transaction to be mined: {}", err);
+            tracing::error!("contract call {hash}: error getting transaction receipt: {err}");
             return None;
         }
     };
     if receipt.status != Some(1.into()) {
-        tracing::error!("transaction reverted");
+        tracing::error!("contract call {hash}: transaction reverted");
         return None;
     }
 
