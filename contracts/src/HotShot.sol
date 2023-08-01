@@ -18,41 +18,55 @@ contract HotShot {
 
     event NewBlocks(uint256 firstBlockNumber, uint256 numBlocks);
 
-    error WrongNumberOfQCs(uint256 numBlocks, uint256 numQCs);
     error TooManyBlocks(uint256 numBlocks);
     error InvalidQC(uint256 blockNumber);
+    error IncorrectBlockNumber(uint256 blockNumber, uint256 expectedBlockNumber);
     error NoKeySelected();
     error NotEnoughStake();
 
-    function _verifyQC(uint256, /*blockNumber*/ uint256, /*commitment*/ bytes calldata /*qc*/ )
-        private
-        pure
-        returns (bool)
-    {
+    struct QC {
+        uint256 height;
+        uint256 blockCommitment;
+        // QC validation is currently mocked out, so the rest of the QC data isn't used, and its
+        // format is not finalized. For realism of gas usage, we want something of the correct size.
+        // The plan for on-chain QC validation is for the contract to only take a few 32-byte words
+        // of the QC, with the rest replaced by a short commitment, since the contract doesn't need
+        // all the fields of the QC and storing the whole QC in calldata can be expensive (or even
+        // run into RPC size limits).
+        uint256 pad1;
+        uint256 pad2;
+    }
+
+    function _verifyQC(QC calldata /* qc */ ) private pure returns (bool) {
         // TODO Check the QC
         // TODO Check the block number
         return true;
     }
 
-    function newBlocks(uint256[] calldata newCommitments, bytes[] calldata qcs) external {
-        if (newCommitments.length != qcs.length) {
-            revert WrongNumberOfQCs(newCommitments.length, qcs.length);
-        }
-        if (newCommitments.length > MAX_BLOCKS) {
-            revert TooManyBlocks(newCommitments.length);
+    function newBlocks(QC[] calldata qcs) external {
+        if (qcs.length > MAX_BLOCKS) {
+            revert TooManyBlocks(qcs.length);
         }
 
         uint256 firstBlockNumber = blockHeight;
-        for (uint256 i = 0; i < newCommitments.length; ++i) {
-            if (!_verifyQC(blockHeight, newCommitments[i], qcs[i])) {
+        for (uint256 i = 0; i < qcs.length; ++i) {
+            if (qcs[i].height != blockHeight) {
+                // Fail quickly if this QC is for the wrong block. In particular, this saves the
+                // caller some gas in the race condition where two clients try to sequence the same
+                // block at the same time, and the first one wins.
+                revert IncorrectBlockNumber(qcs[i].height, blockHeight);
+            }
+
+            // Check that QC is signed and well-formed.
+            if (!_verifyQC(qcs[i])) {
                 revert InvalidQC(blockHeight);
             }
 
-            commitments[blockHeight] = newCommitments[i];
+            commitments[blockHeight] = qcs[i].blockCommitment;
             blockHeight += 1;
         }
 
-        emit NewBlocks(firstBlockNumber, newCommitments.length);
+        emit NewBlocks(firstBlockNumber, qcs.length);
     }
 
     /// @dev Stake table related functions

@@ -1,6 +1,6 @@
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
-use contract_bindings::HotShot;
+use contract_bindings::{hot_shot::Qc, HotShot};
 use ethers::prelude::*;
 use futures::{future::FutureExt, stream::StreamExt};
 use hotshot_query_service::{availability::LeafQueryData, Block, Deltas, Resolvable};
@@ -182,22 +182,15 @@ fn build_sequence_batches_txn<I: NodeImplementation<SeqTypes>, M: ethers::prelud
 where
     Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
 {
-    let (block_comms, qcs) = leaves
+    let qcs = leaves
         .into_iter()
-        .map(|leaf| {
-            (
-                commitment_to_u256(leaf.block_hash()),
-                // The QC validation part of the contract is currently mocked out, so it doesn't
-                // matter what we send here. For realism of gas usage, we want to send something of
-                // the correct size. The plan for on-chain QC validation is for the contract to only
-                // take a few 32-byte words of the QC, with the rest replaced by a short commitment,
-                // since the contract doesn't need all the fields of the QC and storing the whole
-                // QC in calldata can be expensive (or even run into RPC size limits).
-                [0; 32 * 3].into(),
-            )
+        .map(|leaf| Qc {
+            height: leaf.height().into(),
+            block_commitment: commitment_to_u256(leaf.block_hash()),
+            ..Default::default()
         })
-        .unzip();
-    contract.new_blocks(block_comms, qcs)
+        .collect();
+    contract.new_blocks(qcs)
 }
 
 pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> {
@@ -250,13 +243,14 @@ mod test {
         // Create a few test batches.
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_u64();
         let mut leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>> = vec![];
-        for _ in 0..num_batches {
+        for i in 0..num_batches {
             let txn = Transaction::new(1.into(), vec![]);
             let block = Block::new().add_transaction_raw(&txn).unwrap();
 
             // Fake a leaf that sequences this block.
             let mut qc = QuorumCertificate::genesis();
-            let leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
+            let mut leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
+            leaf.height = i;
             qc.leaf_commitment = leaf.commit();
             leaves.push(LeafQueryData::new(leaf, qc).unwrap());
         }
@@ -299,10 +293,16 @@ mod test {
             .input;
         let call = NewBlocksCall::decode(calldata).unwrap();
         assert_eq!(
-            call.new_commitments,
+            call.qcs,
             leaves
                 .iter()
-                .map(|leaf| U256::from_little_endian(&<[u8; 32]>::from(leaf.block_hash())))
+                .map(|leaf| Qc {
+                    height: leaf.height().into(),
+                    block_commitment: U256::from_little_endian(&<[u8; 32]>::from(
+                        leaf.block_hash()
+                    )),
+                    ..Default::default()
+                })
                 .collect::<Vec<_>>()
         );
     }
