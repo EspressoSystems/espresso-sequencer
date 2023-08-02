@@ -1,3 +1,6 @@
+//! Implementation for BitVectorQC that uses BLS signature + Bit vector.
+//! See more details in HotShot paper.
+
 use ark_std::{
     fmt::Debug,
     format,
@@ -25,10 +28,14 @@ pub struct BitVectorQC<A: AggregateableSignatureSchemes, ST: StakeTableScheme>(
     PhantomData<ST>,
 );
 
+/// Public parameters of [`BitVectorQC`]
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct QCParams<A: AggregateableSignatureSchemes, ST: StakeTableScheme> {
+    /// the stake table (snapshot) this QC is verified against
     pub stake_table: ST,
+    /// threshold for the accumulated "weight" of votes to form a QC
     pub threshold: U256,
+    /// public parameter for the aggregated signature scheme
     pub agg_sig_pp: A::PublicParameter,
 }
 
@@ -193,7 +200,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hotshot_types::traits::stake_table::{StakeTable, StakeTableScheme};
+    use hotshot_stake_table::mt_based::StakeTable;
+    use hotshot_types::traits::stake_table::StakeTableScheme;
     use jf_primitives::signatures::bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair};
     use jf_primitives::signatures::SignatureScheme;
 
