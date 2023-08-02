@@ -12,7 +12,7 @@ jobs:
         RUST_MIN_STACK: '3145728'
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: arduino/setup-protoc@v2
 
       - uses: dtolnay/rust-toolchain@stable
 
