@@ -15,6 +15,3 @@ members = [
 jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
 jf-relation = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
 jf-utils = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
-
-[patch."https://github.com/EspressoSystems/hotshot-query-service"]
-hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", branch = "update/hotshot" }
