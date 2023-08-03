@@ -155,7 +155,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         self.last_epoch_start.get_key_by_stake(pos)
     }
 
-    fn iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
+    fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
         let root = Self::get_root(self, version)?;
         Ok(internal::IntoIter::new(root))
     }

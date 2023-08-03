@@ -80,7 +80,7 @@ where
         }
         let total_weight: U256 = qc_pp
             .stake_table
-            .iter(SnapshotVersion::LastEpochStart)?
+            .try_iter(SnapshotVersion::LastEpochStart)?
             .zip(signers.iter())
             .fold(
                 U256::zero(),
@@ -101,7 +101,7 @@ where
         let mut ver_keys = vec![];
         for (entry, b) in qc_pp
             .stake_table
-            .iter(SnapshotVersion::LastEpochStart)?
+            .try_iter(SnapshotVersion::LastEpochStart)?
             .zip(signers.iter())
         {
             if *b {
@@ -136,7 +136,7 @@ where
         }
         let total_weight: U256 = qc_vp
             .stake_table
-            .iter(SnapshotVersion::LastEpochStart)?
+            .try_iter(SnapshotVersion::LastEpochStart)?
             .zip(signers.iter())
             .fold(
                 U256::zero(),
@@ -157,7 +157,7 @@ where
         let mut ver_keys = vec![];
         for (entry, b) in qc_vp
             .stake_table
-            .iter(SnapshotVersion::LastEpochStart)?
+            .try_iter(SnapshotVersion::LastEpochStart)?
             .zip(signers.iter())
         {
             if *b {
@@ -188,7 +188,7 @@ where
 
         let signer_pks: Vec<_> = qc_vp
             .stake_table
-            .iter(SnapshotVersion::LastEpochStart)?
+            .try_iter(SnapshotVersion::LastEpochStart)?
             .zip(signers.iter())
             .filter(|(_, b)| **b)
             .map(|(pk, _)| pk.0)
