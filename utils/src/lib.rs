@@ -247,26 +247,8 @@ pub async fn contract_send<T: Detokenize>(
     let provider = pending.provider();
     tracing::debug!("submitted contract call {}", hash);
 
-    // Wait for the transaction to get mined.
-    loop {
-        match provider.get_transaction(hash).await {
-            Err(err) => {
-                tracing::error!("contract call {hash}: error getting transaction status: {err}");
-                return None;
-            }
-            Ok(None) => {
-                tracing::error!("contract call {hash} missing from mempool, failing transaction");
-                return None;
-            }
-            Ok(Some(tx)) if tx.block_number.is_none() => {
-                let interval = provider.get_interval();
-                tracing::debug!(
-                    "contract call {hash} still pending, will try again in {interval:?}"
-                );
-                sleep(interval).await;
-            }
-            Ok(Some(_)) => break,
-        }
+    if !wait_for_transaction_to_be_mined(&provider, hash).await {
+        return None;
     }
 
     let receipt = match provider.get_transaction_receipt(hash).await {
@@ -291,6 +273,38 @@ pub async fn contract_send<T: Detokenize>(
         .block_number
         .expect("transaction mined but block number not set");
     Some((receipt, block_number.as_u64()))
+}
+
+async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256) -> bool {
+    let interval = provider.get_interval();
+    let retries = 10;
+    let mut i = 0;
+    loop {
+        match provider.get_transaction(hash).await {
+            Err(err) => {
+                tracing::error!("contract call {hash} (retry {i}/{retries}): error getting transaction status: {err}");
+            }
+            Ok(None) => {
+                tracing::error!("contract call {hash} (retry {i}/{retries}): missing from mempool");
+            }
+            Ok(Some(tx)) if tx.block_number.is_none() => {
+                // The transaction is in the mempool, but hasn't been mined yet. In this case we can
+                // loop indefinitely, we don't need to count this as a retry, because as long as the
+                // transaction is in the mempool, it will eventually be mined (when we hit the case
+                // below) or dropped (when we hit the case above and increment `retries`).
+                tracing::info!("contract call {hash} (retry {i}/{retries}): pending");
+                sleep(interval).await;
+                continue;
+            }
+            Ok(Some(_)) => return true,
+        }
+
+        i += 1;
+        if i >= retries {
+            return false;
+        }
+        sleep(interval).await;
+    }
 }
 
 #[cfg(test)]

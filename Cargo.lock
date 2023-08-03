@@ -6800,6 +6800,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 name = "sequencer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ark-bls12-381 0.3.0",
  "ark-serialize 0.4.2",
  "async-compatibility-layer",
