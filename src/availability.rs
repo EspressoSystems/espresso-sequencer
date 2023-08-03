@@ -364,6 +364,7 @@ mod test {
     use futures::FutureExt;
     use hotshot::types::{ed25519::Ed25519Pub, SignatureKey};
     use portpicker::pick_unused_port;
+    use std::collections::HashSet;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
@@ -410,7 +411,10 @@ mod test {
     }
 
     async fn validate(client: &Client<Error>, height: u64) {
-        // Check the consistency of every block/leaf pair.
+        // Check the consistency of every block/leaf pair. Keep track of blocks and transactions we
+        // have seen so we can detect duplicates.
+        let mut seen_blocks = HashSet::new();
+        let mut seen_txns = HashSet::new();
         for i in 0..height {
             // Check that looking up the leaf various ways returns the correct leaf.
             let leaf: LeafQueryData<MockTypes, MockNodeImpl> =
@@ -430,14 +434,19 @@ mod test {
                 client.get(&format!("block/{}", i)).send().await.unwrap();
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i);
-            assert_eq!(
-                block,
-                client
-                    .get(&format!("block/hash/{}", block.hash()))
-                    .send()
-                    .await
-                    .unwrap()
-            );
+            // We should be able to look up the block by hash as long as it's not a duplicate. For
+            // duplicate blocks, this endpoint only returns the first one.
+            if !seen_blocks.contains(&block.hash()) {
+                assert_eq!(
+                    block,
+                    client
+                        .get(&format!("block/hash/{}", block.hash()))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+                seen_blocks.insert(block.hash());
+            }
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
             let proposals: Vec<LeafQueryData<MockTypes, MockNodeImpl>> = client
@@ -495,14 +504,19 @@ mod test {
                 assert_eq!(txn.block_hash(), block.hash());
                 assert_eq!(txn.hash(), txn_from_block.commit());
                 assert_eq!(txn.transaction(), txn_from_block);
-                assert_eq!(
-                    txn,
-                    client
-                        .get(&format!("transaction/hash/{}", txn_from_block.commit()))
-                        .send()
-                        .await
-                        .unwrap()
-                );
+                // We should be able to look up the transaction by hash as long as it's not a
+                // duplicate. For duplicate transactions, this endpoint only returns the first one.
+                if !seen_txns.contains(&txn.hash()) {
+                    assert_eq!(
+                        txn,
+                        client
+                            .get(&format!("transaction/hash/{}", txn.hash()))
+                            .send()
+                            .await
+                            .unwrap()
+                    );
+                    seen_txns.insert(txn.hash());
+                }
             }
         }
     }
@@ -512,7 +526,7 @@ mod test {
         setup_test();
 
         // Create the consensus network.
-        let network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::init(()).await;
         let hotshot = network.handle();
         network.start().await;
 

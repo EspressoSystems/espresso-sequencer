@@ -16,14 +16,14 @@ use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
 };
-use futures::future::join_all;
+use futures::{future::join_all, stream::StreamExt};
 use hotshot::{
     traits::{
         implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
         NodeImplementation,
     },
-    types::{HotShotHandle, SignatureKey},
-    HotShot, HotShotInitializer,
+    types::{SignatureKey, SystemContextHandle},
+    HotShotInitializer, SystemContext,
 };
 use hotshot_types::{
     traits::{
@@ -40,7 +40,7 @@ use tempdir::TempDir;
 
 struct MockNode<UserData> {
     query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
-    hotshot: HotShotHandle<MockTypes, MockNodeImpl>,
+    hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
 }
 
 pub struct MockNetwork<UserData> {
@@ -76,7 +76,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             num_bootstrap: 0,
             execution_type: ExecutionType::Continuous,
             election_config: None,
-            da_committee_size: NonZeroUsize::new(num_nodes).unwrap(),
+            da_committee_size: num_nodes,
         };
         let nodes = join_all(
             priv_keys
@@ -92,12 +92,15 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
 
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();
-                        let channel = MemoryCommChannel::new(Arc::new(MemoryNetwork::new(
+                        let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
                             query_data.metrics(),
-                            master_map,
+                            master_map.clone(),
                             None,
-                        )));
+                        ));
+                        let consensus_channel = MemoryCommChannel::new(network.clone());
+                        let da_channel = MemoryCommChannel::new(network.clone());
+                        let view_sync_channel = MemoryCommChannel::new(network.clone());
 
                         let enc_key = jf_primitives::aead::KeyPair::generate(
                             &mut StdRng::seed_from_u64(0u64),
@@ -106,14 +109,14 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                         let exchanges =
                             <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
                                 pub_keys.clone(),
-                                (election_config.clone(), ()),
-                                (channel, ()),
+                                (election_config.clone(), election_config.clone()),
+                                (consensus_channel, view_sync_channel, da_channel),
                                 pub_keys[node_id],
                                 priv_key.clone(),
                                 enc_key.clone(),
                             );
 
-                        let hotshot = HotShot::init(
+                        let hotshot = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
@@ -139,7 +142,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
 }
 
 impl<UserData> MockNetwork<UserData> {
-    pub fn handle(&self) -> HotShotHandle<MockTypes, MockNodeImpl> {
+    pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
 
@@ -152,20 +155,20 @@ impl<UserData> MockNetwork<UserData> {
     }
 
     async fn shut_down_impl(&mut self) {
-        for node in std::mem::take(&mut self.nodes) {
+        for mut node in std::mem::take(&mut self.nodes) {
             node.hotshot.shut_down().await;
         }
     }
 }
 
 impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
-    pub async fn start(&self) {
+    pub async fn start(&mut self) {
         // Spawn the update tasks.
-        for node in &self.nodes {
-            let mut hotshot = node.hotshot.clone();
+        for node in &mut self.nodes {
             let qd = node.query_data.clone();
+            let mut events = node.hotshot.get_event_stream(Default::default()).await.0;
             spawn(async move {
-                while let Ok(event) = hotshot.next_event().await {
+                while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut qd = qd.write().await;
                     qd.update(&event).unwrap();
@@ -174,7 +177,12 @@ impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
             });
         }
 
-        join_all(self.nodes.iter().map(|node| node.hotshot.start())).await;
+        join_all(
+            self.nodes
+                .iter()
+                .map(|node| node.hotshot.hotshot.start_consensus()),
+        )
+        .await;
     }
 }
 

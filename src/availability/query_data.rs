@@ -50,7 +50,7 @@ pub trait QueryableBlock: traits::Block {
     /// internally however they want (e.g. by position or by hash). Meanwhile, many high-level
     /// functions for querying transactions by different means can be implemented by returning a
     /// `TransactionIndex` and then finally using it to retrieve the desired transaction.
-    type TransactionIndex: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned;
+    type TransactionIndex: Clone + Debug + PartialEq + Eq + Ord + Serialize + DeserializeOwned;
 
     /// Enumerate the transactions in this block.
     type Iter<'a>: Iterator<Item = Self::TransactionIndex>
@@ -194,7 +194,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
     }
 
     pub fn height(&self) -> u64 {
-        self.leaf.get_height()
+        leaf_height(&self.leaf)
     }
 
     pub fn timestamp(&self) -> Timestamp {
@@ -287,7 +287,7 @@ where
         );
         Ok(Self {
             hash: block.commit(),
-            height: leaf.get_height(),
+            height: leaf_height(&leaf),
             timestamp: leaf.get_timestamp(),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
             block,
@@ -392,4 +392,11 @@ where
 
 fn parse_timestamp(ns: i128) -> Timestamp {
     Timestamp::from_unix_timestamp_nanos(ns).expect("HotShot timestamp out of range")
+}
+
+fn leaf_height<L: LeafType>(leaf: &L) -> u64 {
+    // HotShot generates a genesis leaf with height 0, but we don't see it in the event stream.
+    // Therefore, the first leaf we see has height 1. But to clients, the first leaf should have
+    // height 0, since there is nothing before it, so we adjust the height here.
+    leaf.get_height() - 1
 }
