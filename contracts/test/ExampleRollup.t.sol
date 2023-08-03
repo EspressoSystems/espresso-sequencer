@@ -18,15 +18,18 @@ contract ExampleRollupTest is Test {
 
     function testStateUpdate() public {
         // Add a commitment to hotshot
-        uint256[] memory comms = new uint[](1);
-        bytes[] memory qcs = new bytes[](1);
-        comms[0] = 576467464341;
-        qcs[0] = "0x3333";
-        hotshot.newBlocks(comms, qcs);
+        HotShot.QC[] memory qcs = new HotShot.QC[](1);
+        qcs[0].blockCommitment = 576467464341;
+        qcs[0].height = 0;
+        hotshot.newBlocks(qcs);
 
         // Send a state update to the rollup
-        ExampleRollup.BatchProof memory proof =
-            ExampleRollup.BatchProof({firstBlock: comms[0], lastBlock: comms[0], oldState: 0, newState: 523123});
+        ExampleRollup.BatchProof memory proof = ExampleRollup.BatchProof({
+            firstBlock: qcs[0].blockCommitment,
+            lastBlock: qcs[0].blockCommitment,
+            oldState: 0,
+            newState: 523123
+        });
         vm.expectEmit(false, false, false, true, address(rollup));
         emit StateUpdate(1);
         rollup.verifyBlocks(1, proof.newState, proof);
@@ -37,19 +40,23 @@ contract ExampleRollupTest is Test {
 
     function testInvalidProof() public {
         // Add a commitment to hotshot
-        uint256[] memory comms = new uint[](1);
-        bytes[] memory qcs = new bytes[](1);
-        comms[0] = 576467464341;
-        qcs[0] = "0x3333";
-        hotshot.newBlocks(comms, qcs);
+        HotShot.QC[] memory qcs = new HotShot.QC[](1);
+        qcs[0].blockCommitment = 576467464341;
+        qcs[0].height = 0;
+        hotshot.newBlocks(qcs);
         uint256 invalidState = 523124;
 
         // Send an invalid state update to the rollup
         ExampleRollup.BatchProof memory proof =
-            ExampleRollup.BatchProof({firstBlock: comms[0], lastBlock: 0, oldState: 0, newState: 523123});
+            ExampleRollup.BatchProof({firstBlock: qcs[0].blockCommitment, lastBlock: 0, oldState: 0, newState: 523123});
         vm.expectRevert(
             abi.encodeWithSelector(
-                ExampleRollup.InvalidProof.selector, comms[0], comms[0], proof.oldState, invalidState, proof
+                ExampleRollup.InvalidProof.selector,
+                qcs[0].blockCommitment,
+                qcs[0].blockCommitment,
+                proof.oldState,
+                invalidState,
+                proof
             )
         );
         rollup.verifyBlocks(1, invalidState, proof);

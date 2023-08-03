@@ -4,7 +4,7 @@ mod test {
     use crate::helpers::{MyG1Point, MyG2Point};
     use ark_ec::CurveGroup;
     use contract_bindings::bls_test::G2Point;
-    use contract_bindings::hot_shot::NewBlocksCall;
+    use contract_bindings::hot_shot::{NewBlocksCall, Qc};
     use contract_bindings::{HotShot, TestL1System};
     use ethers::middleware::SignerMiddleware;
     use ethers::signers::Wallet;
@@ -31,9 +31,14 @@ mod test {
 
         let block_num = U256::from(0);
         let commitment = U256::from(1234);
+        let qcs = vec![Qc {
+            height: block_num,
+            block_commitment: commitment,
+            ..Default::default()
+        }];
 
         hotshot
-            .new_blocks(vec![commitment], vec![vec![1, 2, 3].into()])
+            .new_blocks(qcs.clone())
             .send()
             .await
             .unwrap()
@@ -48,6 +53,11 @@ mod test {
         let (event, meta) = &hotshot
             .new_blocks_filter()
             .from_block(0)
+            // Ethers does not set the contract address on filters created via contract bindings.
+            // This seems like a bug and I have reported it:
+            // https://github.com/gakonst/ethers-rs/issues/2528. In the mean time we can work around
+            // by setting the address manually.
+            .address(hotshot.address().into())
             .query_with_meta()
             .await
             .unwrap()[0];
@@ -62,7 +72,7 @@ mod test {
             .unwrap()
             .unwrap();
         let call = NewBlocksCall::decode(&tx.input).unwrap();
-        assert_eq!(call.new_commitments, vec![commitment]);
+        assert_eq!(call.qcs, qcs);
     }
 
     #[async_std::test]

@@ -303,11 +303,17 @@ pub async fn init_node(
     // Orchestrator client
     let validator_args = ValidatorArgs {
         host: network_params.orchestrator_url.host().unwrap().to_string(),
-        port: network_params.orchestrator_url.port().unwrap(),
+        port: network_params
+            .orchestrator_url
+            .port_or_known_default()
+            .unwrap(),
         public_ip: None,
     };
     let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
+
+    // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
     let node_index: u16 = orchestrator_client
         .identify_with_orchestrator(public_ip.to_string())
         .await;
@@ -322,19 +328,22 @@ pub async fn init_node(
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let priv_key = priv_keys[config.node_index as usize].clone();
+    let priv_key = priv_keys[node_index as usize].clone();
     let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
 
-    // // Wait for other nodes to connect.
+    // Wait for other nodes to connect.
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
-    let wait_time = Duration::from_secs(1);
+    let wait_time = Duration::from_millis(100);
     let da_network = WebServerNetwork::create(
         &network_params.da_server_url.host().unwrap().to_string(),
-        network_params.da_server_url.port().unwrap(),
+        network_params
+            .da_server_url
+            .port_or_known_default()
+            .unwrap(),
         wait_time,
-        pub_keys[config.node_index as usize].clone(),
+        pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
     );
     let consensus_network = WebServerNetwork::create(
@@ -343,9 +352,12 @@ pub async fn init_node(
             .host()
             .unwrap()
             .to_string(),
-        network_params.consensus_server_url.port().unwrap(),
+        network_params
+            .consensus_server_url
+            .port_or_known_default()
+            .unwrap(),
         wait_time,
-        pub_keys[config.node_index as usize].clone(),
+        pub_keys[node_index as usize].clone(),
         pub_keys.clone(),
     );
     let da_channel = WebCommChannel::new(Arc::new(da_network));
@@ -355,7 +367,7 @@ pub async fn init_node(
         init_hotshot(
             pub_keys,
             genesis_block,
-            config.node_index as usize,
+            node_index as usize,
             priv_key,
             enc_key,
             da_channel,
@@ -363,7 +375,7 @@ pub async fn init_node(
             config.config,
         )
         .await,
-        config.node_index,
+        node_index.into(),
     )
 }
 

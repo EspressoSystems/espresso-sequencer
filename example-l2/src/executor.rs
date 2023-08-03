@@ -63,7 +63,13 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
 
     let rollup_contract = ExampleRollup::new(*rollup_address, l1.clone());
     let hotshot_contract = HotShot::new(*hotshot_address, Arc::new(socket_provider));
-    let filter = hotshot_contract.new_blocks_filter().from_block(0);
+    let filter = hotshot_contract
+        .new_blocks_filter()
+        .from_block(0)
+        // Ethers does not set the contract address on filters created via contract bindings. This
+        // seems like a bug and I have reported it: https://github.com/gakonst/ethers-rs/issues/2528.
+        // In the mean time we can work around by setting the address manually.
+        .address(hotshot_contract.address().into());
     let mut commits_stream = filter
         .subscribe()
         .await
@@ -240,11 +246,32 @@ mod test {
         pub async fn reset_socket_connnection(&mut self) {
             let mut ws_url = self.l1_url.clone();
             ws_url.set_scheme("ws").unwrap();
-            self.socket_provider = Provider::<Ws>::connect(ws_url).await.unwrap();
+            // Occasionally the connection fails, so we retry a few times.
+            for _ in 0..10 {
+                match Provider::<Ws>::connect(ws_url.clone()).await {
+                    Ok(provider) => {
+                        self.socket_provider = provider;
+                        return;
+                    }
+                    Err(_) => {
+                        tracing::warn!("Failed to connect to websocket, retrying");
+                        sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+            panic!("Failed to connect to websocket server: {:?}", ws_url);
         }
 
         pub async fn subscribe(&self) -> SubscriptionStream<'_, Ws, Log> {
-            let state_update_filter = self.contract.state_update_filter().filter;
+            let state_update_filter = self
+                .contract
+                .state_update_filter()
+                .filter
+                // Ethers does not set the contract address on filters created via contract
+                // bindings. This seems like a bug and I have reported it:
+                // https://github.com/gakonst/ethers-rs/issues/2528. In the mean time we can work
+                // around by setting the address manually.
+                .address(self.contract.address());
             self.socket_provider
                 .subscribe_logs(&state_update_filter)
                 .await
