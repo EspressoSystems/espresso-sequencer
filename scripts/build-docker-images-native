@@ -73,7 +73,7 @@ mkdir -p ${WORKDIR}/target/$ARCH/release
 for binary in "orchestrator" "web-server" "sequencer" "example-l2" "cli"; do
   cp -v target/release/$binary ${WORKDIR}/target/$ARCH/release
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
-  if [ $ARCH == "amd64" ]; then
+  if [ $KERNEL == "linux" ]; then
     patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary
   fi
 done
