@@ -34,5 +34,3 @@ hotshot-stake-table = { path = "../hotshot-stake-table" }
 default = ["parallel"]
 std = ["ark-std/std"]
 parallel = ["jf-primitives/parallel", "jf-utils/parallel"]
-# TODO: (alex) what other features should I add
-full-ci = ["std", "parallel"]

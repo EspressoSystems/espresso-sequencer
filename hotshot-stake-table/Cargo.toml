@@ -32,5 +32,3 @@ rand_chacha = { version = "0.3.1", default-features = false }
 default = ["parallel"]
 std = ["ark-std/std", "ark-serialize/std", "ark-ff/std"]
 parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]
-# TODO: (alex) what other features should I add to follow the same pattern as other crates?
-full-ci = ["std", "parallel"]
