@@ -2,7 +2,7 @@ FROM ubuntu:jammy
 
 ARG TARGETARCH
 
-RUN apt-get update \
+RUN apt-get update && apt-get install -y --no-install-recommends libcurl4 curl \
     &&  rm -rf /var/lib/apt/lists/*
 
 COPY target/$TARGETARCH/release/example-l2 /bin/example-l2

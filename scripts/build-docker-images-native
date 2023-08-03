@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#
+# Used to build docker images in a quick way for local testing.
+#
+# On Linux:
+#
+#   - Native executables are built and patched to run inside docker.
+#   - Expected to be run in nix-shell or nix develop because it requires patchelf
+#     to be installed.
+#
+# On Darwin: the build is done inside a docker container.
+#
+# Usage: scripts/build-docker-images-native
+#
+set -euo pipefail
+
+# Check kernel
+case $(uname -s) in
+  Linux)
+    KERNEL=linux
+    ;;
+  Darwin)
+    KERNEL=darwin
+    ;;
+  *)
+    echo "This script is only supported on Linux and Darwin"
+    exit 1
+    ;;
+esac
+
+# Check architecture
+case $(uname -m) in
+  x86_64)
+    ARCH=amd64
+    PLATFORM=amd64
+    INTERPRETER=/lib64/ld-linux-x86-64.so.2
+    ;;
+  arm64)
+    ARCH=arm64
+    PLATFORM=linux/arm64
+    ;;
+  *)
+    echo "Machine type $(uname -m) is not supported."
+    exit 1
+    ;;
+esac
+
+# Compile binaries
+case $KERNEL in
+  linux)
+    cargo build --release
+    ;;
+  darwin)
+  # Build in docker container
+  docker run \
+    -v $(pwd):/work \
+    -v $HOME/.cargo/registry:/root/.cargo/registry \
+    -it ghcr.io/espressosystems/devops-rust:stable \
+    bash -c "cd /work && cargo build --release"
+    ;;
+esac
+
+# Copy binaries to a temporary directory.
+WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
+
+trap "exit" INT TERM
+trap cleanup EXIT
+cleanup(){
+    rm -rfv ${WORKDIR}
+}
+
+mkdir -p ${WORKDIR}/target/$ARCH/release
+for binary in "orchestrator" "web-server" "sequencer" "example-l2" "cli"; do
+  cp -v target/release/$binary ${WORKDIR}/target/$ARCH/release
+  # Patch the interpreter for running without nix inside the ubuntu based docker image.
+  if [ $KERNEL == "linux" ]; then
+    patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary
+  fi
+done
+
+export DOCKER_BUILDKIT=1
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile ${WORKDIR}
