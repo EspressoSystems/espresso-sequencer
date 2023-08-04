@@ -187,7 +187,7 @@ mod test {
     use ethers::signers::{LocalWallet, Signer};
     use futures::future::ready;
     use futures::FutureExt;
-    use hotshot::{traits::NodeImplementation, types::HotShotHandle};
+    use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
@@ -300,7 +300,7 @@ mod test {
     async fn start_query_service<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
         port: u16,
         storage_path: PathBuf,
-        node: HotShotHandle<SeqTypes, I>,
+        node: SystemContextHandle<SeqTypes, I>,
     ) {
         let init_handle = Box::new(move |_| (ready((node, 0)).boxed()));
         sequencer::api::Options::from(HttpOptions { port })
@@ -337,7 +337,7 @@ mod test {
         let storage_path = tmp_dir.path().join("tmp_storage");
         start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
-            node.start().await;
+            node.hotshot.start_consensus().await;
         }
         let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
             .parse()
@@ -436,7 +436,7 @@ mod test {
         let storage_path = tmp_dir.path().join("tmp_storage");
         start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
-            node.start().await;
+            node.hotshot.start_consensus().await;
         }
         let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
             .parse()
@@ -542,12 +542,13 @@ mod test {
         // Start a test HotShot configuration
         let sequencer_port = pick_unused_port().unwrap();
         let nodes = init_hotshot_handles().await;
-        let api_node = nodes[0].clone();
+        let mut api_node = nodes[0].clone();
+        let mut events = api_node.get_event_stream(Default::default()).await.0;
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
         start_query_service(sequencer_port, storage_path, api_node).await;
         for node in &nodes {
-            node.start().await;
+            node.hotshot.start_consensus().await;
         }
         let sequencer_url: Url = format!("http://localhost:{sequencer_port}")
             .parse()
@@ -583,9 +584,7 @@ mod test {
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.
             tracing::info!("Waiting for txn {nonce} to be sequenced");
-            wait_for_decide_on_handle(nodes[0].clone(), txn)
-                .await
-                .unwrap();
+            wait_for_decide_on_handle(&mut events, txn).await.unwrap();
         }
 
         // Wait for the rollup contract to process all state updates

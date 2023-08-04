@@ -4,8 +4,8 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use clap::Parser;
-use futures::{future::BoxFuture, FutureExt};
-use hotshot::types::HotShotHandle;
+use futures::{future::BoxFuture, FutureExt, StreamExt};
+use hotshot::types::SystemContextHandle;
 use hotshot::{traits::NodeImplementation, types::Event};
 use hotshot_query_service::{
     availability::{
@@ -59,7 +59,7 @@ impl SubmitOptions {
     ) -> io::Result<()>
     where
         S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + Borrow<HotShotHandle<SeqTypes, I>>,
+        S::State: Send + Sync + Borrow<SystemContextHandle<SeqTypes, I>>,
     {
         // Include API specification in binary
         let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
@@ -73,7 +73,7 @@ impl SubmitOptions {
         submit_api
             .post("submit", |req, state| {
                 async move {
-                    let state = Borrow::<HotShotHandle<SeqTypes, I>>::borrow(state);
+                    let state = Borrow::<SystemContextHandle<SeqTypes, I>>::borrow(state);
                     state
                         .submit_transaction(
                             req.body_auto::<Transaction>()
@@ -144,13 +144,14 @@ impl Options {
             let metrics: Box<dyn Metrics> = query_state.metrics();
 
             // Start up handle
-            let (handle, node_index) = init_handle(metrics).await;
+            let (mut handle, node_index) = init_handle(metrics).await;
 
-            // Get a clone the handle to use for populating the query data with consensus events.
+            // Get an event stream from the handle to use for populating the query data with
+            // consensus events.
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let mut watch_handle = handle.clone();
+            let mut events = handle.get_event_stream(Default::default()).await.0;
 
             let state = Arc::new(RwLock::new(AppState::<I> {
                 submit_state: handle.clone(),
@@ -206,8 +207,8 @@ impl Options {
                     app.serve(format!("0.0.0.0:{}", self.http.port)),
                     async move {
                         tracing::debug!("waiting for event");
-                        while let Ok(event) = watch_handle.next_event().await {
-                            tracing::debug!("got event {:?}", event);
+                        while let Some(event) = events.next().await {
+                            tracing::info!("got event {:?}", event);
                             // If update results in an error, program state is unrecoverable
                             if let Err(err) = state.write().await.update(&event).await {
                                 tracing::error!(
@@ -243,7 +244,7 @@ impl Options {
         };
 
         // Start consensus.
-        handle.start().await;
+        handle.hotshot.start_consensus().await;
 
         Ok(SequencerNode {
             handle,
@@ -256,22 +257,24 @@ impl Options {
 type NodeIndex = u64;
 
 pub struct SequencerNode<I: NodeImplementation<SeqTypes>> {
-    pub handle: HotShotHandle<SeqTypes, I>,
+    pub handle: SystemContextHandle<SeqTypes, I>,
     pub update_task: JoinHandle<io::Result<()>>,
     pub node_index: NodeIndex,
 }
 
 pub type HandleFromMetrics<I> = Box<
-    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
+    dyn FnOnce(
+        Box<dyn Metrics>,
+    ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, I>, NodeIndex)>,
 >;
 
 struct AppState<I: NodeImplementation<SeqTypes>> {
-    pub submit_state: HotShotHandle<SeqTypes, I>,
+    pub submit_state: SystemContextHandle<SeqTypes, I>,
     pub query_state: QueryData<SeqTypes, I, ()>,
 }
 
-impl<I: NodeImplementation<SeqTypes>> Borrow<HotShotHandle<SeqTypes, I>> for AppState<I> {
-    fn borrow(&self) -> &HotShotHandle<SeqTypes, I> {
+impl<I: NodeImplementation<SeqTypes>> Borrow<SystemContextHandle<SeqTypes, I>> for AppState<I> {
+    fn borrow(&self) -> &SystemContextHandle<SeqTypes, I> {
         &self.submit_state
     }
 }
@@ -411,7 +414,7 @@ mod test {
 
         let handles = init_hotshot_handles().await;
         for handle in handles.iter() {
-            handle.start().await;
+            handle.hotshot.start_consensus().await;
         }
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
@@ -454,7 +457,7 @@ mod test {
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
         for handle in handles.iter() {
-            handle.start().await;
+            handle.hotshot.start_consensus().await;
         }
 
         let init_handle =
@@ -464,7 +467,8 @@ mod test {
         if let Some(query) = query_opt {
             options = options.query(query);
         }
-        let SequencerNode { handle, .. } = options.serve(init_handle).await.unwrap();
+        let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
+        let mut events = handle.get_event_stream(Default::default()).await.0;
 
         client.connect(None).await;
 
@@ -477,8 +481,6 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(handle.clone(), txn)
-            .await
-            .unwrap()
+        wait_for_decide_on_handle(&mut events, txn).await.unwrap()
     }
 }
