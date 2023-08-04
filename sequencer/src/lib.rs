@@ -292,7 +292,7 @@ struct CommChannels<N: network::Type> {
 }
 
 impl CommChannels<network::Web> {
-    fn web(network_params: NetworkParams, pub_keys: Vec<PubKey>, node_index: usize) -> Self {
+    fn web(network_params: NetworkParams, pub_key: PubKey) -> Self {
         let wait_time = Duration::from_millis(100);
         let da_network = Arc::new(WebServerNetwork::create(
             &network_params.da_server_url.host().unwrap().to_string(),
@@ -301,8 +301,7 @@ impl CommChannels<network::Web> {
                 .port_or_known_default()
                 .unwrap(),
             wait_time,
-            pub_keys[node_index].clone(),
-            pub_keys.clone(),
+            pub_key.clone(),
             true,
         ));
         let consensus_network = Arc::new(WebServerNetwork::create(
@@ -316,8 +315,7 @@ impl CommChannels<network::Web> {
                 .port_or_known_default()
                 .unwrap(),
             wait_time,
-            pub_keys[node_index].clone(),
-            pub_keys,
+            pub_key,
             false,
         ));
         Self {
@@ -445,7 +443,7 @@ pub async fn init_node(
             node_index as usize,
             priv_key,
             enc_key,
-            CommChannels::web(network_params, pub_keys, node_index as usize),
+            CommChannels::web(network_params, pub_keys[node_index as usize].clone()),
             config.config,
         )
         .await,
