@@ -39,6 +39,10 @@ hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "ru
     "async-std-executor",
     "channel-async-std",
 ] }
+hotshot-consensus = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "run_view_refactor", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "run_view_refactor", features = [
     "async-std-executor",
     "channel-async-std",

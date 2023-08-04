@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTypes};
+use super::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTransaction, MockTypes};
 use crate::{data_source::QueryData, update::UpdateDataSource};
 use async_std::{
     sync::{Arc, RwLock},
@@ -23,13 +23,17 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
 };
+use hotshot_consensus::traits::SequencingConsensusApi;
 use hotshot_types::{
+    data::ViewNumber,
+    message::DataMessage,
     traits::{
         election::Membership,
         node_implementation::ExchangesType,
         signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
+        state::ConsensusTime,
     },
     ExecutionType, HotShotConfig,
 };
@@ -144,6 +148,15 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
 impl<UserData> MockNetwork<UserData> {
     pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
+    }
+
+    pub async fn submit_transaction(&self, tx: MockTransaction) {
+        let api = HotShotSequencingConsensusApi {
+            inner: self.nodes[0].hotshot.hotshot.inner.clone(),
+        };
+        api.send_transaction(DataMessage::SubmitTransaction(tx, ViewNumber::new(0)))
+            .await
+            .unwrap()
     }
 
     pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>> {

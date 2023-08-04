@@ -527,7 +527,6 @@ mod test {
 
         // Create the consensus network.
         let mut network = MockNetwork::init(()).await;
-        let hotshot = network.handle();
         network.start().await;
 
         // Start the web server.
@@ -553,7 +552,7 @@ mod test {
         let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
-            hotshot.submit_transaction(txn).await.unwrap();
+            network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
             let (i, leaf, block) = loop {

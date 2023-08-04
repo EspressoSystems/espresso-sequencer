@@ -118,7 +118,6 @@ mod test {
 
         // Create the consensus network.
         let mut network = MockNetwork::init(()).await;
-        let hotshot = network.handle();
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
@@ -136,7 +135,7 @@ mod test {
         // stay in the mempool, allowing us to check the mempool endpoint.
         let txn = MockTransaction { nonce: 0 };
         let txn_size = bincode_opts().serialized_size(&txn).unwrap();
-        hotshot.submit_transaction(txn.clone()).await.unwrap();
+        network.submit_transaction(txn.clone()).await;
         loop {
             let mempool = client
                 .get::<MempoolQueryData>("mempool_info")
