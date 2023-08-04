@@ -95,7 +95,7 @@ async fn main() {
     let total: usize = totals.into_iter().sum();
     let unique: usize = uniques.into_iter().sum();
 
-    println!("For blocks 0-{block_height}:");
+    println!("For blocks {from}-{to}:");
     println!("Total transactions: {total}");
     println!("Unique: {unique}");
 }
