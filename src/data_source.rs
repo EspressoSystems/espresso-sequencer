@@ -527,7 +527,6 @@ mod test {
         setup_test();
 
         let mut network = MockNetwork::init(()).await;
-        let hotshot = network.handle();
         let qd = network.query_data();
 
         network.start().await;
@@ -538,7 +537,7 @@ mod test {
         let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap().enumerate() };
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
-            hotshot.submit_transaction(txn).await.unwrap();
+            network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
             let (i, block) = loop {
@@ -570,7 +569,6 @@ mod test {
         setup_test();
 
         let mut network = MockNetwork::init(()).await;
-        let hotshot = network.handle();
         let qd = network.query_data();
 
         {
@@ -583,7 +581,7 @@ mod test {
 
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
-        hotshot.submit_transaction(txn.clone()).await.unwrap();
+        network.submit_transaction(txn.clone()).await;
         loop {
             let mempool = { qd.read().await.mempool_info().unwrap() };
             let expected = MempoolQueryData {
@@ -610,7 +608,7 @@ mod test {
         }
 
         // Submitting the same transaction should not affect the mempool.
-        hotshot.submit_transaction(txn.clone()).await.unwrap();
+        network.submit_transaction(txn.clone()).await;
         sleep(Duration::from_secs(3)).await;
         {
             assert_eq!(
