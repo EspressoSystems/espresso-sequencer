@@ -6641,6 +6641,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot",
+ "hotshot-consensus",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-testing",
