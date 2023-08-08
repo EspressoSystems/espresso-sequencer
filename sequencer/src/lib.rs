@@ -457,8 +457,11 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use either::Either;
     use futures::{Stream, StreamExt};
-    use hotshot::types::EventType::Decide;
-    use hotshot_types::{data::LeafType, ExecutionType};
+    use hotshot::{types::EventType::Decide, HotShotSequencingConsensusApi};
+    use hotshot_consensus::SequencingConsensusApi;
+    use hotshot_types::{
+        data::LeafType, message::DataMessage, traits::state::ConsensusTime, ExecutionType,
+    };
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
     use std::time::Duration;
@@ -561,33 +564,27 @@ pub mod testing {
             }
         }
     }
+
+    // Submit transaction to given handle.
+    pub async fn submit_txn_to_handle<N: network::Type>(
+        handle: &SystemContextHandle<SeqTypes, Node<N>>,
+        txn: Transaction,
+    ) {
+        let api = HotShotSequencingConsensusApi {
+            inner: handle.hotshot.inner.clone(),
+        };
+        api.send_transaction(DataMessage::SubmitTransaction(txn, ViewNumber::new(0)))
+            .await
+            .expect("Failed to submit transaction");
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{
-        transaction::{ApplicationTransaction, Transaction},
-        vm::{TestVm, Vm},
-    };
+    use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_testing::test_builder::TestMetadata;
-    use testing::{init_hotshot_handles, wait_for_decide_on_handle};
-
-    // Submit transaction to given handle, return clone of transaction
-    async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
-        handle: &SystemContextHandle<SeqTypes, I>,
-        txn: &ApplicationTransaction,
-    ) -> Transaction {
-        let tx = Transaction::new(TestVm {}.id(), bincode::serialize(txn).unwrap());
-
-        handle
-            .submit_transaction(tx.clone())
-            .await
-            .expect("Failed to submit transaction");
-
-        tx
-    }
+    use testing::{init_hotshot_handles, submit_txn_to_handle, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
     #[async_std::test]
@@ -615,7 +612,8 @@ mod test {
 
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = submit_txn_to_handle(&handles[0], &txn).await;
+        let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
+        submit_txn_to_handle(&handles[0], submitted_txn.clone()).await;
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
         wait_for_decide_on_handle(&mut events, submitted_txn).await

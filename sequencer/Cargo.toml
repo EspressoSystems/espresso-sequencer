@@ -35,6 +35,10 @@ hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
+hotshot-consensus = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",

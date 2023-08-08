@@ -197,14 +197,17 @@ mod test {
         future::{join_all, ready},
         stream, FutureExt, Stream,
     };
-    use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
+    use hotshot::types::SystemContextHandle;
     use portpicker::pick_unused_port;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use sequencer::api::{HttpOptions, QueryOptions};
-    use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
-    use sequencer::testing::{init_hotshot_handles, wait_for_decide_on_handle};
-    use sequencer::{Leaf, Vm, VmId};
+    use sequencer::{
+        api::{HttpOptions, QueryOptions},
+        hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+        network,
+        testing::{init_hotshot_handles, submit_txn_to_handle, wait_for_decide_on_handle},
+        Node, Vm, VmId,
+    };
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
     use std::path::PathBuf;
     use std::time::Duration;
@@ -373,10 +376,10 @@ mod test {
         }
     }
 
-    async fn start_query_service<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+    async fn start_query_service<N: network::Type>(
         port: u16,
         storage_path: PathBuf,
-        node: SystemContextHandle<SeqTypes, I>,
+        node: SystemContextHandle<SeqTypes, Node<N>>,
     ) {
         let init_handle = Box::new(move |_| (ready((node, 0)).boxed()));
         sequencer::api::Options::from(HttpOptions { port })
@@ -627,7 +630,7 @@ mod test {
         // Submit transactions to sequencer
         for nonce in 1..=num_txns {
             let txn = test_rollup.test_transaction(1, nonce).await;
-            nodes[0].submit_transaction(txn.clone()).await.unwrap();
+            submit_txn_to_handle(&nodes[0], txn.clone()).await;
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.
             tracing::info!("Waiting for txn {nonce} to be sequenced");
