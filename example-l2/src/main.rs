@@ -49,6 +49,7 @@ async fn main() {
         rollup_address: opt.rollup_address,
         rollup_mnemonic: opt.rollup_mnemonic.clone(),
         sequencer_url: opt.sequencer_url.clone(),
+        output_stream: None,
     };
 
     let hotshot_contract_options = CommitmentTaskOptions {

@@ -16,7 +16,7 @@ contract ExampleRollup {
     // Attempted to verify an empty chain of blocks;
     error NoBlocks();
 
-    event StateUpdate(uint256 blockHeight);
+    event StateUpdate(uint256 blockHeight, uint256 stateCommitment);
 
     constructor(address hotshotAddress, uint256 initialState) {
         hotshot = HotShot(hotshotAddress);
@@ -83,6 +83,6 @@ contract ExampleRollup {
 
         numVerifiedBlocks += count;
         stateCommitment = nextStateCommitment;
-        emit StateUpdate(numVerifiedBlocks);
+        emit StateUpdate(numVerifiedBlocks, stateCommitment);
     }
 }

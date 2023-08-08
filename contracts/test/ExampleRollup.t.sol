@@ -9,7 +9,7 @@ contract ExampleRollupTest is Test {
     HotShot public hotshot;
     ExampleRollup public rollup;
 
-    event StateUpdate(uint256 blockHeight);
+    event StateUpdate(uint256 blockHeight, uint256 stateCommitment);
 
     function setUp() public {
         hotshot = new HotShot();
@@ -31,7 +31,7 @@ contract ExampleRollupTest is Test {
             newState: 523123
         });
         vm.expectEmit(false, false, false, true, address(rollup));
-        emit StateUpdate(1);
+        emit StateUpdate(1, proof.newState);
         rollup.verifyBlocks(1, proof.newState, proof);
 
         assertEq(rollup.stateCommitment(), proof.newState);
