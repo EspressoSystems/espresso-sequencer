@@ -1,7 +1,6 @@
 use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
-use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::prelude::{Http, Middleware, Provider, U256};
+use ethers::prelude::U256;
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
@@ -10,11 +9,9 @@ use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::{BindNamespace, NamespacedMerkleTreeScheme},
     AppendableMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
 };
-use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::env;
+use std::cmp::max;
 use std::fmt::{Debug, Display};
-use std::time::Duration;
 use time::OffsetDateTime;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -148,91 +145,11 @@ impl HotShotBlock for Block {
     }
 
     fn new() -> Self {
-        // The HotShot APIs should be redesigned so that
-        // * they are async and fallible
-        // * new blocks being created have access to the application state, which in our case could
-        //   contain an already connected ETH client.
-        // For now, as a workaround, we will create a new ETH client based on environment variables
-        // and use `block_on` to query it.
-        let l1_block = if let Some(l1_provider) = &*L1_PROVIDER {
-            block_on(async move {
-                // This cannot fail, retry until we succeed.
-                loop {
-                    let retry_delay = Duration::from_millis(100);
-                    let chain_tip_number = match l1_provider.get_block_number().await {
-                        Ok(number) => number,
-                        Err(err) => {
-                            tracing::error!(
-                                "failed to get block number from L1 provider, retrying ({err})"
-                            );
-                            sleep(retry_delay).await;
-                            continue;
-                        }
-                    };
-
-                    // Use a block with a few confirmations to minimize the probability of reorgs.
-                    let number = chain_tip_number.saturating_sub(3.into());
-
-                    let block = match l1_provider.get_block(number).await {
-                        Ok(Some(block)) => block,
-                        Ok(None) => {
-                            // This can only happen if there was a reorg that changed the block
-                            // height. Just retry.
-                            tracing::error!("L1 block {number} does not exist, retrying");
-                            sleep(retry_delay).await;
-                            continue;
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                "failed to get block {number} from L1 provider, retrying ({err})"
-                            );
-                            sleep(retry_delay).await;
-
-                            // Retry the whole loop, including re-fetching the block number. One
-                            // reason we might have failed here is if an L1 reorg changed the chain
-                            // height, and the block at our current `number` may not become
-                            // available again for a while.
-                            continue;
-                        }
-                    };
-
-                    let Some(number) = block.number else {
-                    // This can also happen if there's a reorg.
-                    tracing::error!("L1 block {number} is not committed, retrying");
-                    sleep(retry_delay).await;
-                    continue;
-                };
-
-                    break L1BlockInfo {
-                        number: number.as_u64(),
-                        timestamp: block.timestamp,
-                    };
-                }
-            })
-        } else {
-            // For unit testing, we may disable the L1 provider and use mock L1 blocks instead.
-            L1BlockInfo::default()
-        };
-
-        Self {
-            timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
-            l1_block,
-            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
-        }
+        // HotShot calls `new()` to create a "dummy" block for various reasons, so we just give it
+        // the genesis block. Creating a real block, with a proper L1 block info, will be handled by
+        // [`State::next_block`].
+        Self::genesis()
     }
-}
-
-lazy_static! {
-    static ref L1_PROVIDER: Option<Provider<Http>> = {
-        let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_PROVIDER") else {
-            tracing::warn!("ESPRESSO_SEQUENCER_L1_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
-            return None;
-        };
-        Some(
-            url.try_into()
-                .expect("invalid ESPRESSO_SEQUENCER_L1_PROVIDER URL"),
-        )
-    };
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -278,6 +195,19 @@ impl Block {
                 number: 0,
                 timestamp: 0.into(),
             },
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
+        }
+    }
+
+    pub fn from_l1(l1_block: L1BlockInfo) -> Self {
+        Self {
+            // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This
+            // can only happen if our clock is out of sync with L1.
+            timestamp: max(
+                OffsetDateTime::now_utc().unix_timestamp() as u64,
+                l1_block.timestamp.as_u64(),
+            ),
+            l1_block,
             transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
