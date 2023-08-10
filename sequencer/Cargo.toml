@@ -30,6 +30,8 @@ derive_more = "0.99.17"
 either = "1.8.1"
 ethers = "2.0"
 futures = "0.3"
+lazy_static = "1.4"
+time = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",

@@ -10,7 +10,7 @@ use contract_bindings::{
 };
 use ethers::prelude::*;
 use hotshot_query_service::availability::BlockHeaderQueryData;
-use sequencer::{api::NamespaceProofQueryData, Block, Vm};
+use sequencer::{api::NamespaceProofQueryData, Vm};
 use std::sync::Arc;
 use surf_disco::Url;
 
@@ -136,16 +136,20 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
                 .send()
                 .await
                 .unwrap();
-            let nmt_root = namespace_proof_query.nmt_root().clone();
-            let namespace_proof = namespace_proof_query.proof().clone();
+            let header = namespace_proof_query.header;
+            let namespace_proof = namespace_proof_query.proof;
 
             // Check that the NMT root is consistent with the HotShot block committment
-            let derived_block_comm = Block::commitment_from_opening(&nmt_root);
+            let derived_block_comm = header.commit();
 
             assert_eq!(derived_block_comm, block_commitment);
 
             let mut state = state.write().await;
-            proofs.push(state.execute_block(nmt_root, namespace_proof).await);
+            proofs.push(
+                state
+                    .execute_block(header.transactions_root, namespace_proof)
+                    .await,
+            );
             if let Some(stream) = &output_stream {
                 stream
                     .send_async((first_block.as_u64() + i, state.clone()))

@@ -56,7 +56,7 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::Block;
+pub use block::{Block, Header, L1BlockInfo};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
     examples::{Sha3Digest, Sha3Node},
@@ -75,7 +75,7 @@ pub const MAX_NMT_DEPTH: usize = 10;
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NMTRoot {
     #[serde(with = "nmt_root_serializer")]
     root: <TransactionNMT as MerkleTreeScheme>::NodeValue,

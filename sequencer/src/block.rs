@@ -1,5 +1,6 @@
 use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
-use commit::{Commitment, Committable};
+use commit::{Commitment, Committable, RawCommitmentBuilder};
+use ethers::prelude::U256;
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
@@ -9,12 +10,64 @@ use jf_primitives::merkle_tree::{
     AppendableMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::cmp::max;
 use std::fmt::{Debug, Display};
+use time::OffsetDateTime;
+
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct Header {
+    pub timestamp: u64,
+    pub l1_block: L1BlockInfo,
+    pub transactions_root: NMTRoot,
+}
+
+impl Header {
+    pub fn commit(&self) -> Commitment<Block> {
+        RawCommitmentBuilder::new("Block Comm")
+            .u64_field("timestamp", self.timestamp)
+            .field("l1_block", self.l1_block.commit())
+            .field("transactions_root", self.transactions_root.commit())
+            .finalize()
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
+    timestamp: u64,
+    l1_block: L1BlockInfo,
+
     #[serde(with = "nmt_serializer")]
     pub(crate) transaction_nmt: TransactionNMT,
+}
+
+impl From<&Block> for Header {
+    fn from(b: &Block) -> Self {
+        Self {
+            timestamp: b.timestamp,
+            l1_block: b.l1_block,
+            transactions_root: NMTRoot {
+                root: b.transaction_nmt.commitment().digest(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct L1BlockInfo {
+    pub number: u64,
+    pub timestamp: U256,
+}
+
+impl Committable for L1BlockInfo {
+    fn commit(&self) -> Commitment<Self> {
+        let mut timestamp = [0u8; 32];
+        self.timestamp.to_little_endian(&mut timestamp);
+
+        RawCommitmentBuilder::new("L1BlockInfo")
+            .u64_field("number", self.number)
+            .fixed_size_bytes(&timestamp)
+            .finalize()
+    }
 }
 
 mod nmt_serializer {
@@ -92,9 +145,10 @@ impl HotShotBlock for Block {
     }
 
     fn new() -> Self {
-        Self {
-            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
-        }
+        // HotShot calls `new()` to create a "dummy" block for various reasons, so we just give it
+        // the genesis block. Creating a real block, with a proper L1 block info, will be handled by
+        // [`State::next_block`].
+        Self::genesis()
     }
 }
 
@@ -117,10 +171,7 @@ impl Display for Block {
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        let nmt_root = NMTRoot {
-            root: self.transaction_nmt.commitment().digest(),
-        };
-        Self::commitment_from_opening(&nmt_root)
+        Header::from(self).commit()
     }
 }
 
@@ -130,7 +181,7 @@ impl Committable for NMTRoot {
             <Sha3Digest as BindNamespace<Transaction, VmId, Sha3Node, _>>::generate_namespaced_commitment(
                 self.root,
             );
-        commit::RawCommitmentBuilder::new("NMT Root Comm")
+        RawCommitmentBuilder::new("NMT Root Comm")
             .var_size_field("NMT Root", comm_bytes.as_ref())
             .finalize()
     }
@@ -139,6 +190,24 @@ impl Committable for NMTRoot {
 impl Block {
     pub fn genesis() -> Self {
         Self {
+            timestamp: 0,
+            l1_block: L1BlockInfo {
+                number: 0,
+                timestamp: 0.into(),
+            },
+            transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
+        }
+    }
+
+    pub fn from_l1(l1_block: L1BlockInfo) -> Self {
+        Self {
+            // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This
+            // can only happen if our clock is out of sync with L1.
+            timestamp: max(
+                OffsetDateTime::now_utc().unix_timestamp() as u64,
+                l1_block.timestamp.as_u64(),
+            ),
+            l1_block,
             transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
@@ -163,10 +232,13 @@ impl Block {
         }
     }
 
-    /// Derives a block commitment from the NMTRoot
-    pub fn commitment_from_opening(nmt_root: &NMTRoot) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Block Comm")
-            .field("NMT Root", nmt_root.commit())
-            .finalize()
+    /// The block's timestamp.
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
+    /// Information about the L1 block with which this sequencer block is synchronized.
+    pub fn l1_block(&self) -> &L1BlockInfo {
+        &self.l1_block
     }
 }

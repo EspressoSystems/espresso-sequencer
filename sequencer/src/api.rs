@@ -1,4 +1,4 @@
-use crate::{network, transaction::Transaction, Leaf, NMTRoot, NamespaceProofType, Node, SeqTypes};
+use crate::{network, transaction::Transaction, Header, Leaf, NamespaceProofType, Node, SeqTypes};
 use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
@@ -200,8 +200,10 @@ impl Options {
                             .ok_or(AvailabilityError::MissingBlock { height })?;
 
                         let proof = block.block().get_namespace_proof(namespace.into());
-                        let nmt_root = block.block().get_nmt_root();
-                        Ok(NamespaceProofQueryData { nmt_root, proof })
+                        Ok(NamespaceProofQueryData {
+                            proof,
+                            header: block.block().into(),
+                        })
                     }
                     .boxed()
                 })
@@ -295,8 +297,8 @@ impl<N: network::Type> Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>> 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    proof: NamespaceProofType,
-    nmt_root: NMTRoot,
+    pub proof: NamespaceProofType,
+    pub header: Header,
 }
 
 impl NamespaceProofQueryData {
@@ -304,8 +306,8 @@ impl NamespaceProofQueryData {
         &self.proof
     }
 
-    pub fn nmt_root(&self) -> &NMTRoot {
-        &self.nmt_root
+    pub fn header(&self) -> &Header {
+        &self.header
     }
 }
 
