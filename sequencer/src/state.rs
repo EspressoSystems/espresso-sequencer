@@ -120,8 +120,15 @@ impl HotShotState for State {
 lazy_static! {
     static ref L1_PROVIDER: Option<Provider<Http>> = {
         let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_PROVIDER") else {
-            tracing::warn!("ESPRESSO_SEQUENCER_L1_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
-            return None;
+            #[cfg(any(test, feature = "testing"))] 
+            {
+                tracing::warn!("ESPRESSO_SEQUENCER_L1_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
+                return None;
+            }
+            #[cfg(not(any(test, feature = "testing")))]
+            {
+                panic!("ESPRESSO_SEQUENCER_L1_PROVIDER must be set.");
+            }
         };
         Some(
             url.try_into()
