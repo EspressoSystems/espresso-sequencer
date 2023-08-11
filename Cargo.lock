@@ -2739,7 +2739,7 @@ dependencies = [
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.1)",
  "tempfile",
  "tide-disco",
- "toml 0.5.11",
+ "toml 0.7.6",
  "tracing",
 ]
 
@@ -6646,7 +6646,7 @@ dependencies = [
  "tempfile",
  "tide-disco",
  "time 0.3.23",
- "toml 0.5.11",
+ "toml 0.7.6",
  "tracing",
  "typenum",
  "url",

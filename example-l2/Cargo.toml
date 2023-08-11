@@ -30,7 +30,7 @@ strum = "0.25.0"
 strum_macros = "0.25.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.1" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.1" }
-toml = "0.5"
+toml = "0.7"
 tracing = "0.1"
 
 [dev-dependencies]
