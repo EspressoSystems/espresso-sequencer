@@ -269,6 +269,11 @@ mod reference {
     //! representation or U256 representation of a commitment for testing in other packages, run the
     //! tests and look for "commitment bytes" or "commitment U256" in the logs.
     //!
+    //! For convenience, the reference objects are provided in serialized form, as they will appear
+    //! in query service responses and the like, in the JSON files in the `data` directory of the
+    //! repo for this crate. These JSON files are compiled into the crate binary and deserialized in
+    //! this module to generate tests for the serialization format and commitment scheme.
+    //!
     //! These tests may fail if you make a breaking change to a commitment scheme, serialization,
     //! etc. If this happens, be sure you _want_ to break the API, and, if so, simply replace the
     //! relevant constant in this module with the "actual" value that can be found in the logs of
@@ -279,34 +284,19 @@ mod reference {
     use lazy_static::lazy_static;
     use sequencer_utils::commitment_to_u256;
     use serde::de::DeserializeOwned;
-    use serde_json::{json, Value};
+    use serde_json::Value;
+
+    macro_rules! load_reference {
+        ($name:expr) => {
+            serde_json::from_str(include_str!(std::concat!("../../data/", $name, ".json"))).unwrap()
+        };
+    }
 
     lazy_static! {
-        pub static ref NMT_ROOT: Value = json! {
-            {
-                "root": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-            }
-        };
-        pub static ref L1_BLOCK: Value = json! {
-            {
-                "number": 123,
-                "timestamp": "0x456",
-            }
-        };
-        pub static ref HEADER: Value = json! {
-            {
-                "timestamp": 789,
-                "l1_block": &*L1_BLOCK,
-                "transactions_root": &*NMT_ROOT,
-            }
-        };
-        pub static ref BLOCK: Value = json! {
-            {
-                "timestamp": 789,
-                "l1_block": &*L1_BLOCK,
-                "transaction_nmt": [],
-            }
-        };
+        pub static ref NMT_ROOT: Value = load_reference!("nmt_root");
+        pub static ref L1_BLOCK: Value = load_reference!("l1_block");
+        pub static ref HEADER: Value = load_reference!("header");
+        pub static ref BLOCK: Value = load_reference!("block");
     }
 
     fn reference_test<T: DeserializeOwned, C: Committable>(
