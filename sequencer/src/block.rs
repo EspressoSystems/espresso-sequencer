@@ -1,13 +1,13 @@
 use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
+use ark_serialize::CanonicalSerialize;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::U256;
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
 use jf_primitives::merkle_tree::{
-    examples::{Sha3Digest, Sha3Node},
-    namespaced_merkle_tree::{BindNamespace, NamespacedMerkleTreeScheme},
-    AppendableMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
+    MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::max;
@@ -23,7 +23,7 @@ pub struct Header {
 
 impl Header {
     pub fn commit(&self) -> Commitment<Block> {
-        RawCommitmentBuilder::new("Block Comm")
+        RawCommitmentBuilder::new(&Block::tag())
             .u64_field("timestamp", self.timestamp)
             .field("l1_block", self.l1_block.commit())
             .field("transactions_root", self.transactions_root.commit())
@@ -63,8 +63,10 @@ impl Committable for L1BlockInfo {
         let mut timestamp = [0u8; 32];
         self.timestamp.to_little_endian(&mut timestamp);
 
-        RawCommitmentBuilder::new("L1BlockInfo")
+        RawCommitmentBuilder::new(&Self::tag())
             .u64_field("number", self.number)
+            // `RawCommitmentBuilder` doesn't have a `u256_field` method, so we simulate it:
+            .constant_str("timestamp")
             .fixed_size_bytes(&timestamp)
             .finalize()
     }
@@ -185,12 +187,12 @@ impl Committable for Block {
 
 impl Committable for NMTRoot {
     fn commit(&self) -> Commitment<Self> {
-        let comm_bytes =
-            <Sha3Digest as BindNamespace<Transaction, VmId, Sha3Node, _>>::generate_namespaced_commitment(
-                self.root,
-            );
-        RawCommitmentBuilder::new("NMT Root Comm")
-            .var_size_field("NMT Root", comm_bytes.as_ref())
+        let mut comm_bytes = vec![];
+        self.root
+            .serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        RawCommitmentBuilder::new(&Self::tag())
+            .var_size_field("root", &comm_bytes)
             .finalize()
     }
 
@@ -333,7 +335,7 @@ mod reference {
     fn test_reference_nmt_root() {
         reference_test::<NMTRoot, _>(
             NMT_ROOT.clone(),
-            "NMTROOT~A8-vDtIyHoR6bHhsa_mMl6to88DaLRQ5DUTvx5WAv_TQ",
+            "NMTROOT~-1Dow1sCihLw5x-sNsxaKtcqSLsPHIBDlXUacug5vgpx",
             |root| root.commit(),
         );
     }
@@ -342,7 +344,7 @@ mod reference {
     fn test_reference_l1_block() {
         reference_test::<L1BlockInfo, _>(
             L1_BLOCK.clone(),
-            "L1BLOCK~Xgig8kXFFKBb0-ZEGnj3AJxx4wH7mYNqD1I38y4qgu1O",
+            "L1BLOCK~i_2nsYHZCxW16USM7fnDryhITeIMDkshibzma7rhlsm-",
             |block| block.commit(),
         );
     }
@@ -351,7 +353,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~3I8o-MEj3fr2slR6UTcUjax_i6UKfIYfMh64aSoV417K",
+            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
             |header| header.commit(),
         );
     }
@@ -360,7 +362,7 @@ mod reference {
     fn test_reference_block() {
         reference_test::<Block, _>(
             BLOCK.clone(),
-            "BLOCK~3I8o-MEj3fr2slR6UTcUjax_i6UKfIYfMh64aSoV417K",
+            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
             |block| block.commit(),
         );
     }
