@@ -1,13 +1,13 @@
 use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
+use ark_serialize::CanonicalSerialize;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::U256;
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
 use jf_primitives::merkle_tree::{
-    examples::{Sha3Digest, Sha3Node},
-    namespaced_merkle_tree::{BindNamespace, NamespacedMerkleTreeScheme},
-    AppendableMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
+    MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::max;
@@ -23,7 +23,7 @@ pub struct Header {
 
 impl Header {
     pub fn commit(&self) -> Commitment<Block> {
-        RawCommitmentBuilder::new("Block Comm")
+        RawCommitmentBuilder::new(&Block::tag())
             .u64_field("timestamp", self.timestamp)
             .field("l1_block", self.l1_block.commit())
             .field("transactions_root", self.transactions_root.commit())
@@ -63,10 +63,16 @@ impl Committable for L1BlockInfo {
         let mut timestamp = [0u8; 32];
         self.timestamp.to_little_endian(&mut timestamp);
 
-        RawCommitmentBuilder::new("L1BlockInfo")
+        RawCommitmentBuilder::new(&Self::tag())
             .u64_field("number", self.number)
+            // `RawCommitmentBuilder` doesn't have a `u256_field` method, so we simulate it:
+            .constant_str("timestamp")
             .fixed_size_bytes(&timestamp)
             .finalize()
+    }
+
+    fn tag() -> String {
+        "L1BLOCK".into()
     }
 }
 
@@ -173,17 +179,25 @@ impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
         Header::from(self).commit()
     }
+
+    fn tag() -> String {
+        "BLOCK".into()
+    }
 }
 
 impl Committable for NMTRoot {
     fn commit(&self) -> Commitment<Self> {
-        let comm_bytes =
-            <Sha3Digest as BindNamespace<Transaction, VmId, Sha3Node, _>>::generate_namespaced_commitment(
-                self.root,
-            );
-        RawCommitmentBuilder::new("NMT Root Comm")
-            .var_size_field("NMT Root", comm_bytes.as_ref())
+        let mut comm_bytes = vec![];
+        self.root
+            .serialize_with_mode(&mut comm_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        RawCommitmentBuilder::new(&Self::tag())
+            .var_size_field("root", &comm_bytes)
             .finalize()
+    }
+
+    fn tag() -> String {
+        "NMTROOT".into()
     }
 }
 
@@ -240,5 +254,112 @@ impl Block {
     /// Information about the L1 block with which this sequencer block is synchronized.
     pub fn l1_block(&self) -> &L1BlockInfo {
         &self.l1_block
+    }
+}
+
+#[cfg(test)]
+mod reference {
+    //! Reference data types.
+    //!
+    //! This module provides some reference instantiations of various data types which have an
+    //! external, language-independent interface (e.g. commitment scheme). Ports of the sequencer to
+    //! other languages, as well as downstream packages written in other languages, can use these
+    //! references objects and their known commitments to check that their implementations of the
+    //! commitment scheme are compatible with this reference implementation. To get the byte
+    //! representation or U256 representation of a commitment for testing in other packages, run the
+    //! tests and look for "commitment bytes" or "commitment U256" in the logs.
+    //!
+    //! For convenience, the reference objects are provided in serialized form, as they will appear
+    //! in query service responses and the like, in the JSON files in the `data` directory of the
+    //! repo for this crate. These JSON files are compiled into the crate binary and deserialized in
+    //! this module to generate tests for the serialization format and commitment scheme.
+    //!
+    //! These tests may fail if you make a breaking change to a commitment scheme, serialization,
+    //! etc. If this happens, be sure you _want_ to break the API, and, if so, simply replace the
+    //! relevant constant in this module with the "actual" value that can be found in the logs of
+    //! the failing test.
+
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use lazy_static::lazy_static;
+    use sequencer_utils::commitment_to_u256;
+    use serde::de::DeserializeOwned;
+    use serde_json::Value;
+
+    macro_rules! load_reference {
+        ($name:expr) => {
+            serde_json::from_str(include_str!(std::concat!("../../data/", $name, ".json"))).unwrap()
+        };
+    }
+
+    lazy_static! {
+        pub static ref NMT_ROOT: Value = load_reference!("nmt_root");
+        pub static ref L1_BLOCK: Value = load_reference!("l1_block");
+        pub static ref HEADER: Value = load_reference!("header");
+        pub static ref BLOCK: Value = load_reference!("block");
+    }
+
+    fn reference_test<T: DeserializeOwned, C: Committable>(
+        reference: Value,
+        expected: &str,
+        commit: impl FnOnce(&T) -> Commitment<C>,
+    ) {
+        setup_logging();
+        setup_backtrace();
+
+        let reference: T = serde_json::from_value(reference).unwrap();
+        let actual = commit(&reference);
+
+        // Print information about the commitment that might be useful in generating tests for other
+        // languages.
+        let bytes: &[u8] = actual.as_ref();
+        let u256 = commitment_to_u256(actual);
+        tracing::info!("actual commitment: {}", actual);
+        tracing::info!("commitment bytes: {:?}", bytes);
+        tracing::info!("commitment U256: {}", u256);
+
+        assert_eq!(actual, expected.parse().unwrap());
+    }
+
+    #[test]
+    fn test_reference_nmt_root() {
+        reference_test::<NMTRoot, _>(
+            NMT_ROOT.clone(),
+            "NMTROOT~-1Dow1sCihLw5x-sNsxaKtcqSLsPHIBDlXUacug5vgpx",
+            |root| root.commit(),
+        );
+    }
+
+    #[test]
+    fn test_reference_l1_block() {
+        reference_test::<L1BlockInfo, _>(
+            L1_BLOCK.clone(),
+            "L1BLOCK~i_2nsYHZCxW16USM7fnDryhITeIMDkshibzma7rhlsm-",
+            |block| block.commit(),
+        );
+    }
+
+    #[test]
+    fn test_reference_header() {
+        reference_test::<Header, _>(
+            HEADER.clone(),
+            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
+            |header| header.commit(),
+        );
+    }
+
+    #[test]
+    fn test_reference_block() {
+        reference_test::<Block, _>(
+            BLOCK.clone(),
+            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
+            |block| block.commit(),
+        );
+    }
+
+    #[test]
+    fn test_header_block_commitment_equivalence() {
+        let block: Block = serde_json::from_value(BLOCK.clone()).unwrap();
+        assert_eq!(block.commit(), Header::from(&block).commit());
     }
 }
