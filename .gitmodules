@@ -10,4 +10,3 @@
 [submodule "contracts/lib/bn254"]
 	path = contracts/lib/bn254
 	url = https://github.com/EspressoSystems/solidity-bn254
-	branch = v0.1.0
