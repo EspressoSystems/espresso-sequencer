@@ -1,12 +1,12 @@
-use crate::{transaction::Transaction, Leaf, NMTRoot, NamespaceProofType, SeqTypes};
+use crate::{network, transaction::Transaction, Header, Leaf, NamespaceProofType, Node, SeqTypes};
 use async_std::{
     sync::RwLock,
     task::{spawn, JoinHandle},
 };
 use clap::Parser;
-use futures::{future::BoxFuture, FutureExt};
-use hotshot::types::HotShotHandle;
-use hotshot::{traits::NodeImplementation, types::Event};
+use futures::{future::BoxFuture, FutureExt, StreamExt};
+use hotshot::{types::Event, types::SystemContextHandle, HotShotSequencingConsensusApi};
+use hotshot_consensus::SequencingConsensusApi;
 use hotshot_query_service::{
     availability::{
         self, AvailabilityDataSource, Error as AvailabilityError, Options as AvailabilityOptions,
@@ -15,7 +15,14 @@ use hotshot_query_service::{
     status::{self, StatusDataSource},
     Error,
 };
-use hotshot_types::traits::metrics::{Metrics, NoMetrics};
+use hotshot_types::{
+    data::ViewNumber,
+    message::DataMessage,
+    traits::{
+        metrics::{Metrics, NoMetrics},
+        state::ConsensusTime,
+    },
+};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -53,13 +60,13 @@ pub struct QueryOptions {
 pub struct SubmitOptions;
 
 impl SubmitOptions {
-    fn init<S, I: NodeImplementation<SeqTypes>>(
+    fn init<S, N: network::Type>(
         self,
         app: &mut App<S, hotshot_query_service::Error>,
     ) -> io::Result<()>
     where
         S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + Borrow<HotShotHandle<SeqTypes, I>>,
+        S::State: Send + Sync + Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>,
     {
         // Include API specification in binary
         let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
@@ -73,12 +80,14 @@ impl SubmitOptions {
         submit_api
             .post("submit", |req, state| {
                 async move {
-                    let state = Borrow::<HotShotHandle<SeqTypes, I>>::borrow(state);
+                    let state =
+                        Borrow::<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>::borrow(state);
                     state
-                        .submit_transaction(
+                        .send_transaction(DataMessage::SubmitTransaction(
                             req.body_auto::<Transaction>()
                                 .map_err(|err| Error::internal(err.to_string()))?,
-                        )
+                            ViewNumber::new(0),
+                        ))
                         .await
                         .map_err(|err| Error::internal(err.to_string()))
                 }
@@ -123,14 +132,14 @@ impl Options {
         self
     }
 
-    pub async fn serve<I: NodeImplementation<SeqTypes, Leaf = Leaf>>(
+    pub async fn serve<N: network::Type>(
         self,
-        init_handle: HandleFromMetrics<I>,
-    ) -> io::Result<SequencerNode<I>> {
+        init_handle: HandleFromMetrics<N>,
+    ) -> io::Result<SequencerNode<N>> {
         // The server state type depends on whether we are running a query API or not, so we handle
         // the two cases differently.
         let (handle, node_index, update_task) = if let Some(query) = self.query {
-            type StateType<I> = Arc<RwLock<AppState<I>>>;
+            type StateType<N> = Arc<RwLock<AppState<N>>>;
 
             let storage_path = Path::new(&query.storage_path);
             let query_state = {
@@ -144,16 +153,19 @@ impl Options {
             let metrics: Box<dyn Metrics> = query_state.metrics();
 
             // Start up handle
-            let (handle, node_index) = init_handle(metrics).await;
+            let (mut handle, node_index) = init_handle(metrics).await;
 
-            // Get a clone the handle to use for populating the query data with consensus events.
+            // Get an event stream from the handle to use for populating the query data with
+            // consensus events.
             //
             // We must do this _before_ starting consensus on the handle, otherwise we could miss
             // the first events emitted by consensus.
-            let mut watch_handle = handle.clone();
+            let mut events = handle.get_event_stream(Default::default()).await.0;
 
-            let state = Arc::new(RwLock::new(AppState::<I> {
-                submit_state: handle.clone(),
+            let state = Arc::new(RwLock::new(AppState::<N> {
+                submit_state: HotShotSequencingConsensusApi {
+                    inner: handle.hotshot.inner.clone(),
+                },
                 query_state,
             }));
 
@@ -171,9 +183,9 @@ impl Options {
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
             options.extensions.push(namespace_extension);
             let mut availability_api =
-                availability::define_api::<StateType<I>, SeqTypes, I>(&options)
+                availability::define_api::<StateType<N>, SeqTypes, Node<N>>(&options)
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-            let status_api = status::define_api::<StateType<I>>(&Default::default())
+            let status_api = status::define_api::<StateType<N>>(&Default::default())
                 .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
             availability_api
@@ -188,8 +200,10 @@ impl Options {
                             .ok_or(AvailabilityError::MissingBlock { height })?;
 
                         let proof = block.block().get_namespace_proof(namespace.into());
-                        let nmt_root = block.block().get_nmt_root();
-                        Ok(NamespaceProofQueryData { nmt_root, proof })
+                        Ok(NamespaceProofQueryData {
+                            proof,
+                            header: block.block().into(),
+                        })
                     }
                     .boxed()
                 })
@@ -206,8 +220,8 @@ impl Options {
                     app.serve(format!("0.0.0.0:{}", self.http.port)),
                     async move {
                         tracing::debug!("waiting for event");
-                        while let Ok(event) = watch_handle.next_event().await {
-                            tracing::debug!("got event {:?}", event);
+                        while let Some(event) = events.next().await {
+                            tracing::info!("got event {:?}", event);
                             // If update results in an error, program state is unrecoverable
                             if let Err(err) = state.write().await.update(&event).await {
                                 tracing::error!(
@@ -227,12 +241,15 @@ impl Options {
             (handle, node_index, task)
         } else {
             let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
-            let mut app =
-                App::<_, hotshot_query_service::Error>::with_state(RwLock::new(handle.clone()));
+            let mut app = App::<_, hotshot_query_service::Error>::with_state(RwLock::new(
+                HotShotSequencingConsensusApi {
+                    inner: handle.hotshot.inner.clone(),
+                },
+            ));
 
             // Initialize submit API
             if let Some(submit) = self.submit {
-                submit.init::<_, I>(&mut app)?;
+                submit.init::<_, N>(&mut app)?;
             }
 
             (
@@ -243,7 +260,7 @@ impl Options {
         };
 
         // Start consensus.
-        handle.start().await;
+        handle.hotshot.start_consensus().await;
 
         Ok(SequencerNode {
             handle,
@@ -255,31 +272,33 @@ impl Options {
 
 type NodeIndex = u64;
 
-pub struct SequencerNode<I: NodeImplementation<SeqTypes>> {
-    pub handle: HotShotHandle<SeqTypes, I>,
+pub struct SequencerNode<N: network::Type> {
+    pub handle: SystemContextHandle<SeqTypes, Node<N>>,
     pub update_task: JoinHandle<io::Result<()>>,
     pub node_index: NodeIndex,
 }
 
-pub type HandleFromMetrics<I> = Box<
-    dyn FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (HotShotHandle<SeqTypes, I>, NodeIndex)>,
+pub type HandleFromMetrics<N> = Box<
+    dyn FnOnce(
+        Box<dyn Metrics>,
+    ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, Node<N>>, NodeIndex)>,
 >;
 
-struct AppState<I: NodeImplementation<SeqTypes>> {
-    pub submit_state: HotShotHandle<SeqTypes, I>,
-    pub query_state: QueryData<SeqTypes, I, ()>,
+struct AppState<N: network::Type> {
+    pub submit_state: HotShotSequencingConsensusApi<SeqTypes, Node<N>>,
+    pub query_state: QueryData<SeqTypes, Node<N>, ()>,
 }
 
-impl<I: NodeImplementation<SeqTypes>> Borrow<HotShotHandle<SeqTypes, I>> for AppState<I> {
-    fn borrow(&self) -> &HotShotHandle<SeqTypes, I> {
+impl<N: network::Type> Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>> for AppState<N> {
+    fn borrow(&self) -> &HotShotSequencingConsensusApi<SeqTypes, Node<N>> {
         &self.submit_state
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    proof: NamespaceProofType,
-    nmt_root: NMTRoot,
+    pub proof: NamespaceProofType,
+    pub header: Header,
 }
 
 impl NamespaceProofQueryData {
@@ -287,35 +306,45 @@ impl NamespaceProofQueryData {
         &self.proof
     }
 
-    pub fn nmt_root(&self) -> &NMTRoot {
-        &self.nmt_root
+    pub fn header(&self) -> &Header {
+        &self.header
     }
 }
 
-impl<I: NodeImplementation<SeqTypes, Leaf = Leaf>> AppState<I> {
+impl<N: network::Type> AppState<N> {
     pub async fn update(
         &mut self,
         event: &Event<SeqTypes, Leaf>,
-    ) -> Result<(), <QueryData<SeqTypes, I, ()> as UpdateDataSource<SeqTypes, I>>::Error> {
+    ) -> Result<(), <QueryData<SeqTypes, Node<N>, ()> as UpdateDataSource<SeqTypes, Node<N>>>::Error>
+    {
         self.query_state.update(event)?;
         self.query_state.commit_version().await?;
         Ok(())
     }
 }
 
-impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes, I> for AppState<I> {
-    type Error = <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::Error;
+impl<N: network::Type> AvailabilityDataSource<SeqTypes, Node<N>> for AppState<N> {
+    type Error =
+        <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<SeqTypes, Node<N>>>::Error;
 
-    type LeafIterType<'a> =
-        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::LeafIterType<'a>;
+    type LeafIterType<'a> = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
+        SeqTypes,
+        Node<N>,
+    >>::LeafIterType<'a>;
 
-    type BlockIterType<'a> =
-        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::BlockIterType<'a>;
+    type BlockIterType<'a> = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
+        SeqTypes,
+        Node<N>,
+    >>::BlockIterType<'a>;
 
-    type LeafStreamType =
-        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::LeafStreamType;
-    type BlockStreamType =
-        <QueryData<SeqTypes, I, ()> as AvailabilityDataSource<SeqTypes, I>>::BlockStreamType;
+    type LeafStreamType = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
+        SeqTypes,
+        Node<N>,
+    >>::LeafStreamType;
+    type BlockStreamType = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
+        SeqTypes,
+        Node<N>,
+    >>::BlockStreamType;
 
     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
         self.query_state.get_nth_leaf_iter(n)
@@ -327,7 +356,7 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes, I> for Ap
 
     fn get_leaf_index_by_hash(
         &self,
-        hash: hotshot_query_service::availability::LeafHash<SeqTypes, I>,
+        hash: hotshot_query_service::availability::LeafHash<SeqTypes, Node<N>>,
     ) -> Option<u64> {
         self.query_state.get_leaf_index_by_hash(hash)
     }
@@ -362,8 +391,8 @@ impl<I: NodeImplementation<SeqTypes>> AvailabilityDataSource<SeqTypes, I> for Ap
     }
 }
 
-impl<I: NodeImplementation<SeqTypes>> StatusDataSource for AppState<I> {
-    type Error = <QueryData<SeqTypes, I, ()> as StatusDataSource>::Error;
+impl<N: network::Type> StatusDataSource for AppState<N> {
+    type Error = <QueryData<SeqTypes, Node<N>, ()> as StatusDataSource>::Error;
 
     fn block_height(&self) -> Result<usize, Self::Error> {
         self.query_state.block_height()
@@ -411,7 +440,7 @@ mod test {
 
         let handles = init_hotshot_handles().await;
         for handle in handles.iter() {
-            handle.start().await;
+            handle.hotshot.start_consensus().await;
         }
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
@@ -454,7 +483,7 @@ mod test {
         // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
         for handle in handles.iter() {
-            handle.start().await;
+            handle.hotshot.start_consensus().await;
         }
 
         let init_handle =
@@ -464,7 +493,8 @@ mod test {
         if let Some(query) = query_opt {
             options = options.query(query);
         }
-        let SequencerNode { handle, .. } = options.serve(init_handle).await.unwrap();
+        let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
+        let mut events = handle.get_event_stream(Default::default()).await.0;
 
         client.connect(None).await;
 
@@ -477,8 +507,6 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(handle.clone(), txn)
-            .await
-            .unwrap()
+        wait_for_decide_on_handle(&mut events, txn).await.unwrap()
     }
 }

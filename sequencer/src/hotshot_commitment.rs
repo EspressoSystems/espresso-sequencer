@@ -276,7 +276,9 @@ mod test {
         // Fake a leaf that sequences this block.
         let mut qc = QuorumCertificate::genesis();
         let mut leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
-        leaf.height = height;
+        // Mimic the behavior of HotShot, where leaf heights are indexed starting from 1, since the
+        // 0-height genesis leaf is implicit.
+        leaf.height = height + 1;
         qc.leaf_commitment = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }

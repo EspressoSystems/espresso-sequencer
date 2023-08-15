@@ -190,7 +190,7 @@ async fn main() {
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.propose_min_round_time = args.min_propose_time;
     config.config.propose_max_round_time = args.max_propose_time;
-    config.config.da_committee_size = args.num_nodes;
+    config.config.da_committee_size = args.num_nodes.get();
     config.config.min_transactions = args.min_transactions;
     config.config.known_nodes = pub_keys;
 

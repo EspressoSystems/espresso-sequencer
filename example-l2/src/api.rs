@@ -107,7 +107,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use sequencer::{
-        api::{HttpOptions, QueryOptions, SequencerNode},
+        api::{HttpOptions, QueryOptions},
         testing::wait_for_decide_on_handle,
         Transaction as SeqTransaction,
     };
@@ -154,11 +154,12 @@ mod tests {
         let sequencer_port = pick_unused_port().unwrap();
         let vm = RollupVM::new(1.into());
         let nodes = sequencer::testing::init_hotshot_handles().await;
-        let api_node = nodes[0].clone();
+        let mut api_node = nodes[0].clone();
+        let mut events = api_node.get_event_stream(Default::default()).await.0;
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle = Box::new(move |_| (ready((api_node, 0)).boxed()));
-        let SequencerNode { handle, .. } = sequencer::api::Options::from(HttpOptions {
+        sequencer::api::Options::from(HttpOptions {
             port: sequencer_port,
         })
         .submit(Default::default())
@@ -170,7 +171,7 @@ mod tests {
         .await
         .unwrap();
         for node in &nodes {
-            node.start().await;
+            node.hotshot.start_consensus().await;
         }
 
         // Start the Rollup API
@@ -213,8 +214,6 @@ mod tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let raw_tx = signed_transaction.encode();
         let txn = SeqTransaction::new(vm.id(), raw_tx.to_vec());
-        wait_for_decide_on_handle(handle.clone(), txn)
-            .await
-            .unwrap()
+        wait_for_decide_on_handle(&mut events, txn).await.unwrap()
     }
 }

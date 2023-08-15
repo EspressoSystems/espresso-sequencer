@@ -16,23 +16,29 @@ use hotshot::{
             static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
             vrf::JfPubKey,
         },
-        implementations::{MemoryCommChannel, MemoryStorage, WebCommChannel, WebServerNetwork},
+        implementations::{
+            MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, WebCommChannel,
+            WebServerNetwork,
+        },
         NodeImplementation,
     },
-    types::{HotShotHandle, Message, SignatureKey},
-    HotShot, HotShotInitializer,
+    types::{Message, SignatureKey, SystemContextHandle},
+    HotShotInitializer, SystemContext,
 };
 use hotshot_types::{
+    certificate::ViewSyncCertificate,
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
     message::SequencingMessage,
     traits::{
         consensus_type::sequencing_consensus::SequencingConsensus,
-        election::{CommitteeExchange, Membership as MembershipTrait, QuorumExchange},
+        election::{
+            CommitteeExchange, Membership as MembershipTrait, QuorumExchange, ViewSyncExchange,
+        },
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
-        node_implementation::{ExchangesType, NodeType, SequencingExchanges},
+        node_implementation::{ChannelMaps, ExchangesType, NodeType, SequencingExchanges},
     },
-    vote::{DAVote, QuorumVote},
+    vote::{DAVote, QuorumVote, ViewSyncVote},
     HotShotConfig,
 };
 
@@ -50,7 +56,7 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::Block;
+pub use block::{Block, Header, L1BlockInfo};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
     examples::{Sha3Digest, Sha3Node},
@@ -69,7 +75,7 @@ pub const MAX_NMT_DEPTH: usize = 10;
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NMTRoot {
     #[serde(with = "nmt_root_serializer")]
     root: <TransactionNMT as MerkleTreeScheme>::NodeValue,
@@ -116,7 +122,7 @@ pub mod network {
                 SeqTypes,
                 Message<SeqTypes, I>,
                 DAProposal<SeqTypes>,
-                DAVote<SeqTypes, Leaf>,
+                DAVote<SeqTypes>,
                 Membership,
             > + Debug;
         type QuorumChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
@@ -126,6 +132,13 @@ pub mod network {
                 QuorumVote<SeqTypes, Leaf>,
                 Membership,
             > + Debug;
+        type ViewSyncChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
+                SeqTypes,
+                Message<SeqTypes, I>,
+                ViewSyncCertificate<SeqTypes>,
+                ViewSyncVote<SeqTypes>,
+                Membership,
+            > + Debug;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -133,12 +146,19 @@ pub mod network {
 
     impl Type for Web {
         type DAChannel<I: NodeImplementation<SeqTypes>> =
-            WebCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes, Leaf>, Membership>;
+            WebCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes>, Membership>;
         type QuorumChannel<I: NodeImplementation<SeqTypes>> = WebCommChannel<
             SeqTypes,
             I,
             QuorumProposal<SeqTypes, Leaf>,
             QuorumVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+        type ViewSyncChannel<I: NodeImplementation<SeqTypes>> = WebCommChannel<
+            SeqTypes,
+            I,
+            ViewSyncCertificate<SeqTypes>,
+            ViewSyncVote<SeqTypes>,
             Membership,
         >;
     }
@@ -147,18 +167,20 @@ pub mod network {
     pub struct Memory;
 
     impl Type for Memory {
-        type DAChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
-            SeqTypes,
-            I,
-            DAProposal<SeqTypes>,
-            DAVote<SeqTypes, Leaf>,
-            Membership,
-        >;
+        type DAChannel<I: NodeImplementation<SeqTypes>> =
+            MemoryCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes>, Membership>;
         type QuorumChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
             SeqTypes,
             I,
             QuorumProposal<SeqTypes, Leaf>,
             QuorumVote<SeqTypes, Leaf>,
+            Membership,
+        >;
+        type ViewSyncChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
+            SeqTypes,
+            I,
+            ViewSyncCertificate<SeqTypes>,
+            ViewSyncVote<SeqTypes>,
             Membership,
         >;
     }
@@ -170,7 +192,10 @@ pub mod network {
     Clone(bound = ""),
     Copy(bound = ""),
     Debug(bound = ""),
-    Default(bound = "")
+    Default(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Hash(bound = "")
 )]
 pub struct Node<N: network::Type>(PhantomData<fn(&N)>);
 
@@ -182,6 +207,7 @@ pub struct SeqTypes;
 pub type Leaf = SequencingLeaf<SeqTypes>;
 pub type Membership = GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>;
 pub type Storage = MemoryStorage<SeqTypes, Leaf>;
+pub type Event = hotshot::types::Event<SeqTypes, Leaf>;
 
 pub type SignatureSchemeType = BLSSignatureScheme;
 pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
@@ -203,7 +229,23 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
             Message<SeqTypes, Self>,
         >,
         CommitteeExchange<SeqTypes, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>,
+        ViewSyncExchange<
+            SeqTypes,
+            ViewSyncCertificate<SeqTypes>,
+            Membership,
+            N::ViewSyncChannel<Self>,
+            Message<SeqTypes, Self>,
+        >,
     >;
+
+    fn new_channel_maps(
+        start_view: ViewNumber,
+    ) -> (
+        ChannelMaps<SeqTypes, Self>,
+        Option<ChannelMaps<SeqTypes, Self>>,
+    ) {
+        (ChannelMaps::new(start_view), None)
+    }
 }
 
 impl NodeType for SeqTypes {
@@ -243,17 +285,75 @@ pub enum Error {
 type PubKey = JfPubKey<SignatureSchemeType>;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-#[allow(clippy::too_many_arguments)]
+struct CommChannels<N: network::Type> {
+    da: N::DAChannel<Node<N>>,
+    quorum: N::QuorumChannel<Node<N>>,
+    view_sync: N::ViewSyncChannel<Node<N>>,
+}
+
+impl CommChannels<network::Web> {
+    fn web(network_params: NetworkParams, pub_key: PubKey) -> Self {
+        let wait_time = Duration::from_millis(100);
+        let da_network = Arc::new(WebServerNetwork::create(
+            &network_params.da_server_url.host().unwrap().to_string(),
+            network_params
+                .da_server_url
+                .port_or_known_default()
+                .unwrap(),
+            wait_time,
+            pub_key.clone(),
+            true,
+        ));
+        let consensus_network = Arc::new(WebServerNetwork::create(
+            &network_params
+                .consensus_server_url
+                .host()
+                .unwrap()
+                .to_string(),
+            network_params
+                .consensus_server_url
+                .port_or_known_default()
+                .unwrap(),
+            wait_time,
+            pub_key,
+            false,
+        ));
+        Self {
+            da: WebCommChannel::new(da_network),
+            quorum: WebCommChannel::new(consensus_network.clone()),
+            view_sync: WebCommChannel::new(consensus_network),
+        }
+    }
+}
+
+impl CommChannels<network::Memory> {
+    fn memory(
+        master_map: Arc<MasterMap<Message<SeqTypes, Node<network::Memory>>, PubKey>>,
+        pub_key: PubKey,
+    ) -> Self {
+        let network = Arc::new(MemoryNetwork::new(
+            pub_key,
+            Box::<NoMetrics>::default(),
+            master_map,
+            None,
+        ));
+        Self {
+            da: MemoryCommChannel::new(network.clone()),
+            quorum: MemoryCommChannel::new(network.clone()),
+            view_sync: MemoryCommChannel::new(network),
+        }
+    }
+}
+
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     genesis_block: Block,
     node_id: usize,
     priv_key: PrivKey,
     enc_key: KeyPair,
-    da_channel: N::DAChannel<Node<N>>,
-    quorum_channel: N::QuorumChannel<Node<N>>,
+    channels: CommChannels<N>,
     config: HotShotConfig<PubKey, ElectionConfig>,
-) -> HotShotHandle<SeqTypes, Node<N>> {
+) -> SystemContextHandle<SeqTypes, Node<N>> {
     // Create public and private keys for the node.
     let public_key = PubKey::from_private(&priv_key);
 
@@ -269,13 +369,13 @@ async fn init_hotshot<N: network::Type>(
     let exchanges = SequencingExchanges::create(
         nodes_pub_keys.clone(),
         (election_config.clone(), election_config),
-        (quorum_channel, da_channel),
+        (channels.quorum, channels.view_sync, channels.da),
         public_key.clone(),
         priv_key.clone(),
         enc_key,
     );
 
-    HotShot::init(
+    SystemContext::init(
         public_key,
         priv_key,
         node_id as u64,
@@ -299,7 +399,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     genesis_block: Block,
     _metrics: Box<dyn Metrics>,
-) -> (HotShotHandle<SeqTypes, Node<network::Web>>, u64) {
+) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         host: network_params.orchestrator_url.host().unwrap().to_string(),
@@ -329,49 +429,21 @@ pub async fn init_node(
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
     let priv_key = priv_keys[node_index as usize].clone();
-    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(config.node_index));
+    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(node_index.into()));
 
     // Wait for other nodes to connect.
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
-    let wait_time = Duration::from_millis(100);
-    let da_network = WebServerNetwork::create(
-        &network_params.da_server_url.host().unwrap().to_string(),
-        network_params
-            .da_server_url
-            .port_or_known_default()
-            .unwrap(),
-        wait_time,
-        pub_keys[node_index as usize].clone(),
-        pub_keys.clone(),
-    );
-    let consensus_network = WebServerNetwork::create(
-        &network_params
-            .consensus_server_url
-            .host()
-            .unwrap()
-            .to_string(),
-        network_params
-            .consensus_server_url
-            .port_or_known_default()
-            .unwrap(),
-        wait_time,
-        pub_keys[node_index as usize].clone(),
-        pub_keys.clone(),
-    );
-    let da_channel = WebCommChannel::new(Arc::new(da_network));
-    let quorum_channel = WebCommChannel::new(Arc::new(consensus_network));
 
     (
         init_hotshot(
-            pub_keys,
+            pub_keys.clone(),
             genesis_block,
             node_index as usize,
             priv_key,
             enc_key,
-            da_channel,
-            quorum_channel,
+            CommChannels::web(network_params, pub_keys[node_index as usize].clone()),
             config.config,
         )
         .await,
@@ -383,18 +455,19 @@ pub async fn init_node(
 pub mod testing {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use core::panic;
     use either::Either;
-    use hotshot::{
-        traits::implementations::{MasterMap, MemoryNetwork},
-        types::{Event, EventType::Decide},
+    use futures::{Stream, StreamExt};
+    use hotshot::{types::EventType::Decide, HotShotSequencingConsensusApi};
+    use hotshot_consensus::SequencingConsensusApi;
+    use hotshot_types::{
+        data::LeafType, message::DataMessage, traits::state::ConsensusTime, ExecutionType,
     };
-    use hotshot_types::{data::LeafType, ExecutionType};
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
-    use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+    use std::time::Duration;
 
-    pub async fn init_hotshot_handles() -> Vec<HotShotHandle<SeqTypes, Node<network::Memory>>> {
+    pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
+    {
         setup_logging();
         setup_backtrace();
 
@@ -436,7 +509,7 @@ pub mod testing {
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(1),
             election_config: Some(Membership::default_election_config(num_nodes as u64)),
-            da_committee_size: NonZeroUsize::new(num_nodes).unwrap(),
+            da_committee_size: num_nodes,
         };
 
         // Create HotShot instances.
@@ -444,24 +517,13 @@ pub mod testing {
             let priv_key = (sign_key.clone(), *ver_key);
             let public_key = JfPubKey::from_native(*ver_key);
 
-            let network = MemoryNetwork::new(
-                public_key.clone(),
-                Box::<NoMetrics>::default(),
-                master_map.clone(),
-                None,
-            );
-
-            let da_channel = MemoryCommChannel::new(Arc::new(network.clone()));
-            let quorum_channel = MemoryCommChannel::new(Arc::new(network));
-
             let handle = init_hotshot(
                 nodes_pub_keys.clone(),
                 genesis_block.clone(),
                 node_id,
                 priv_key,
                 enc_key.clone(),
-                da_channel,
-                quorum_channel,
+                CommChannels::memory(master_map.clone(), public_key.clone()),
                 config.clone(),
             )
             .await;
@@ -472,100 +534,69 @@ pub mod testing {
     }
 
     // Wait for decide event, make sure it matches submitted transaction
-    pub async fn wait_for_decide_on_handle<N: network::Type>(
-        mut handle: HotShotHandle<SeqTypes, Node<N>>,
+    pub async fn wait_for_decide_on_handle(
+        events: &mut (impl Stream<Item = Event> + Unpin),
         submitted_txn: Transaction,
     ) -> Result<(), ()> {
-        let start_view = handle.get_current_view().await;
-
         // Keep getting events until we see a Decide event
         loop {
-            let event = handle.next_event().await;
+            let event = events.next().await;
             tracing::info!("Received event from handle: {event:?}");
 
-            match event {
-                Ok(Event {
-                    event:
-                        Decide {
-                            leaf_chain: leaf, ..
-                        },
-                    ..
-                }) => {
-                    if leaf.iter().any(|leaf| match leaf.get_deltas() {
-                        Either::Left(block) => block
-                            .transaction_nmt
-                            .leaves()
-                            .any(|txn| txn == &submitted_txn),
-                        Either::Right(_) => false,
-                    }) {
-                        return Ok(());
-                    }
+            if let Some(Event {
+                event: Decide {
+                    leaf_chain: leaf, ..
+                },
+                ..
+            }) = event
+            {
+                if leaf.iter().any(|leaf| match leaf.get_deltas() {
+                    Either::Left(block) => block
+                        .transaction_nmt
+                        .leaves()
+                        .any(|txn| txn == &submitted_txn),
+                    Either::Right(_) => false,
+                }) {
+                    return Ok(());
                 }
-                Ok(Event {
-                    view_number: vn, ..
-                }) => {
-                    // Don't wait too long; 20 views should more more than enough
-                    if *vn > *start_view + 20u64 {
-                        panic!();
-                    }
-                } // Keep waiting
-                _ => panic!(), // Error
+            } else {
+                // Keep waiting
             }
         }
+    }
+
+    // Submit transaction to given handle.
+    pub async fn submit_txn_to_handle<N: network::Type>(
+        handle: &SystemContextHandle<SeqTypes, Node<N>>,
+        txn: Transaction,
+    ) {
+        let api = HotShotSequencingConsensusApi {
+            inner: handle.hotshot.inner.clone(),
+        };
+        api.send_transaction(DataMessage::SubmitTransaction(txn, ViewNumber::new(0)))
+            .await
+            .expect("Failed to submit transaction");
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{
-        transaction::{ApplicationTransaction, Transaction},
-        vm::{TestVm, Vm},
-    };
+    use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use core::panic;
-    use either::Either;
-    use hotshot::types::{Event, EventType::Decide};
-    use hotshot_testing::test_builder::{TestBuilder, TestMetadata};
-    use testing::{init_hotshot_handles, wait_for_decide_on_handle};
-
-    // Submit transaction to given handle, return clone of transaction
-    async fn submit_txn_to_handle<I: NodeImplementation<SeqTypes>>(
-        handle: HotShotHandle<SeqTypes, I>,
-        txn: &ApplicationTransaction,
-    ) -> Transaction {
-        let tx = Transaction::new(TestVm {}.id(), bincode::serialize(txn).unwrap());
-
-        handle
-            .submit_transaction(tx.clone())
-            .await
-            .expect("Failed to submit transaction");
-
-        tx
-    }
+    use hotshot_testing::test_builder::TestMetadata;
+    use testing::{init_hotshot_handles, submit_txn_to_handle, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
     #[async_std::test]
     async fn hotshot_test() {
-        let builder = TestBuilder {
-            metadata: TestMetadata {
-                total_nodes: 10,
-                start_nodes: 10,
-                num_succeeds: 10,
-                min_transactions: 1,
-                failure_threshold: 3,
-                da_committee_size: 4,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        setup_logging();
+        setup_backtrace();
 
-        builder
-            .build::<SeqTypes, Node<network::Memory>>()
+        TestMetadata::default()
+            .gen_launcher::<SeqTypes, Node<network::Memory>>()
             .launch()
             .run_test()
-            .await
-            .unwrap();
+            .await;
     }
 
     #[async_std::test]
@@ -574,33 +605,17 @@ mod test {
         setup_backtrace();
 
         let mut handles = init_hotshot_handles().await;
+        let mut events = handles[0].get_event_stream(Default::default()).await.0;
         for handle in handles.iter() {
-            handle.start().await;
-        }
-
-        let event = handles[0].next_event().await;
-        tracing::info!("Received event from handle: {event:?}");
-
-        // Should immediately get genesis block decide event
-        match event {
-            Ok(Event {
-                event: Decide {
-                    leaf_chain: leaf, ..
-                },
-                ..
-            }) => {
-                // Exactly one leaf, and it contains the genesis block
-                assert_eq!(leaf.len(), 1);
-                assert_eq!(leaf[0].deltas, Either::Left(Block::genesis()));
-            }
-            _ => panic!(),
+            handle.hotshot.start_consensus().await;
         }
 
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
-        let submitted_txn = submit_txn_to_handle(handles[0].clone(), &txn).await;
+        let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
+        submit_txn_to_handle(&handles[0], submitted_txn.clone()).await;
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(handles[0].clone(), submitted_txn).await
+        wait_for_decide_on_handle(&mut events, submitted_txn).await
     }
 }

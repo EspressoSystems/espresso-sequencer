@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 ark-serialize = { version = "0.3.0", features = ["derive"] }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.2.0" }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.3.0" }
 async-std = { version = "1.12", features = ["attributes"] }
 clap = "4.3.10"
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
@@ -34,7 +34,8 @@ toml = "0.5"
 tracing = "0.1"
 
 [dev-dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "paper_benchmarking", features = [
+derivative = "2.2"
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
