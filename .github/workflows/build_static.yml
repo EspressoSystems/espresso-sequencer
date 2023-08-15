@@ -76,6 +76,7 @@ jobs:
             target/${{ env.TARGET }}/release/sequencer
             target/${{ env.TARGET }}/release/example-l2
             target/${{ env.TARGET }}/release/cli
+            target/${{ env.TARGET }}/release/commitment-task
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -125,6 +126,12 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
 
+      - name: Generate commitment task docker metadata
+        uses: docker/metadata-action@v4
+        id: commitment-task
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
+
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v4
         id: example-rollup
@@ -170,3 +177,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.example-rollup.outputs.tags }}
           labels: ${{ steps.example-rollup.outputs.labels }}
+
+      - name: Build and push commitment-task docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/web-server.Dockerfile
+          platforms: linux/amd64,arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.commitment-task.outputs.tags }}
+          labels: ${{ steps.commitment-task.outputs.labels }}
