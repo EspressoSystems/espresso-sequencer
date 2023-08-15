@@ -1,6 +1,9 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use futures::future::{join_all, FutureExt};
+use futures::{
+    future::{join_all, FutureExt},
+    stream::StreamExt,
+};
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, SequencerNode},
@@ -68,13 +71,14 @@ async fn main() {
     tasks.push(
         async move {
             // Start doing consensus.
-            handle.start().await;
+            handle.hotshot.start_consensus().await;
 
             // Wait for events just to keep the process from exiting before consensus exits.
-            loop {
-                let event = handle.next_event().await;
+            let mut events = handle.get_event_stream(Default::default()).await.0;
+            while let Some(event) = events.next().await {
                 tracing::debug!(?event);
             }
+            tracing::debug!("event stream ended");
         }
         .boxed(),
     );
