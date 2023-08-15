@@ -182,7 +182,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./
-          file: ./docker/web-server.Dockerfile
+          file: ./docker/commitment-task.Dockerfile
           platforms: linux/amd64,arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.commitment-task.outputs.tags }}
