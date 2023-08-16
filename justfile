@@ -55,9 +55,7 @@ dev-demo:
 dev-commitment:
      target/release/commitment-task --sequencer-url http://localhost:50000 \
      --l1-provider http://localhost:8545 \
-     --hotshot-address 0x5fbdb2315678afecb367f032d93f642f64180aa3 \
-     --rollup-mnemonic "test test test test test test test test test test test junk" \
-     --deploy
+     --eth-mnemonic "test test test test test test test test test test test junk" \
 
 build-docker-images:
     scripts/build-docker-images
