@@ -1,0 +1,8 @@
+{
+    "timestamp": 789,
+    "l1_block": {
+        "number": 123,
+        "timestamp": "0x456"
+    },
+    "transaction_nmt": []
+}

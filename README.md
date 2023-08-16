@@ -97,6 +97,11 @@ To generate documentation in `./docs` for solidity code run
 forge doc
 ```
 
+To verify the HotShot contract on sepolia via Etherscan run
+```
+env ETHERSCAN_API_KEY=... scripts/verify-contract HOTSHOT_ADDRESS
+```
+
 ## Misc
 
 ### Authenticate with GitHub container registry

@@ -11,6 +11,7 @@ testing = []
 [dev-dependencies]
 portpicker = "0.1.1"
 rand = "0.8.5"
+serde_json = "1.0"
 tempfile = "3.4.0"
 
 [dependencies]
@@ -30,24 +31,30 @@ derive_more = "0.99.17"
 either = "1.8.1"
 ethers = "2.0"
 futures = "0.3"
+lazy_static = "1.4"
+time = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
+hotshot-consensus = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "run_view_refactor", features = [
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", features = [
+    "async-std-executor",
+    "channel-async-std",
+] }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", features = [
     "async-std-executor",
     "channel-async-std",
 ] }
