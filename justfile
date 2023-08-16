@@ -52,5 +52,11 @@ dev-demo:
      --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
      --rollup-mnemonic "test test test test test test test test test test test junk"
 
+dev-commitment:
+     target/release/commitment-task --sequencer-url http://localhost:50000 \
+     --l1-provider http://localhost:8545 \
+     --eth-mnemonic "test test test test test test test test test test test junk" \
+     --deploy
+
 build-docker-images:
     scripts/build-docker-images

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#
+# Usage env ETHERSCAN_API_KEY=XYZ ./verify-contract HOTSHOT_ADDRESS
+#
+set -euo pipefail
+
+forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch $1 contracts/src/HotShot.sol:HotShot
