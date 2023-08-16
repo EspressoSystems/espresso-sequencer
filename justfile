@@ -56,6 +56,7 @@ dev-commitment:
      target/release/commitment-task --sequencer-url http://localhost:50000 \
      --l1-provider http://localhost:8545 \
      --eth-mnemonic "test test test test test test test test test test test junk" \
+     --deploy
 
 build-docker-images:
     scripts/build-docker-images

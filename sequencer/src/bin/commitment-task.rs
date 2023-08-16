@@ -15,8 +15,8 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider: Url,
 
-    /// Optional address of a predeployed HotShot contract on layer 1. If unspecified, the task will deploy
-    /// a HotShot instance before launching the commitment task.
+    /// Optional address of a predeployed HotShot contract on layer 1. If unspecified, the --deploy flag must be set
+    /// to instruct the script to launch a new HotShot contract.
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS")]
     pub hotshot_address: Option<Address>,
 
@@ -35,6 +35,10 @@ pub struct Options {
         default_value = "0"
     )]
     pub hotshot_account_index: u32,
+
+    /// If true, the executable will attempt to deploy a HotShot contract instance if a HotShot address is not provided.
+    #[clap(long)]
+    pub deploy: bool,
 }
 
 #[async_std::main]
@@ -47,8 +51,12 @@ async fn main() {
 
     if let Some(address) = opt.hotshot_address {
         hotshot_address = address;
+    } else if !opt.deploy {
+        panic!("No HotShot address provided, use the --deploy flag if you would like the script to deploy a HotShot contract instance.")
     } else {
-        tracing::info!("HotShot contract address unspecified, deploying HotShot contract.");
+        tracing::info!(
+            "No HotShot address provided and --deploy flag set, deploying HotShot contract."
+        );
 
         let provider = Provider::try_from(opt.l1_provider.to_string()).unwrap();
         let chain_id = provider
