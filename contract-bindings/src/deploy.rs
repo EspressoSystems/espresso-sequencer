@@ -46,10 +46,14 @@ impl TestClients {
     }
 }
 
-pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> TestClient {
-    let mnemonic = MnemonicBuilder::<English>::default()
-        .phrase("test test test test test test test test test test test junk");
-    let provider = Arc::new(SignerMiddleware::new(
+pub fn create_signer(
+    index: u32,
+    provider: &Provider<Http>,
+    chain_id: u64,
+    mnemonic_str: &str,
+) -> Arc<EthMiddleware> {
+    let mnemonic = MnemonicBuilder::<English>::default().phrase(mnemonic_str);
+    Arc::new(SignerMiddleware::new(
         provider.clone(),
         mnemonic
             .index(index)
@@ -57,7 +61,12 @@ pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> 
             .build()
             .unwrap()
             .with_chain_id(chain_id),
-    ));
+    ))
+}
+
+pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> TestClient {
+    let test_mnemonic = "test test test test test test test test test test test junk";
+    let provider = create_signer(index, provider, chain_id, test_mnemonic);
     TestClient { provider, index }
 }
 
