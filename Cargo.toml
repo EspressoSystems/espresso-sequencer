@@ -48,7 +48,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", featur
     "channel-async-std",
 ] }
 hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git" }
-itertools = "0.10"
+itertools = "0.11"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
