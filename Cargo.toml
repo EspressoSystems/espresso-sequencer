@@ -55,7 +55,7 @@ snafu = { version = "0.7", features = ["backtraces"] }
 spin_sleep = "1.1"
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
 time = "0.3.25"
-toml = "0.5"
+toml = "0.7"
 tracing = "0.1"
 
 # Dependencies enabled by feature "testing".
