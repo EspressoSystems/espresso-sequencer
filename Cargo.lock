@@ -3499,7 +3499,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot#32f0aad41e707a6456a740cc50c5a7f019ba62bd"
+source = "git+https://github.com/EspressoSystems/hotshot#0fea552d3eca281a64afc06837d3c830931c9b6c"
 dependencies = [
  "ark-bls12-381 0.3.0",
  "async-compatibility-layer",
