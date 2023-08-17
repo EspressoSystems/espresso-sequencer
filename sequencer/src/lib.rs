@@ -30,7 +30,6 @@ use hotshot_types::{
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
     message::SequencingMessage,
     traits::{
-        consensus_type::sequencing_consensus::SequencingConsensus,
         election::{
             CommitteeExchange, Membership as MembershipTrait, QuorumExchange, ViewSyncExchange,
         },
@@ -249,7 +248,6 @@ impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
 }
 
 impl NodeType for SeqTypes {
-    type ConsensusType = SequencingConsensus;
     type Time = ViewNumber;
     type BlockType = Block;
     type SignatureKey = SignatureKeyType;
@@ -369,7 +367,7 @@ async fn init_hotshot<N: network::Type>(
     let exchanges = SequencingExchanges::create(
         nodes_pub_keys.clone(),
         (election_config.clone(), election_config),
-        (channels.quorum, channels.view_sync, channels.da),
+        (channels.quorum, channels.da, channels.view_sync),
         public_key.clone(),
         priv_key.clone(),
         enc_key,
@@ -460,11 +458,82 @@ pub mod testing {
     use hotshot::{types::EventType::Decide, HotShotSequencingConsensusApi};
     use hotshot_consensus::SequencingConsensusApi;
     use hotshot_types::{
-        data::LeafType, message::DataMessage, traits::state::ConsensusTime, ExecutionType,
+        data::LeafType,
+        message::DataMessage,
+        traits::{
+            election::ConsensusExchange,
+            network::{TestableChannelImplementation, TestableNetworkingImplementation},
+            node_implementation::TestableExchange,
+            state::ConsensusTime,
+        },
+        ExecutionType,
     };
     use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
     use rand::thread_rng;
     use std::time::Duration;
+
+    impl TestableExchange<SeqTypes, Leaf, Message<SeqTypes, Node<network::Memory>>>
+        for <Node<network::Memory> as NodeImplementation<SeqTypes>>::Exchanges
+    {
+        fn gen_comm_channels(
+            expected_node_count: usize,
+            num_bootstrap: usize,
+            da_committee_size: usize,
+        ) -> Box<
+            dyn Fn(
+                    u64,
+                ) -> (
+                    <Self::QuorumExchange as ConsensusExchange<
+                        SeqTypes,
+                        Message<SeqTypes, Node<network::Memory>>,
+                    >>::Networking,
+                    <Self::CommitteeExchange as ConsensusExchange<
+                        SeqTypes,
+                        Message<SeqTypes, Node<network::Memory>>,
+                    >>::Networking,
+                    <Self::ViewSyncExchange as ConsensusExchange<
+                        SeqTypes,
+                        Message<SeqTypes, Node<network::Memory>>,
+                    >>::Networking,
+                ) + 'static,
+        > {
+            let network_generator = Arc::new(<MemoryNetwork<
+                Message<SeqTypes, Node<network::Memory>>,
+                <SeqTypes as NodeType>::SignatureKey,
+            > as TestableNetworkingImplementation<
+                SeqTypes,
+                Message<SeqTypes, Node<network::Memory>>,
+            >>::generator(
+                expected_node_count,
+                num_bootstrap,
+                0,
+                da_committee_size,
+                false,
+            ));
+            let network_da_generator = Arc::new(<MemoryNetwork<
+                Message<SeqTypes, Node<network::Memory>>,
+                <SeqTypes as NodeType>::SignatureKey,
+            > as TestableNetworkingImplementation<
+                SeqTypes,
+                Message<SeqTypes, Node<network::Memory>>,
+            >>::generator(
+                expected_node_count,
+                num_bootstrap,
+                1,
+                da_committee_size,
+                true,
+            ));
+            Box::new(move |id| {
+                let network = Arc::new(network_generator(id));
+                let network_da = Arc::new(network_da_generator(id));
+                let quorum_chan = <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
+                let committee_chan = <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network_da);
+                let view_sync_chan = <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network);
+
+                (quorum_chan, committee_chan, view_sync_chan)
+            })
+        }
+    }
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
     {
