@@ -30,7 +30,6 @@ use hotshot_types::{
     message::SequencingMessage,
     traits::{
         block_contents::Transaction,
-        consensus_type::sequencing_consensus::SequencingConsensus,
         election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, NodeType, SequencingExchanges},
         signature_key::ed25519::Ed25519Pub,
@@ -272,7 +271,6 @@ impl TestableBlock for MockBlock {
 pub struct MockTypes;
 
 impl NodeType for MockTypes {
-    type ConsensusType = SequencingConsensus;
     type Time = ViewNumber;
     type BlockType = MockBlock;
     type SignatureKey = Ed25519Pub;
