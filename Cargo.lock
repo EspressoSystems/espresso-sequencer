@@ -2013,6 +2013,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deranged"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7684a49fb1af197853ef7b2ee694bc1f5b4179556f1e5710e1760c5db6f5e929"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3302,7 +3311,7 @@ dependencies = [
  "serde",
  "snafu",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?branch=main)",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -3324,7 +3333,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "snafu",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -3413,7 +3422,7 @@ dependencies = [
  "snafu",
  "spin_sleep",
  "tide-disco",
- "time 0.3.23",
+ "time 0.3.25",
  "toml 0.5.11",
  "tracing",
 ]
@@ -3462,7 +3471,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -3531,7 +3540,7 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64 0.2.4",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -6645,7 +6654,7 @@ dependencies = [
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.1)",
  "tempfile",
  "tide-disco",
- "time 0.3.23",
+ "time 0.3.25",
  "toml 0.5.11",
  "tracing",
  "typenum",
@@ -6752,7 +6761,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with_macros",
- "time 0.3.23",
+ "time 0.3.25",
 ]
 
 [[package]]
@@ -7682,14 +7691,15 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.23"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
+checksum = "b0fdd63d58b18d663fbdf70e049f00a22c8e42be082203be7f26589213cd75ea"
 dependencies = [
+ "deranged",
  "itoa 1.0.9",
  "serde",
  "time-core",
- "time-macros 0.2.10",
+ "time-macros 0.2.11",
 ]
 
 [[package]]
@@ -7710,9 +7720,9 @@ dependencies = [
 
 [[package]]
 name = "time-macros"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
+checksum = "eb71511c991639bb078fd5bf97757e03914361c48100d52878b8e52b46fb92cd"
 dependencies = [
  "time-core",
 ]
@@ -8718,7 +8728,7 @@ dependencies = [
  "hmac 0.12.1",
  "pbkdf2 0.11.0",
  "sha1 0.10.5",
- "time 0.3.23",
+ "time 0.3.25",
  "zstd",
 ]
 
