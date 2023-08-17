@@ -49,7 +49,10 @@ fn load_toml(path: &Path) -> Result<Value, ApiError> {
     let bytes = fs::read(path).map_err(|err| ApiError::CannotReadToml {
         reason: err.to_string(),
     })?;
-    toml::from_slice(&bytes).map_err(|err| ApiError::CannotReadToml {
+    let string = std::str::from_utf8(&bytes).map_err(|err| ApiError::CannotReadToml {
+        reason: err.to_string(),
+    })?;
+    toml::from_str(string).map_err(|err| ApiError::CannotReadToml {
         reason: err.to_string(),
     })
 }
