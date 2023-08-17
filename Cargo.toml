@@ -53,9 +53,9 @@ prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 spin_sleep = "1.1"
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.2" }
 time = "0.3.25"
-toml = "0.5"
+toml = "0.7"
 tracing = "0.1"
 
 # Dependencies enabled by feature "testing".
@@ -79,5 +79,5 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 [dev-dependencies]
 portpicker = "0.1"
 rand = "0.8"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.1" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.2" }
 tempdir = "0.3"

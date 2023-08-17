@@ -603,7 +603,7 @@ mod test {
         let mut api =
             define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>, MockTypes, MockNodeImpl>(
                 &Options {
-                    extensions: vec![extensions],
+                    extensions: vec![extensions.into()],
                     ..Default::default()
                 },
             )
