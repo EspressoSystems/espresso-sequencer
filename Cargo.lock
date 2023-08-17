@@ -1746,6 +1746,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deranged"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7684a49fb1af197853ef7b2ee694bc1f5b4179556f1e5710e1760c5db6f5e929"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2503,7 +2512,7 @@ dependencies = [
  "serde",
  "snafu",
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?branch=main)",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -2547,7 +2556,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "snafu",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -2629,7 +2638,7 @@ dependencies = [
  "hotshot-consensus",
  "hotshot-types",
  "hotshot-utils",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "jf-primitives",
  "portpicker",
  "prometheus",
@@ -2640,7 +2649,7 @@ dependencies = [
  "surf-disco 0.4.1 (git+https://github.com/EspressoSystems/surf-disco.git?tag=v0.4.1)",
  "tempdir",
  "tide-disco",
- "time 0.3.23",
+ "time 0.3.25",
  "toml 0.5.11",
  "tracing",
 ]
@@ -2689,7 +2698,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -2729,7 +2738,7 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64 0.2.4",
- "time 0.3.23",
+ "time 0.3.25",
  "tracing",
 ]
 
@@ -3102,6 +3111,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3116,7 +3134,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#58eb45ab189364a2538e5ccaa912a3afdabd2bd1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#61276c0166604e1912c1a8f4bd127c74da25482e"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
@@ -3162,7 +3180,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#58eb45ab189364a2538e5ccaa912a3afdabd2bd1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#61276c0166604e1912c1a8f4bd127c74da25482e"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381 0.4.0",
@@ -3188,7 +3206,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#58eb45ab189364a2538e5ccaa912a3afdabd2bd1"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=hotshot-compat#61276c0166604e1912c1a8f4bd127c74da25482e"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -5346,18 +5364,18 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.174"
+version = "1.0.179"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b88756493a5bd5e5395d53baa70b194b05764ab85b59e43e4b8f4e1192fa9b1"
+checksum = "0a5bf42b8d227d4abf38a1ddb08602e229108a517cd4e5bb28f9c7eaafdce5c0"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.174"
+version = "1.0.179"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5c3a298c7f978e53536f95a63bdc4c4a64550582f31a0359a9afda6aede62e"
+checksum = "741e124f5485c7e60c03b043f79f320bff3527f4bbf12cf3831750dc46a0ec2c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5429,7 +5447,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with_macros",
- "time 0.3.23",
+ "time 0.3.25",
 ]
 
 [[package]]
@@ -6239,14 +6257,15 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.23"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
+checksum = "b0fdd63d58b18d663fbdf70e049f00a22c8e42be082203be7f26589213cd75ea"
 dependencies = [
+ "deranged",
  "itoa 1.0.9",
  "serde",
  "time-core",
- "time-macros 0.2.10",
+ "time-macros 0.2.11",
 ]
 
 [[package]]
@@ -6267,9 +6286,9 @@ dependencies = [
 
 [[package]]
 name = "time-macros"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
+checksum = "eb71511c991639bb078fd5bf97757e03914361c48100d52878b8e52b46fb92cd"
 dependencies = [
  "time-core",
 ]

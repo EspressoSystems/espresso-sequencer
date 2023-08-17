@@ -27,7 +27,7 @@ jobs:
         name: Checkout Repository
 
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: arduino/setup-protoc@v2
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -36,7 +36,7 @@ jobs:
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
           git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
       - name: Format Check
