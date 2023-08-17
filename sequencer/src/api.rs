@@ -69,7 +69,7 @@ impl SubmitOptions {
         S::State: Send + Sync + Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>,
     {
         // Include API specification in binary
-        let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
+        let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
         // Initialize submit API
@@ -179,7 +179,7 @@ impl Options {
             // Initialize availability and status APIs
             let mut options: AvailabilityOptions = Default::default();
             let namespace_extension =
-                toml::from_str::<toml::value::Value>(include_str!("namespace_api.toml"))
+                toml::from_str::<toml::value::Value>(include_str!("../api/availability.toml"))
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
             options.extensions.push(namespace_extension);
             let mut availability_api =
