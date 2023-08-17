@@ -35,7 +35,6 @@
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use futures::StreamExt;
 //! use hotshot::SystemContext;
-//! use hotshot_types::traits::consensus_type::sequencing_consensus::SequencingConsensus;
 //! use tide_disco::App;
 //!
 //! // Create or open query data.
@@ -43,7 +42,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = SystemContext::<SequencingConsensus, AppTypes, AppNodeImpl>::init(
+//! let mut hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
