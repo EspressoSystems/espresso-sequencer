@@ -41,4 +41,4 @@ hotshot = { git = "https://github.com/EspressoSystems/hotshot", features = [
 ] }
 portpicker = "0.1.1"
 sequencer-utils = { path = "../utils" }
-tempfile = "3.4.0"
+tempfile = "3.7.1"
