@@ -12,6 +12,6 @@ commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
 ethers = "2.0.4"
 portpicker = "0.1.1"
 surf = "2.3.2"
-tempfile = "3.4.0"
+tempfile = "3.7.1"
 tracing = "0.1.37"
 url = "2.3.1"
