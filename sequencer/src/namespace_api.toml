@@ -1,5 +1,0 @@
-[route.getnamespaceproof]
-PATH = ["block/:height/namespace/:namespace"]
-":height" = "Integer"
-":namespace" = "Integer"
-DOC = "Get the namespace proof for a set of VM transations and the NMT root"

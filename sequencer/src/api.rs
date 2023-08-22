@@ -9,7 +9,8 @@ use hotshot::{types::Event, types::SystemContextHandle, HotShotSequencingConsens
 use hotshot_consensus::SequencingConsensusApi;
 use hotshot_query_service::{
     availability::{
-        self, AvailabilityDataSource, Error as AvailabilityError, Options as AvailabilityOptions,
+        self, AvailabilityDataSource, BlockQueryData, Error as AvailabilityError,
+        Options as AvailabilityOptions,
     },
     data_source::{QueryData, UpdateDataSource},
     status::{self, StatusDataSource},
@@ -26,11 +27,12 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
+    collections::BTreeMap,
     io,
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tide_disco::{Api, App};
+use tide_disco::{Api, App, StatusCode};
 
 /// The minimal HTTP API.
 ///
@@ -69,7 +71,7 @@ impl SubmitOptions {
         S::State: Send + Sync + Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>,
     {
         // Include API specification in binary
-        let toml = toml::from_str::<toml::value::Value>(include_str!("api.toml"))
+        let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
         // Initialize submit API
@@ -150,6 +152,18 @@ impl Options {
                 }
             }
             .expect("Failed to initialize query data storage");
+
+            // Index blocks by timestamp.
+            let mut blocks_by_time = BTreeMap::new();
+            for (i, block) in query_state.get_nth_block_iter(0).enumerate() {
+                index_block_by_time(
+                    &mut blocks_by_time,
+                    &block.unwrap_or_else(|| {
+                        panic!("block {i} is missing, cannot build timestamp index")
+                    }),
+                );
+            }
+
             let metrics: Box<dyn Metrics> = query_state.metrics();
 
             // Start up handle
@@ -167,6 +181,7 @@ impl Options {
                     inner: handle.hotshot.inner.clone(),
                 },
                 query_state,
+                blocks_by_time,
             }));
 
             let mut app = App::<_, hotshot_query_service::Error>::with_state(state.clone());
@@ -178,10 +193,10 @@ impl Options {
 
             // Initialize availability and status APIs
             let mut options: AvailabilityOptions = Default::default();
-            let namespace_extension =
-                toml::from_str::<toml::value::Value>(include_str!("namespace_api.toml"))
+            let availability_extension =
+                toml::from_str::<toml::value::Value>(include_str!("../api/availability.toml"))
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-            options.extensions.push(namespace_extension);
+            options.extensions.push(availability_extension);
             let mut availability_api =
                 availability::define_api::<StateType<N>, SeqTypes, Node<N>>(&options)
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
@@ -207,6 +222,73 @@ impl Options {
                     }
                     .boxed()
                 })
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                .get("gettimestampwindow", |req, state| {
+                    async move {
+                        let first_block = if let Some(height) = req.opt_integer_param("height")? {
+                            height
+                        } else if let Some(hash) = req.opt_blob_param("hash")? {
+                            state.get_block_index_by_hash(hash).ok_or(
+                                AvailabilityError::UnknownBlockHash {
+                                    hash: hash.to_string(),
+                                },
+                            )?
+                        } else {
+                            let start: u64 = req.integer_param("start")?;
+
+                            // Find the minimum timestamp which is at least `start`, and all the
+                            // blocks with that timestamp.
+                            let blocks = state
+                                .blocks_by_time
+                                .range(start..)
+                                .next()
+                                .ok_or_else(|| AvailabilityError::Custom {
+                                    status: StatusCode::NotFound,
+                                    message: format!("no blocks with timestamp at least {start}"),
+                                })?
+                                .1;
+                            // Multiple blocks can have the same timestamp (when truncated to
+                            // seconds); we want the first one. It is an invariant that any
+                            // timestamp which has an entry in `blocks_by_time` has a non-empty list
+                            // associated with it, so this indexing is safe.
+                            blocks[0]
+                        };
+
+                        let mut res = TimeWindowQueryData::new(first_block);
+
+                        // Include the block just before the start of the window, if there is one.
+                        if first_block > 0 {
+                            let prev = state
+                                .get_nth_block_iter(first_block as usize - 1)
+                                .next()
+                                .ok_or(AvailabilityError::InvalidLeafHeight {
+                                    height: first_block - 1,
+                                })?
+                                .ok_or(AvailabilityError::MissingBlock {
+                                    height: first_block - 1,
+                                })?;
+                            res.prev = Some(Header::from(prev.block()));
+                        }
+
+                        // Add blocks to the window, starting from `first_block`, until we reach the
+                        // end of the requested time window.
+                        let end = req.integer_param("end")?;
+                        for (i, block) in state.get_nth_block_iter(first_block as usize).enumerate()
+                        {
+                            let height = first_block + i as u64;
+                            let block = block.ok_or(AvailabilityError::MissingBlock { height })?;
+                            let header = Header::from(block.block());
+                            if header.timestamp >= end {
+                                res.next = Some(header);
+                                break;
+                            }
+                            res.window.push(header);
+                        }
+
+                        Ok(res)
+                    }
+                    .boxed()
+                })
                 .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
 
             // Register modules in app
@@ -222,6 +304,7 @@ impl Options {
                         tracing::debug!("waiting for event");
                         while let Some(event) = events.next().await {
                             tracing::info!("got event {:?}", event);
+
                             // If update results in an error, program state is unrecoverable
                             if let Err(err) = state.write().await.update(&event).await {
                                 tracing::error!(
@@ -270,6 +353,16 @@ impl Options {
     }
 }
 
+fn index_block_by_time(
+    blocks_by_time: &mut BTreeMap<u64, Vec<u64>>,
+    block: &BlockQueryData<SeqTypes>,
+) {
+    blocks_by_time
+        .entry(block.block().timestamp())
+        .or_default()
+        .push(block.height());
+}
+
 type NodeIndex = u64;
 
 pub struct SequencerNode<N: network::Type> {
@@ -285,13 +378,47 @@ pub type HandleFromMetrics<N> = Box<
 >;
 
 struct AppState<N: network::Type> {
-    pub submit_state: HotShotSequencingConsensusApi<SeqTypes, Node<N>>,
-    pub query_state: QueryData<SeqTypes, Node<N>, ()>,
+    submit_state: HotShotSequencingConsensusApi<SeqTypes, Node<N>>,
+    query_state: QueryData<SeqTypes, Node<N>, ()>,
+    blocks_by_time: BTreeMap<u64, Vec<u64>>,
 }
 
 impl<N: network::Type> Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>> for AppState<N> {
     fn borrow(&self) -> &HotShotSequencingConsensusApi<SeqTypes, Node<N>> {
         &self.submit_state
+    }
+}
+
+impl<N: network::Type> AppState<N> {
+    async fn update(&mut self, event: &Event<SeqTypes, Leaf>) -> Result<(), io::Error> {
+        // Remember the current block height, so we can update our local index
+        // based on any new blocks that get added.
+        let prev_block_height = self
+            .block_height()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        self.query_state
+            .update(event)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        self.query_state
+            .commit_version()
+            .await
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+        // Update index.
+        for (i, block) in self
+            .query_state
+            .get_nth_block_iter(prev_block_height)
+            .enumerate()
+        {
+            let Some(block) = block else {
+                tracing::warn!("missing block {}, index may be out of date", prev_block_height + i);
+                continue;
+            };
+            index_block_by_time(&mut self.blocks_by_time, &block);
+        }
+
+        Ok(())
     }
 }
 
@@ -311,15 +438,22 @@ impl NamespaceProofQueryData {
     }
 }
 
-impl<N: network::Type> AppState<N> {
-    pub async fn update(
-        &mut self,
-        event: &Event<SeqTypes, Leaf>,
-    ) -> Result<(), <QueryData<SeqTypes, Node<N>, ()> as UpdateDataSource<SeqTypes, Node<N>>>::Error>
-    {
-        self.query_state.update(event)?;
-        self.query_state.commit_version().await?;
-        Ok(())
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeWindowQueryData {
+    pub from: u64,
+    pub window: Vec<Header>,
+    pub prev: Option<Header>,
+    pub next: Option<Header>,
+}
+
+impl TimeWindowQueryData {
+    fn new(from: u64) -> Self {
+        Self {
+            from,
+            window: vec![],
+            prev: None,
+            next: None,
+        }
     }
 }
 
@@ -413,21 +547,21 @@ impl<N: network::Type> StatusDataSource for AppState<N> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::{
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         transaction::Transaction,
         vm::VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
     use futures::FutureExt;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
-
     use tempfile::TempDir;
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
-
-    use super::{HttpOptions, Options, QueryOptions, SequencerNode};
 
     #[async_std::test]
     async fn test_healthcheck() {
@@ -508,5 +642,192 @@ mod test {
 
         // Wait for a Decide event containing transaction matching the one we sent
         wait_for_decide_on_handle(&mut events, txn).await.unwrap()
+    }
+
+    #[async_std::test]
+    async fn test_timestamp_window() {
+        setup_logging();
+        setup_backtrace();
+
+        // Start sequencer.
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        // Start query service.
+        let port = pick_unused_port().expect("No ports free");
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path = tmp_dir.path().join("tmp_storage");
+        let init_handle =
+            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
+        Options::from(HttpOptions { port })
+            .query(QueryOptions {
+                storage_path,
+                reset_store: true,
+            })
+            .serve(init_handle)
+            .await
+            .unwrap();
+
+        // Connect client.
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+
+        // Wait for blocks with at least three different timestamps to be sequenced. This lets us
+        // test all the edge cases.
+        let mut test_blocks: Vec<Vec<Header>> = vec![];
+        while test_blocks.len() < 3 {
+            let num_blocks = test_blocks.iter().flatten().count();
+
+            // Wait for the next block to be sequenced.
+            while client
+                .get::<usize>("status/latest_block_height")
+                .send()
+                .await
+                .unwrap()
+                < num_blocks + 1
+            {
+                sleep(Duration::from_secs(1)).await;
+            }
+
+            let block: BlockQueryData<SeqTypes> = client
+                .get(&format!("availability/block/{num_blocks}"))
+                .send()
+                .await
+                .unwrap();
+            let header = Header::from(block.block());
+            if let Some(last_timestamp) = test_blocks.last_mut() {
+                if last_timestamp[0].timestamp == header.timestamp {
+                    last_timestamp.push(header);
+                } else {
+                    test_blocks.push(vec![header]);
+                }
+            } else {
+                test_blocks.push(vec![header]);
+            }
+        }
+        tracing::info!("blocks for testing: {test_blocks:#?}");
+
+        // Define invariants that every response should satisfy.
+        let check_invariants = |res: &TimeWindowQueryData, start, end, check_prev| {
+            let mut prev = res.prev.as_ref();
+            if let Some(prev) = prev {
+                if check_prev {
+                    assert!(prev.timestamp < start);
+                }
+            } else {
+                // `prev` can only be `None` if the first block in the window is the genesis block.
+                assert_eq!(res.from, 0);
+            };
+            for header in &res.window {
+                assert!(start <= header.timestamp);
+                assert!(header.timestamp < end);
+                if let Some(prev) = prev {
+                    assert!(prev.timestamp <= header.timestamp);
+                }
+                prev = Some(header);
+            }
+            if let Some(next) = &res.next {
+                assert!(next.timestamp >= end);
+                // If there is a `next`, there must be at least one previous block (either `prev`
+                // itself or the last block if the window is nonempty), so we can `unwrap` here.
+                assert!(next.timestamp >= prev.unwrap().timestamp);
+            }
+        };
+
+        let get_window = |start, end| {
+            let client = client.clone();
+            async move {
+                let res = client
+                    .get(&format!("availability/headers/window/{start}/{end}"))
+                    .send()
+                    .await
+                    .unwrap();
+                tracing::info!("window for timestamp range {start}-{end}: {res:#?}");
+                check_invariants(&res, start, end, true);
+                res
+            }
+        };
+
+        // Case 0: happy path. All blocks are available, including prev and next.
+        let start = test_blocks[1][0].timestamp;
+        let end = start + 1;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
+        assert_eq!(res.window, test_blocks[1]);
+        assert_eq!(res.next.unwrap(), test_blocks[2][0]);
+
+        // Case 1: no `prev`, start of window is before genesis.
+        let start = 0;
+        let end = test_blocks[0][0].timestamp + 1;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev, None);
+        assert_eq!(res.window, test_blocks[0]);
+        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
+
+        // Case 2: no `next`, end of window is after the most recently sequenced block.
+        let start = test_blocks[2][0].timestamp;
+        let end = u64::MAX;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
+        // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
+        // that the prefix of the window is correct.
+        assert_eq!(res.window[..test_blocks[2].len()], test_blocks[2]);
+        assert_eq!(res.next, None);
+        // Fetch more blocks using the `from` form of the endpoint. Start from the last block we had
+        // previously (ie fetch a slightly overlapping window) to ensure there is at least one block
+        // in the new window.
+        let from = test_blocks.iter().flatten().count() - 1;
+        let more: TimeWindowQueryData = client
+            .get(&format!("availability/headers/window/from/{from}/{end}",))
+            .send()
+            .await
+            .unwrap();
+        check_invariants(&more, start, end, false);
+        assert_eq!(
+            more.prev.as_ref().unwrap(),
+            test_blocks.iter().flatten().nth(from - 1).unwrap()
+        );
+        assert_eq!(
+            more.window[..res.window.len() - test_blocks[2].len() + 1],
+            res.window[test_blocks[2].len() - 1..]
+        );
+        assert_eq!(res.next, None);
+        // We should get the same result whether we query by block height or hash.
+        let more2: TimeWindowQueryData = client
+            .get(&format!(
+                "availability/headers/window/from/hash/{}/{}",
+                test_blocks[2].last().unwrap().commit(),
+                end
+            ))
+            .send()
+            .await
+            .unwrap();
+        check_invariants(&more2, start, end, false);
+        assert_eq!(more2.from, more.from);
+        assert_eq!(more2.prev, more.prev);
+        assert_eq!(more2.next, more.next);
+        assert_eq!(more2.window[..more.window.len()], more.window);
+
+        // Case 3: the window is empty.
+        let start = test_blocks[1][0].timestamp;
+        let end = start;
+        let res = get_window(start, end).await;
+        assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
+        assert_eq!(res.next.unwrap(), test_blocks[1][0]);
+        assert_eq!(res.window, vec![]);
+
+        // Case 5: no relevant blocks are available yet.
+        client
+            .get::<TimeWindowQueryData>(&format!(
+                "availability/headers/window/{}/{}",
+                u64::MAX - 1,
+                u64::MAX
+            ))
+            .send()
+            .await
+            .unwrap_err();
     }
 }
