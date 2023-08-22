@@ -193,10 +193,10 @@ impl Options {
 
             // Initialize availability and status APIs
             let mut options: AvailabilityOptions = Default::default();
-            let namespace_extension =
+            let availability_extension =
                 toml::from_str::<toml::value::Value>(include_str!("../api/availability.toml"))
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-            options.extensions.push(namespace_extension);
+            options.extensions.push(availability_extension);
             let mut availability_api =
                 availability::define_api::<StateType<N>, SeqTypes, Node<N>>(&options)
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
