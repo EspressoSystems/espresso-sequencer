@@ -10,7 +10,7 @@ rust-version = { workspace = true }
 ark-bls12-377 = "0.4.0"
 ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
-ark-ec = "0.4.0"
+ark-ec = { workspace = true }
 ark-ff = "0.4.0"
 ark-pallas = "0.4.0"
 ark-poly = "0.4.0"
