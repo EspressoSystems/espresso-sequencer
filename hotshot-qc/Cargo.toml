@@ -22,7 +22,7 @@ bitvec = { version = "1.0.1", default-features = false, features = [
     "atomic",
     "serde",
 ] }
-ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
+ethereum-types = { workspace = true }
 generic-array = "0.14.7"
 hotshot-types = { path = "../../types" }
 jf-primitives = { workspace = true }
