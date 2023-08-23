@@ -16,7 +16,7 @@ ark-pallas = "0.4.0"
 ark-poly = "0.4.0"
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-bincode = { version = "1.1.3" }
+bincode = { workspace = true }
 bitvec = { version = "1.0.1", default-features = false, features = [
     "alloc",
     "atomic",
