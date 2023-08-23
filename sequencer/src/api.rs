@@ -24,6 +24,7 @@ use hotshot_types::{
         state::ConsensusTime,
     },
 };
+use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -216,6 +217,11 @@ impl Options {
 
                         let proof = block.block().get_namespace_proof(namespace.into());
                         Ok(NamespaceProofQueryData {
+                            transactions: proof
+                                .get_namespace_leaves()
+                                .into_iter()
+                                .cloned()
+                                .collect(),
                             proof,
                             header: block.block().into(),
                         })
@@ -426,16 +432,7 @@ impl<N: network::Type> AppState<N> {
 pub struct NamespaceProofQueryData {
     pub proof: NamespaceProofType,
     pub header: Header,
-}
-
-impl NamespaceProofQueryData {
-    pub fn proof(&self) -> &NamespaceProofType {
-        &self.proof
-    }
-
-    pub fn header(&self) -> &Header {
-        &self.header
-    }
+    pub transactions: Vec<Transaction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
