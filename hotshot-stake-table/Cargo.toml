@@ -12,11 +12,7 @@ ark-ff = "0.4.0"
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 bincode = { workspace = true }
-bitvec = { version = "1.0.1", default-features = false, features = [
-    "alloc",
-    "atomic",
-    "serde",
-] }
+bitvec = { workspace = true }
 digest = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { workspace = true }
