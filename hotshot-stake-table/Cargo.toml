@@ -23,7 +23,7 @@ jf-relation = { git = "https://github.com/espressosystems/jellyfish", branch = "
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", branch = "hotshot-compat" }
 serde = { workspace = true, features = ["rc"] }
 tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
-typenum = { version = "1.16.0" }
+typenum = { workspace = true }
 
 [dev-dependencies]
 rand_chacha = { workspace = true }

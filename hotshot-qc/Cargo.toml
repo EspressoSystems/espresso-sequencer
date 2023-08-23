@@ -25,7 +25,7 @@ jf-primitives = { workspace = true }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", branch = "hotshot-compat" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", branch = "hotshot-compat" }
 serde = { workspace = true }
-typenum = { version = "1.16.0" }
+typenum = { workspace = true }
 
 [dev-dependencies]
 hotshot-stake-table = { path = "../hotshot-stake-table" }
