@@ -33,7 +33,7 @@ tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag 
 typenum = { version = "1.16.0" }
 
 [dev-dependencies]
-rand_chacha = { version = "0.3.1", default-features = false }
+rand_chacha = { workspace = true }
 
 [features]
 default = ["parallel"]
