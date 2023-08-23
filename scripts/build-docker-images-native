@@ -32,7 +32,7 @@ esac
 case $(uname -m) in
   x86_64)
     ARCH=amd64
-    PLATFORM=amd64
+    PLATFORM=linux/amd64
     INTERPRETER=/lib64/ld-linux-x86-64.so.2
     ;;
   arm64)
