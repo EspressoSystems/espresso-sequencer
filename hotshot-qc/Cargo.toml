@@ -28,7 +28,7 @@ hotshot-types = { path = "../../types" }
 jf-primitives = { workspace = true }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", branch = "hotshot-compat" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", branch = "hotshot-compat" }
-serde = { version = "1.0.183", features = ["derive"] }
+serde = { workspace = true }
 typenum = { version = "1.16.0" }
 
 [dev-dependencies]
