@@ -17,7 +17,7 @@ bitvec = { version = "1.0.1", default-features = false, features = [
     "atomic",
     "serde",
 ] }
-digest = { version = "0.10" }
+digest = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 generic-array = "0.14.7"
