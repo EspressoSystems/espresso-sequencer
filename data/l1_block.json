@@ -1,4 +1,5 @@
 {
     "number": 123,
-    "timestamp": "0x456"
+    "timestamp": "0x456",
+    "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }

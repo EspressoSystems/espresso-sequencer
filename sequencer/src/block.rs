@@ -1,7 +1,7 @@
 use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
 use ark_serialize::CanonicalSerialize;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::prelude::U256;
+use ethers::prelude::{H256, U256};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
@@ -10,22 +10,91 @@ use jf_primitives::merkle_tree::{
     MerkleCommitment, MerkleTreeScheme,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::max;
 use std::fmt::{Debug, Display};
 use time::OffsetDateTime;
 
+/// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    pub timestamp: u64,
-    pub l1_block: L1BlockInfo,
+    // Would be nice to use #[serde(flatten)] here, but unfortunately it doesn't work with bincode.
+    pub metadata: Metadata,
     pub transactions_root: NMTRoot,
+}
+
+impl Header {
+    pub fn timestamp(&self) -> u64 {
+        self.metadata.timestamp
+    }
+
+    pub fn l1_head(&self) -> u64 {
+        self.metadata.l1_head
+    }
+
+    pub fn l1_finalized(&self) -> Option<&L1BlockInfo> {
+        self.metadata.l1_finalized.as_ref()
+    }
+}
+
+/// Metadata shared by block headers and full blocks.
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct Metadata {
+    pub timestamp: u64,
+
+    /// The Espresso block header includes a reference to the current head of the L1 chain.
+    ///
+    /// Rollups can use this to facilitate bridging between the L1 and L2 in a deterministic way.
+    /// This field deterministically associates an L2 block with a recent L1 block the instant the
+    /// L2 block is sequenced. Rollups can then define the L2 state after this block as the state
+    /// obtained by executing all the transactions in this block _plus_ all the L1 deposits up to
+    /// the given L1 block number. Since there is no need to wait for the L2 block to be reflected
+    /// on the L1, this bridge design retains the low confirmation latency of HotShot.
+    ///
+    /// This block number indicates the unsafe head of the L1 chain, so it is subject to reorgs. For
+    /// this reason, the Espresso header does not include any information that might change in a
+    /// reorg, such as the L1 block timestamp or hash. It includes only the L1 block number, which
+    /// will always refer to _some_ block after a reorg: if the L1 head at the time this block was
+    /// sequenced gets reorged out, the L1 chain will eventually (and probably quickly) grow to the
+    /// same height once again, and a different block will exist with the same height. In this way,
+    /// Espresso does not have to handle L1 reorgs, and the Espresso blockchain will always be
+    /// reflective of the current state of the L1 blockchain. Rollups that use this block number
+    /// _do_ have to handle L1 reorgs, but each rollup and each rollup client can decide how many
+    /// confirmations they want to wait for on top of this `l1_head` before they consider an L2
+    /// block finalized. This offers a tradeoff between low-latency L1-L2 bridges and finality.
+    ///
+    /// Rollups that want a stronger guarantee of finality, or that want Espresso to attest to data
+    /// from the L1 block that might change in reorgs, can instead use the latest L1 _finalized_
+    /// block at the time this L2 block was sequenced: `l1_finalized`.
+    pub l1_head: u64,
+
+    /// The Espresso block header includes information a bout the latest finalized L1 block.
+    ///
+    /// Similar to `l1_head`, rollups can use this information to implement a bridge between the L1
+    /// and L2 while retaining the finality of low-latency block confirmations from HotShot. Since
+    /// this information describes the finalized L1 block, a bridge using this L1 block will have
+    /// much higher latency than a bridge using `l1_head`. In exchange, rollups that use the
+    /// finalized block do not have to worry about L1 reorgs, and can inject verifiable attestations
+    /// to the L1 block metadata (such as its timestamp or hash) into their execution layers, since
+    /// Espresso replicas will sign this information for the finalized L1 block.
+    ///
+    /// This block may be `None` in the rare case where Espresso has started shortly after the
+    /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
+    /// `Some`.
+    pub l1_finalized: Option<L1BlockInfo>,
 }
 
 impl Header {
     pub fn commit(&self) -> Commitment<Block> {
         RawCommitmentBuilder::new(&Block::tag())
-            .u64_field("timestamp", self.timestamp)
-            .field("l1_block", self.l1_block.commit())
+            .u64_field("timestamp", self.timestamp())
+            .u64_field("l1_head", self.l1_head())
+            .array_field(
+                "l1_finalized",
+                self.l1_finalized()
+                    .iter()
+                    .map(|block| block.commit())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )
             .field("transactions_root", self.transactions_root.commit())
             .finalize()
     }
@@ -33,20 +102,18 @@ impl Header {
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Block {
-    timestamp: u64,
-    l1_block: L1BlockInfo,
+    metadata: Metadata,
 
     #[serde(with = "nmt_serializer")]
     pub(crate) transaction_nmt: TransactionNMT,
 }
 
-impl From<&Block> for Header {
-    fn from(b: &Block) -> Self {
-        Self {
-            timestamp: b.timestamp,
-            l1_block: b.l1_block,
+impl Block {
+    pub fn header(&self) -> Header {
+        Header {
+            metadata: self.metadata.clone(),
             transactions_root: NMTRoot {
-                root: b.transaction_nmt.commitment().digest(),
+                root: self.transaction_nmt.commitment().digest(),
             },
         }
     }
@@ -56,6 +123,7 @@ impl From<&Block> for Header {
 pub struct L1BlockInfo {
     pub number: u64,
     pub timestamp: U256,
+    pub hash: H256,
 }
 
 impl Committable for L1BlockInfo {
@@ -68,6 +136,8 @@ impl Committable for L1BlockInfo {
             // `RawCommitmentBuilder` doesn't have a `u256_field` method, so we simulate it:
             .constant_str("timestamp")
             .fixed_size_bytes(&timestamp)
+            .constant_str("hash")
+            .fixed_size_bytes(&self.hash.0)
             .finalize()
     }
 
@@ -177,7 +247,7 @@ impl Display for Block {
 
 impl Committable for Block {
     fn commit(&self) -> Commitment<Self> {
-        Header::from(self).commit()
+        self.header().commit()
     }
 
     fn tag() -> String {
@@ -204,24 +274,34 @@ impl Committable for NMTRoot {
 impl Block {
     pub fn genesis() -> Self {
         Self {
-            timestamp: 0,
-            l1_block: L1BlockInfo {
-                number: 0,
-                timestamp: 0.into(),
+            metadata: Metadata {
+                timestamp: 0,
+                l1_head: 0,
+                l1_finalized: None,
             },
             transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
 
-    pub fn from_l1(l1_block: L1BlockInfo) -> Self {
+    pub fn from_l1(l1_finalized: Option<L1BlockInfo>, l1_head: u64) -> Self {
+        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
+
+        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
+        // only happen if our clock is badly out of sync with L1.
+        if let Some(l1_block) = &l1_finalized {
+            let l1_timestamp = l1_block.timestamp.as_u64();
+            if l1_timestamp > timestamp {
+                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}");
+                timestamp = l1_timestamp;
+            }
+        }
+
         Self {
-            // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This
-            // can only happen if our clock is out of sync with L1.
-            timestamp: max(
-                OffsetDateTime::now_utc().unix_timestamp() as u64,
-                l1_block.timestamp.as_u64(),
-            ),
-            l1_block,
+            metadata: Metadata {
+                timestamp,
+                l1_head,
+                l1_finalized,
+            },
             transaction_nmt: TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap(),
         }
     }
@@ -248,12 +328,17 @@ impl Block {
 
     /// The block's timestamp.
     pub fn timestamp(&self) -> u64 {
-        self.timestamp
+        self.metadata.timestamp
     }
 
-    /// Information about the L1 block with which this sequencer block is synchronized.
-    pub fn l1_block(&self) -> &L1BlockInfo {
-        &self.l1_block
+    /// The number of the most recent L1 block when this block was sequenced.
+    pub fn l1_head(&self) -> u64 {
+        self.metadata.l1_head
+    }
+
+    /// Information about the finalized L1 block with which this sequencer block is synchronized.
+    pub fn l1_finalized(&self) -> Option<&L1BlockInfo> {
+        self.metadata.l1_finalized.as_ref()
     }
 }
 
@@ -334,7 +419,7 @@ mod reference {
     fn test_reference_l1_block() {
         reference_test::<L1BlockInfo, _>(
             L1_BLOCK.clone(),
-            "L1BLOCK~i_2nsYHZCxW16USM7fnDryhITeIMDkshibzma7rhlsm-",
+            "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWOF2c9JeLZzVNLmfpQ9",
             |block| block.commit(),
         );
     }
@@ -343,7 +428,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
+            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
             |header| header.commit(),
         );
     }
@@ -352,7 +437,7 @@ mod reference {
     fn test_reference_block() {
         reference_test::<Block, _>(
             BLOCK.clone(),
-            "BLOCK~2xOyAKvho84kCCJUo2D4NOlV_lld-XGOX8xmZ0r6LWcB",
+            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
             |block| block.commit(),
         );
     }
@@ -360,6 +445,6 @@ mod reference {
     #[test]
     fn test_header_block_commitment_equivalence() {
         let block: Block = serde_json::from_value(BLOCK.clone()).unwrap();
-        assert_eq!(block.commit(), Header::from(&block).commit());
+        assert_eq!(block.commit(), block.header().commit());
     }
 }
