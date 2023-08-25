@@ -2,5 +2,5 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 
-// #[cfg(feature = "demo")]
-// pub mod bn254;
+#[cfg(feature = "demo")]
+pub mod bn254;
