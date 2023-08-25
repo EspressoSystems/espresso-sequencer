@@ -1,0 +1,14 @@
+[package]
+name = "hotshot-signature-key"
+description = "Signature instantiations"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+
+[features]
+# default = ["parallel"]
+# std = ["ark-std/std"]
+# parallel = ["jf-primitives/parallel", "jf-utils/parallel"]
