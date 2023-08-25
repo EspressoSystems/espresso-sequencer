@@ -26,4 +26,6 @@ typenum = { workspace = true }
 # default = ["parallel"]
 # std = ["ark-std/std"]
 # parallel = ["jf-primitives/parallel", "jf-utils/parallel"]
+full-ci = ["demo"]  # needed only because `just test_*` needs `demo` code
+tokio-ci = ["demo"] # needed only because `just test_*` needs `demo` code
 demo = []

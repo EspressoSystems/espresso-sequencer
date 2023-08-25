@@ -3,7 +3,7 @@ use bincode::Options;
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
 use ethereum_types::U256;
-use hotshot_qc::bit_vector::{
+use hotshot_qc::bit_vector_old::{
     BitVectorQC, QCParams as JFQCParams, StakeTableEntry as JFStakeTableEntry,
 };
 use hotshot_types::traits::qc::QuorumCertificate;

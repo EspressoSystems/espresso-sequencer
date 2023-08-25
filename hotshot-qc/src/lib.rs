@@ -3,4 +3,5 @@
 #![deny(missing_docs)]
 
 pub mod bit_vector;
+pub mod bit_vector_old;
 pub mod snarked;
