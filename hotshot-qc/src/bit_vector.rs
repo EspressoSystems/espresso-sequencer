@@ -16,9 +16,10 @@ use hotshot_types::traits::{
     qc::QuorumCertificate,
     stake_table::{SnapshotVersion, StakeTableScheme},
 };
-use jf_primitives::errors::PrimitivesError;
-use jf_primitives::errors::PrimitivesError::ParameterError;
-use jf_primitives::signatures::AggregateableSignatureSchemes;
+use jf_primitives::{
+    errors::{PrimitivesError, PrimitivesError::ParameterError},
+    signatures::AggregateableSignatureSchemes,
+};
 use serde::{Deserialize, Serialize};
 use typenum::U32;
 
@@ -202,8 +203,10 @@ mod tests {
     use super::*;
     use hotshot_stake_table::mt_based::StakeTable;
     use hotshot_types::traits::stake_table::StakeTableScheme;
-    use jf_primitives::signatures::bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair};
-    use jf_primitives::signatures::SignatureScheme;
+    use jf_primitives::signatures::{
+        bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
+        SignatureScheme,
+    };
 
     macro_rules! test_quorum_certificate {
         ($aggsig:tt) => {

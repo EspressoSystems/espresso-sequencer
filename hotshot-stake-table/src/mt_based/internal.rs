@@ -612,8 +612,7 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::super::config;
-    use super::{to_merkle_path, PersistentMerkleNode};
+    use super::{super::config, to_merkle_path, PersistentMerkleNode};
     use ark_std::{
         rand::{Rng, RngCore},
         sync::Arc,
