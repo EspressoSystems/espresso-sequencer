@@ -3,10 +3,10 @@ use bincode::Options;
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
 use ethereum_types::U256;
-use hotshot_primitives::qc::{
-    bit_vector::{BitVectorQC, QCParams as JFQCParams, StakeTableEntry as JFStakeTableEntry},
-    QuorumCertificate,
+use hotshot_qc::bit_vector::{
+    BitVectorQC, QCParams as JFQCParams, StakeTableEntry as JFStakeTableEntry,
 };
+use hotshot_types::traits::qc::QuorumCertificate;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey},
