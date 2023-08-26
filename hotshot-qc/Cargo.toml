@@ -22,8 +22,8 @@ ethereum-types = { workspace = true }
 generic-array = "0.14.7"
 hotshot-types = { path = "../../types" }
 jf-primitives = { workspace = true }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", branch = "hotshot-compat" }
-jf-utils = { git = "https://github.com/espressosystems/jellyfish", branch = "hotshot-compat" }
+jf-relation = { workspace = true }
+jf-utils = { workspace = true }
 serde = { workspace = true }
 typenum = { workspace = true }
 
