@@ -1,0 +1,78 @@
+[package]
+description = "Libp2p Networking Layer"
+name = "libp2p-networking"
+version = "0.1.0"
+edition = "2021"
+authors = ["Espresso Systems <hello@espressosys.com>"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[features]
+default = ["webui"]
+webui = ["tide"]
+
+# # this only has effect on linux
+# lossy_network = [
+#     "nix",
+#     "netlink-packet-route",
+#     "netlink-packet-utils",
+#     "netlink-packet-core",
+#     "netlink-proto",
+#     "netlink-sys",
+#     "netlink-packet-generic",
+#     "rtnetlink",
+# ]
+
+[dependencies]
+async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+blake3 = { workspace = true }
+color-eyre = "0.6.2"
+custom_debug = { workspace = true }
+derive_builder = "0.12.0"
+either = { workspace = true }
+futures = { workspace = true }
+hotshot-utils = { path = "../utils" }
+libp2p-swarm-derive = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-noise = { version = "0.43.0", default-features = false }
+parking_lot = "0.12.1"
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0.105"
+snafu = { workspace = true }
+tide = { version = "0.16", optional = true, default-features = false, features = [
+    "h1-server",
+] }
+# TODO do we want this as non optional??
+tokio-stream = "0.1.14"
+tracing = { workspace = true }
+void = "1.0.2"
+
+[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
+libp2p = { workspace = true, features = ["tokio"] }
+tokio = { workspace = true }
+[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
+libp2p = { workspace = true, features = ["async-std"] }
+async-std = { workspace = true }
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+## lossy_network dependencies
+nix = { version = "0.26.2", optional = true }
+rtnetlink = { git = "https://github.com/espressosystems/netlink.git", version = "0.9.1", features = [
+    "smol_socket",
+], default-features = false, optional = true }
+netlink-packet-route = { git = "https://github.com/espressosystems/netlink.git", version = "0.11.0", optional = true }
+netlink-packet-utils = { git = "https://github.com/espressosystems/netlink.git", version = "0.5.1", optional = true }
+netlink-packet-core = { git = "https://github.com/espressosystems/netlink.git", version = "0.4.2", optional = true }
+netlink-proto = { git = "https://github.com/espressosystems/netlink.git", version = "0.9.2", optional = true }
+netlink-sys = { git = "https://github.com/espressosystems/netlink.git", version = "0.8.2", features = [
+    "smol_socket",
+], optional = true }
+netlink-packet-generic = { git = "https://github.com/espressosystems/netlink.git", version = "0.2.0", optional = true }
+
+[dev-dependencies]
+clap = { version = "4.4", features = ["derive", "env"] }

@@ -12,9 +12,9 @@ bitvec = { workspace = true }
 blake3 = { workspace = true }
 custom_debug = { workspace = true }
 ethereum-types = { workspace = true }
-hotshot-qc = { path = "../../crates/hotshot-qc" }
-hotshot-types = { path = "../../types" }
-hotshot-utils = { path = "../../utils" }
+hotshot-qc = { path = "../hotshot-qc" }
+hotshot-types = { path = "../types" }
+hotshot-utils = { path = "../utils" }
 jf-primitives = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

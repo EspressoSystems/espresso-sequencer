@@ -1,0 +1,50 @@
+[meta]
+NAME = "orchestrator"
+DESCRIPTION = "Orchestrator for HotShot"
+FORMAT_VERSION = "0.1.0"
+
+# POST node's identity
+[route.postidentity]
+PATH = ["identity/:identity"]
+METHOD = "POST"
+":identity" = "Literal"
+DOC = """
+POST a node's identity (IP address) to the orchestrator.  Returns the node's node_index
+"""
+
+# POST retrieve the network configuration
+[route.post_getconfig]
+PATH = ["config/:node_index"]
+METHOD = "POST"
+":node_index" = "Integer"
+DOC = """
+Get networking configuration needed for nodes to initialize HotShot and themselves. See `config.rs` for more information. 
+This must be a POST request so we can update the OrchestratorState in the server accordingly.  Must use the node_index previously 
+received from the 'identity' endpoint
+"""
+
+# POST whether the node is ready to begin the run
+# TODO ED Use the node index parameter
+[route.postready]
+PATH = ["ready"]
+METHOD = "POST"
+":node_index" = "Integer"
+DOC = """
+Post whether the node with node_index is ready to start the run
+"""
+
+# GET whether or not to start the run
+[route.getstart]
+PATH = ["start"]
+DOC = """
+Get whether the node should start the run, returns a boolean
+"""
+
+# POST the run results
+[route.postresults]
+PATH = ["results"]
+":run_results" = "TaggedBase64"
+METHOD = "POST"
+DOC = """
+Post run results.
+"""
