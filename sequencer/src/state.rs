@@ -5,7 +5,8 @@ use crate::{
 };
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable};
-use ethers::prelude::{Http, Middleware, Provider};
+use ethers::prelude::{BlockNumber, Http, Middleware, Provider};
+use futures::future::join;
 use hotshot::traits::State as HotShotState;
 use hotshot_types::{data::ViewNumber, traits::state::TestableState};
 use lazy_static::lazy_static;
@@ -33,72 +34,17 @@ impl HotShotState for State {
         //   contain an already connected ETH client.
         // For now, as a workaround, we will create a new ETH client based on environment variables
         // and use `block_on` to query it.
-        let l1_block = if let Some(l1_provider) = &*L1_PROVIDER {
-            block_on(async move {
-                // This cannot fail, retry until we succeed.
-                loop {
-                    let retry_delay = Duration::from_millis(100);
-                    let chain_tip_number = match l1_provider.get_block_number().await {
-                        Ok(number) => number,
-                        Err(err) => {
-                            tracing::error!(
-                                "failed to get block number from L1 provider, retrying ({err})"
-                            );
-                            sleep(retry_delay).await;
-                            continue;
-                        }
-                    };
-                    tracing::debug!("L1 chain tip at block {chain_tip_number}");
-
-                    // Use a block with a few confirmations to minimize the probability of reorgs.
-                    let number = chain_tip_number.saturating_sub(3.into());
-
-                    let block = match l1_provider.get_block(number).await {
-                        Ok(Some(block)) => block,
-                        Ok(None) => {
-                            // This can only happen if there was a reorg that changed the block
-                            // height. Just retry.
-                            tracing::error!("L1 block {number} does not exist, retrying");
-                            sleep(retry_delay).await;
-                            continue;
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                "failed to get block {number} from L1 provider, retrying ({err})"
-                            );
-                            sleep(retry_delay).await;
-
-                            // Retry the whole loop, including re-fetching the block number. One
-                            // reason we might have failed here is if an L1 reorg changed the chain
-                            // height, and the block at our current `number` may not become
-                            // available again for a while.
-                            continue;
-                        }
-                    };
-
-                    let Some(number) = block.number else {
-                        // This can also happen if there's a reorg.
-                        tracing::error!("L1 block {number} is not committed, retrying");
-                        sleep(retry_delay).await;
-                        continue;
-                    };
-
-                    tracing::debug!(
-                        "proposing with L1 block {number} (timestamp {})",
-                        block.timestamp
-                    );
-                    break L1BlockInfo {
-                        number: number.as_u64(),
-                        timestamp: block.timestamp,
-                    };
-                }
-            })
+        let (finalized, head) = if let Some(l1_provider) = &*L1_PROVIDER {
+            block_on(join(
+                get_finalized_l1_block(l1_provider),
+                get_l1_head(l1_provider),
+            ))
         } else {
             // For unit testing, we may disable the L1 provider and use mock L1 blocks instead.
-            L1BlockInfo::default()
+            (None, 0)
         };
 
-        Block::from_l1(l1_block)
+        Block::from_l1(finalized, head)
     }
 
     fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
@@ -135,6 +81,62 @@ lazy_static! {
                 .expect("invalid ESPRESSO_SEQUENCER_L1_PROVIDER URL"),
         )
     };
+}
+
+async fn get_l1_head(l1_provider: &Provider<Http>) -> u64 {
+    // This cannot fail, retry until we succeed.
+    loop {
+        let retry_delay = Duration::from_millis(100);
+        let chain_tip_number = match l1_provider.get_block_number().await {
+            Ok(number) => number,
+            Err(err) => {
+                tracing::error!("failed to get block number from L1 provider, retrying ({err})");
+                sleep(retry_delay).await;
+                continue;
+            }
+        };
+        tracing::debug!("L1 chain tip at block {chain_tip_number}");
+        break chain_tip_number.as_u64();
+    }
+}
+
+async fn get_finalized_l1_block(l1_provider: &Provider<Http>) -> Option<L1BlockInfo> {
+    // This cannot fail, retry until we succeed.
+    loop {
+        let retry_delay = Duration::from_millis(100);
+        let block = match l1_provider.get_block(BlockNumber::Finalized).await {
+            Ok(Some(block)) => block,
+            Ok(None) => {
+                // This can happen in rare cases where the L1 chain is very young and has not
+                // finalized a block yet. This is more common in testing and demo environments. In
+                // any case, we proceed with a null L1 block rather than wait for the L1 to finalize
+                // a block, which can take a long time.
+                return None;
+            }
+            Err(err) => {
+                tracing::error!("failed to get finalized block from L1 provider, retrying ({err})");
+                sleep(retry_delay).await;
+                continue;
+            }
+        };
+
+        // The block number always exists unless the block is pending. The finalized block cannot be
+        // pending, unless there has been a catastrophic reorg of the finalized prefix of the L1
+        // chain, so it is OK to panic if this happens.
+        let number = block.number.expect("finalized block has no number");
+        // Same for the hash.
+        let hash = block.hash.expect("finalized block has no hash");
+
+        tracing::debug!(
+            "proposing with finalized L1 block {number} (timestamp {}, hash {hash})",
+            block.timestamp,
+        );
+        break Some(L1BlockInfo {
+            number: number.as_u64(),
+            timestamp: block.timestamp,
+            hash,
+        });
+    }
 }
 
 // Required for TestableState

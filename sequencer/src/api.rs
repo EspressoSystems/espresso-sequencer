@@ -24,6 +24,7 @@ use hotshot_types::{
         state::ConsensusTime,
     },
 };
+use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -216,8 +217,13 @@ impl Options {
 
                         let proof = block.block().get_namespace_proof(namespace.into());
                         Ok(NamespaceProofQueryData {
+                            transactions: proof
+                                .get_namespace_leaves()
+                                .into_iter()
+                                .cloned()
+                                .collect(),
                             proof,
-                            header: block.block().into(),
+                            header: block.block().header(),
                         })
                     }
                     .boxed()
@@ -267,7 +273,7 @@ impl Options {
                                 .ok_or(AvailabilityError::MissingBlock {
                                     height: first_block - 1,
                                 })?;
-                            res.prev = Some(Header::from(prev.block()));
+                            res.prev = Some(prev.block().header());
                         }
 
                         // Add blocks to the window, starting from `first_block`, until we reach the
@@ -277,8 +283,8 @@ impl Options {
                         {
                             let height = first_block + i as u64;
                             let block = block.ok_or(AvailabilityError::MissingBlock { height })?;
-                            let header = Header::from(block.block());
-                            if header.timestamp >= end {
+                            let header = block.block().header();
+                            if header.timestamp() >= end {
                                 res.next = Some(header);
                                 break;
                             }
@@ -426,16 +432,7 @@ impl<N: network::Type> AppState<N> {
 pub struct NamespaceProofQueryData {
     pub proof: NamespaceProofType,
     pub header: Header,
-}
-
-impl NamespaceProofQueryData {
-    pub fn proof(&self) -> &NamespaceProofType {
-        &self.proof
-    }
-
-    pub fn header(&self) -> &Header {
-        &self.header
-    }
+    pub transactions: Vec<Transaction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -697,9 +694,9 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            let header = Header::from(block.block());
+            let header = block.block().header();
             if let Some(last_timestamp) = test_blocks.last_mut() {
-                if last_timestamp[0].timestamp == header.timestamp {
+                if last_timestamp[0].timestamp() == header.timestamp() {
                     last_timestamp.push(header);
                 } else {
                     test_blocks.push(vec![header]);
@@ -715,25 +712,25 @@ mod test {
             let mut prev = res.prev.as_ref();
             if let Some(prev) = prev {
                 if check_prev {
-                    assert!(prev.timestamp < start);
+                    assert!(prev.timestamp() < start);
                 }
             } else {
                 // `prev` can only be `None` if the first block in the window is the genesis block.
                 assert_eq!(res.from, 0);
             };
             for header in &res.window {
-                assert!(start <= header.timestamp);
-                assert!(header.timestamp < end);
+                assert!(start <= header.timestamp());
+                assert!(header.timestamp() < end);
                 if let Some(prev) = prev {
-                    assert!(prev.timestamp <= header.timestamp);
+                    assert!(prev.timestamp() <= header.timestamp());
                 }
                 prev = Some(header);
             }
             if let Some(next) = &res.next {
-                assert!(next.timestamp >= end);
+                assert!(next.timestamp() >= end);
                 // If there is a `next`, there must be at least one previous block (either `prev`
                 // itself or the last block if the window is nonempty), so we can `unwrap` here.
-                assert!(next.timestamp >= prev.unwrap().timestamp);
+                assert!(next.timestamp() >= prev.unwrap().timestamp());
             }
         };
 
@@ -752,7 +749,7 @@ mod test {
         };
 
         // Case 0: happy path. All blocks are available, including prev and next.
-        let start = test_blocks[1][0].timestamp;
+        let start = test_blocks[1][0].timestamp();
         let end = start + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
@@ -761,14 +758,14 @@ mod test {
 
         // Case 1: no `prev`, start of window is before genesis.
         let start = 0;
-        let end = test_blocks[0][0].timestamp + 1;
+        let end = test_blocks[0][0].timestamp() + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev, None);
         assert_eq!(res.window, test_blocks[0]);
         assert_eq!(res.next.unwrap(), test_blocks[1][0]);
 
         // Case 2: no `next`, end of window is after the most recently sequenced block.
-        let start = test_blocks[2][0].timestamp;
+        let start = test_blocks[2][0].timestamp();
         let end = u64::MAX;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
@@ -812,7 +809,7 @@ mod test {
         assert_eq!(more2.window[..more.window.len()], more.window);
 
         // Case 3: the window is empty.
-        let start = test_blocks[1][0].timestamp;
+        let start = test_blocks[1][0].timestamp();
         let end = start;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
