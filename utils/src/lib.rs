@@ -282,17 +282,19 @@ async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256)
     loop {
         match provider.get_transaction(hash).await {
             Err(err) => {
-                tracing::error!("contract call {hash} (retry {i}/{retries}): error getting transaction status: {err}");
+                tracing::error!("contract call {hash:?} (retry {i}/{retries}): error getting transaction status: {err}");
             }
             Ok(None) => {
-                tracing::error!("contract call {hash} (retry {i}/{retries}): missing from mempool");
+                tracing::error!(
+                    "contract call {hash:?} (retry {i}/{retries}): missing from mempool"
+                );
             }
             Ok(Some(tx)) if tx.block_number.is_none() => {
                 // The transaction is in the mempool, but hasn't been mined yet. In this case we can
                 // loop indefinitely, we don't need to count this as a retry, because as long as the
                 // transaction is in the mempool, it will eventually be mined (when we hit the case
                 // below) or dropped (when we hit the case above and increment `retries`).
-                tracing::info!("contract call {hash} (retry {i}/{retries}): pending");
+                tracing::info!("contract call {hash:?} (retry {i}/{retries}): pending");
                 sleep(interval).await;
                 continue;
             }

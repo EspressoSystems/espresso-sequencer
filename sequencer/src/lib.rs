@@ -74,6 +74,14 @@ pub const MAX_NMT_DEPTH: usize = 10;
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
+/// Initialize the static variables for the commitment task
+///
+/// Calling it early on startup makes it easier to catch errors.
+pub fn init_static() {
+    lazy_static::initialize(&state::L1_PROVIDER);
+    lazy_static::initialize(&state::L1_BLOCK_TAG);
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NMTRoot {
     #[serde(with = "nmt_root_serializer")]
