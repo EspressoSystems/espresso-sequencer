@@ -89,7 +89,6 @@ espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
 hotshot-web-server = { version = "0.1.1", path = "../web_server", default-features = false }
-hotshot-consensus = { path = "../consensus", version = "0.1.0", default-features = false }
 hotshot-orchestrator = { version = "0.1.1", path = "../orchestrator", default-features = false }
 hotshot-signature-key = { path = "../hotshot-signature-key" }
 hotshot-types = { path = "../types", version = "0.1.0", default-features = false }

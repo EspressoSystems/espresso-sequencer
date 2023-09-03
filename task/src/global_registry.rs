@@ -196,7 +196,7 @@ impl GlobalRegistry {
     /// checks if all registered tasks have completed
     pub async fn is_shutdown(&mut self) -> bool {
         let task_list = self.state_list.read().await;
-        for (_uid, task) in task_list.iter() {
+        for task in (*task_list).values() {
             if task.0.get_status() != TaskStatus::Completed {
                 return false;
             }

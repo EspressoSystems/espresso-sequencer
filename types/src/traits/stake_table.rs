@@ -52,7 +52,7 @@ pub trait StakeTableScheme {
     {
         let _ = new_keys
             .into_iter()
-            .zip(amounts.into_iter())
+            .zip(amounts)
             .try_for_each(|(key, amount)| Self::register(self, key, amount));
         Ok(())
     }

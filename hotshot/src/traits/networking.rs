@@ -18,7 +18,7 @@ pub use hotshot_types::traits::network::{
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics};
 
 /// Contains the metrics that we're interested in from the networking interfaces
-pub(self) struct NetworkingMetrics {
+pub struct NetworkingMetrics {
     #[allow(dead_code)]
     /// A [`Gauge`] which tracks how many peers are connected
     pub connected_peers: Box<dyn Gauge>,

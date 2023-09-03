@@ -136,6 +136,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     /// # Panics
     ///
     /// Will panic if a handler is already spawned
+    #[allow(clippy::unused_async)]
     pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future<Output = ()>
     where
         F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,

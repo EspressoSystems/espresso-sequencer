@@ -192,6 +192,7 @@ impl
         Message<SequencingTestTypes, SequencingLibp2pImpl>,
     > for SequencingLibp2pExchange
 {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -272,6 +273,7 @@ impl
         Message<SequencingTestTypes, SequencingMemoryImpl>,
     > for SequencingMemoryExchange
 {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -389,6 +391,7 @@ impl
         Message<SequencingTestTypes, SequencingWebImpl>,
     > for SequencingWebExchanges
 {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -503,6 +506,7 @@ impl
         Message<SequencingTestTypes, StaticFallbackImpl>,
     > for SequencingFallbackExchange
 {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
         num_bootstrap: usize,

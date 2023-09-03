@@ -349,7 +349,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             .serialize(&message)
             .context(FailedToSerializeSnafu)?;
         trace!("Message bincoded, sending");
-        for node in self.inner.master_map.map.iter() {
+        for node in &self.inner.master_map.map {
             let (key, node) = node.pair();
             if !recipients.contains(key) {
                 continue;

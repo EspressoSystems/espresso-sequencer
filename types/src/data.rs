@@ -815,6 +815,8 @@ pub fn random_commitment<S: Committable>(rng: &mut dyn rand::RngCore) -> Commitm
 }
 
 /// Serialization for the QC assembled signature
+/// # Panics
+/// if serialization fails
 pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES>) -> Vec<u8> {
     let mut signatures_bytes = vec![];
     let signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType> = match &signature {

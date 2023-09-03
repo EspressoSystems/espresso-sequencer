@@ -227,6 +227,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     /// garbage collects based on state change
     /// right now, this removes from both the `saved_blocks`
     /// and `state_map` fields of `Consensus`
+    /// # Panics
+    /// On inconsistent stored entries
     #[allow(clippy::unused_async)] // async for API compatibility reasons
     pub async fn collect_garbage(
         &mut self,
