@@ -61,7 +61,7 @@ async-std = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ## lossy_network dependencies
-nix = { version = "0.26.2", optional = true }
+nix = { version = "0.27.1", optional = true }
 rtnetlink = { git = "https://github.com/espressosystems/netlink.git", version = "0.9.1", features = [
     "smol_socket",
 ], default-features = false, optional = true }
