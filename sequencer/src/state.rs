@@ -18,6 +18,7 @@ use std::time::Duration;
 #[derive(Default, Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct State {
     chain_variables: ChainVariables,
+    ethereum_block_tag: BlockNumber,
 }
 
 impl HotShotState for State {
@@ -64,9 +65,9 @@ impl HotShotState for State {
 }
 
 lazy_static! {
-    static ref L1_PROVIDER: Option<Provider<Http>> = {
+    pub(crate) static ref L1_PROVIDER: Option<Provider<Http>> = {
         let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_PROVIDER") else {
-            #[cfg(any(test, feature = "testing"))] 
+            #[cfg(any(test, feature = "testing"))]
             {
                 tracing::warn!("ESPRESSO_SEQUENCER_L1_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
                 return None;
@@ -80,6 +81,27 @@ lazy_static! {
             url.try_into()
                 .expect("invalid ESPRESSO_SEQUENCER_L1_PROVIDER URL"),
         )
+    };
+    // For testing with a pre-merge geth node that does not support the
+    // finalized block tag we allow setting an environment variable to use the
+    // latest block instead. This feature is used in the OP devnet which uses
+    // the docker images built in this repo. Therefore it's not hidden behind
+    // the testing flag.
+    pub(crate) static ref L1_BLOCK_TAG: BlockNumber = {
+        match env::var("ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG") {
+            Ok(val) => match val.as_str() {
+               "y" | "yes" | "t"|  "true" | "on" | "1"  => {
+                    tracing::warn!(
+                        "ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG is set. Using latest block tag\
+                         instead of finalized block tag. This is suitable for testing but not production."
+                    );
+                    BlockNumber::Latest
+                },
+                "n" | "no" | "f" | "false" | "off" | "0" => BlockNumber::Finalized,
+                _ => panic!("invalid ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG value: {}", val)
+            },
+            Err(_) => BlockNumber::Finalized,
+        }
     };
 }
 
@@ -104,7 +126,7 @@ async fn get_finalized_l1_block(l1_provider: &Provider<Http>) -> Option<L1BlockI
     // This cannot fail, retry until we succeed.
     loop {
         let retry_delay = Duration::from_millis(100);
-        let block = match l1_provider.get_block(BlockNumber::Finalized).await {
+        let block = match l1_provider.get_block(*L1_BLOCK_TAG).await {
             Ok(Some(block)) => block,
             Ok(None) => {
                 // This can happen in rare cases where the L1 chain is very young and has not

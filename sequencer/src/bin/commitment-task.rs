@@ -2,9 +2,26 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use contract_bindings::{create_signer, HotShot};
 use ethers::{prelude::*, providers::Provider};
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    init_static,
+};
 use url::Url;
 
+/// Commitment Task Command
+///
+/// There is an additional env var `ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG`
+/// that is not handled by clap because it must be set via env var (and not via
+/// CLI arguments).
+///
+/// Used testing with a pre-merge geth node that does not support the finalized
+/// block tag.
+///
+/// Do not use in production.
+///
+/// When set to a truthy value ("y", "yes", "t", "true", "on", "1") the
+/// commitment task will fetch "latest" block timestamps instead of
+/// "finalized" ones.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
     /// URL of a HotShot sequencer node.
@@ -40,11 +57,12 @@ pub struct Options {
     #[clap(long)]
     pub deploy: bool,
 }
-
 #[async_std::main]
 async fn main() {
     setup_logging();
     setup_backtrace();
+
+    init_static();
 
     let opt = Options::parse();
     let hotshot_address;

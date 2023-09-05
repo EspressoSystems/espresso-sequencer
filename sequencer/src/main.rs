@@ -8,13 +8,15 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, Block, NetworkParams, Options,
+    init_node, init_static, Block, NetworkParams, Options,
 };
 
 #[async_std::main]
 async fn main() {
     setup_logging();
     setup_backtrace();
+
+    init_static();
 
     tracing::info!("sequencer starting up");
     let opt = Options::parse();
