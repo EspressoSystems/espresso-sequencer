@@ -1,24 +1,24 @@
 use commit::Committable;
-use hotshot::types::SignatureKey;
-use hotshot::HotShotSequencingConsensusApi;
-use hotshot_consensus::traits::ConsensusSharedApi;
+use hotshot::{types::SignatureKey, HotShotSequencingConsensusApi};
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_testing::node_types::{SequencingMemoryImpl, SequencingTestTypes};
-use hotshot_types::traits::election::ViewSyncExchangeType;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
+        consensus_api::ConsensusSharedApi,
+        election::{ConsensusExchange, ViewSyncExchangeType},
+        node_implementation::ExchangesType,
+        state::ConsensusTime,
     },
 };
 use std::collections::HashMap;
 
 #[cfg(test)]
 #[cfg_attr(
-    feature = "tokio-executor",
+    async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
-#[cfg_attr(feature = "async-std-executor", async_std::test)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_task() {
     use core::panic;
 
