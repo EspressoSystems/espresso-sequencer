@@ -1,0 +1,31 @@
+[package]
+name = "hotshot-orchestrator"
+version = "0.1.1"
+edition = "2021"
+
+[dependencies]
+async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+clap = { version = "4.0", features = ["derive", "env"], optional = false }
+futures = { workspace = true }
+libp2p-core = { version = "0.40.0", default-features = false }
+libp2p = { workspace = true }
+blake3 = { workspace = true, features = ["traits-preview"] }
+hotshot-types = { version = "0.1.0", path = "../types", default-features = false }
+hotshot-utils = { path = "../utils" }
+libp2p-networking = { workspace = true }
+nll = { workspace = true }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
+surf-disco = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0.96"
+snafu = { workspace = true }
+toml = "0.5.9" # TODO GG upgrade to toml = { workspace = true }
+
+[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
+tokio = { workspace = true }
+[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
+async-std = { workspace = true }

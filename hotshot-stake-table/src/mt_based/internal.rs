@@ -135,19 +135,16 @@ impl<K: Key> MerkleProof<K> {
                 self.path
                     .iter()
                     .skip(1)
-                    .fold(Ok(init), |result, node| match node {
-                        MerklePathEntry::Branch { pos, siblings } => match result {
-                            Ok(comm) => {
-                                let mut input = [FieldType::from(0); TREE_BRANCH];
-                                input[..*pos].copy_from_slice(&siblings[..*pos]);
-                                input[*pos] = comm;
-                                input[pos + 1..].copy_from_slice(&siblings[*pos..]);
-                                let comm = Digest::evaluate(input)
-                                    .map_err(|_| StakeTableError::RescueError)?[0];
-                                Ok(comm)
-                            }
-                            Err(_) => unreachable!(),
-                        },
+                    .try_fold(init, |comm, node| match node {
+                        MerklePathEntry::Branch { pos, siblings } => {
+                            let mut input = [FieldType::from(0); TREE_BRANCH];
+                            input[..*pos].copy_from_slice(&siblings[..*pos]);
+                            input[*pos] = comm;
+                            input[pos + 1..].copy_from_slice(&siblings[*pos..]);
+                            let comm = Digest::evaluate(input)
+                                .map_err(|_| StakeTableError::RescueError)?[0];
+                            Ok(comm)
+                        }
                         _ => Err(StakeTableError::MalformedProof),
                     })
             }

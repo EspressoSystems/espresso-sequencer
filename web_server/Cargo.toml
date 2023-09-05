@@ -1,0 +1,42 @@
+[package]
+name = "hotshot-web-server"
+description = "HotShot web server"
+version = "0.1.1"
+readme = "README.md"
+edition = "2021"
+
+[features]
+default = ["demo"]
+demo = ["hotshot-types/demo"]
+
+[dependencies]
+ark-bls12-381 = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+clap = { version = "4.0", features = ["derive", "env"], optional = false }
+futures = { workspace = true }
+libp2p-core = { version = "0.40.0", default-features = false }
+hotshot-types = { path = "../types", default-features = false }
+hotshot-utils = { path = "../utils" }
+jf-primitives = { workspace = true }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
+nll = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0.96"
+snafu = { workspace = true }
+tide = { version = "0.16.0", default-features = false }
+toml = { workspace = true }
+portpicker = "0.1"
+surf-disco = { workspace = true }
+
+[dev-dependencies]
+hotshot-types = { path = "../types", default-features = false }
+
+[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
+tokio = { workspace = true }
+[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
+async-std = { workspace = true }
