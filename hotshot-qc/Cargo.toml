@@ -20,7 +20,7 @@ bincode = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }
 generic-array = "0.14.7"
-hotshot-types = { path = "../../types" }
+hotshot-types = { path = "../types" }
 jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
 jf-utils = { workspace = true }

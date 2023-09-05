@@ -1,0 +1,48 @@
+[package]
+name = "hotshot-testing"
+version = "0.1.0"
+edition = "2021"
+description = "Types and traits for the HotShot consesus module"
+authors = ["Espresso Systems <hello@espressosys.com>"]
+
+[features]
+default = ["demo"]
+demo = ["hotshot/demo"]
+
+# NOTE this is used to activate the slow tests we don't wish to run in CI
+slow-tests = []
+
+[dependencies]
+ark-bls12-381 = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-trait = { workspace = true }
+# needed for vrf demo
+# so non-optional for now
+blake3 = { workspace = true, features = ["traits-preview"] }
+commit = { workspace = true }
+either = { workspace = true }
+futures = { workspace = true }
+hotshot = { path = "../hotshot", features = [
+  "hotshot-testing",
+], default-features = false }
+hotshot-types = { path = "../types", default-features = false }
+hotshot-utils = { path = "../utils" }
+hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
+hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+jf-primitives = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+snafu = { workspace = true }
+tracing = { workspace = true }
+nll = { workspace = true }
+serde = { workspace = true }
+ethereum-types = { workspace = true }
+bitvec = { workspace = true }
+
+[dev-dependencies]
+async-lock = { workspace = true }
+
+[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
+tokio = { workspace = true }
+[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
+async-std = { workspace = true }

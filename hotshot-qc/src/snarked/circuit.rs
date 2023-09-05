@@ -351,7 +351,7 @@ mod tests {
         let mut rng = jf_utils::test_rng();
         let vk_points: Vec<Projective<P>> =
             (0..5).map(|_| Projective::<P>::rand(&mut rng)).collect();
-        let selector = vec![false, true, false, true, false];
+        let selector = [false, true, false, true, false];
         let agg_vk_point =
             vk_points
                 .iter()
@@ -455,7 +455,7 @@ mod tests {
         let mut rng = jf_utils::test_rng();
         let vk_points: Vec<Projective<P>> =
             (0..5).map(|_| Projective::<P>::rand(&mut rng)).collect();
-        let selector = vec![false, true, false, true, false];
+        let selector = [false, true, false, true, false];
         let agg_vk_point =
             vk_points
                 .iter()
