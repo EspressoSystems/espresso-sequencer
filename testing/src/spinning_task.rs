@@ -1,11 +1,15 @@
 use std::{
+    collections::HashMap,
     sync::{atomic::AtomicUsize, Arc},
     time::Duration,
 };
 
+use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 use async_compatibility_layer::art::async_sleep;
 use futures::FutureExt;
 use hotshot::traits::TestableNodeImplementation;
+use hotshot::HotShotType;
+use hotshot::SystemContext;
 use hotshot_task::{
     boxed_sync,
     event_stream::ChannelStream,
@@ -15,8 +19,6 @@ use hotshot_task::{
 };
 use hotshot_types::traits::node_implementation::NodeType;
 use snafu::Snafu;
-
-use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 #[derive(Snafu, Debug)]
 pub struct SpinningTaskErr {}
 
@@ -32,6 +34,7 @@ pub type SpinningTaskTypes<TYPES, I> = HSTWithEventAndMessage<
 
 pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) handles: Vec<Node<TYPES, I>>,
+    pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
     pub(crate) changes: Vec<Vec<ChangeNode>>,
 }
 
@@ -63,7 +66,10 @@ pub struct SpinningTaskDescription {
 impl SpinningTaskDescription {
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
-    ) -> TaskGenerator<SpinningTask<TYPES, I>> {
+    ) -> TaskGenerator<SpinningTask<TYPES, I>>
+    where
+        SystemContext<TYPES, I>: HotShotType<TYPES, I>,
+    {
         Box::new(move |state, mut registry, test_event_stream| {
             async move {
                 let event_handler =
@@ -103,8 +109,12 @@ impl SpinningTaskDescription {
                                 for ChangeNode { idx, updown } in nodes_to_change {
                                     match updown {
                                         UpDown::Up => {
-                                            // TODO... we don't need this right now anyway. We haven't
-                                            // implemented catchup
+                                            if let Some(node) =
+                                                state.late_start.remove(&idx.try_into().unwrap())
+                                            {
+                                                tracing::error!("Spinning up node late");
+                                                node.run_tasks().await;
+                                            }
                                         }
                                         UpDown::Down => {
                                             if let Some(node) = state.handles.get_mut(idx) {

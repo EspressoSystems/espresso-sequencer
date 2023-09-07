@@ -27,6 +27,7 @@ use std::{
     fmt::Debug,
     num::NonZeroU64,
 };
+use tracing::error;
 
 /// The vote sent by consensus messages.
 pub trait VoteType<TYPES: NodeType>:
@@ -340,6 +341,10 @@ where
             .entry(commitment)
             .or_insert_with(|| (0, BTreeMap::new()));
 
+        // Check for duplicate vote
+        if total_vote_map.contains_key(&key) {
+            return Either::Left(self);
+        }
         let (da_stake_casted, da_vote_map) = self
             .da_vote_outcomes
             .entry(commitment)
@@ -374,13 +379,11 @@ where
         // stake of all votes, in case they correspond to inconsistent
         // commitments.
 
-        // Check for duplicate vote
-        if total_vote_map.contains_key(&key) {
-            // error!("Duplicate vote");
+        // update the active_keys and sig_lists
+        if self.signers.get(node_id).as_deref() == Some(&true) {
+            error!("node id already in signers");
             return Either::Left(self);
         }
-
-        // update the active_keys and sig_lists
         self.signers.set(node_id, true);
         self.sig_lists.push(origianl_sig);
 

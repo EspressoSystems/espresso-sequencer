@@ -419,7 +419,7 @@ where
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1");
+                    error!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
                 // Inject view info into network

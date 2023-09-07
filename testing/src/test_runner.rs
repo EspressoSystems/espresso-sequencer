@@ -3,6 +3,7 @@ use super::{
     overall_safety_task::{OverallSafetyTask, RoundCtx},
     txn_task::TxnTask,
 };
+use crate::spinning_task::UpDown;
 use crate::test_launcher::{Networks, TestLauncher};
 use hotshot::types::SystemContextHandle;
 
@@ -21,6 +22,9 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
+use std::collections::HashMap;
+use std::collections::HashSet;
+
 #[allow(deprecated)]
 use tracing::info;
 
@@ -44,6 +48,7 @@ where
 {
     pub(crate) launcher: TestLauncher<TYPES, I>,
     pub(crate) nodes: Vec<Node<TYPES, I>>,
+    pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
     pub(crate) next_node_id: u64,
     pub(crate) task_runner: TaskRunner,
 }
@@ -75,11 +80,28 @@ where
             .spinning_properties
             .node_changes
             .clone();
-        self.add_nodes(self.launcher.metadata.start_nodes).await;
+
+        let mut late_start_nodes: HashSet<u64> = HashSet::new();
+        for (_, changes) in &spinning_changes {
+            for change in changes {
+                if matches!(change.updown, UpDown::Up) {
+                    late_start_nodes.insert(change.idx.try_into().unwrap());
+                }
+            }
+        }
+        assert!(
+            late_start_nodes.len()
+                <= self.launcher.metadata.total_nodes - self.launcher.metadata.start_nodes,
+            "Test wants to late start too many nodes."
+        );
+
+        self.add_nodes(self.launcher.metadata.total_nodes, &late_start_nodes)
+            .await;
 
         let TestRunner {
             launcher,
             nodes,
+            late_start,
             next_node_id: _,
             mut task_runner,
         } = self;
@@ -111,13 +133,16 @@ where
             test_event_stream.clone(),
         )
         .await;
+
         task_runner = task_runner.add_task(id, "Test Completion Task".to_string(), task);
 
         // add spinning task
         let spinning_task_state = crate::spinning_task::SpinningTask {
             handles: nodes.clone(),
+            late_start,
             changes: spinning_changes.into_iter().map(|(_, b)| b).collect(),
         };
+
         let (id, task) = (launcher.spinning_task_generator)(
             spinning_task_state,
             registry.clone(),
@@ -142,7 +167,9 @@ where
 
         // Start hotshot
         for node in nodes {
-            node.handle.hotshot.start_consensus().await;
+            if !late_start_nodes.contains(&node.node_id) {
+                node.handle.hotshot.start_consensus().await;
+            }
         }
 
         let results = task_runner.launch().await;
@@ -165,7 +192,7 @@ where
     }
 
     /// add nodes
-    pub async fn add_nodes(&mut self, count: usize) -> Vec<u64>
+    pub async fn add_nodes(&mut self, total: usize, late_start: &HashSet<u64>) -> Vec<u64>
     where
         I::Exchanges: ExchangesType<
             TYPES,
@@ -175,7 +202,7 @@ where
         >,
     {
         let mut results = vec![];
-        for _i in 0..count {
+        for _i in 0..total {
             tracing::error!("running node{}", _i);
             let node_id = self.next_node_id;
             let storage = (self.launcher.resource_generator.storage)(node_id);
@@ -183,9 +210,17 @@ where
             let initializer =
                 HotShotInitializer::<TYPES, I::Leaf>::from_genesis(I::block_genesis()).unwrap();
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
-            let node_id = self
+            let hotshot = self
                 .add_node_with_config(networks, storage, initializer, config)
                 .await;
+            if late_start.contains(&node_id) {
+                self.late_start.insert(node_id, hotshot);
+            } else {
+                self.nodes.push(Node {
+                    node_id,
+                    handle: hotshot.run_tasks().await,
+                });
+            }
             results.push(node_id);
         }
 
@@ -203,7 +238,7 @@ where
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
             TYPES::ElectionConfigType,
         >,
-    ) -> u64
+    ) -> SystemContext<TYPES, I>
     where
         I::Exchanges: ExchangesType<
             TYPES,
@@ -240,7 +275,7 @@ where
             entry.clone(),
             private_key.clone(),
         );
-        let handle = SystemContext::init(
+        SystemContext::new(
             public_key,
             private_key,
             node_id,
@@ -252,8 +287,5 @@ where
         )
         .await
         .expect("Could not init hotshot")
-        .0;
-        self.nodes.push(Node { handle, node_id });
-        node_id
     }
 }

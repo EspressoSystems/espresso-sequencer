@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use futures::future::BoxFuture;
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
@@ -124,6 +124,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
         TestRunner {
             launcher: self,
             nodes: Vec::new(),
+            late_start: HashMap::new(),
             next_node_id: 0,
             task_runner: TaskRunner::default(),
         }
