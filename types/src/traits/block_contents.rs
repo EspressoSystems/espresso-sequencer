@@ -57,6 +57,9 @@ pub trait BlockPayload:
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
+
+    /// Compute the VID payload commitment.
+    fn commitment(&self) -> Commitment<Self>;
 }
 
 /// Commitment to a block, used by data availibity
@@ -153,6 +156,12 @@ pub mod dummy {
 
         fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()
+        }
+
+        fn commitment(&self) -> Commitment<Self> {
+            // TODO: Get the payload commitment after VID is added.
+            // https://github.com/EspressoSystems/HotShot/issues/1673
+            unimplemented!();
         }
     }
 
