@@ -44,7 +44,7 @@ async fn test_catchup() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(10000),
+                duration: Duration::from_millis(100000),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
@@ -100,7 +100,7 @@ async fn test_catchup_one_node() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(10000),
+                duration: Duration::from_millis(100000),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
