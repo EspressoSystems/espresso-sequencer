@@ -27,7 +27,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block, State,
+        BlockPayload, State,
     },
     utils::ViewInner,
     vote::VoteAccumulator,

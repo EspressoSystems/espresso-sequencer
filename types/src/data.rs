@@ -15,7 +15,7 @@ use crate::{
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
-        Block, State,
+        BlockPayload, State,
     },
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -101,7 +101,7 @@ impl std::ops::Sub<u64> for ViewNumber {
 }
 
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
-pub type Transaction<STATE> = <<STATE as State>::BlockType as Block>::Transaction;
+pub type Transaction<STATE> = <<STATE as State>::BlockType as BlockPayload>::Transaction;
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
@@ -131,14 +131,14 @@ where
     #[debug(skip)]
     pub parent_commitment: Commitment<LEAF>,
 
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
 
     /// What the state should be after applying `self.deltas`
     pub state_commitment: Commitment<TYPES::StateType>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,
@@ -147,7 +147,7 @@ where
 /// A proposal to start providing data availability for a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
@@ -233,14 +233,14 @@ pub trait ProposalType:
 /// full. It is guaranteed to contain, at least, a cryptographic commitment to the block, and it
 /// provides an interface for resolving the commitment to a full block if the full block is
 /// available.
-pub trait DeltasType<Block: Committable>:
+pub trait DeltasType<BlockPayload: Committable>:
     Clone + Debug + for<'a> Deserialize<'a> + PartialEq + Eq + std::hash::Hash + Send + Serialize + Sync
 {
     /// Errors reported by this type.
     type Error: std::error::Error;
 
     /// Get a cryptographic commitment to the block represented by this delta.
-    fn block_commitment(&self) -> Commitment<Block>;
+    fn block_commitment(&self) -> Commitment<BlockPayload>;
 
     /// Get the full block if it is available, otherwise return this object unchanged.
     ///
@@ -248,7 +248,7 @@ pub trait DeltasType<Block: Committable>:
     ///
     /// Returns the original [`DeltasType`], unchanged, in an [`Err`] variant in the case where the
     /// full block is not currently available.
-    fn try_resolve(self) -> Result<Block, Self>;
+    fn try_resolve(self) -> Result<BlockPayload, Self>;
 
     /// Fill this [`DeltasType`] by providing a complete block.
     ///
@@ -259,7 +259,7 @@ pub trait DeltasType<Block: Committable>:
     ///
     /// Fails if `block` does not match `self.block_commitment()`, or if the block is not able to be
     /// stored for some implementation-defined reason.
-    fn fill(&mut self, block: Block) -> Result<(), Self::Error>;
+    fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
 }
 
 /// Error which occurs when [`DeltasType::fill`] is called with a block that does not match the
@@ -442,10 +442,10 @@ pub type LeafDeltasError<LEAF> = <LeafDeltas<LEAF> as DeltasType<LeafBlock<LEAF>
 pub type LeafNode<LEAF> = <LEAF as LeafType>::NodeType;
 /// The [`StateType`] in a [`LeafType`].
 pub type LeafState<LEAF> = <LeafNode<LEAF> as NodeType>::StateType;
-/// The [`Block`] in a [`LeafType`].
+/// The [`BlockPayload`] in a [`LeafType`].
 pub type LeafBlock<LEAF> = <LeafNode<LEAF> as NodeType>::BlockType;
 /// The [`Transaction`] in a [`LeafType`].
-pub type LeafTransaction<LEAF> = <LeafBlock<LEAF> as Block>::Transaction;
+pub type LeafTransaction<LEAF> = <LeafBlock<LEAF> as BlockPayload>::Transaction;
 /// The [`ConsensusTime`] used by a [`LeafType`].
 pub type LeafTime<LEAF> = <LeafNode<LEAF> as NodeType>::Time;
 
@@ -459,12 +459,12 @@ pub trait TestableLeaf {
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction;
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction;
 }
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
-/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::Block`
+/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative)]
 #[serde(bound(deserialize = ""))]
 #[derivative(Hash, PartialEq, Eq)]
@@ -482,14 +482,14 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
     /// So we can ask if it extends
     pub parent_commitment: Commitment<ValidatingLeaf<TYPES>>,
 
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
 
     /// What the state should be AFTER applying `self.deltas`
     pub state: TYPES::StateType,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     #[derivative(PartialEq = "ignore")]
@@ -504,7 +504,7 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
-/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::Block`
+/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct SequencingLeaf<TYPES: NodeType> {
@@ -525,7 +525,7 @@ pub struct SequencingLeaf<TYPES: NodeType> {
     pub deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     pub timestamp: i128,
@@ -642,7 +642,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.state.clone()
     }
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as Block>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -680,7 +680,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
         <TYPES::StateType as TestableState>::create_random_transaction(
             Some(&self.state),
             rng,
@@ -757,7 +757,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
     // The Sequencing Leaf doesn't have a state.
     fn get_state(&self) -> Self::MaybeState {}
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as Block>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -794,7 +794,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
         TYPES::StateType::create_random_transaction(None, rng, padding)
     }
 }

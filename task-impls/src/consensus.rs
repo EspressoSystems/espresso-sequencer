@@ -31,7 +31,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteAccumulator, VoteType},
@@ -1160,7 +1160,7 @@ where
 
         let block_commitment = self.block.commit();
         if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("Block is generic block! {:?}", self.cur_view);
+            debug!("BlockPayload is generic block! {:?}", self.cur_view);
         }
 
         let leaf = SequencingLeaf {

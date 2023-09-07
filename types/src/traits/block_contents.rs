@@ -1,7 +1,7 @@
 //! Abstraction over the contents of a block
 //!
-//! This module provides the [`Block`] trait, which describes the behaviors that a block is
-//! expected to have.
+//! This module provides the [`BlockPayload`] and [`BlockHeader`] traits, which describe the
+//! behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -15,14 +15,15 @@ use std::{
 
 /// Abstraction over the full contents of a block
 ///
-/// This trait encapsulates the behaviors that a block must have in order to be used by consensus:
-///   * Must have a predefined error type ([`Block::Error`])
+/// This trait encapsulates the behaviors that the transactions of a block must have in order to be
+/// used by consensus
+///   * Must have a predefined error type ([`BlockPayload::Error`])
 ///   * Must have a transaction type that can be compared for equality, serialized and serialized,
 ///     sent between threads, and can have a hash produced of it
 ///   * Must be able to be produced incrementally by appending transactions
-///     ([`add_transaction_raw`](Block::add_transaction_raw))
+///     ([`add_transaction_raw`](BlockPayload::add_transaction_raw))
 ///   * Must be hashable
-pub trait Block:
+pub trait BlockPayload:
     Serialize
     + Clone
     + Debug
@@ -61,19 +62,19 @@ pub trait Block:
 /// Commitment to a block, used by data availibity
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 #[serde(bound(deserialize = ""), transparent)]
-pub struct BlockCommitment<T: Block>(pub Commitment<T>);
+pub struct BlockCommitment<T: BlockPayload>(pub Commitment<T>);
 
-/// Abstraction over any type of transaction. Used by [`Block`].
+/// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
 }
 
-/// Dummy implementation of `BlockContents` for unit tests
+/// Dummy implementation of `BlockPayload` for unit tests
 pub mod dummy {
     use std::fmt::Display;
 
-    use super::{Block, Commitment, Committable, Debug, Hash, HashSet, Serialize};
+    use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
     use rand::Rng;
     use serde::Deserialize;
 
@@ -107,7 +108,7 @@ pub mod dummy {
 
     impl Committable for DummyTransaction {
         fn commit(&self) -> commit::Commitment<Self> {
-            commit::RawCommitmentBuilder::new("Dummy Block Comm")
+            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
                 .u64_field("Dummy Field", 0)
                 .finalize()
         }
@@ -132,7 +133,7 @@ pub mod dummy {
         }
     }
 
-    impl Block for DummyBlock {
+    impl BlockPayload for DummyBlock {
         type Error = DummyError;
 
         type Transaction = DummyTransaction;
@@ -167,7 +168,7 @@ pub mod dummy {
 
     impl Committable for DummyBlock {
         fn commit(&self) -> commit::Commitment<Self> {
-            commit::RawCommitmentBuilder::new("Dummy Block Comm")
+            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
                 .u64_field("Nonce", self.nonce)
                 .finalize()
         }

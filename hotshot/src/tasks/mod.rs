@@ -37,7 +37,7 @@ use hotshot_types::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
         },
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     vote::{ViewSyncData, VoteType},
 };

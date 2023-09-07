@@ -181,7 +181,7 @@ pub trait DualKeyValue: Serialize + DeserializeOwned + Clone {
 }
 
 impl<STATE: StateContents> DualKeyValue for QuorumCertificate<STATE> {
-    type Key1 = Commitment<STATE::Block>;
+    type Key1 = Commitment<STATE::BlockPayload>;
     type Key2 = ViewNumber;
 
     const KEY_1_NAME: &'static str = "block_commitment";
@@ -200,7 +200,7 @@ where
     STATE: StateContents,
 {
     type Key1 = Commitment<Leaf<STATE>>;
-    type Key2 = Commitment<STATE::Block>;
+    type Key2 = Commitment<STATE::BlockPayload>;
 
     const KEY_1_NAME: &'static str = "leaf_commitment";
     const KEY_2_NAME: &'static str = "block_commitment";
@@ -210,6 +210,6 @@ where
     }
 
     fn key_2(&self) -> Self::Key2 {
-        <STATE::Block as Committable>::commit(&self.deltas)
+        <STATE::BlockPayload as Committable>::commit(&self.deltas)
     }
 }
