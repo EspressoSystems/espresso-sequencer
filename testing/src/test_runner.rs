@@ -167,7 +167,7 @@ where
 
         // Start hotshot
         for node in nodes {
-            if !late_start_nodes.contains(&node.node_id.try_into().unwrap()) {
+            if !late_start_nodes.contains(&node.node_id) {
                 node.handle.hotshot.start_consensus().await;
             }
         }

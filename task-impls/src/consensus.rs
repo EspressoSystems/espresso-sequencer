@@ -1195,7 +1195,7 @@ where
             data: proposal,
             signature,
         };
-        error!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
+        debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
 
         self.event_stream
             .publish(SequencingHotShotEvent::QuorumProposalSend(
