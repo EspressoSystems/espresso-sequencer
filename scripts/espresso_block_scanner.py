@@ -5,6 +5,7 @@
 import urllib.request
 import json;
 import time;
+import datetime;
 import sys;
 host="localhost"
 port="50000"
@@ -59,7 +60,8 @@ while True:
 				seen_vms.add(vm)
 
 				print("### New transactions for vm "+str(vm) + " found on Espresso Block "+str(block_number)+" ###")
-
+				namespace_block_url=url+str(block_number)+"/namespace/"+str(vm)
+				print("GET "+namespace_block_url)
 				# find block info for Rollup
 				vm_page = urllib.request.urlopen(url+str(block_number)+"/namespace/"+str(vm))
 				vm_block_str = vm_page.read()
@@ -67,8 +69,14 @@ while True:
 				
 				# Omit unnecessary data
 				del vm_block_struct['proof']['phantom']
-				del vm_block_struct['proof']['left_boundary_proof']
-				del vm_block_struct['proof']['right_boundary_proof']
+				if vm_block_struct['proof']['left_boundary_proof'] == None:
+					vm_block_struct['proof']['left_boundary_proof'] = "Null # left boundary proof not needed"
+				else:
+					vm_block_struct['proof']['left_boundary_proof'] = "[...]" # Merkle proof for inclusion of left boundary vm transaction
+				if vm_block_struct['proof']['right_boundary_proof'] == None:
+					vm_block_struct['proof']['right_boundary_proof'] = "Null # right boundary proof not needed"
+				else:
+					vm_block_struct['proof']['right_boundary_proof'] = "[...]" # Merkle proof for inclusion of righ boundary vm transaction
 				del vm_block_struct['header']['metadata']['l1_finalized']
 				for proof in vm_block_struct['proof']['proofs']:
 					# proof is too large to see, Eliding details
@@ -81,6 +89,11 @@ while True:
 				for txn in vm_block_struct['transactions']:
 					payload_hex = bytearray(txn['payload']).hex()
 					txn['payload']=payload_hex
+				
+				# transform unix timespamp to date
+				timestamp = vm_block_struct['header']['metadata']['timestamp']
+				date = datetime.datetime.fromtimestamp(timestamp)
+				vm_block_struct['header']['metadata']['timestamp'] = str(date)
 				
 				# print trimmed block
 				print(json.dumps(vm_block_struct, indent=2))
