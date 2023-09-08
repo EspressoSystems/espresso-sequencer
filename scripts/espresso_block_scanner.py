@@ -1,8 +1,15 @@
 import urllib.request
 import json;
 import time;
+import sys;
 block_number = 0
-url='http://localhost:50000/availability/block/'
+host="localhost"
+port="50000"
+if len(sys.argv) > 1:
+	host=sys.argv[1]
+if len(sys.argv) > 2:
+	port=sys.argv[2]
+url="http://"+host+":"+port+"/availability/block/"
 
 # Keep track of transaction to avoid showing duplicates
 payloads = set()
