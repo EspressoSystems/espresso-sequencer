@@ -418,7 +418,10 @@ impl<N: network::Type> AppState<N> {
             .enumerate()
         {
             let Some(block) = block else {
-                tracing::warn!("missing block {}, index may be out of date", prev_block_height + i);
+                tracing::warn!(
+                    "missing block {}, index may be out of date",
+                    prev_block_height + i
+                );
                 continue;
             };
             index_block_by_time(&mut self.blocks_by_time, &block);

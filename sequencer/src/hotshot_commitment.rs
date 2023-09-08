@@ -73,7 +73,6 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     // Connect to the layer one HotShot contract.
     let Some(l1) = connect_l1(opt).await else {
         panic!("unable to connect to L1, hotshot commitment task exiting");
-
     };
     let contract = HotShot::new(opt.hotshot_address, l1.clone());
 
