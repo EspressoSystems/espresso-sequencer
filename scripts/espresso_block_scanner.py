@@ -1,8 +1,11 @@
+### Simple live Espresso block scanner
+### Scan all blocks looking for transaction on each VM. 
+### For each found transaction, display the VM block containing that transaction, including inclusion proofs for transactions in the Espresso block.
+
 import urllib.request
 import json;
 import time;
 import sys;
-block_number = 0
 host="localhost"
 port="50000"
 if len(sys.argv) > 1:
@@ -15,6 +18,7 @@ url="http://"+host+":"+port+"/availability/block/"
 payloads = set()
 
 # Scan block by block
+block_number = 0
 while True:
 	try:
 		page = urllib.request.urlopen(url+str(block_number))
@@ -39,15 +43,22 @@ while True:
 		# throw exception if json is different from expected
 		try:
 			txns = struct['block']['transaction_nmt']
+			# we only need to show the block once per vm, so if several transactions are seen for same vm in same block, treat them as duplicates
+			seen_vms = set();
 			for txn in txns:
 				vm = txn['vm'] # extract Rollup ID
 				payload = payload_hex=bytearray(txn['payload']).hex()
 				# if transaction already seen, skip
 				if payload in payloads:
 					continue
-
-				print("### New transaction for vm "+str(vm) + " found on Espresso Block "+str(block_number)+" ###")
 				payloads.add(payload)
+				
+				# if vm already seen in block skip
+				if vm in seen_vms:
+					continue
+				seen_vms.add(vm)
+
+				print("### New transactions for vm "+str(vm) + " found on Espresso Block "+str(block_number)+" ###")
 
 				# find block info for Rollup
 				vm_page = urllib.request.urlopen(url+str(block_number)+"/namespace/"+str(vm))
