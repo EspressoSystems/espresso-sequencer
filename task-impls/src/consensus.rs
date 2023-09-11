@@ -368,7 +368,7 @@ where
                         if let GeneralConsensusMessage::Vote(vote) = message {
                             debug!(
                                 "Sending vote to next quorum leader {:?}",
-                                vote.current_view()
+                                vote.get_view()
                             );
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
@@ -446,7 +446,7 @@ where
                         if let GeneralConsensusMessage::Vote(vote) = message {
                             debug!(
                                 "Sending vote to next quorum leader {:?}",
-                                vote.current_view()
+                                vote.get_view()
                             );
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
@@ -890,13 +890,13 @@ where
                 }
             }
             SequencingHotShotEvent::QuorumVoteRecv(vote) => {
-                debug!("Received quroum vote: {:?}", vote.current_view());
+                debug!("Received quroum vote: {:?}", vote.get_view());
 
-                if !self.quorum_exchange.is_leader(vote.current_view() + 1) {
+                if !self.quorum_exchange.is_leader(vote.get_view() + 1) {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
-                        *vote.current_view() + 1,
-                        self.quorum_exchange.is_leader(vote.current_view() + 2)
+                        *vote.get_view() + 1,
+                        self.quorum_exchange.is_leader(vote.get_view() + 2)
                     );
                     return;
                 }

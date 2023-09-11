@@ -359,7 +359,7 @@ impl<
                         // this should match replica upon receipt
                         p.data.get_view_number()
                     }
-                    GeneralConsensusMessage::Vote(vote_message) => vote_message.current_view(),
+                    GeneralConsensusMessage::Vote(vote_message) => vote_message.get_view(),
                     GeneralConsensusMessage::InternalTrigger(trigger) => match trigger {
                         InternalTrigger::Timeout(time) => *time,
                     },
@@ -376,7 +376,7 @@ impl<
                         // this should match replica upon receipt
                         p.data.get_view_number()
                     }
-                    CommitteeConsensusMessage::DAVote(vote_message) => vote_message.current_view(),
+                    CommitteeConsensusMessage::DAVote(vote_message) => vote_message.get_view(),
                     CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
                 }
             }

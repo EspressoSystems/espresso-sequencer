@@ -1,5 +1,8 @@
 //! Provides two types of cerrtificates and their accumulators.
 
+use crate::vote::Accumulator;
+use crate::vote::AccumulatorPlaceholder;
+use crate::vote::QuorumVote;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
     traits::{
@@ -8,10 +11,11 @@ use crate::{
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
         state::ConsensusTime,
     },
-    vote::{ViewSyncData, VoteAccumulator, DAVote, ViewSyncVote},
+    vote::{DAVote, ViewSyncData, ViewSyncVote, VoteAccumulator},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};
+use either::Either;
 use espresso_systems_common::hotshot::tag;
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
@@ -20,8 +24,6 @@ use std::{
     ops::Deref,
 };
 use tracing::debug;
-use crate::vote::QuorumVote;
-use crate::vote::AccumulatorPlaceholder;
 
 /// A `DACertificate` is a threshold signature that some data is available.
 /// It is signed by the members of the DA committee, not the entire network. It is used
@@ -115,7 +117,7 @@ pub struct ViewSyncCertificateInternal<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Enum representing whether a signatures is for a 'Yes' or 'No' or 'DA' or 'Genesis' certificate
-// TODO ED Should this be a trait? 
+// TODO ED Should this be a trait?
 pub enum AssembledSignature<TYPES: NodeType> {
     // (enum, signature)
     /// These signatures are for a 'Yes' certificate

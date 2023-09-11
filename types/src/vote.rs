@@ -34,7 +34,12 @@ pub trait VoteType<TYPES: NodeType>:
     Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq
 {
     /// The view this vote was cast for.
-    fn current_view(&self) -> TYPES::Time;
+    fn get_view(&self) -> TYPES::Time;
+    fn get_key(self) -> TYPES::SignatureKey; 
+    fn get_signature(self) -> EncodedSignature;
+    fn get_data(self) -> TYPES::SignatureKey {
+        todo!()
+    }
 }
 
 /// A vote on DA proposal.
@@ -192,15 +197,25 @@ pub enum QuorumVote<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
 }
 
 impl<TYPES: NodeType> VoteType<TYPES> for DAVote<TYPES> {
-    fn current_view(&self) -> TYPES::Time {
+    fn get_view(&self) -> TYPES::Time {
         self.current_view
+    }
+    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+        self.signature_key()
+    }
+    fn get_signature(self) -> EncodedSignature {
+        // TODO ED Revisit this function
+        self.signature.1
     }
 }
 
+#[deprecated]
+// TODO ED Remove this
 impl<TYPES: NodeType> DAVote<TYPES> {
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
+    #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
     }
@@ -209,16 +224,24 @@ impl<TYPES: NodeType> DAVote<TYPES> {
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES>
     for QuorumVote<TYPES, LEAF>
 {
-    fn current_view(&self) -> TYPES::Time {
+    fn get_view(&self) -> TYPES::Time {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.current_view,
             QuorumVote::Timeout(v) => v.current_view,
         }
     }
+
+    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+        self.signature_key()
+    }
+    fn get_signature(self) -> EncodedSignature {
+        self.signature()
+    }
 }
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> {
     /// Get the encoded signature.
+    #[deprecated]
     pub fn signature(&self) -> EncodedSignature {
         match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.1.clone(),
@@ -228,6 +251,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
+    #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         let encoded = match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.0.clone(),
@@ -238,12 +262,19 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
 }
 
 impl<TYPES: NodeType> VoteType<TYPES> for ViewSyncVote<TYPES> {
-    fn current_view(&self) -> TYPES::Time {
+    fn get_view(&self) -> TYPES::Time {
         match self {
             ViewSyncVote::PreCommit(v) | ViewSyncVote::Commit(v) | ViewSyncVote::Finalize(v) => {
                 v.round
             }
         }
+    }
+    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+        self.signature_key()
+    }
+
+    fn get_signature(self) -> EncodedSignature {
+        self.signature()
     }
 }
 

@@ -208,7 +208,7 @@ impl<
                     GeneralConsensusMessage::Vote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view() + 1)),
+                Some(membership.get_leader(vote.get_view() + 1)),
             ),
 
             SequencingHotShotEvent::DAProposalSend(proposal, sender) => (

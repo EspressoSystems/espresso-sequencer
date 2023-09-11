@@ -186,7 +186,24 @@ where
 
     type VoteAccumulator: Accumulator2<TYPES, Self::Vote>; 
 
+    fn accumulate_vote(accumulator: Self::VoteAccumulator, vote: Self::Vote, commit: COMMITTABLE) -> Either<Self::VoteAccumulator, Self> {
+        // if !self.is_valid_vote(
+        //     &vote.encoded_key,
+        //     &vote.encoded_signature,
+        //     vote.data.clone(),
+        //     // Ignoring deserialization errors below since we are getting rid of it soon
+        //     Checked::Unchecked(vote.vote_token.clone()),
+        // ) {
+        //     error!("Invalid vote!");
+        //     return Either::Left(accumulator);
+        // }
+        // Call append
+
+        todo!()
+    }
+
     /// Build a QC from the threshold signature and commitment
+    // TODO ED Rename this function
     fn from_signatures_and_commitment(
         view_number: TIME,
         signatures: AssembledSignature<TYPES>,
