@@ -116,6 +116,6 @@ async-std = { workspace = true }
 [dev-dependencies]
 blake3 = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
-serde_json = "1.0.105"
+serde_json = "1.0.106"
 toml = { workspace = true }
 
