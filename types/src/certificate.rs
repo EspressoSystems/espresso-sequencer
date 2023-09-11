@@ -8,7 +8,7 @@ use crate::{
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
         state::ConsensusTime,
     },
-    vote::ViewSyncData,
+    vote::{ViewSyncData, VoteAccumulator},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};
@@ -20,6 +20,8 @@ use std::{
     ops::Deref,
 };
 use tracing::debug;
+use crate::vote::QuorumVote;
+use crate::vote::AccumulatorPlaceholder;
 
 /// A `DACertificate` is a threshold signature that some data is available.
 /// It is signed by the members of the DA committee, not the entire network. It is used
@@ -113,6 +115,7 @@ pub struct ViewSyncCertificateInternal<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Enum representing whether a signatures is for a 'Yes' or 'No' or 'DA' or 'Genesis' certificate
+// TODO ED Should this be a trait? 
 pub enum AssembledSignature<TYPES: NodeType> {
     // (enum, signature)
     /// These signatures are for a 'Yes' certificate
@@ -154,6 +157,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, LEAF>
     for QuorumCertificate<TYPES, LEAF>
 {
+    type Vote = QuorumVote<TYPES, LEAF>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
+
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,

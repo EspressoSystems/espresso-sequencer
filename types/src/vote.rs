@@ -7,7 +7,7 @@ use crate::{
     certificate::{AssembledSignature, QuorumCertificate},
     data::LeafType,
     traits::{
-        election::{VoteData, VoteToken},
+        election::{SignedCertificate, VoteData, VoteToken},
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
     },
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
-    num::NonZeroU64,
+    num::NonZeroU64, marker::PhantomData,
 };
 use tracing::error;
 
@@ -187,6 +187,7 @@ pub enum QuorumVote<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// Negative vote.
     No(YesOrNoVote<TYPES, LEAF>),
     /// Timeout vote.
+    // TODO ED Remove this and make it it's own vote type, since it is not part of the QC type
     Timeout(TimeoutVote<TYPES, LEAF>),
 }
 
@@ -255,6 +256,22 @@ pub trait Accumulator<T, U>: Sized {
     fn append(self, val: T) -> Either<Self, U>;
 }
 
+
+pub trait Accumulator2<TYPES: NodeType, VOTE: VoteType<TYPES>>: Sized
+{
+    fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>>;
+}
+
+pub struct AccumulatorPlaceholder<TYPES: NodeType, VOTE: VoteType<TYPES>> {
+    phantom: PhantomData<(TYPES, VOTE)>
+}
+
+impl <TYPES: NodeType, VOTE: VoteType<TYPES>> Accumulator2<TYPES, VOTE> for AccumulatorPlaceholder<TYPES, VOTE> {
+    fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
+        either::Left(self)
+    }
+}
+
 /// Mapping of commitments to vote tokens by key.
 type VoteMap<C, TOKEN> = HashMap<
     Commitment<C>,
@@ -314,6 +331,7 @@ where
     #![allow(clippy::too_many_lines)]
     fn append(
         mut self,
+        // TODO ED Make this its own type to avoid extra long type signature
         val: (
             Commitment<LEAF>,
             (

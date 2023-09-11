@@ -42,6 +42,7 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, marker::PhantomData, num::NonZeroU64};
 use tracing::error;
+use crate::vote::Accumulator2;
 
 /// Error for election problems
 #[derive(Snafu, Debug)]
@@ -181,6 +182,10 @@ where
     COMMITTABLE: Committable + Serialize + Clone,
     TOKEN: VoteToken,
 {
+    type Vote: VoteType<TYPES>;
+
+    type VoteAccumulator: Accumulator2<TYPES, Self::Vote>; 
+
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         view_number: TIME,
