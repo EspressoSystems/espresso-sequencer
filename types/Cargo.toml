@@ -50,7 +50,7 @@ bit-vec = "0.6.3"
 typenum = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0.105"
+serde_json = "1.0.106"
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }
