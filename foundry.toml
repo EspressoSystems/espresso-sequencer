@@ -6,7 +6,7 @@ src = 'contracts/src'
 out = 'contracts/out'
 test = 'contracts/test'
 libs = ['contracts/lib']
-scripts = "contracts/scripts"
+script = "contracts/script"
 broadcast = "contracts/broadcast"
 
 # Version should match the solc installed via flake, otherwise the contract

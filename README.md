@@ -102,15 +102,18 @@ forge doc
 #### Deployment
 To deploy the contracts to a local testnet, first run a dev chain (e. g. `anvil`), then run
 
-    forge script contracts/scripts/HotShot.s.sol --broadcast --rpc-url local
+    forge script DeployHotShot --broadcast --rpc-url local
 
-[TODO: test this] To deploy to sepolia set `SEPOLIA_RPC_URL` and `MNEMONIC` env vars and run
+To deploy to sepolia set `SEPOLIA_RPC_URL` and `MNEMONIC` env vars and run
 
-    forge script contracts/scripts/HotShot.s.sol --broadcast --rpc-url sepolia
+    forge script DeployHotShot --broadcast --rpc-url sepolia
 
-[TODO: test this] To additionally verify the contact on etherscan run
+To additionally verify the contact on etherscan set the `ETHERSCAN_API_KEY` env var and run
 
-    forge script contracts/scripts/HotShot.s.sol --broadcast --rpc-url sepolia
+    forge script DeployHotShot --broadcast --rpc-url sepolia --verify
+
+Running the script will save a file with details about the deployment in
+`contracts/broadcast/$CHAIN_ID`.
 
 ## Misc
 
