@@ -8,7 +8,7 @@ use crate::{
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
         state::ConsensusTime,
     },
-    vote::{ViewSyncData, VoteAccumulator},
+    vote::{ViewSyncData, VoteAccumulator, DAVote, ViewSyncVote},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};
@@ -230,6 +230,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
 impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::BlockType>
     for DACertificate<TYPES>
 {
+    type Vote = DAVote<TYPES>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
+
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
@@ -318,6 +321,8 @@ impl<TYPES: NodeType>
     SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, ViewSyncData<TYPES>>
     for ViewSyncCertificate<TYPES>
 {
+    type Vote = ViewSyncVote<TYPES>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
