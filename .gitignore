@@ -22,7 +22,3 @@ target/
 cache/
 
 node_modules/
-
-# Local foundry deployments
-contracts/broadcast/*/31337
-contracts/broadcast/*/1337
