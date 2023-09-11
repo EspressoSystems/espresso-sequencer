@@ -51,7 +51,7 @@ Make sure nix is installed. See instructions [here](https://github.com/EspressoS
 1. Build all executables: `cargo build --release`
 2. Run the orchestrator: `just dev-orchestrator`
 3. Run the DA web server: `just dev-da-server`
-4. Run the consensus web server: `just dev-consensus-server` 
+4. Run the consensus web server: `just dev-consensus-server`
 5. Run the sequencer: `just dev-sequencer`
 6. Run a test Anvil node: `anvil`
 7. Once the Sequencer HotShot network is running (there is a 10 second delay), run the demo: `just dev-demo`
