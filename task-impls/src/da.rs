@@ -15,6 +15,8 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::traits::election::SignedCertificate;
+use hotshot_types::vote::AccumulatorPlaceholder;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -34,6 +36,7 @@ use hotshot_types::{
 };
 use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
+use std::marker::PhantomData;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -104,6 +107,16 @@ pub struct DAVoteCollectionTaskState<
     /// the vote accumulator
     pub accumulator:
         Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType>, DACertificate<TYPES>>,
+
+    pub accumulator2: Either<
+        <DACertificate<TYPES> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            TYPES::BlockType,
+        >>::VoteAccumulator,
+        DACertificate<TYPES>,
+    >,
     // TODO ED Make this just "view" since it is only for this task
     /// the current view
     pub cur_view: TYPES::Time,
@@ -379,10 +392,14 @@ where
                     acc,
                     None,
                 );
+                let accumulator2 = AccumulatorPlaceholder {
+                    phantom: PhantomData::default(),
+                };
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
                         accumulator,
+                        accumulator2: either::Left(accumulator2), 
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,

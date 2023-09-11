@@ -263,7 +263,7 @@ pub trait Accumulator2<TYPES: NodeType, VOTE: VoteType<TYPES>>: Sized
 }
 
 pub struct AccumulatorPlaceholder<TYPES: NodeType, VOTE: VoteType<TYPES>> {
-    phantom: PhantomData<(TYPES, VOTE)>
+    pub phantom: PhantomData<(TYPES, VOTE)>
 }
 
 impl <TYPES: NodeType, VOTE: VoteType<TYPES>> Accumulator2<TYPES, VOTE> for AccumulatorPlaceholder<TYPES, VOTE> {
