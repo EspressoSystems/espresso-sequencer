@@ -77,7 +77,9 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use 
 connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking
 is enabled.
 
-### Developing contracts
+### Contracts
+
+#### Development
 
 A foundry project for the contracts specific to HotShot can be found in the directory `contracts`.
 
@@ -104,11 +106,21 @@ To generate documentation in `./docs` for solidity code run
 forge doc
 ```
 
-To verify the HotShot contract on sepolia via Etherscan run
+#### Deployment
 
-```
-env ETHERSCAN_API_KEY=... scripts/verify-contract HOTSHOT_ADDRESS
-```
+To deploy the contracts to a local testnet, first run a dev chain (e. g. `anvil`), then run
+
+    forge script DeployHotShot --broadcast --rpc-url local
+
+To deploy to sepolia set `SEPOLIA_RPC_URL` and `MNEMONIC` env vars and run
+
+    forge script DeployHotShot --broadcast --rpc-url sepolia
+
+To additionally verify the contact on etherscan set the `ETHERSCAN_API_KEY` env var and run
+
+    forge script DeployHotShot --broadcast --rpc-url sepolia --verify
+
+Running the script will save a file with details about the deployment in `contracts/broadcast/$CHAIN_ID`.
 
 ## Misc
 
