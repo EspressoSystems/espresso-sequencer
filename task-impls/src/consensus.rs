@@ -12,6 +12,7 @@ use commit::Committable;
 use core::time::Duration;
 use either::{Either, Left, Right};
 use futures::FutureExt;
+use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -487,6 +488,18 @@ where
             // }
             self.cur_view = new_view;
             self.current_proposal = None;
+
+            // Poll the future leader for lookahead
+            let lookahead_view = new_view + LOOK_AHEAD;
+            if !self.quorum_exchange.is_leader(lookahead_view) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
+                        *lookahead_view,
+                        self.quorum_exchange.get_leader(lookahead_view),
+                    ))
+                    .await;
+            }
 
             // Start polling for proposals for the new view
             self.quorum_exchange

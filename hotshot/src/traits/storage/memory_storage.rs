@@ -120,8 +120,7 @@ mod test {
     use hotshot_signature_key::bn254::BN254Pub;
     use hotshot_types::{
         certificate::{AssembledSignature, QuorumCertificate},
-        constants::genesis_proposer_id,
-        data::{fake_commitment, ValidatingLeaf, ViewNumber},
+        data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
         traits::{
             block_contents::dummy::{DummyBlock, DummyState},
             node_implementation::NodeType,

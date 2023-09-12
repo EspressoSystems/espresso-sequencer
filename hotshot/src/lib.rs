@@ -44,9 +44,9 @@ use crate::{
 use async_compatibility_layer::{
     art::{async_spawn, async_spawn_local},
     async_primitives::{broadcast::BroadcastSender, subscribable_rwlock::SubscribableRwLock},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
+    channel::UnboundedSender,
 };
-use async_lock::{Mutex, RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
+use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use custom_debug::Debug;
@@ -146,9 +146,6 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// latter of which is only applicable for sequencing consensus.
     channel_maps: (ChannelMaps<TYPES, I>, Option<ChannelMaps<TYPES, I>>),
 
-    /// for receiving messages in the network lookup task
-    recv_network_lookup: Arc<Mutex<UnboundedReceiver<Option<TYPES::Time>>>>,
-
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
     output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
@@ -238,9 +235,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let consensus = Arc::new(RwLock::new(consensus));
         let txns = consensus.read().await.get_transactions();
 
-        let (_send_network_lookup, recv_network_lookup) = unbounded();
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
-            recv_network_lookup: Arc::new(Mutex::new(recv_network_lookup)),
             id: nonce,
             channel_maps: I::new_channel_maps(start_view),
             consensus,

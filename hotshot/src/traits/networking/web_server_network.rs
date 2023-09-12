@@ -128,17 +128,23 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
     // TODO ED This should be TYPES::Time
     // Theoretically there should never be contention for this lock...
     /// Task map for quorum proposals.
-    proposal_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    proposal_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for quorum votes.
-    vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for DACs.
-    dac_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    dac_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync certificates.
-    view_sync_cert_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_cert_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync votes.
-    view_sync_vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for transactions
-    txn_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    txn_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
 }
 
 impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
@@ -146,7 +152,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     /// Pull a web server.
     async fn poll_web_server(
         &self,
-        receiver: UnboundedReceiver<ConsensusIntentEvent>,
+        receiver: UnboundedReceiver<ConsensusIntentEvent<TYPES::SignatureKey>>,
         message_purpose: MessagePurpose,
         view_number: u64,
     ) -> Result<(), NetworkError> {
@@ -608,13 +614,7 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         <WebServerNetwork<_, _, _> as ConnectedNetwork<
             Message<TYPES, I>,
             TYPES::SignatureKey,
@@ -725,14 +725,8 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: K) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
     #[allow(clippy::too_many_lines)]
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
         debug!(
             "Injecting event: {:?} is da {}",
             event.clone(),
@@ -997,7 +991,7 @@ impl<
                 };
             }
 
-            _ => error!("Unexpected event!"),
+            _ => {}
         }
     }
 }
