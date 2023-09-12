@@ -29,6 +29,7 @@ use hotshot_types::{
         BlockPayload, State,
     },
 };
+use jf_primitives::vid::VidResult;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -234,9 +235,10 @@ impl BlockPayload for SDemoBlock {
         }
     }
 
-    fn commitment(&self) -> Commitment<Self> {
-        // TODO: Get the payload commitment after VID is added.
-        // https://github.com/EspressoSystems/HotShot/issues/1673
+    fn commitment(&self) -> VidResult<Commitment<Self>> {
+        // TODO: Get the payload commitment after VID integration.
+        // <https://github.com/EspressoSystems/HotShot/issues/1673>
+        // <https://github.com/EspressoSystems/jellyfish/issues/369>
         unimplemented!();
     }
 }

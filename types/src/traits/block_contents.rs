@@ -4,7 +4,8 @@
 //! behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use jf_primitives::vid::VidResult;
+use serde::{de::DeserializeOwned, Serialize};
 
 use std::{
     collections::HashSet,
@@ -59,13 +60,8 @@ pub trait BlockPayload:
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 
     /// Compute the VID payload commitment.
-    fn commitment(&self) -> Commitment<Self>;
+    fn commitment(&self) -> VidResult<Commitment<Self>>;
 }
-
-/// Commitment to a block, used by data availibity
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
-#[serde(bound(deserialize = ""), transparent)]
-pub struct BlockCommitment<T: BlockPayload>(pub Commitment<T>);
 
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
@@ -78,6 +74,7 @@ pub mod dummy {
     use std::fmt::Display;
 
     use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
+    use jf_primitives::vid::VidResult;
     use rand::Rng;
     use serde::Deserialize;
 
@@ -158,9 +155,10 @@ pub mod dummy {
             HashSet::new()
         }
 
-        fn commitment(&self) -> Commitment<Self> {
-            // TODO: Get the payload commitment after VID is added.
-            // https://github.com/EspressoSystems/HotShot/issues/1673
+        fn commitment(&self) -> VidResult<Commitment<Self>> {
+            // TODO: Get the payload commitment after VID integration.
+            // <https://github.com/EspressoSystems/HotShot/issues/1673>
+            // <https://github.com/EspressoSystems/jellyfish/issues/369>
             unimplemented!();
         }
     }
