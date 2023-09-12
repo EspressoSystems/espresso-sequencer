@@ -13,7 +13,6 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
     message::{Message, MessagePurpose},
     traits::{
         election::Membership,
@@ -25,7 +24,6 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
-    vote::VoteType,
 };
 use hotshot_web_server::{self, config};
 use rand::random;
@@ -54,12 +52,8 @@ pub struct WebCommChannel<
     PhantomData<(MEMBERSHIP, I)>,
 );
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-
-        MEMBERSHIP: Membership<TYPES>,
-    > WebCommChannel<TYPES, I,  MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     /// Create new communication channel
     #[must_use]
@@ -515,13 +509,9 @@ impl<
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>,  MEMBERSHIP>
-    for WebCommChannel<TYPES, I,  MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
     /// Blocks until node is successfully initialized
@@ -1048,13 +1038,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebCommChannel<TYPES, I,  MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generator(
         expected_node_count: usize,

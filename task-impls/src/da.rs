@@ -108,6 +108,8 @@ pub struct DAVoteCollectionTaskState<
     pub accumulator:
         Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType>, DACertificate<TYPES>>,
 
+    /// The accumulator
+    #[allow(clippy::type_complexity)]
     pub accumulator2: Either<
         <DACertificate<TYPES> as SignedCertificate<
             TYPES,
@@ -393,13 +395,13 @@ where
                     None,
                 );
                 let accumulator2 = AccumulatorPlaceholder {
-                    phantom: PhantomData::default(),
+                    phantom: PhantomData,
                 };
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
                         accumulator,
-                        accumulator2: either::Left(accumulator2), 
+                        accumulator2: either::Left(accumulator2),
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,

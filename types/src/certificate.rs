@@ -1,6 +1,5 @@
 //! Provides two types of cerrtificates and their accumulators.
 
-use crate::vote::Accumulator;
 use crate::vote::AccumulatorPlaceholder;
 use crate::vote::QuorumVote;
 use crate::{
@@ -11,11 +10,11 @@ use crate::{
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
         state::ConsensusTime,
     },
-    vote::{DAVote, ViewSyncData, ViewSyncVote, VoteAccumulator},
+    vote::{DAVote, ViewSyncData, ViewSyncVote},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};
-use either::Either;
+
 use espresso_systems_common::hotshot::tag;
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};

@@ -366,10 +366,7 @@ where
                             );
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.get_view()
-                            );
+                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -444,10 +441,7 @@ where
 
                         // TODO ED Only publish event in vote if able
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.get_view()
-                            );
+                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;

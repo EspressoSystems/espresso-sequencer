@@ -16,7 +16,6 @@ use dashmap::DashMap;
 use futures::StreamExt;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
     message::{Message, MessageKind},
     traits::{
         election::Membership,
@@ -29,7 +28,6 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    vote::VoteType,
 };
 use hotshot_utils::bincode::bincode_opts;
 use rand::Rng;
@@ -471,12 +469,8 @@ pub struct MemoryCommChannel<
     PhantomData<(I, MEMBERSHIP)>,
 );
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-     
-        MEMBERSHIP: Membership<TYPES>,
-    > MemoryCommChannel<TYPES, I,  MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    MemoryCommChannel<TYPES, I, MEMBERSHIP>
 {
     /// create new communication channel
     #[must_use]

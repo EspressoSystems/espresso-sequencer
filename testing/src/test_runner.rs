@@ -41,8 +41,6 @@ where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
         Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote,
         <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
     >,
 {
@@ -59,8 +57,6 @@ where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
         Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote,
         <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
     >,
 {

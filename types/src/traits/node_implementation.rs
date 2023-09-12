@@ -401,21 +401,18 @@ where
     QuorumCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
- 
         QuorumMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
     CommitteeCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-      
         CommitteeMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
     ViewSyncCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-
         ViewSyncMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
@@ -515,7 +512,6 @@ pub type ViewSyncMembership<TYPES, I> = QuorumMembership<TYPES, I>;
 pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as CommunicationChannel<
     TYPES,
     Message<TYPES, I>,
-
     QuorumMembership<TYPES, I>,
 >>::NETWORK;
 
@@ -523,7 +519,6 @@ pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as Communication
 pub type CommitteeNetwork<TYPES, I> = <CommitteeCommChannel<TYPES, I> as CommunicationChannel<
     TYPES,
     Message<TYPES, I>,
-
     CommitteeMembership<TYPES, I>,
 >>::NETWORK;
 

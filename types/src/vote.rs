@@ -7,7 +7,7 @@ use crate::{
     certificate::{AssembledSignature, QuorumCertificate},
     data::LeafType,
     traits::{
-        election::{SignedCertificate, VoteData, VoteToken},
+        election::{VoteData, VoteToken},
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
     },
@@ -25,7 +25,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
-    num::NonZeroU64, marker::PhantomData,
+    marker::PhantomData,
+    num::NonZeroU64,
 };
 use tracing::error;
 
@@ -33,10 +34,13 @@ use tracing::error;
 pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone>:
     Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq
 {
-    /// The view this vote was cast for.
+    /// Get the view this vote was cast for
     fn get_view(&self) -> TYPES::Time;
-    fn get_key(self) -> TYPES::SignatureKey; 
+    /// Get the signature key associated with this vote
+    fn get_key(self) -> TYPES::SignatureKey;
+    /// Get the signature associated with this vote
     fn get_signature(self) -> EncodedSignature;
+    /// Get the data this vote was signed over
     fn get_data(self) -> VoteData<COMMITTABLE> {
         todo!()
     }
@@ -209,13 +213,12 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
     }
 }
 
-#[deprecated]
 // TODO ED Remove this
 impl<TYPES: NodeType> DAVote<TYPES> {
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    #[deprecated]
+    // #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
     }
@@ -241,7 +244,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> {
     /// Get the encoded signature.
-    #[deprecated]
+    // #[deprecated]
     pub fn signature(&self) -> EncodedSignature {
         match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.1.clone(),
@@ -251,7 +254,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    #[deprecated]
+    // #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         let encoded = match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.0.clone(),
@@ -287,18 +290,36 @@ pub trait Accumulator<T, U>: Sized {
     fn append(self, val: T) -> Either<Self, U>;
 }
 
-
-pub trait Accumulator2<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>>: Sized
+/// Accumulator trait used to accumulate votes into an `AssembledSignature`
+pub trait Accumulator2<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+>: Sized
 {
+    /// Append 1 vote to the accumulator.  If the threshold is not reached, return
+    /// the accumulator, else return the `AssembledSignature`
+    /// Only called from inside `accumulate_internal`
     fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>>;
 }
 
-pub struct AccumulatorPlaceholder<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> {
-    pub phantom: PhantomData<(TYPES, VOTE, COMMITTABLE)>
+/// Placeholder accumulator; will be replaced by accumulator for each certificate type
+pub struct AccumulatorPlaceholder<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+> {
+    /// Phantom data to make compiler happy
+    pub phantom: PhantomData<(TYPES, VOTE, COMMITTABLE)>,
 }
 
-impl <TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE> {
-    fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
+impl<
+        TYPES: NodeType,
+        COMMITTABLE: Committable + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITTABLE>,
+    > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
+{
+    fn append(self, _vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
         either::Left(self)
     }
 }

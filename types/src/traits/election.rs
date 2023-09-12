@@ -182,27 +182,19 @@ where
     COMMITTABLE: Committable + Serialize + Clone,
     TOKEN: VoteToken,
 {
+    /// `VoteType` that is used in this certificate
     type Vote: VoteType<TYPES, COMMITTABLE>;
 
+    /// `Accumulator` type to accumulate votes.
     type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
 
+    /// Accumulates votes given an accumulator, vote, and commit.  
+    /// Returns either the accumulator or a certificate
     fn accumulate_vote(
-        accumulator: Self::VoteAccumulator,
-        vote: Self::Vote,
-        commit: COMMITTABLE,
+        _accumulator: Self::VoteAccumulator,
+        _vote: Self::Vote,
+        _commit: COMMITTABLE,
     ) -> Either<Self::VoteAccumulator, Self> {
-        // if !self.is_valid_vote(
-        //     &vote.encoded_key,
-        //     &vote.encoded_signature,
-        //     vote.data.clone(),
-        //     // Ignoring deserialization errors below since we are getting rid of it soon
-        //     Checked::Unchecked(vote.vote_token.clone()),
-        // ) {
-        //     error!("Invalid vote!");
-        //     return Either::Left(accumulator);
-        // }
-        // Call append
-
         todo!()
     }
 

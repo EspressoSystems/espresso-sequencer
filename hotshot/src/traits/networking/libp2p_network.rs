@@ -14,7 +14,6 @@ use bimap::BiHashMap;
 use bincode::Options;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
     message::{Message, MessageKind},
     traits::{
         election::Membership,
@@ -27,7 +26,6 @@ use hotshot_types::{
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    vote::VoteType,
 };
 use hotshot_utils::bincode::bincode_opts;
 use libp2p_identity::PeerId;
@@ -731,13 +729,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-      
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for Libp2pCommChannel<TYPES, I,  MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 where
     MessageKind<TYPES, I>: ViewMessage<TYPES>,
 {

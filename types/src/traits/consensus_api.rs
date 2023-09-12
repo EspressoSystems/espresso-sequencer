@@ -2,7 +2,7 @@
 
 use crate::{
     certificate::QuorumCertificate,
-    data::{LeafType, ProposalType},
+    data::LeafType,
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
@@ -12,7 +12,6 @@ use crate::{
         signature_key::SignatureKey,
         storage::StorageError,
     },
-    vote::VoteType,
 };
 use async_trait::async_trait;
 
@@ -128,30 +127,23 @@ pub trait SequencingConsensusApi<
     LEAF: LeafType<NodeType = TYPES>,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >: ConsensusSharedApi<TYPES, LEAF, I>
-// TODO ED VoteType should not always be over LEAF, but for the API it doesn't matter and we are removing it soon anyway
 {
     /// Send a direct message to the given recipient
-    async fn send_direct_message<PROPOSAL: ProposalType<NodeType = TYPES>, VOTE: VoteType<TYPES, LEAF>>(
+    async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// send a direct message using the DA communication channel
-    async fn send_direct_da_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES, LEAF>,
-    >(
+    async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// Send a broadcast message to the entire network.
-    async fn send_broadcast_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES, LEAF>,
-    >(
+    async fn send_broadcast_message(
         &self,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
