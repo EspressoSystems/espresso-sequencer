@@ -41,9 +41,7 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     /// Get the signature associated with this vote
     fn get_signature(self) -> EncodedSignature;
     /// Get the data this vote was signed over
-    fn get_data(self) -> VoteData<COMMITTABLE> {
-        todo!()
-    }
+    fn get_data(self) -> VoteData<COMMITTABLE>;
 }
 
 /// A vote on DA proposal.
@@ -211,6 +209,9 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
         // TODO ED Revisit this function
         self.signature.1
     }
+    fn get_data(self) -> VoteData<TYPES::BlockType> {
+        self.vote_data
+    }
 }
 
 // TODO ED Remove this
@@ -218,7 +219,7 @@ impl<TYPES: NodeType> DAVote<TYPES> {
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    // #[deprecated]
+    #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
     }
@@ -240,11 +241,17 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
     fn get_signature(self) -> EncodedSignature {
         self.signature()
     }
+    fn get_data(self) -> VoteData<LEAF> {
+        match self {
+            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data,
+            QuorumVote::Timeout(v) => unimplemented!()
+        }
+    }
 }
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> {
     /// Get the encoded signature.
-    // #[deprecated]
+    #[deprecated]
     pub fn signature(&self) -> EncodedSignature {
         match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.1.clone(),
@@ -254,7 +261,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    // #[deprecated]
+    #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         let encoded = match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.0.clone(),
@@ -278,6 +285,13 @@ impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPE
 
     fn get_signature(self) -> EncodedSignature {
         self.signature()
+    }
+    fn get_data(self) -> VoteData<ViewSyncData<TYPES>> {
+        match self {
+            ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
+                vote_internal.vote_data
+            }
+        }
     }
 }
 
