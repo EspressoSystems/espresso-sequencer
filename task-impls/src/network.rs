@@ -137,10 +137,8 @@ pub struct NetworkEventTaskState<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
+    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
 > {
     /// comm channel
     pub channel: COMMCHANNEL,
@@ -149,7 +147,7 @@ pub struct NetworkEventTaskState<
     /// view number
     pub view: TYPES::Time,
     /// phantom data
-    pub phantom: PhantomData<(PROPOSAL, VOTE, MEMBERSHIP)>,
+    pub phantom: PhantomData<(MEMBERSHIP)>,
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
 }
 
@@ -160,11 +158,9 @@ impl<
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
-    > TS for NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
+    > TS for NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
 {
 }
 
@@ -175,11 +171,9 @@ impl<
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
-    > NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
+    > NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
 {
     /// Handle the given event.
     ///
@@ -348,9 +342,9 @@ pub type NetworkMessageTaskTypes<TYPES, I> = HSTWithMessage<
 >;
 
 /// network event task types
-pub type NetworkEventTaskTypes<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL> = HSTWithEvent<
+pub type NetworkEventTaskTypes<TYPES, I, MEMBERSHIP, COMMCHANNEL> = HSTWithEvent<
     NetworkTaskError,
     SequencingHotShotEvent<TYPES, I>,
     ChannelStream<SequencingHotShotEvent<TYPES, I>>,
-    NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>,
+    NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>,
 >;

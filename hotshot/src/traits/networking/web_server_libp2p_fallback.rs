@@ -161,7 +161,7 @@ impl<
         PROPOSAL: ProposalType<NodeType = TYPES>,
         VOTE: VoteType<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
+    > CommunicationChannel<TYPES, Message<TYPES, I>,MEMBERSHIP>
     for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>
 {
     type NETWORK = CombinedNetworks<TYPES, I, MEMBERSHIP>;
@@ -299,15 +299,13 @@ impl<
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
+       
         MEMBERSHIP: Membership<TYPES>,
     >
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
+    
         MEMBERSHIP,
         CombinedNetworks<TYPES, I, MEMBERSHIP>,
     > for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>

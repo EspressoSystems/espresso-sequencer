@@ -294,7 +294,7 @@ pub trait Accumulator2<TYPES: NodeType, COMMITTABLE: Committable + Serialize + C
 }
 
 pub struct AccumulatorPlaceholder<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> {
-    pub phantom: PhantomData<(TYPES, VOTE)>
+    pub phantom: PhantomData<(TYPES, VOTE, COMMITTABLE)>
 }
 
 impl <TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE> {

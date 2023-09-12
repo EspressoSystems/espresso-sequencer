@@ -465,21 +465,18 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
 pub struct MemoryCommChannel<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
     Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
-    PhantomData<(I, PROPOSAL, VOTE, MEMBERSHIP)>,
+    PhantomData<(I, MEMBERSHIP)>,
 );
 
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
+     
         MEMBERSHIP: Membership<TYPES>,
-    > MemoryCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > MemoryCommChannel<TYPES, I,  MEMBERSHIP>
 {
     /// create new communication channel
     #[must_use]
@@ -488,14 +485,9 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for MemoryCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 where
     MessageKind<TYPES, I>: ViewMessage<TYPES>,
 {
@@ -525,14 +517,9 @@ where
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for MemoryCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 where
     MessageKind<TYPES, I>: ViewMessage<TYPES>,
 {
@@ -598,21 +585,13 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
-    > for MemoryCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>

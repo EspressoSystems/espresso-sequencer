@@ -48,21 +48,18 @@ use tracing::{debug, error, info};
 pub struct WebCommChannel<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
     Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    PhantomData<(MEMBERSHIP, I, PROPOSAL, VOTE)>,
+    PhantomData<(MEMBERSHIP, I)>,
 );
 
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
+
         MEMBERSHIP: Membership<TYPES>,
-    > WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > WebCommChannel<TYPES, I,  MEMBERSHIP>
 {
     /// Create new communication channel
     #[must_use]
@@ -521,11 +518,10 @@ impl<
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
+
         MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > CommunicationChannel<TYPES, Message<TYPES, I>,  MEMBERSHIP>
+    for WebCommChannel<TYPES, I,  MEMBERSHIP>
 {
     type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
     /// Blocks until node is successfully initialized
@@ -1055,11 +1051,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
+
         MEMBERSHIP: Membership<TYPES>,
     > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    for WebCommChannel<TYPES, I,  MEMBERSHIP>
 {
     fn generator(
         expected_node_count: usize,
@@ -1087,21 +1082,13 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
-    > for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network() -> Box<
         dyn Fn(Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>) -> Self
