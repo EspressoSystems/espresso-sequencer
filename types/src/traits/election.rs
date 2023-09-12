@@ -191,10 +191,15 @@ where
     /// Accumulates votes given an accumulator, vote, and commit.  
     /// Returns either the accumulator or a certificate
     fn accumulate_vote(
-        _accumulator: Self::VoteAccumulator,
-        _vote: Self::Vote,
-        _commit: COMMITTABLE,
+        self,
+        accumulator: Self::VoteAccumulator,
+        vote: Self::Vote,
+        commit: COMMITTABLE,
     ) -> Either<Self::VoteAccumulator, Self> {
+        todo!()
+    }
+
+    fn is_valid_vote() -> bool {
         todo!()
     }
 
@@ -501,6 +506,10 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
         relay: Option<u64>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate>;
+
+    fn accumulate_vote_2(&self, vote: Self::Vote)-> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
+        todo!()
+    }
 
     /// The committee which votes on proposals.
     fn membership(&self) -> &Self::Membership;

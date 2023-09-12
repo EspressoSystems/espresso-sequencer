@@ -42,6 +42,8 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     fn get_signature(self) -> EncodedSignature;
     /// Get the data this vote was signed over
     fn get_data(self) -> VoteData<COMMITTABLE>;
+    // Get the vote token of this vote
+    fn get_vote_token(self) -> TYPES::VoteTokenType; 
 }
 
 /// A vote on DA proposal.
@@ -212,6 +214,9 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
     fn get_data(self) -> VoteData<TYPES::BlockType> {
         self.vote_data
     }
+    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
+        self.vote_token
+    }
 }
 
 // TODO ED Remove this
@@ -244,6 +249,12 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
     fn get_data(self) -> VoteData<LEAF> {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data,
+            QuorumVote::Timeout(v) => unimplemented!()
+        }
+    }
+    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
+        match self {
+            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_token,
             QuorumVote::Timeout(v) => unimplemented!()
         }
     }
@@ -290,6 +301,14 @@ impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPE
         match self {
             ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
                 vote_internal.vote_data
+            }
+        }
+    }
+
+    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
+        match self {
+            ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
+                vote_internal.vote_token
             }
         }
     }
