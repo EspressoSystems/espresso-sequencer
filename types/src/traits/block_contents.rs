@@ -60,6 +60,11 @@ pub trait BlockPayload:
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 
     /// Compute the VID payload commitment.
+    ///
+    /// # Errors
+    /// - `VidResult::Err` in case of actual error.
+    /// - `VidResult::Ok(Result::Err)` if verification fails.
+    /// - `VidResult::Ok(Result::Ok)` if verification succeeds.
     fn commitment(&self) -> VidResult<Commitment<Self>>;
 }
 
