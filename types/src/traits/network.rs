@@ -195,6 +195,7 @@ pub trait ViewMessage<TYPES: NodeType> {
 
 /// API for interacting directly with a consensus committee
 /// intended to be implemented for both DA and for validating consensus committees
+// TODO ED Why is this generic over VOTE? 
 #[async_trait]
 pub trait CommunicationChannel<
     TYPES: NodeType,
@@ -332,6 +333,7 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
     fn in_flight_message_count(&self) -> Option<usize>;
 }
 /// Describes additional functionality needed by the test communication channel
+// TODO ED Why is this generic over VOTE? 
 pub trait TestableChannelImplementation<
     TYPES: NodeType,
     M: NetworkMsg,

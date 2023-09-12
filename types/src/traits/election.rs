@@ -182,9 +182,9 @@ where
     COMMITTABLE: Committable + Serialize + Clone,
     TOKEN: VoteToken,
 {
-    type Vote: VoteType<TYPES>;
+    type Vote: VoteType<TYPES, COMMITTABLE>;
 
-    type VoteAccumulator: Accumulator2<TYPES, Self::Vote>; 
+    type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>; 
 
     fn accumulate_vote(accumulator: Self::VoteAccumulator, vote: Self::Vote, commit: COMMITTABLE) -> Either<Self::VoteAccumulator, Self> {
         // if !self.is_valid_vote(

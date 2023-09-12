@@ -30,14 +30,14 @@ use std::{
 use tracing::error;
 
 /// The vote sent by consensus messages.
-pub trait VoteType<TYPES: NodeType>:
+pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone>:
     Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq
 {
     /// The view this vote was cast for.
     fn get_view(&self) -> TYPES::Time;
     fn get_key(self) -> TYPES::SignatureKey; 
     fn get_signature(self) -> EncodedSignature;
-    fn get_data(self) -> TYPES::SignatureKey {
+    fn get_data(self) -> VoteData<COMMITTABLE> {
         todo!()
     }
 }
@@ -196,7 +196,7 @@ pub enum QuorumVote<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     Timeout(TimeoutVote<TYPES, LEAF>),
 }
 
-impl<TYPES: NodeType> VoteType<TYPES> for DAVote<TYPES> {
+impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
     fn get_view(&self) -> TYPES::Time {
         self.current_view
     }
@@ -221,7 +221,7 @@ impl<TYPES: NodeType> DAVote<TYPES> {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES>
+impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
     for QuorumVote<TYPES, LEAF>
 {
     fn get_view(&self) -> TYPES::Time {
@@ -261,7 +261,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     }
 }
 
-impl<TYPES: NodeType> VoteType<TYPES> for ViewSyncVote<TYPES> {
+impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPES> {
     fn get_view(&self) -> TYPES::Time {
         match self {
             ViewSyncVote::PreCommit(v) | ViewSyncVote::Commit(v) | ViewSyncVote::Finalize(v) => {
@@ -288,16 +288,16 @@ pub trait Accumulator<T, U>: Sized {
 }
 
 
-pub trait Accumulator2<TYPES: NodeType, VOTE: VoteType<TYPES>>: Sized
+pub trait Accumulator2<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>>: Sized
 {
     fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>>;
 }
 
-pub struct AccumulatorPlaceholder<TYPES: NodeType, VOTE: VoteType<TYPES>> {
+pub struct AccumulatorPlaceholder<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> {
     pub phantom: PhantomData<(TYPES, VOTE)>
 }
 
-impl <TYPES: NodeType, VOTE: VoteType<TYPES>> Accumulator2<TYPES, VOTE> for AccumulatorPlaceholder<TYPES, VOTE> {
+impl <TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone, VOTE: VoteType<TYPES, COMMITTABLE>> Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE> {
     fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
         either::Left(self)
     }

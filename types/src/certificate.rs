@@ -160,7 +160,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     for QuorumCertificate<TYPES, LEAF>
 {
     type Vote = QuorumVote<TYPES, LEAF>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, LEAF, Self::Vote>;
 
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
@@ -233,7 +233,7 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, TYPES::BlockType, Self::Vote>;
 
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
@@ -324,7 +324,7 @@ impl<TYPES: NodeType>
     for ViewSyncCertificate<TYPES>
 {
     type Vote = ViewSyncVote<TYPES>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, Self::Vote>;
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, ViewSyncData<TYPES>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
