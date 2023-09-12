@@ -543,7 +543,7 @@ where
 
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
-                    error!("view too high");
+                    debug!("Proposal is from an older view.  ");
                     return;
                 }
 
@@ -827,6 +827,7 @@ where
                                 .update(-(i64::try_from(included_txn_size).unwrap_or(i64::MAX)));
 
                             debug!("about to publish decide");
+                            self.event_stream.publish(SequencingHotShotEvent::LeafDecided(leaf_views.clone())).await;
                             let decide_sent = self.output_event_stream.publish(Event {
                                 view_number: consensus.last_decided_view,
                                 event: EventType::Decide {
