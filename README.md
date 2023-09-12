@@ -35,19 +35,25 @@ Docker images and the [docker-compose-demo.yaml](docker-compose-demo.yaml) file 
 Docker-based demo fetches the images from the `ghcr` repository, where they are updated with every push to `main` on
 GitHub. For testing uncommitted changes, you can also run the binaries by manually building and running the services.
 
-Build all executables with `cargo build --release`. You may then start a sequencer network. First, start an orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer nodes `$N` you
-will use, then run `target/release/orchestrator -p $PORT -n $N`.
+Build all executables with `cargo build --release`. You may then start a sequencer network. First, start an
+orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer nodes `$N` you will use, then run
+`target/release/orchestrator -p $PORT -n $N`.
 
 The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
-options. Next, you must launch two `web-server` instances, which are necessary to facilitate consensus. One web server is for data availability, while the other coordinates consensus among sequencer nodes. Pick a `$DA_PORT` and a `$CONSENSUS_PORT` and run:
+options. Next, you must launch two `web-server` instances, which are necessary to facilitate consensus. One web server
+is for data availability, while the other coordinates consensus among sequencer nodes. Pick a `$DA_PORT` and a
+`$CONSENSUS_PORT` and run:
+
 ```bash
 target/release/web-server -p $DA_PORT
 target/release/web-server -p $CONSENSUS_PORT
 ```
 
-Once you have started the orchestrator and the web servers, you must connect `$N` sequencer nodes to them, after which the network will start up automatically. To start one node, run
+Once you have started the orchestrator and the web servers, you must connect `$N` sequencer nodes to them, after which
+the network will start up automatically. To start one node, run
+
 ```bash
 target/release/sequencer \
     --orchestrator-url http://localhost:$PORT \
@@ -55,6 +61,7 @@ target/release/sequencer \
     --consensus-server-url http://localhost:$CONSENSUS_PORT \
     -- http --port 8083 -- query --storage-path storage -- submit
 ```
+
 A useful Bash snippet for running `$N` nodes simultaneously in the background of your shell is:
 
 ```bash
@@ -67,8 +74,8 @@ done
 ```
 
 Note: if the sequencer shows a `"Connection refused"` error you may need to use `127.0.0.1` instead of `localhost` when
-connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking is
-enabled.
+connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking
+is enabled.
 
 ### Developing contracts
 
@@ -98,6 +105,7 @@ forge doc
 ```
 
 To verify the HotShot contract on sepolia via Etherscan run
+
 ```
 env ETHERSCAN_API_KEY=... scripts/verify-contract HOTSHOT_ADDRESS
 ```
