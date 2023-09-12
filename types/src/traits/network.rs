@@ -200,8 +200,6 @@ pub trait ViewMessage<TYPES: NodeType> {
 pub trait CommunicationChannel<
     TYPES: NodeType,
     M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >: Clone + Debug + Send + Sync + 'static
 {
@@ -337,11 +335,9 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
 pub trait TestableChannelImplementation<
     TYPES: NodeType,
     M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK,
->: CommunicationChannel<TYPES, M, PROPOSAL, VOTE, MEMBERSHIP>
+>: CommunicationChannel<TYPES, M, MEMBERSHIP>
 {
     /// generates the `CommunicationChannel` given it's associated network type
     fn generate_network() -> Box<dyn Fn(Arc<NETWORK>) -> Self + 'static>;

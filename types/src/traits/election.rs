@@ -19,6 +19,7 @@ use crate::{
     vote::ViewSyncVoteInternal,
 };
 
+use crate::vote::Accumulator2;
 use crate::{
     data::LeafType,
     traits::{
@@ -42,7 +43,6 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, marker::PhantomData, num::NonZeroU64};
 use tracing::error;
-use crate::vote::Accumulator2;
 
 /// Error for election problems
 #[derive(Snafu, Debug)]
@@ -184,9 +184,13 @@ where
 {
     type Vote: VoteType<TYPES, COMMITTABLE>;
 
-    type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>; 
+    type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
 
-    fn accumulate_vote(accumulator: Self::VoteAccumulator, vote: Self::Vote, commit: COMMITTABLE) -> Either<Self::VoteAccumulator, Self> {
+    fn accumulate_vote(
+        accumulator: Self::VoteAccumulator,
+        vote: Self::Vote,
+        commit: COMMITTABLE,
+    ) -> Either<Self::VoteAccumulator, Self> {
         // if !self.is_valid_vote(
         //     &vote.encoded_key,
         //     &vote.encoded_signature,
@@ -306,7 +310,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
-    type Networking: CommunicationChannel<TYPES, M, Self::Proposal, Self::Vote, Self::Membership>;
+    type Networking: CommunicationChannel<TYPES, M, Self::Membership>;
     /// Commitments to items which are the subject of proposals and decisions.
     type Commitment: Committable + Serialize + Clone;
 
@@ -548,7 +552,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
 pub struct CommitteeExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -569,7 +573,7 @@ pub struct CommitteeExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > CommitteeExchangeType<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -618,7 +622,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -782,7 +786,7 @@ pub struct QuorumExchange<
     LEAF: LeafType<NodeType = TYPES>,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -805,7 +809,7 @@ impl<
         LEAF: LeafType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > QuorumExchangeType<TYPES, LEAF, M>
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
@@ -937,7 +941,7 @@ impl<
         LEAF: LeafType<NodeType = TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M>
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
@@ -1074,7 +1078,7 @@ pub struct ViewSyncExchange<
     TYPES: NodeType,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -1096,7 +1100,7 @@ impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
@@ -1297,7 +1301,7 @@ impl<
         TYPES: NodeType,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {

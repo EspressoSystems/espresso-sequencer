@@ -150,7 +150,7 @@ pub trait SequencingConsensusApi<
     /// Send a broadcast message to the entire network.
     async fn send_broadcast_message<
         PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES LEAF>,
+        VOTE: VoteType<TYPES, LEAF>,
     >(
         &self,
         message: SequencingMessage<TYPES, I>,
