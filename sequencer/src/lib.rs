@@ -196,7 +196,6 @@ pub mod network {
 /// The Sequencer node is generic over the hotshot CommChannel.
 #[derive(Derivative, Serialize, Deserialize)]
 #[derivative(
-    Clone(bound = ""),
     Copy(bound = ""),
     Debug(bound = ""),
     Default(bound = ""),
@@ -205,6 +204,14 @@ pub mod network {
     Hash(bound = "")
 )]
 pub struct Node<N: network::Type>(PhantomData<fn(&N)>);
+
+// Using derivative to derive Clone triggers the clippy lint
+// https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
+impl<N: network::Type> Clone for Node<N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
@@ -505,6 +512,7 @@ pub mod testing {
                     >>::Networking,
                 ) + 'static,
         > {
+            #[allow(clippy::arc_with_non_send_sync)]
             let network_generator = Arc::new(<MemoryNetwork<
                 Message<SeqTypes, Node<network::Memory>>,
                 <SeqTypes as NodeType>::SignatureKey,
@@ -518,6 +526,7 @@ pub mod testing {
                 da_committee_size,
                 false,
             ));
+            #[allow(clippy::arc_with_non_send_sync)]
             let network_da_generator = Arc::new(<MemoryNetwork<
                 Message<SeqTypes, Node<network::Memory>>,
                 <SeqTypes as NodeType>::SignatureKey,
