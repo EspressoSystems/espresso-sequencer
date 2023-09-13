@@ -37,7 +37,7 @@ impl<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey>
 {
     /// Creates a new dummy elector
     #[must_use]
-    pub fn new(_nodes: Vec<PUBKEY>, nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
+    pub fn new(_nodes: &[PUBKEY], nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
         Self {
             nodes_with_stake: nodes_with_stake.clone(),
             committee_nodes_with_stake: nodes_with_stake,
