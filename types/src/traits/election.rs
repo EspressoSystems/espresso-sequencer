@@ -199,10 +199,6 @@ where
         todo!()
     }
 
-    fn is_valid_vote() -> bool {
-        todo!()
-    }
-
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function
     fn from_signatures_and_commitment(
@@ -299,6 +295,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// A proposal for participants to vote on.
     type Proposal: ProposalType<NodeType = TYPES>;
     /// A vote on a [`Proposal`](Self::Proposal).
+    // TODO ED Use default associated type if it becomes stable
     type Vote: VoteType<TYPES, Self::Commitment>;
     /// A [`SignedCertificate`] attesting to a decision taken by the committee.
     type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
@@ -507,8 +504,36 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         relay: Option<u64>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate>;
 
-    fn accumulate_vote_2(&self, vote: Self::Vote)-> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
-        todo!()
+    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the SignedCertificate
+    // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
+    fn accumulate_vote_2(
+        &self,
+        accumulator: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::VoteAccumulator,
+        vote: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::Vote,
+        commit: Self::Commitment,
+    ) -> Either<
+        <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::VoteAccumulator,
+        Self::Certificate,
+    > {
+        match accumulator.append(vote) {
+            Either::Left(_) => todo!(),
+            Either::Right(_) => todo!(),
+        }
     }
 
     /// The committee which votes on proposals.
