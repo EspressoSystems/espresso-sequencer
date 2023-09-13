@@ -15,6 +15,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::vote::VoteType;
 use hotshot_types::traits::election::SignedCertificate;
 use hotshot_types::vote::AccumulatorPlaceholder;
 use hotshot_types::{
@@ -165,6 +166,14 @@ where
             if state.accumulator.is_right() {
                 debug!("DA accumulator finished view: {:?}", state.cur_view);
                 return (None, state);
+            }
+
+            let accumulator2 = state.accumulator2.left().unwrap();
+            // TODO ED Maybe we don't need this to take in commitment?  Can just get it from the vote directly if it is always
+            // going to be passed in as the vote.commitment
+            match state.committee_exchange.accumulate_vote_2(accumulator2, &vote, &vote.block_commitment) {
+                Left(_) => todo!(),
+                Right(_) => todo!(),
             }
 
             let accumulator = state.accumulator.left().unwrap();

@@ -542,13 +542,13 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             TYPES::VoteTokenType,
             Self::Commitment,
         >>::VoteAccumulator,
-        vote: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+        vote: &<<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
             Self::Commitment,
         >>::Vote,
-        commit: Self::Commitment,
+        commit: &Commitment<Self::Commitment>,
     ) -> Either<
         <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
             TYPES,
@@ -569,7 +569,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             return Either::Left(accumulator);
         }
 
-        match accumulator.append(vote) {
+        // TODO ED Should make append function take a reference to vote
+        match accumulator.append(vote.clone()) {
             Either::Left(_) => todo!(),
             Either::Right(_) => todo!(),
         }
