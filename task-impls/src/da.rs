@@ -414,18 +414,22 @@ where
                     acc,
                     None,
                 );
-                let accumulator2 = DAVoteAccumulator {
+                let new_accumulator = DAVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
                     success_threshold: self.committee_exchange.success_threshold(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.committee_exchange.total_nodes()],
                     phantom: PhantomData,
                 };
+
+                // TODO ED Get vote data here instead of cloning into block commitment field of vote
+                let accumulator2 = self.committee_exchange.accumulate_vote_2(new_accumulator, &vote, &vote.clone().block_commitment); 
+
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
                         accumulator,
-                        accumulator2: either::Left(accumulator2),
+                        accumulator2: accumulator2,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,

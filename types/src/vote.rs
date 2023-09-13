@@ -427,6 +427,7 @@ impl<
 
             return Either::Right(AssembledSignature::DA(real_qc_sig));
         }
+        error!("DA stake casted is {da_stake_casted}");
         Either::Left(self)
     }
 }
