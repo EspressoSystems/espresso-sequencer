@@ -461,7 +461,8 @@ mod test {
     use async_std::{sync::RwLock, task::spawn};
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
-    use hotshot::types::{ed25519::Ed25519Pub, SignatureKey};
+    use hotshot::types::SignatureKey;
+    use hotshot_signature_key::bn254::BN254Pub;
     use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -623,7 +624,7 @@ mod test {
                 .unwrap(),
             0
         );
-        let (key, _) = Ed25519Pub::generated_from_seed_indexed([0; 32], 0);
+        let (key, _) = BN254Pub::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
                 .get::<u64>(&format!("availability/proposals/{}/count", key.to_bytes()))
