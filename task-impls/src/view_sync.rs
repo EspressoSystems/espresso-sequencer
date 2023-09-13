@@ -9,7 +9,14 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::{election::Membership, network::ConsensusIntentEvent};
+use hotshot_types::traits::election::VoteData;
+use hotshot_types::{
+    traits::{
+        election::{Membership, SignedCertificate},
+        network::ConsensusIntentEvent,
+    },
+    vote::{ViewSyncVoteAccumulator, VoteType},
+};
 
 use bitvec::prelude::*;
 use hotshot_task::global_registry::GlobalRegistry;
@@ -28,7 +35,7 @@ use hotshot_types::{
     vote::{ViewSyncData, ViewSyncVote, VoteAccumulator},
 };
 use snafu::Snafu;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 use tracing::{debug, error, instrument};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
@@ -217,7 +224,12 @@ pub struct ViewSyncRelayTaskState<
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
     pub accumulator: Either<
-        VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>>,
+        <ViewSyncCertificate<TYPES> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            ViewSyncData<TYPES>,
+        >>::VoteAccumulator,
         ViewSyncCertificate<TYPES>,
     >,
     /// Our node id; for logging
@@ -380,24 +392,23 @@ where
                     return;
                 }
 
-                let accumulator = VoteAccumulator {
-                    total_vote_outcomes: HashMap::new(),
-                    da_vote_outcomes: HashMap::new(),
-                    yes_vote_outcomes: HashMap::new(),
-                    no_vote_outcomes: HashMap::new(),
-                    viewsync_precommit_vote_outcomes: HashMap::new(),
-                    viewsync_commit_vote_outcomes: HashMap::new(),
-                    viewsync_finalize_vote_outcomes: HashMap::new(),
+                let new_accumulator = ViewSyncVoteAccumulator {
+                    pre_commit_vote_outcomes: HashMap::new(),
+                    commit_vote_outcomes: HashMap::new(),
+                    finalize_vote_outcomes: HashMap::new(),
+
                     success_threshold: self.exchange.success_threshold(),
                     failure_threshold: self.exchange.failure_threshold(),
+
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],
+                    phantom: PhantomData,
                 };
 
                 let mut relay_state = ViewSyncRelayTaskState {
                     event_stream: self.event_stream.clone(),
                     exchange: self.exchange.clone(),
-                    accumulator: either::Left(accumulator),
+                    accumulator: either::Left(new_accumulator),
                     id: self.id,
                 };
 
@@ -958,7 +969,7 @@ where
                     return (Some(HotShotTaskCompleted::ShutDown), self);
                 }
 
-                let (vote_internal, phase) = match vote {
+                let (vote_internal, phase) = match vote.clone() {
                     ViewSyncVote::PreCommit(vote_internal) => {
                         (vote_internal, ViewSyncPhase::PreCommit)
                     }
@@ -993,15 +1004,18 @@ where
                     *vote_internal.round, vote_internal.relay
                 );
 
-                let accumulator = self.exchange.accumulate_vote(
-                    &vote_internal.signature.0,
-                    &vote_internal.signature.1,
-                    view_sync_data,
-                    vote_internal.vote_data,
-                    vote_internal.vote_token.clone(),
-                    vote_internal.round,
+                // TODO ED This isn't ideal, should fix this
+                let vote_data = match vote.get_data() {
+                    VoteData::ViewSyncPreCommit(data) => data,
+                    VoteData::ViewSyncCommit(data) => data,
+                    VoteData::ViewSyncFinalize(data) => data,
+                    _ => unimplemented!(),
+                };
+
+                let accumulator = self.exchange.accumulate_vote_2(
                     self.accumulator.left().unwrap(),
-                    Some(vote_internal.relay),
+                    &vote,
+                    &vote_data,
                 );
 
                 self.accumulator = match accumulator {
@@ -1022,19 +1036,19 @@ where
                             .await;
 
                         // Reset accumulator for new certificate
-                        either::Left(VoteAccumulator {
-                            total_vote_outcomes: HashMap::new(),
-                            da_vote_outcomes: HashMap::new(),
-                            yes_vote_outcomes: HashMap::new(),
-                            no_vote_outcomes: HashMap::new(),
-                            viewsync_precommit_vote_outcomes: HashMap::new(),
-                            viewsync_commit_vote_outcomes: HashMap::new(),
-                            viewsync_finalize_vote_outcomes: HashMap::new(),
+                        let new_accumulator = ViewSyncVoteAccumulator {
+                            pre_commit_vote_outcomes: HashMap::new(),
+                            commit_vote_outcomes: HashMap::new(),
+                            finalize_vote_outcomes: HashMap::new(),
+
                             success_threshold: self.exchange.success_threshold(),
                             failure_threshold: self.exchange.failure_threshold(),
+
                             sig_lists: Vec::new(),
                             signers: bitvec![0; self.exchange.total_nodes()],
-                        })
+                            phantom: PhantomData,
+                        };
+                        either::Left(new_accumulator)
                     }
                 };
 
