@@ -17,6 +17,7 @@ use crate::{
         Block, State,
     },
 };
+use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use bincode::Options;
 use commit::{Commitment, Committable};
@@ -25,6 +26,7 @@ use either::Either;
 use espresso_systems_common::hotshot::tag;
 use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
+use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
@@ -159,6 +161,44 @@ pub struct DAProposal<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 }
 
+/// The VID scheme type used in `HotShot`.
+pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
+pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
+
+/// VID dispersal data
+///
+/// Like [`DAProposal`].
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub struct VidDisperse<TYPES: NodeType> {
+    /// The view number for which this VID data is intended
+    pub view_number: TYPES::Time,
+    /// Block commitment
+    pub commitment: Commitment<TYPES::BlockType>,
+    /// VID shares dispersed among storage nodes
+    pub shares: Vec<<VidScheme as VidSchemeTrait>::StorageShare>,
+    /// VID common data sent to all storage nodes
+    pub common: <VidScheme as VidSchemeTrait>::StorageCommon,
+}
+
+/// Trusted KZG setup for VID.
+///
+/// TESTING ONLY: don't use this in production
+/// TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+///
+/// # Panics
+/// ...because this is only for tests. This comment exists to pacify clippy.
+#[must_use]
+pub fn test_srs(
+    num_storage_nodes: usize,
+) -> <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::SRS {
+    let mut rng = jf_utils::test_rng();
+    UnivariateKzgPCS::<ark_bls12_381::Bls12_381>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(num_storage_nodes).unwrap(),
+    )
+    .unwrap()
+}
+
 /// Proposal to append a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
@@ -196,6 +236,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ProposalType
 }
 
 impl<TYPES: NodeType> ProposalType for DAProposal<TYPES> {
+    type NodeType = TYPES;
+    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+        self.view_number
+    }
+}
+
+impl<TYPES: NodeType> ProposalType for VidDisperse<TYPES> {
     type NodeType = TYPES;
     fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
         self.view_number

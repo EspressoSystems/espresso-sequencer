@@ -202,8 +202,8 @@ where
         >,
     {
         let mut results = vec![];
-        for _i in 0..total {
-            tracing::error!("running node{}", _i);
+        for i in 0..total {
+            tracing::debug!("launch node {}", i);
             let node_id = self.next_node_id;
             let storage = (self.launcher.resource_generator.storage)(node_id);
             let config = self.launcher.resource_generator.config.clone();

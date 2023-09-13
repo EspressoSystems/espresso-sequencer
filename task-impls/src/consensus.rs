@@ -1047,7 +1047,17 @@ where
                     self.update_view(view + 1).await;
                 }
             }
+            SequencingHotShotEvent::VidCertRecv(cert) => {
+                debug!("VID cert received for view ! {}", *cert.view_number);
 
+                let view = cert.view_number;
+                self.certs.insert(view, cert); // TODO new cert type for VID https://github.com/EspressoSystems/HotShot/issues/1701
+
+                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
+                if self.vote_if_able().await {
+                    self.update_view(view + 1).await;
+                }
+            }
             SequencingHotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1311,6 +1321,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::QuorumVoteRecv(_)
             | SequencingHotShotEvent::QCFormed(_)
             | SequencingHotShotEvent::DACRecv(_)
+            | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
             | SequencingHotShotEvent::SendDABlockData(_)
             | SequencingHotShotEvent::Timeout(_)

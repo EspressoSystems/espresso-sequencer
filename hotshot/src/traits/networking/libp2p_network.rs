@@ -608,7 +608,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                 source: NetworkNodeHandleError::NoSuchTopic,
             })?
             .clone();
-        error!("Broadcasting to topic {}", topic);
+        info!("broadcasting to topic: {}", topic);
 
         // gossip doesn't broadcast from itself, so special case
         if recipients.contains(&self.inner.pk) {
