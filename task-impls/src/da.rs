@@ -32,7 +32,6 @@ use hotshot_types::{
         Block, State,
     },
     utils::ViewInner,
-    vote::VoteAccumulator,
 };
 use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;

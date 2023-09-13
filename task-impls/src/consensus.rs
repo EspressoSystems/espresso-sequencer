@@ -148,8 +148,15 @@ pub struct VoteCollectionTaskState<
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
-    pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, I::Leaf>, QuorumCertificate<TYPES, I::Leaf>>,
+    pub accumulator: Either<
+        <QuorumCertificate<TYPES, SequencingLeaf<TYPES>> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            SequencingLeaf<TYPES>,
+        >>::VoteAccumulator,
+        QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
+    >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
     /// The event stream shared by all tasks
@@ -191,32 +198,29 @@ where
 {
     // TODO ED Emit a view change event upon new proposal?
     match event {
-        SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote {
-            QuorumVote::Yes(vote) => {
+        SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
+            QuorumVote::Yes(vote_internal) => {
                 // For the case where we receive votes after we've made a certificate
                 if state.accumulator.is_right() {
                     return (None, state);
                 }
 
-                if vote.current_view != state.cur_view {
+                if vote_internal.current_view != state.cur_view {
                     error!(
                         "Vote view does not match! vote view is {} current view is {}",
-                        *vote.current_view, *state.cur_view
+                        *vote_internal.current_view, *state.cur_view
                     );
                     return (None, state);
                 }
 
                 let accumulator = state.accumulator.left().unwrap();
-                match state.quorum_exchange.accumulate_vote(
-                    &vote.signature.0,
-                    &vote.signature.1,
-                    vote.leaf_commitment,
-                    vote.vote_data,
-                    vote.vote_token.clone(),
-                    state.cur_view,
+                // TODO ED Maybe we don't need this to take in commitment?  Can just get it from the vote directly if it is always
+                // going to be passed in as the vote.commitment
+                match state.quorum_exchange.accumulate_vote_2(
                     accumulator,
-                    None,
-                ) {
+                    &vote,
+                    &vote_internal.leaf_commitment,
+                )  {
                     Either::Left(acc) => {
                         state.accumulator = Either::Left(acc);
                         return (None, state);
@@ -895,15 +899,17 @@ where
                     return;
                 }
 
+                // TODO ED Should remove this match because we'd always want to collect votes no matter the type on qc
+                // Though will need a sep accumulator for Timeout votes
                 match vote {
-                    QuorumVote::Yes(vote) => {
+                    QuorumVote::Yes(vote_internal) => {
                         let handle_event = HandleEvent(Arc::new(move |event, state| {
                             async move { vote_handle(state, event).await }.boxed()
                         }));
                         let collection_view = if let Some((collection_view, collection_task, _)) =
                             &self.vote_collector
                         {
-                            if vote.current_view > *collection_view {
+                            if vote_internal.current_view > *collection_view {
                                 // ED I think we'd want to let that task timeout to avoid a griefing vector
                                 self.registry.shutdown_task(*collection_task).await;
                             }
@@ -912,37 +918,33 @@ where
                             TYPES::Time::new(0)
                         };
 
-                        let acc = VoteAccumulator {
-                            total_vote_outcomes: HashMap::new(),
-                            da_vote_outcomes: HashMap::new(),
-                            yes_vote_outcomes: HashMap::new(),
-                            no_vote_outcomes: HashMap::new(),
-                            viewsync_precommit_vote_outcomes: HashMap::new(),
-                            viewsync_commit_vote_outcomes: HashMap::new(),
-                            viewsync_finalize_vote_outcomes: HashMap::new(),
-                            success_threshold: self.quorum_exchange.success_threshold(),
-                            failure_threshold: self.quorum_exchange.failure_threshold(),
-                            sig_lists: Vec::new(),
-                            signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                        };
 
                         // Todo check if we are the leader
-                        let accumulator = self.quorum_exchange.accumulate_vote(
-                            &vote.clone().signature.0,
-                            &vote.clone().signature.1,
-                            vote.clone().leaf_commitment,
-                            vote.clone().vote_data.clone(),
-                            vote.clone().vote_token.clone(),
-                            vote.clone().current_view,
-                            acc,
-                            None,
+                        let new_accumulator = QuorumVoteAccumulator {
+                            total_vote_outcomes: HashMap::new(),
+                            yes_vote_outcomes: HashMap::new(),
+                            no_vote_outcomes: HashMap::new(),
+
+                            success_threshold: self.quorum_exchange.success_threshold(),
+                            failure_threshold: self.quorum_exchange.failure_threshold(),
+
+                            sig_lists: Vec::new(),
+                            signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                            phantom: PhantomData,
+                        };
+        
+                        // TODO ED Get vote data here instead of cloning into block commitment field of vote
+                        let accumulator = self.quorum_exchange.accumulate_vote_2(
+                            new_accumulator,
+                            &vote,
+                            &vote_internal.clone().leaf_commitment,
                         );
 
-                        if vote.current_view > collection_view {
+                        if vote_internal.current_view > collection_view {
                             let state = VoteCollectionTaskState {
                                 quorum_exchange: self.quorum_exchange.clone(),
                                 accumulator,
-                                cur_view: vote.current_view,
+                                cur_view: vote_internal.current_view,
                                 event_stream: self.event_stream.clone(),
                                 id: self.id,
                             };
@@ -962,17 +964,17 @@ where
                             let id = builder.get_task_id().unwrap();
                             let stream_id = builder.get_stream_id().unwrap();
 
-                            self.vote_collector = Some((vote.current_view, id, stream_id));
+                            self.vote_collector = Some((vote_internal.current_view, id, stream_id));
 
                             let _task = async_spawn(async move {
                                 VoteCollectionTypes::build(builder).launch().await;
                             });
-                            debug!("Starting vote handle for view {:?}", vote.current_view);
+                            debug!("Starting vote handle for view {:?}", vote_internal.current_view);
                         } else if let Some((_, _, stream_id)) = self.vote_collector {
                             self.event_stream
                                 .direct_message(
                                     stream_id,
-                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(vote)),
+                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(vote_internal)),
                                 )
                                 .await;
                         }
