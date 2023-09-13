@@ -61,6 +61,7 @@ pub enum ElectionError {
 /// the outcome is already knowable.
 ///
 /// This would be a useful general utility.
+#[derive(Clone)]
 pub enum Checked<T> {
     /// This item has been checked, and is valid
     Valid(T),
@@ -434,6 +435,31 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         is_valid_signature && is_valid_vote_token
     }
 
+    /// Validate a vote by checking its signature and token.
+    fn is_valid_vote_2(
+        &self,
+        key: &TYPES::SignatureKey,
+        encoded_signature: &EncodedSignature,
+        data: &VoteData<Self::Commitment>,
+        vote_token: &Checked<TYPES::VoteTokenType>,
+    ) -> bool {
+        let mut is_valid_vote_token = false;
+        let mut is_valid_signature = false;
+
+        is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
+        let valid_vote_token = self.membership().validate_vote_token(key.clone(), vote_token.clone());
+        is_valid_vote_token = match valid_vote_token {
+            Err(_) => {
+                error!("Vote token was invalid");
+                false
+            }
+            Ok(Checked::Valid(_)) => true,
+            Ok(Checked::Inval(_) | Checked::Unchecked(_)) => false,
+        };
+
+        is_valid_signature && is_valid_vote_token
+    }
+
     #[doc(hidden)]
     fn accumulate_internal(
         &self,
@@ -506,6 +532,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
 
     // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the SignedCertificate
     // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
+    /// Accumulate vote
+    /// Returns either the accumulate if no threshold was reached, or a SignedCertificate if the threshold was reached
     fn accumulate_vote_2(
         &self,
         accumulator: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
@@ -530,6 +558,17 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         >>::VoteAccumulator,
         Self::Certificate,
     > {
+        if !self.is_valid_vote_2(
+            &vote.get_key(),
+            &vote.get_signature(),
+            &vote.get_data(),
+            // Ignoring deserialization errors below since we are getting rid of it soon
+            &Checked::Unchecked(vote.get_vote_token()),
+        ) {
+            error!("Invalid vote!");
+            return Either::Left(accumulator);
+        }
+
         match accumulator.append(vote) {
             Either::Left(_) => todo!(),
             Either::Right(_) => todo!(),

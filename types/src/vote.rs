@@ -37,13 +37,13 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     /// Get the view this vote was cast for
     fn get_view(&self) -> TYPES::Time;
     /// Get the signature key associated with this vote
-    fn get_key(self) -> TYPES::SignatureKey;
+    fn get_key(&self) -> TYPES::SignatureKey;
     /// Get the signature associated with this vote
-    fn get_signature(self) -> EncodedSignature;
+    fn get_signature(&self) -> EncodedSignature;
     /// Get the data this vote was signed over
-    fn get_data(self) -> VoteData<COMMITTABLE>;
+    fn get_data(&self) -> VoteData<COMMITTABLE>;
     // Get the vote token of this vote
-    fn get_vote_token(self) -> TYPES::VoteTokenType; 
+    fn get_vote_token(&self) -> TYPES::VoteTokenType; 
 }
 
 /// A vote on DA proposal.
@@ -204,18 +204,18 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
     fn get_view(&self) -> TYPES::Time {
         self.current_view
     }
-    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+    fn get_key(&self) -> <TYPES as NodeType>::SignatureKey {
         self.signature_key()
     }
-    fn get_signature(self) -> EncodedSignature {
+    fn get_signature(&self) -> EncodedSignature {
         // TODO ED Revisit this function
-        self.signature.1
+        self.signature.1.clone()
     }
-    fn get_data(self) -> VoteData<TYPES::BlockType> {
-        self.vote_data
+    fn get_data(&self) -> VoteData<TYPES::BlockType> {
+        self.vote_data.clone()
     }
-    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
-        self.vote_token
+    fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
+        self.vote_token.clone()
     }
 }
 
@@ -240,21 +240,21 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
         }
     }
 
-    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+    fn get_key(&self) -> <TYPES as NodeType>::SignatureKey {
         self.signature_key()
     }
-    fn get_signature(self) -> EncodedSignature {
+    fn get_signature(&self) -> EncodedSignature {
         self.signature()
     }
-    fn get_data(self) -> VoteData<LEAF> {
+    fn get_data(&self) -> VoteData<LEAF> {
         match self {
-            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data,
+            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data.clone(),
             QuorumVote::Timeout(v) => unimplemented!()
         }
     }
-    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
+    fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
         match self {
-            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_token,
+            QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_token.clone(),
             QuorumVote::Timeout(v) => unimplemented!()
         }
     }
@@ -290,25 +290,25 @@ impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPE
             }
         }
     }
-    fn get_key(self) -> <TYPES as NodeType>::SignatureKey {
+    fn get_key(&self) -> <TYPES as NodeType>::SignatureKey {
         self.signature_key()
     }
 
-    fn get_signature(self) -> EncodedSignature {
+    fn get_signature(&self) -> EncodedSignature {
         self.signature()
     }
-    fn get_data(self) -> VoteData<ViewSyncData<TYPES>> {
+    fn get_data(&self) -> VoteData<ViewSyncData<TYPES>> {
         match self {
             ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
-                vote_internal.vote_data
+                vote_internal.vote_data.clone()
             }
         }
     }
 
-    fn get_vote_token(self) -> <TYPES as NodeType>::VoteTokenType {
+    fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
         match self {
             ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
-                vote_internal.vote_token
+                vote_internal.vote_token.clone()
             }
         }
     }
