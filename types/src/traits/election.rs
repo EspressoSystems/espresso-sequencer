@@ -572,6 +572,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         }
 
         let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
+        // TODO ED Could we make this part of the vote in the future?  It's only a usize. 
         let append_node_id = self
             .membership()
             .get_committee_qc_stake_table()
@@ -580,7 +581,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             .unwrap();
 
         // TODO ED Should make append function take a reference to vote
-        match accumulator.append(vote.clone()) {
+        match accumulator.append(vote.clone(), append_node_id, self.membership().get_committee_qc_stake_table()) {
             Either::Left(accumulator) => Either::Left(accumulator),
             Either::Right(signatures) => {
                 // TODO ED Update this function to just take in the signatures and most recent vote 

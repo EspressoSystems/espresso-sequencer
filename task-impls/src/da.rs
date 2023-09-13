@@ -15,6 +15,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::traits::election::SignedCertificate;
 use hotshot_types::vote::AccumulatorPlaceholder;
 use hotshot_types::vote::VoteType;
@@ -163,7 +164,7 @@ where
             // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
             // For the case where we receive votes after we've made a certificate
-            if state.accumulator.is_right() {
+            if state.accumulator2.is_right() {
                 debug!("DA accumulator finished view: {:?}", state.cur_view);
                 return (None, state);
             }
@@ -181,7 +182,7 @@ where
                     state.accumulator2 = either::Left(new_accumulator);
                 }
                 Right(dac) => {
-                    error!("DA cert made!");
+                    panic!("DA cert made!");
                     state.accumulator2 = either::Right(dac);
                 }
             }
@@ -413,7 +414,11 @@ where
                     acc,
                     None,
                 );
-                let accumulator2 = AccumulatorPlaceholder {
+                let accumulator2 = DAVoteAccumulator {
+                    da_vote_outcomes: HashMap::new(),
+                    success_threshold: self.committee_exchange.success_threshold(),
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.committee_exchange.total_nodes()],
                     phantom: PhantomData,
                 };
                 if view > collection_view {

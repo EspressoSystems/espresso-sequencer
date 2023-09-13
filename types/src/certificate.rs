@@ -1,6 +1,7 @@
 //! Provides two types of cerrtificates and their accumulators.
 
 use crate::vote::AccumulatorPlaceholder;
+use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
@@ -232,7 +233,7 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, TYPES::BlockType, Self::Vote>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::BlockType, Self::Vote>;
 
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,

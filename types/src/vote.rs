@@ -43,7 +43,7 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     /// Get the data this vote was signed over
     fn get_data(&self) -> VoteData<COMMITTABLE>;
     // Get the vote token of this vote
-    fn get_vote_token(&self) -> TYPES::VoteTokenType; 
+    fn get_vote_token(&self) -> TYPES::VoteTokenType;
 }
 
 /// A vote on DA proposal.
@@ -249,13 +249,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
     fn get_data(&self) -> VoteData<LEAF> {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data.clone(),
-            QuorumVote::Timeout(v) => unimplemented!()
+            QuorumVote::Timeout(v) => unimplemented!(),
         }
     }
     fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_token.clone(),
-            QuorumVote::Timeout(v) => unimplemented!()
+            QuorumVote::Timeout(v) => unimplemented!(),
         }
     }
 }
@@ -299,17 +299,17 @@ impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPE
     }
     fn get_data(&self) -> VoteData<ViewSyncData<TYPES>> {
         match self {
-            ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
-                vote_internal.vote_data.clone()
-            }
+            ViewSyncVote::PreCommit(vote_internal)
+            | ViewSyncVote::Commit(vote_internal)
+            | ViewSyncVote::Finalize(vote_internal) => vote_internal.vote_data.clone(),
         }
     }
 
     fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
         match self {
-            ViewSyncVote::PreCommit(vote_internal) | ViewSyncVote::Commit(vote_internal) | ViewSyncVote::Finalize(vote_internal) => {
-                vote_internal.vote_token.clone()
-            }
+            ViewSyncVote::PreCommit(vote_internal)
+            | ViewSyncVote::Commit(vote_internal)
+            | ViewSyncVote::Finalize(vote_internal) => vote_internal.vote_token.clone(),
         }
     }
 }
@@ -333,10 +333,106 @@ pub trait Accumulator2<
     /// Append 1 vote to the accumulator.  If the threshold is not reached, return
     /// the accumulator, else return the `AssembledSignature`
     /// Only called from inside `accumulate_internal`
-    fn append(self, vote: VOTE) -> Either<Self, AssembledSignature<TYPES>>;
+    fn append(self, vote: VOTE, vote_node_id: usize, stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,) -> Either<Self, AssembledSignature<TYPES>>;
+}
+
+pub struct DAVoteAccumulator<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+> {
+    /// Map of all da signatures accumlated so far
+    pub da_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    /// A quorum's worth of stake, generally 2f + 1
+    pub success_threshold: NonZeroU64,
+    /// A list of valid signatures for certificate aggregation
+    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
+    pub signers: BitVec,
+
+    pub phantom: PhantomData<VOTE>,
+}
+
+impl<
+        TYPES: NodeType,
+        COMMITTABLE: Committable + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITTABLE>,
+    > Accumulator2<TYPES, COMMITTABLE, VOTE> for DAVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+{
+    fn append(
+        mut self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>> {
+        // TODO ED Make this a function on VoteType trait
+        let vote_commitment = match vote.get_data() {
+            VoteData::DA(commitment) => commitment,
+            _ => return Either::Left(self),
+        };
+
+        let encoded_key = vote.get_key().to_bytes();
+
+        // Deserialize the signature so that it can be assembeld into a QC
+        // TODO ED Update this once we've gotten rid of EncodedSignature
+        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+            bincode_opts()
+                .deserialize(&vote.get_signature().0)
+                .expect("Deserialization on the signature shouldn't be able to fail.");
+
+        let (da_stake_casted, da_vote_map) = self
+            .da_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        // Check for duplicate vote
+        // TODO ED Re-encoding signature key to bytes until we get rid of EncodedKey
+        // Have to do this because SignatureKey is not hashable
+        if da_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
+
+        // Update the active_keys and signature lists
+        // TODO ED How does this differ than the check above?
+        if self.signers.get(vote_node_id).as_deref() == Some(&true) {
+            error!("Node id is already in signers list");
+            return Either::Left(self);
+        }
+        self.signers.set(vote_node_id, true);
+        self.sig_lists.push(original_signature);
+
+        // Already checked that vote data was for a DA vote above
+        *da_stake_casted += u64::from(vote.get_vote_token().vote_count());
+        da_vote_map.insert(
+            encoded_key,
+            (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+        );
+
+        if *da_stake_casted >= u64::from(self.success_threshold) {
+            // Assemble QC
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                // TODO ED Something about stake table entries.  Might be easier to just pass in membership? 
+                stake_table_entries.clone(),
+                U256::from(self.success_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+
+            // TODO ED Why do we need this line if we have the above line? 
+            self.da_vote_outcomes.remove(&vote_commitment);
+
+            return Either::Right(AssembledSignature::DA(real_qc_sig));
+        }
+        Either::Left(self)
+    }
 }
 
 /// Placeholder accumulator; will be replaced by accumulator for each certificate type
+#[deprecated]
 pub struct AccumulatorPlaceholder<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
@@ -352,13 +448,13 @@ impl<
         VOTE: VoteType<TYPES, COMMITTABLE>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
 {
-    fn append(self, _vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
-        todo!();
-        either::Left(self)
+    fn append(self, vote: VOTE, vote_node_id: usize, stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>) -> Either<Self, AssembledSignature<TYPES>> {
+        todo!()
     }
 }
 
 /// Mapping of commitments to vote tokens by key.
+// TODO ED Remove this whole token generic
 type VoteMap<C, TOKEN> = HashMap<
     Commitment<C>,
     (
