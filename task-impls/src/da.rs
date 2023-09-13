@@ -15,10 +15,8 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::traits::election::SignedCertificate;
-use hotshot_types::vote::AccumulatorPlaceholder;
-use hotshot_types::vote::VoteType;
+use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -106,11 +104,7 @@ pub struct DAVoteCollectionTaskState<
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
-    /// the vote accumulator
-    pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType>, DACertificate<TYPES>>,
 
-    /// The accumulator
     #[allow(clippy::type_complexity)]
     pub accumulator2: Either<
         <DACertificate<TYPES> as SignedCertificate<
@@ -178,31 +172,9 @@ where
                 &vote.block_commitment,
             ) {
                 Left(new_accumulator) => {
-                    error!("DA cert still accumulating");
                     state.accumulator2 = either::Left(new_accumulator);
                 }
-                Right(dac) => {
-                    panic!("DA cert made!");
-                    state.accumulator2 = either::Right(dac);
-                }
-            }
 
-            let accumulator = state.accumulator.left().unwrap();
-            match state.committee_exchange.accumulate_vote(
-                &vote.signature.0,
-                &vote.signature.1,
-                vote.block_commitment,
-                vote.vote_data,
-                vote.vote_token.clone(),
-                state.cur_view,
-                accumulator,
-                None,
-            ) {
-                Left(acc) => {
-                    state.accumulator = Either::Left(acc);
-                    // debug!("Not enough DA votes! ");
-                    return (None, state);
-                }
                 Right(dac) => {
                     debug!("Sending DAC! {:?}", dac.view_number);
                     state
@@ -213,7 +185,8 @@ where
                         ))
                         .await;
 
-                    state.accumulator = Right(dac.clone());
+                    // TODO ED Rename this to just accumulator
+                    state.accumulator2 = Right(dac.clone());
                     state
                         .committee_exchange
                         .network()
@@ -391,29 +364,7 @@ where
                     } else {
                         TYPES::Time::new(0)
                     };
-                let acc = VoteAccumulator {
-                    total_vote_outcomes: HashMap::new(),
-                    da_vote_outcomes: HashMap::new(),
-                    yes_vote_outcomes: HashMap::new(),
-                    no_vote_outcomes: HashMap::new(),
-                    viewsync_precommit_vote_outcomes: HashMap::new(),
-                    viewsync_commit_vote_outcomes: HashMap::new(),
-                    viewsync_finalize_vote_outcomes: HashMap::new(),
-                    success_threshold: self.committee_exchange.success_threshold(),
-                    failure_threshold: self.committee_exchange.failure_threshold(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.committee_exchange.total_nodes()],
-                };
-                let accumulator = self.committee_exchange.accumulate_vote(
-                    &vote.clone().signature.0,
-                    &vote.clone().signature.1,
-                    vote.clone().block_commitment,
-                    vote.clone().vote_data.clone(),
-                    vote.clone().vote_token.clone(),
-                    vote.clone().current_view,
-                    acc,
-                    None,
-                );
+
                 let new_accumulator = DAVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
                     success_threshold: self.committee_exchange.success_threshold(),
@@ -423,12 +374,16 @@ where
                 };
 
                 // TODO ED Get vote data here instead of cloning into block commitment field of vote
-                let accumulator2 = self.committee_exchange.accumulate_vote_2(new_accumulator, &vote, &vote.clone().block_commitment); 
+                let accumulator2 = self.committee_exchange.accumulate_vote_2(
+                    new_accumulator,
+                    &vote,
+                    &vote.clone().block_commitment,
+                );
 
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
-                        accumulator,
+
                         accumulator2: accumulator2,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),

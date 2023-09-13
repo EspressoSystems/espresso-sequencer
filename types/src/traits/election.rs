@@ -296,7 +296,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// A proposal for participants to vote on.
     type Proposal: ProposalType<NodeType = TYPES>;
     /// A vote on a [`Proposal`](Self::Proposal).
-    // TODO ED Use default associated type if it becomes stable
+    // TODO ED Make this equal Certificate vote (if possible?)
     type Vote: VoteType<TYPES, Self::Commitment>;
     /// A [`SignedCertificate`] attesting to a decision taken by the committee.
     type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>

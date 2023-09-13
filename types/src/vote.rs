@@ -359,6 +359,7 @@ impl<
         VOTE: VoteType<TYPES, COMMITTABLE>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for DAVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
+    // TODO ED We could make this the default impl, so it works for both TC and DAC
     fn append(
         mut self,
         vote: VOTE,
@@ -427,7 +428,6 @@ impl<
 
             return Either::Right(AssembledSignature::DA(real_qc_sig));
         }
-        error!("DA stake casted is {da_stake_casted}");
         Either::Left(self)
     }
 }
