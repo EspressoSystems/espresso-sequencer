@@ -437,7 +437,7 @@ impl<
     }
 }
 
-// TODO ED Should make these fields a trait for Accumulator, like success threshold, etc. 
+// TODO ED Should make these fields a trait for Accumulator, like success threshold, etc.
 pub struct QuorumVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
@@ -468,12 +468,105 @@ impl<
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for QuorumVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
     fn append(
-        self,
+        mut self,
         vote: VOTE,
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        todo!()
+        let vote_commitment = match vote.get_data() {
+            VoteData::Yes(commitment) | VoteData::No(commitment) => commitment,
+
+            _ => return Either::Left(self),
+        };
+
+        let encoded_key = vote.get_key().to_bytes();
+
+        // Deserialize the signature so that it can be assembeld into a QC
+        // TODO ED Update this once we've gotten rid of EncodedSignature
+        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+            bincode_opts()
+                .deserialize(&vote.get_signature().0)
+                .expect("Deserialization on the signature shouldn't be able to fail.");
+
+        let (total_stake_casted, total_vote_map) = self
+            .total_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        let (yes_stake_casted, yes_vote_map) = self
+            .yes_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        let (no_stake_casted, no_vote_map) = self
+            .no_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        // Check for duplicate vote
+        // TODO ED Re-encoding signature key to bytes until we get rid of EncodedKey
+        // Have to do this because SignatureKey is not hashable
+        if total_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
+
+        // Update the active_keys and signature lists
+        // TODO ED How does this differ than the check above?
+        if self.signers.get(vote_node_id).as_deref() == Some(&true) {
+            error!("Node id is already in signers list");
+            return Either::Left(self);
+        }
+        self.signers.set(vote_node_id, true);
+        self.sig_lists.push(original_signature);
+
+        // TODO ED Make all these get calls as local variables to avoid constantly calling them
+        *total_stake_casted += u64::from(vote.get_vote_token().vote_count());
+        total_vote_map.insert(
+            encoded_key.clone(),
+            (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+        );
+
+        match vote.get_data() {
+            VoteData::Yes(_) => {
+                *yes_stake_casted += u64::from(vote.get_vote_token().vote_count());
+                yes_vote_map.insert(
+                    encoded_key,
+                    (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+                );
+            }
+            VoteData::No(_) => {
+                *no_stake_casted += u64::from(vote.get_vote_token().vote_count());
+                no_vote_map.insert(
+                    encoded_key,
+                    (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+                );
+            }
+            _ => return Either::Left(self),
+        }
+
+        if *total_stake_casted >= u64::from(self.success_threshold) {
+            // Assemble QC
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                // TODO ED Something about stake table entries.  Might be easier to just pass in membership?
+                stake_table_entries.clone(),
+                U256::from(self.success_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+
+            if *yes_stake_casted >= u64::from(self.success_threshold) {
+                self.yes_vote_outcomes.remove(&vote_commitment);
+                return Either::Right(AssembledSignature::Yes(real_qc_sig));
+            } else if *no_stake_casted >= u64::from(self.failure_threshold) {
+                self.total_vote_outcomes.remove(&vote_commitment);
+                return Either::Right(AssembledSignature::No(real_qc_sig));
+            }
+        }
+        Either::Left(self)
     }
 }
 
@@ -490,7 +583,7 @@ pub struct ViewSyncVoteAccumulator<
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
 
-    pub failure_threshold: NonZeroU64, 
+    pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
     pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
@@ -506,7 +599,7 @@ impl<
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
     fn append(
-        self,
+        mut self,
         vote: VOTE,
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
