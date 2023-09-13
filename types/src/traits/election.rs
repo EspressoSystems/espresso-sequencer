@@ -15,7 +15,7 @@ use crate::{
 };
 
 use crate::{
-    message::{CommitteeConsensusMessage, GeneralConsensusMessage, Message},
+    message::{GeneralConsensusMessage, Message},
     vote::ViewSyncVoteInternal,
 };
 
@@ -519,7 +519,23 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
         block_commitment: Commitment<TYPES::BlockType>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
-    ) -> CommitteeConsensusMessage<TYPES>;
+    ) -> DAVote<TYPES>;
+
+    // TODO temporary vid methods, move to quorum https://github.com/EspressoSystems/HotShot/issues/1696
+
+    /// Create a message with a vote on VID disperse data.
+    fn create_vid_message(
+        &self,
+        block_commitment: Commitment<TYPES::BlockType>,
+        current_view: TYPES::Time,
+        vote_token: TYPES::VoteTokenType,
+    ) -> DAVote<TYPES>;
+
+    /// Sign a vote on VID proposal.
+    fn sign_vid_vote(
+        &self,
+        block_commitment: Commitment<TYPES::BlockType>,
+    ) -> (EncodedPublicKey, EncodedSignature);
 }
 
 /// Standard implementation of [`CommitteeExchangeType`] utilizing a DA committee.
@@ -583,15 +599,44 @@ impl<
         block_commitment: Commitment<TYPES::BlockType>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
-    ) -> CommitteeConsensusMessage<TYPES> {
+    ) -> DAVote<TYPES> {
         let signature = self.sign_da_vote(block_commitment);
-        CommitteeConsensusMessage::<TYPES>::DAVote(DAVote {
+        DAVote {
             signature,
             block_commitment,
             current_view,
             vote_token,
             vote_data: VoteData::DA(block_commitment),
-        })
+        }
+    }
+
+    fn create_vid_message(
+        &self,
+        block_commitment: Commitment<TYPES::BlockType>,
+        current_view: <TYPES as NodeType>::Time,
+        vote_token: <TYPES as NodeType>::VoteTokenType,
+    ) -> DAVote<TYPES> {
+        let signature = self.sign_vid_vote(block_commitment);
+        DAVote {
+            signature,
+            block_commitment,
+            current_view,
+            vote_token,
+            vote_data: VoteData::DA(block_commitment),
+        }
+    }
+
+    fn sign_vid_vote(
+        &self,
+        block_commitment: Commitment<<TYPES as NodeType>::BlockType>,
+    ) -> (EncodedPublicKey, EncodedSignature) {
+        let signature = TYPES::SignatureKey::sign(
+            &self.private_key,
+            VoteData::<TYPES::BlockType>::DA(block_commitment)
+                .commit()
+                .as_ref(),
+        );
+        (self.public_key.to_bytes(), signature)
     }
 }
 

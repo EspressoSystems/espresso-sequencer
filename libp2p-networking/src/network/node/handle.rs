@@ -11,22 +11,25 @@ use async_compatibility_layer::{
         UnboundedReceiver, UnboundedRecvError, UnboundedSender,
     },
 };
-use async_lock::Mutex;
+use async_lock::{Mutex, RwLock};
 use bincode::Options;
+use dashmap::DashMap;
 use futures::{stream::FuturesOrdered, Future, FutureExt};
+use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use hotshot_utils::bincode::bincode_opts;
 use libp2p::{request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fmt::Debug,
+    hash::Hash,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use tracing::{debug, info, instrument};
 
@@ -34,7 +37,7 @@ use tracing::{debug, info, instrument};
 /// - A reference to the state
 /// - Controls for the swarm
 #[derive(Debug)]
-pub struct NetworkNodeHandle<S> {
+pub struct NetworkNodeHandle<S, K: Debug + Eq + Hash + Serialize + Clone> {
     /// network configuration
     network_config: NetworkNodeConfig,
     /// the state of the replica
@@ -48,6 +51,10 @@ pub struct NetworkNodeHandle<S> {
     peer_id: PeerId,
     /// human readable id
     id: usize,
+    /// the cache for peers we've looked up
+    peer_cache: Arc<DashMap<K, PeerId>>,
+    /// the expiries for the peer cache, in order
+    peer_cache_expiries: Arc<RwLock<BTreeMap<SystemTime, K>>>,
 
     /// A list of webui listeners that are listening for changes on this node
     webui_listeners: Arc<Mutex<Vec<Sender<()>>>>,
@@ -84,7 +91,7 @@ impl NetworkNodeReceiver {
     }
 }
 
-impl<S: Default + Debug> NetworkNodeHandle<S> {
+impl<S: Default + Debug, K: Debug + Eq + Hash + Serialize + Clone> NetworkNodeHandle<S, K> {
     /// constructs a new node listening on `known_addr`
     #[instrument]
     pub async fn new(config: NetworkNodeConfig, id: usize) -> Result<Self, NetworkNodeHandleError> {
@@ -112,7 +119,6 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
 
         let kill_switch = Mutex::new(Some(kill_switch));
         let recv_kill = Mutex::new(Some(recv_kill));
-
         Ok(NetworkNodeHandle {
             network_config: config,
             state: std::sync::Arc::default(),
@@ -120,6 +126,8 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
             listen_addr,
             peer_id,
             id,
+            peer_cache: Arc::new(DashMap::new()),
+            peer_cache_expiries: Arc::new(RwLock::new(BTreeMap::new())),
             webui_listeners: Arc::default(),
             receiver: NetworkNodeReceiver {
                 kill_switch,
@@ -139,9 +147,10 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     #[allow(clippy::unused_async)]
     pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future<Output = ()>
     where
-        F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,
+        F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S, K>>) -> RET + Sync + Send + 'static,
         RET: Future<Output = Result<(), NetworkNodeHandleError>> + Send + 'static,
         S: Send + 'static,
+        K: Send + Sync + 'static,
     {
         assert!(
             !self.receiver.receiver_spawned.swap(true, Ordering::Relaxed),
@@ -260,7 +269,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     }
 }
 
-impl<S> NetworkNodeHandle<S> {
+impl<S, K: Debug + Eq + Hash + Serialize + Clone> NetworkNodeHandle<S, K> {
     /// Print out the routing table used by kademlia
     /// NOTE: only for debugging purposes currently
     /// # Errors
@@ -281,6 +290,55 @@ impl<S> NetworkNodeHandle<S> {
         let req = ClientRequest::LookupPeer(peer_id, s);
         self.send_request(req).await?;
         r.await.map_err(|_| NetworkNodeHandleError::RecvError)
+    }
+
+    /// Prunes the peer lookup cache, removing old entries
+    /// Should be 1:1 with kademlia expiries
+    pub async fn prune_peer_cache(&self) {
+        let now = SystemTime::now();
+        let mut expiries = self.peer_cache_expiries.write().await;
+
+        while let Some((expires, key)) = expiries.pop_first() {
+            if now > expires {
+                self.peer_cache.remove(&key);
+            } else {
+                expiries.insert(expires, key);
+                break;
+            }
+        }
+    }
+
+    /// Looks up a node's `PeerId` and attempts to validate routing
+    /// Will use cached `PeerId` if available
+    /// # Errors
+    /// if the peer was unable to be looked up (did not provide a response, DNE)
+    pub async fn lookup_node<V: for<'a> Deserialize<'a>>(
+        &self,
+        key: K,
+        dht_timeout: Duration,
+    ) -> Result<PeerId, NetworkNodeHandleError> {
+        let pid = if let Some(record) = self.peer_cache.get(&key) {
+            // exists in cache. look up routing but skip kademlia
+            *record.value()
+        } else {
+            // does not exist in cache. look up in kademlia, store in cache
+            let pid = self.get_record_timeout::<PeerId>(&key, dht_timeout).await?;
+            self.peer_cache.insert(key.clone(), pid);
+            self.peer_cache_expiries.write().await.insert(
+                SystemTime::now()
+                    + self
+                        .network_config
+                        .ttl
+                        .unwrap_or(Duration::from_secs(KAD_DEFAULT_REPUB_INTERVAL_SEC * 16)),
+                key,
+            );
+            pid
+        };
+
+        // pid lookup for routing
+        self.lookup_pid(pid).await?;
+
+        Ok(pid)
     }
 
     /// Insert a record into the kademlia DHT
@@ -611,7 +669,7 @@ impl<S> NetworkNodeHandle<S> {
     }
 }
 
-impl<S: Clone> NetworkNodeHandle<S> {
+impl<S: Clone, K: Clone + Debug + Eq + Hash + Serialize> NetworkNodeHandle<S, K> {
     /// Get a clone of the internal state
     pub async fn state(&self) -> S {
         self.state.cloned().await
@@ -679,4 +737,107 @@ pub mod network_node_handle_error {
     pub use super::{
         NetworkSnafu, NodeConfigSnafu, RecvSnafu, SendSnafu, SerializationSnafu, TimeoutSnafu,
     };
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// libp2p peer cache test
+    #[cfg_attr(
+        async_executor_impl = "tokio",
+        tokio::test(flavor = "multi_thread", worker_threads = 2)
+    )]
+    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[instrument]
+    async fn test_libp2p_cache_eviction() {
+        async_compatibility_layer::logging::setup_logging();
+        async_compatibility_layer::logging::setup_backtrace();
+
+        let handle: NetworkNodeHandle<(), PeerId> =
+            NetworkNodeHandle::new(NetworkNodeConfig::default(), 0)
+                .await
+                .unwrap();
+
+        let now = SystemTime::now();
+        let later = now + Duration::from_secs(1);
+
+        // present insert
+        let present_key = PeerId::random();
+        let present_pid = PeerId::random();
+        handle.peer_cache.insert(present_key, present_pid);
+        handle
+            .peer_cache_expiries
+            .write()
+            .await
+            .insert(now, present_key);
+
+        // later insert
+        let later_key = PeerId::random();
+        let later_pid = PeerId::random();
+        handle.peer_cache.insert(later_key, later_pid);
+        handle
+            .peer_cache_expiries
+            .write()
+            .await
+            .insert(now + Duration::from_secs(1), later_key);
+
+        // check that now and later exist
+        assert!(handle
+            .peer_cache
+            .get(&present_key)
+            .is_some_and(|entry| entry.value() == &present_pid));
+        assert!(handle
+            .peer_cache
+            .get(&later_key)
+            .is_some_and(|entry| entry.value() == &later_pid));
+        assert!(handle
+            .peer_cache_expiries
+            .read()
+            .await
+            .get(&now)
+            .is_some_and(|entry| entry == &present_key));
+        assert!(handle
+            .peer_cache_expiries
+            .read()
+            .await
+            .get(&later)
+            .is_some_and(|entry| entry == &later_key));
+
+        // prune
+        handle.prune_peer_cache().await;
+
+        // check that now doesn't exist and later does
+        assert!(handle.peer_cache.get(&present_key).is_none());
+        assert!(handle
+            .peer_cache
+            .get(&later_key)
+            .is_some_and(|entry| entry.value() == &later_pid));
+        assert!(handle.peer_cache_expiries.read().await.get(&now).is_none());
+        assert!(handle
+            .peer_cache_expiries
+            .read()
+            .await
+            .get(&later)
+            .is_some_and(|entry| entry == &later_key));
+
+        // wait for later to expire
+        async_sleep(Duration::from_secs(1)).await;
+
+        // prune
+        handle.prune_peer_cache().await;
+
+        // check that later doesn't exist
+        assert!(handle.peer_cache.get(&later_key).is_none());
+        assert!(handle
+            .peer_cache_expiries
+            .read()
+            .await
+            .get(&later)
+            .is_none());
+
+        // check that the expiries and cache are empty
+        assert!(handle.peer_cache_expiries.read().await.is_empty());
+        assert!(handle.peer_cache.is_empty());
+    }
 }

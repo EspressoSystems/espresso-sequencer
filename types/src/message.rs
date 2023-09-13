@@ -5,7 +5,7 @@
 
 use crate::{
     certificate::DACertificate,
-    data::{DAProposal, ProposalType},
+    data::{DAProposal, ProposalType, VidDisperse},
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
@@ -52,7 +52,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewMessage<TYPES> for Messa
 #[derive(Clone, Debug)]
 pub struct Messages<TYPES: NodeType, I: NodeImplementation<TYPES>>(pub Vec<Message<TYPES, I>>);
 
-/// A message type agnostic description of a messages purpose
+/// A message type agnostic description of a message's purpose
 #[derive(PartialEq, Copy, Clone)]
 pub enum MessagePurpose {
     /// Message with a quorum proposal.
@@ -69,6 +69,12 @@ pub enum MessagePurpose {
     Internal,
     /// Data message
     Data,
+    /// VID disperse, like [`Proposal`].
+    VidDisperse,
+    /// VID vote, like [`Vote`].
+    VidVote,
+    /// VID certificate, like [`DAC`].
+    VidCert,
 }
 
 // TODO (da) make it more customized to the consensus layer, maybe separating the specific message
@@ -207,6 +213,12 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     DAVote(DAVote<TYPES>, TYPES::SignatureKey),
     /// Certificate for the DA.
     DACertificate(DACertificate<TYPES>, TYPES::SignatureKey),
+    /// VID dispersal data. Like [`DAProposal`]
+    VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Vote from VID storage node. Like [`DAVote`]
+    VidVote(DAVote<TYPES>, TYPES::SignatureKey),
+    /// Certificate for VID. Like [`DACertificate`]
+    VidCertificate(DACertificate<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
@@ -222,6 +234,15 @@ impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
             }
             ProcessedCommitteeConsensusMessage::DACertificate(cert, _) => {
                 CommitteeConsensusMessage::DACertificate(cert)
+            }
+            ProcessedCommitteeConsensusMessage::VidDisperseMsg(disperse, _) => {
+                CommitteeConsensusMessage::VidDisperseMsg(disperse)
+            }
+            ProcessedCommitteeConsensusMessage::VidVote(v, _) => {
+                CommitteeConsensusMessage::VidVote(v)
+            }
+            ProcessedCommitteeConsensusMessage::VidCertificate(cert, _) => {
+                CommitteeConsensusMessage::VidCertificate(cert)
             }
         }
     }
@@ -239,6 +260,15 @@ impl<TYPES: NodeType> ProcessedCommitteeConsensusMessage<TYPES> {
             }
             CommitteeConsensusMessage::DACertificate(cert) => {
                 ProcessedCommitteeConsensusMessage::DACertificate(cert, sender)
+            }
+            CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
+                ProcessedCommitteeConsensusMessage::VidDisperseMsg(disperse, sender)
+            }
+            CommitteeConsensusMessage::VidVote(v) => {
+                ProcessedCommitteeConsensusMessage::VidVote(v, sender)
+            }
+            CommitteeConsensusMessage::VidCertificate(cert) => {
+                ProcessedCommitteeConsensusMessage::VidCertificate(cert, sender)
             }
         }
     }
@@ -307,6 +337,23 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
 
     /// Certificate data is available
     DACertificate(DACertificate<TYPES>),
+
+    /// Initiate VID dispersal.
+    ///
+    /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from [`VidDisperse`].
+    /// TODO this variant should not be a [`CommitteeConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
+    VidDisperseMsg(Proposal<VidDisperse<TYPES>>),
+
+    /// Vote for VID disperse data
+    ///
+    /// Like [`DAVote`].
+    /// TODO currently re-using [`DAVote`]; do we need a separate VID vote? <https://github.com/EspressoSystems/HotShot/issues/1703>
+    VidVote(DAVote<TYPES>),
+    /// VID certificate data is available
+    ///
+    /// Like [`DACertificate`]
+    /// TODO currently re-using [`DACertificate`]; do we need a separate VID cert? <https://github.com/EspressoSystems/HotShot/issues/1716>
+    VidCertificate(DACertificate<TYPES>),
 }
 
 /// Messages related to the consensus protocol.
@@ -377,7 +424,12 @@ impl<
                         p.data.get_view_number()
                     }
                     CommitteeConsensusMessage::DAVote(vote_message) => vote_message.current_view(),
-                    CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::DACertificate(cert)
+                    | CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
+                        disperse.data.get_view_number()
+                    }
+                    CommitteeConsensusMessage::VidVote(vote) => vote.current_view(),
                 }
             }
         }
@@ -397,7 +449,10 @@ impl<
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,
                 CommitteeConsensusMessage::DAVote(_) => MessagePurpose::Vote,
+                CommitteeConsensusMessage::VidVote(_) => MessagePurpose::VidVote,
                 CommitteeConsensusMessage::DACertificate(_) => MessagePurpose::DAC,
+                CommitteeConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
+                CommitteeConsensusMessage::VidCertificate(_) => todo!(),
             },
         }
     }

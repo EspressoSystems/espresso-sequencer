@@ -128,17 +128,23 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
     // TODO ED This should be TYPES::Time
     // Theoretically there should never be contention for this lock...
     /// Task map for quorum proposals.
-    proposal_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    proposal_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for quorum votes.
-    vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for DACs.
-    dac_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    dac_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync certificates.
-    view_sync_cert_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_cert_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync votes.
-    view_sync_vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for transactions
-    txn_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    txn_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
 }
 
 impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
@@ -146,7 +152,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     /// Pull a web server.
     async fn poll_web_server(
         &self,
-        receiver: UnboundedReceiver<ConsensusIntentEvent>,
+        receiver: UnboundedReceiver<ConsensusIntentEvent<TYPES::SignatureKey>>,
         message_purpose: MessagePurpose,
         view_number: u64,
     ) -> Result<(), NetworkError> {
@@ -171,6 +177,9 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                     config::get_view_sync_vote_route(view_number, vote_index)
                 }
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
+                MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
+                MessagePurpose::VidVote => config::get_vid_vote_route(view_number, vote_index), // like `Vote`
+                MessagePurpose::VidCert => config::get_vid_cert_route(view_number), // like `DAC`
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -234,6 +243,14 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                     direct_poll_queue.push(vote.clone());
                                 }
                             }
+                            MessagePurpose::VidVote => {
+                                // TODO copy-pasted from `MessagePurpose::Vote` https://github.com/EspressoSystems/HotShot/issues/1690
+                                let mut direct_poll_queue = self.direct_poll_queue.write().await;
+                                for vote in &deserialized_messages {
+                                    vote_index += 1;
+                                    direct_poll_queue.push(vote.clone());
+                                }
+                            }
                             MessagePurpose::DAC => {
                                 debug!(
                                     "Received DAC from web server for view {} {}",
@@ -248,6 +265,41 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                 // return if we found a DAC, since there will only be 1 per view
                                 // In future we should check to make sure DAC is valid
                                 return Ok(());
+                            }
+                            MessagePurpose::VidCert => {
+                                // TODO copy-pasted from `MessagePurpose::DAC` https://github.com/EspressoSystems/HotShot/issues/1690
+                                debug!(
+                                    "Received VID cert from web server for view {} {}",
+                                    view_number, self.is_da
+                                );
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                // return if we found a VID cert, since there will only be 1 per view
+                                // In future we should check to make sure VID cert is valid
+                                return Ok(());
+                            }
+                            MessagePurpose::VidDisperse => {
+                                // TODO copy-pasted from `MessagePurpose::Proposal` https://github.com/EspressoSystems/HotShot/issues/1690
+
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
+                                // Wait for the view to change before polling for proposals again
+                                // let event = receiver.recv().await;
+                                // match event {
+                                //     Ok(event) => view_number = event.view_number(),
+                                //     Err(_r) => {
+                                //         error!("Proposal receiver error!  It was likely shutdown")
+                                //     }
+                                // }
                             }
                             MessagePurpose::ViewSyncVote => {
                                 // error!(
@@ -507,6 +559,9 @@ impl<
             }
             MessagePurpose::ViewSyncVote => config::post_view_sync_vote_route(*view_number),
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
+            MessagePurpose::VidVote => config::post_vid_vote_route(*view_number),
+            MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
+            MessagePurpose::VidCert => config::post_vid_cert_route(*view_number),
         };
 
         let network_msg: SendMsg<M> = SendMsg {
@@ -608,13 +663,7 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         <WebServerNetwork<_, _, _> as ConnectedNetwork<
             Message<TYPES, I>,
             TYPES::SignatureKey,
@@ -725,14 +774,8 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: K) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
     #[allow(clippy::too_many_lines)]
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
         debug!(
             "Injecting event: {:?} is da {}",
             event.clone(),
@@ -997,7 +1040,7 @@ impl<
                 };
             }
 
-            _ => error!("Unexpected event!"),
+            _ => {}
         }
     }
 }

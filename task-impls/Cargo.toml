@@ -18,6 +18,7 @@ tracing = { workspace = true }
 atomic_enum = "0.2.0"
 pin-project = "1.1.3"
 async-stream = "0.3.5"
+hotshot-constants = { path = "../constants", default-features = false }
 hotshot-types = { path = "../types", default-features = false }
 hotshot-task = { path = "../task", default-features = false }
 time = { workspace = true }

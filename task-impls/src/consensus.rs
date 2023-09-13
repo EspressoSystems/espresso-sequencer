@@ -12,6 +12,7 @@ use commit::Committable;
 use core::time::Duration;
 use either::{Either, Left, Right};
 use futures::FutureExt;
+use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -487,6 +488,18 @@ where
             // }
             self.cur_view = new_view;
             self.current_proposal = None;
+
+            // Poll the future leader for lookahead
+            let lookahead_view = new_view + LOOK_AHEAD;
+            if !self.quorum_exchange.is_leader(lookahead_view) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
+                        *lookahead_view,
+                        self.quorum_exchange.get_leader(lookahead_view),
+                    ))
+                    .await;
+            }
 
             // Start polling for proposals for the new view
             self.quorum_exchange
@@ -1034,7 +1047,17 @@ where
                     self.update_view(view + 1).await;
                 }
             }
+            SequencingHotShotEvent::VidCertRecv(cert) => {
+                debug!("VID cert received for view ! {}", *cert.view_number);
 
+                let view = cert.view_number;
+                self.certs.insert(view, cert); // TODO new cert type for VID https://github.com/EspressoSystems/HotShot/issues/1701
+
+                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
+                if self.vote_if_able().await {
+                    self.update_view(view + 1).await;
+                }
+            }
             SequencingHotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1298,6 +1321,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::QuorumVoteRecv(_)
             | SequencingHotShotEvent::QCFormed(_)
             | SequencingHotShotEvent::DACRecv(_)
+            | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
             | SequencingHotShotEvent::SendDABlockData(_)
             | SequencingHotShotEvent::Timeout(_)

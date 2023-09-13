@@ -5,16 +5,17 @@
 use super::NetworkingMetrics;
 use crate::NodeImplementation;
 use async_compatibility_layer::{
-    art::{async_block_on, async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
+    art::{async_block_on, async_sleep, async_spawn, async_timeout},
+    channel::{unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
 use bimap::BiHashMap;
 use bincode::Options;
+use hotshot_constants::{KAD_DEFAULT_REPUB_INTERVAL_SEC, LOOK_AHEAD};
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
+    data::{ProposalType, ViewNumber},
     message::{Message, MessageKind},
     traits::{
         election::Membership,
@@ -26,6 +27,7 @@ use hotshot_types::{
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
+        state::ConsensusTime,
     },
     vote::VoteType,
 };
@@ -49,10 +51,13 @@ use std::{
     marker::PhantomData,
     num::NonZeroUsize,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// hardcoded topic of QC used
 pub const QC_TOPIC: &str = "global";
@@ -78,10 +83,7 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// this node's public key
     pk: K,
     /// handle to control the network
-    handle: Arc<NetworkNodeHandle<()>>,
-    /// Bidirectional map from public key provided by espresso
-    /// to public key provided by libp2p
-    pubkey_pid_map: RwLock<BiHashMap<K, PeerId>>,
+    handle: Arc<NetworkNodeHandle<(), K>>,
     /// map of known replica peer ids to public keys
     broadcast_recv: UnboundedReceiver<M>,
     /// Sender for broadcast messages
@@ -90,6 +92,10 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     direct_send: UnboundedSender<M>,
     /// Receiver for direct messages
     direct_recv: UnboundedReceiver<M>,
+    /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
+    node_lookup_send: UnboundedSender<Option<(ViewNumber, K)>>,
+    /// Sender for shutdown of the peer cache's garbage collection task
+    cache_gc_shutdown_send: UnboundedSender<()>,
     /// this is really cheating to enable local tests
     /// hashset of (bootstrap_addr, peer_id)
     bootstrap_addrs: PeerInfoVec,
@@ -107,6 +113,10 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// hash(hashset) -> topic
     /// btreemap ordered so is hashable
     topic_map: RwLock<BiHashMap<BTreeSet<K>, String>>,
+    /// the latest view number (for node lookup purposes)
+    /// NOTE: supposed to represent a ViewNumber but we
+    /// haven't made that atomic yet and we prefer lock-free
+    latest_seen_view: Arc<AtomicU64>,
 }
 
 /// Networking implementation that uses libp2p
@@ -244,11 +254,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     /// Returns when network is ready
     pub async fn wait_for_ready(&self) {
         loop {
-            if self
-                .inner
-                .is_ready
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
+            if self.inner.is_ready.load(Ordering::Relaxed) {
                 break;
             }
             async_sleep(Duration::from_secs(1)).await;
@@ -282,7 +288,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
         let network_handle = Arc::new(
-            NetworkNodeHandle::<()>::new(config, id)
+            NetworkNodeHandle::<(), K>::new(config, id)
                 .await
                 .map_err(Into::<NetworkError>::into)?,
         );
@@ -300,7 +306,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         }
 
         let mut pubkey_pid_map = BiHashMap::new();
-
         pubkey_pid_map.insert(pk.clone(), network_handle.peer_id());
 
         let mut topic_map = BiHashMap::new();
@@ -313,11 +318,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         // if bounded figure out a way to log dropped msgs
         let (direct_send, direct_recv) = unbounded();
         let (broadcast_send, broadcast_recv) = unbounded();
+        let (node_lookup_send, node_lookup_recv) = unbounded();
+        let (cache_gc_shutdown_send, cache_gc_shutdown_recv) = unbounded::<()>();
 
         let result = Libp2pNetwork {
             inner: Arc::new(Libp2pNetworkInner {
                 handle: network_handle,
-                pubkey_pid_map: RwLock::new(pubkey_pid_map),
                 broadcast_recv,
                 direct_send: direct_send.clone(),
                 direct_recv,
@@ -330,14 +336,72 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
                 metrics: NetworkingMetrics::new(&*metrics),
                 topic_map,
+                node_lookup_send,
+                cache_gc_shutdown_send,
+                // Start the latest view from 0. "Latest" refers to "most recent view we are polling for
+                // proposals on". We need this because to have consensus info injected we need a working
+                // network already. In the worst case, we send a few lookups we don't need.
+                latest_seen_view: Arc::new(AtomicU64::new(0)),
             }),
         };
 
         result.spawn_event_generator(direct_send, broadcast_send);
-
+        result.spawn_node_lookup(node_lookup_recv, cache_gc_shutdown_recv);
         result.spawn_connect(id);
 
         Ok(result)
+    }
+
+    /// Spawns task for looking up nodes pre-emptively
+    /// as well as garbage collecting the peer cache
+    #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    fn spawn_node_lookup(
+        &self,
+        node_lookup_recv: UnboundedReceiver<Option<(ViewNumber, K)>>,
+        cache_gc_shutdown_send: UnboundedReceiver<()>,
+    ) {
+        let handle = self.inner.handle.clone();
+        let dht_timeout = self.inner.dht_timeout;
+        let latest_seen_view = self.inner.latest_seen_view.clone();
+
+        // deals with handling lookup queue. should be infallible
+        let handle_ = handle.clone();
+        async_spawn(async move {
+            // cancels on shutdown
+            while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
+                /// defines lookahead threshold based on the constant
+                const THRESHOLD: u64 = (LOOK_AHEAD as f64 * 0.8) as u64;
+
+                info!("Performing lookup for peer {:?}", pk);
+
+                // only run if we are not too close to the next view number
+                if latest_seen_view.load(Ordering::Relaxed) + THRESHOLD <= *view_number {
+                    // look up node, caching if applicable
+                    if let Err(err) = handle_.lookup_node::<K>(pk.clone(), dht_timeout).await {
+                        error!("Failed to perform lookup for key {:?}: {}", pk, err);
+                    };
+                }
+            }
+        });
+
+        // deals with garbage collecting the lookup queue
+        let handle_ = handle.clone();
+        async_spawn(async move {
+            loop {
+                let ttl = handle_
+                    .config()
+                    .ttl
+                    .unwrap_or(Duration::from_secs(KAD_DEFAULT_REPUB_INTERVAL_SEC * 8));
+                if async_timeout(ttl, cache_gc_shutdown_send.recv())
+                    .await
+                    .is_err()
+                {
+                    handle_.prune_peer_cache().await;
+                } else {
+                    break;
+                }
+            }
+        });
     }
 
     /// Initiates connection to the outside world
@@ -376,7 +440,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     .await
                     .unwrap();
 
-                while !is_bootstrapped.load(std::sync::atomic::Ordering::Relaxed) {
+                while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
                 }
 
@@ -414,7 +478,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     node_type
                 );
 
-                is_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                is_ready.store(true, Ordering::Relaxed);
                 info!("STARTING CONSENSUS ON {:?}", handle.peer_id());
                 Ok::<(), NetworkError>(())
             }
@@ -480,7 +544,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                             .context(FailedToSerializeSnafu);
                     }
                     NetworkEvent::IsBootstrapped => {
-                        is_bootstrapped.store(true, std::sync::atomic::Ordering::Relaxed);
+                        is_bootstrapped.store(true, Ordering::Relaxed);
                     }
                 }
             }
@@ -499,9 +563,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
     #[instrument(name = "Libp2pNetwork::ready_nonblocking", skip_all)]
     async fn is_ready(&self) -> bool {
-        self.inner
-            .is_ready
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.inner.is_ready.load(Ordering::Relaxed)
     }
 
     #[instrument(name = "Libp2pNetwork::shut_down", skip_all)]
@@ -511,6 +573,8 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         Self: 'b,
     {
         let closure = async move {
+            self.inner.node_lookup_send.send(None).await.unwrap();
+            self.inner.cache_gc_shutdown_send.send(()).await.unwrap();
             if self.inner.handle.is_killed() {
                 error!("Called shut down when already shut down! Noop.");
             } else {
@@ -544,7 +608,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                 source: NetworkNodeHandleError::NoSuchTopic,
             })?
             .clone();
-        error!("Broadcasting to topic {}", topic);
+        info!("broadcasting to topic: {}", topic);
 
         // gossip doesn't broadcast from itself, so special case
         if recipients.contains(&self.inner.pk) {
@@ -586,37 +650,24 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         }
 
         self.wait_for_ready().await;
-        // check local cache. if that fails, initiate search
-        // if search fails, just error out
-        // NOTE: relay may be a good way to fix this in the future .
-        let pid: PeerId = if let Some(pid) = self
+
+        let pid = match self
             .inner
-            .pubkey_pid_map
-            .read()
+            .handle
+            .lookup_node::<K>(recipient.clone(), self.inner.dht_timeout)
             .await
-            .get_by_left(&recipient)
         {
-            *pid
-        } else {
-            match self
-                .inner
-                .handle
-                .get_record_timeout(&recipient, self.inner.dht_timeout)
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    self.inner.metrics.message_failed_to_send.add(1);
-                    error!("Failed to message {:?} because could not find recipient peer id for pk {:?}", message, recipient);
-                    return Err(NetworkError::Libp2p { source: e });
-                }
+            Ok(pid) => pid,
+            Err(err) => {
+                self.inner.metrics.message_failed_to_send.add(1);
+                error!(
+                    "Failed to message {:?} because could not find recipient peer id for pk {:?}",
+                    message, recipient
+                );
+                return Err(NetworkError::Libp2p { source: err });
             }
         };
 
-        if let Err(e) = self.inner.handle.lookup_pid(pid).await {
-            self.inner.metrics.message_failed_to_send.add(1);
-            return Err(e.into());
-        }
         match self.inner.handle.direct_request(pid, &message).await {
             Ok(()) => {
                 self.inner.metrics.outgoing_message_count.add(1);
@@ -669,44 +720,37 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         boxed_sync(closure)
     }
 
-    #[instrument(name = "Libp2pNetwork::lookup_node", skip_all)]
-    async fn lookup_node(&self, pk: K) -> Result<(), NetworkError> {
-        self.wait_for_ready().await;
-
-        if self.inner.handle.is_killed() {
-            return Err(NetworkError::ShutDown);
-        }
-
-        let maybe_pid = self
-            .inner
-            .handle
-            .get_record_timeout(&pk, self.inner.dht_timeout)
+    #[instrument(name = "Libp2pNetwork::queue_node_lookup", skip_all)]
+    async fn queue_node_lookup(
+        &self,
+        view_number: ViewNumber,
+        pk: K,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, K)>>> {
+        self.inner
+            .node_lookup_send
+            .send(Some((view_number, pk)))
             .await
-            .map_err(Into::<NetworkError>::into);
-
-        if let Ok(pid) = maybe_pid {
-            if self.inner.handle.lookup_pid(pid).await.is_err() {
-                error!("Failed to look up pid");
-                return Err(NetworkError::Libp2p {
-                    source: NetworkNodeHandleError::DHTError {
-                        source: libp2p_networking::network::error::DHTError::NotFound,
-                    },
-                });
-            };
-        } else {
-            error!("Unable to look up pubkey {:?}", pk);
-            return Err(NetworkError::Libp2p {
-                source: NetworkNodeHandleError::DHTError {
-                    source: libp2p_networking::network::error::DHTError::NotFound,
-                },
-            });
-        }
-
-        Ok(())
     }
 
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
+        match event {
+            ConsensusIntentEvent::PollFutureLeader(future_view, future_leader) => {
+                let _ = self
+                    .queue_node_lookup(ViewNumber::new(future_view), future_leader)
+                    .await
+                    .map_err(|err| warn!("failed to process node lookup request: {}", err));
+            }
+
+            ConsensusIntentEvent::PollForProposal(new_view) => {
+                if new_view > self.inner.latest_seen_view.load(Ordering::Relaxed) {
+                    self.inner
+                        .latest_seen_view
+                        .store(new_view, Ordering::Relaxed);
+                }
+            }
+
+            _ => {}
+        }
     }
 }
 
@@ -851,12 +895,20 @@ where
         boxed_sync(closure)
     }
 
-    async fn lookup_node(&self, pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        self.0.lookup_node(pk).await
+    async fn queue_node_lookup(
+        &self,
+        view_number: ViewNumber,
+        pk: TYPES::SignatureKey,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        self.0.queue_node_lookup(view_number, pk).await
     }
 
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
+        <Libp2pNetwork<_, _> as ConnectedNetwork<
+            Message<TYPES, I>,
+            TYPES::SignatureKey,
+        >>::inject_consensus_info(&self.0, event)
+        .await;
     }
 }
 

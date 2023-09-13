@@ -19,8 +19,10 @@ use either::Either;
 use hotshot_signature_key::bn254::BN254Pub;
 use hotshot_types::{
     certificate::{AssembledSignature, QuorumCertificate},
-    constants::genesis_proposer_id,
-    data::{fake_commitment, random_commitment, LeafType, SequencingLeaf, ViewNumber},
+    data::{
+        fake_commitment, genesis_proposer_id, random_commitment, LeafType, SequencingLeaf,
+        ViewNumber,
+    },
     traits::{
         block_contents::Transaction,
         election::Membership,
