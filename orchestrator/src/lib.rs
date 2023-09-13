@@ -174,7 +174,15 @@ where
     fn post_ready(&mut self) -> Result<(), ServerError> {
         self.nodes_connected += 1;
         println!("Nodes connected: {}", self.nodes_connected);
-        if self.nodes_connected >= self.config.config.known_nodes_with_stake.len().try_into().unwrap() {
+        if self.nodes_connected
+            >= self
+                .config
+                .config
+                .known_nodes_with_stake
+                .len()
+                .try_into()
+                .unwrap()
+        {
             self.start = true;
         }
         Ok(())

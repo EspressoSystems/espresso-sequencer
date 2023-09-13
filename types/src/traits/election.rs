@@ -613,9 +613,8 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -932,9 +931,8 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -1290,9 +1288,8 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,

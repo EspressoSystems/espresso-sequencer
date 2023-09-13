@@ -180,8 +180,12 @@ where
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         // Transfer from committee_nodes_with_stake to pure committee_nodes
-        (0..(self.committee_nodes_with_stake.len()))
-        .map(|node_id| <TYPES as NodeType>::SignatureKey::get_public_key(&self.committee_nodes_with_stake[node_id]))
-        .collect()
+        (0..self.committee_nodes_with_stake.len())
+            .map(|node_id| {
+                <TYPES as NodeType>::SignatureKey::get_public_key(
+                    &self.committee_nodes_with_stake[node_id],
+                )
+            })
+            .collect()
     }
 }
