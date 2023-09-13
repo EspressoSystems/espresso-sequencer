@@ -194,6 +194,7 @@
               RUST_BACKTRACE = 1;
               inherit RUST_LOG;
               FOUNDRY_SOLC = "${solc}/bin/solc";
+              RUSTFLAGS="--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
             };
         devShells.crossShell = crossShell { config = "x86_64-unknown-linux-musl"; };
         devShells.armCrossShell = crossShell { config = "aarch64-unknown-linux-musl"; };

@@ -12,9 +12,8 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate
 use derivative::Derivative;
 use hotshot::{
     traits::{
-        election::{
-            static_committee::{GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken},
-            vrf::JfPubKey,
+        election::static_committee::{
+            GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
         },
         implementations::{
             MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, WebCommChannel,
@@ -25,6 +24,7 @@ use hotshot::{
     types::{Message, SignatureKey, SystemContextHandle},
     HotShotInitializer, SystemContext,
 };
+use hotshot_signature_key::bn254::BN254Pub;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
@@ -42,11 +42,9 @@ use hotshot_types::{
 };
 
 use jf_primitives::{
-    aead::KeyPair,
     merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
     signatures::BLSSignatureScheme,
 };
-use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::net::Ipv4Addr;
@@ -224,7 +222,7 @@ pub type Storage = MemoryStorage<SeqTypes, Leaf>;
 pub type Event = hotshot::types::Event<SeqTypes, Leaf>;
 
 pub type SignatureSchemeType = BLSSignatureScheme;
-pub type SignatureKeyType = JfPubKey<SignatureSchemeType>;
+pub type SignatureKeyType = BN254Pub;
 type ElectionConfig = StaticElectionConfig;
 
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
@@ -295,7 +293,7 @@ pub enum Error {
     MerkleTreeError { error: String },
 }
 
-type PubKey = JfPubKey<SignatureSchemeType>;
+type PubKey = BN254Pub;
 type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 struct CommChannels<N: network::Type> {
@@ -314,7 +312,7 @@ impl CommChannels<network::Web> {
                 .port_or_known_default()
                 .unwrap(),
             wait_time,
-            pub_key.clone(),
+            pub_key,
             true,
         ));
         let consensus_network = Arc::new(WebServerNetwork::create(
@@ -360,16 +358,13 @@ impl CommChannels<network::Memory> {
 
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
+    known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
     genesis_block: Block,
     node_id: usize,
     priv_key: PrivKey,
-    enc_key: KeyPair,
     channels: CommChannels<N>,
-    config: HotShotConfig<PubKey, ElectionConfig>,
+    config: HotShotConfig<PubKey, <PubKey as SignatureKey>::StakeTableEntry, ElectionConfig>,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    // Create public and private keys for the node.
-    let public_key = PubKey::from_private(&priv_key);
-
     let storage = Storage::empty();
     let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
         genesis_block.clone(),
@@ -380,16 +375,17 @@ async fn init_hotshot<N: network::Type>(
     let election_config = Membership::default_election_config(num_nodes);
 
     let exchanges = SequencingExchanges::create(
+        known_nodes_with_stake,
         nodes_pub_keys.clone(),
         (election_config.clone(), election_config),
         (channels.quorum, channels.da, channels.view_sync),
-        public_key.clone(),
+        nodes_pub_keys[node_id],
+        nodes_pub_keys[node_id].get_stake_table_entry(1u64),
         priv_key.clone(),
-        enc_key,
     );
 
     SystemContext::init(
-        public_key,
+        nodes_pub_keys[node_id],
         priv_key,
         node_id as u64,
         config,
@@ -400,6 +396,7 @@ async fn init_hotshot<N: network::Type>(
     )
     .await
     .unwrap()
+    .0
 }
 
 pub struct NetworkParams {
@@ -438,11 +435,14 @@ pub async fn init_node(
     // Generate public keys and this node's private keys.
     //
     // These are deterministic keys suitable *only* for testing and demo purposes.
-    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..config.config.total_nodes.get())
+    let num_nodes = config.config.total_nodes.get();
+    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
     let priv_key = priv_keys[node_index as usize].clone();
-    let enc_key = KeyPair::generate(&mut StdRng::seed_from_u64(node_index.into()));
+    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0..num_nodes)
+        .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+        .collect();
 
     // Wait for other nodes to connect.
     orchestrator_client
@@ -452,11 +452,11 @@ pub async fn init_node(
     (
         init_hotshot(
             pub_keys.clone(),
+            known_nodes_with_stake.clone(),
             genesis_block,
             node_index as usize,
             priv_key,
-            enc_key,
-            CommChannels::web(network_params, pub_keys[node_index as usize].clone()),
+            CommChannels::web(network_params, pub_keys[node_index as usize]),
             config.config,
         )
         .await,
@@ -470,21 +470,17 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use either::Either;
     use futures::{Stream, StreamExt};
-    use hotshot::{types::EventType::Decide, HotShotSequencingConsensusApi};
-    use hotshot_consensus::SequencingConsensusApi;
+    use hotshot::types::EventType::Decide;
+    use hotshot_signature_key::bn254::BN254Priv;
     use hotshot_types::{
         data::LeafType,
-        message::DataMessage,
         traits::{
             election::ConsensusExchange,
             network::{TestableChannelImplementation, TestableNetworkingImplementation},
             node_implementation::TestableExchange,
-            state::ConsensusTime,
         },
         ExecutionType,
     };
-    use jf_primitives::signatures::SignatureScheme; // This trait provides the `key_gen` method.
-    use rand::thread_rng;
     use std::time::Duration;
 
     impl TestableExchange<SeqTypes, Leaf, Message<SeqTypes, Node<network::Memory>>>
@@ -562,31 +558,29 @@ pub mod testing {
         let num_nodes = 5;
 
         // Generate keys for the nodes.
-        let nodes_key_pairs = (0..num_nodes)
-            .map(|_| {
-                (
-                    SignatureSchemeType::key_gen(&(), &mut thread_rng()).unwrap(),
-                    KeyPair::generate(&mut thread_rng()),
-                )
-            })
+        let priv_keys = (0..num_nodes)
+            .map(|_| BN254Priv::generate())
             .collect::<Vec<_>>();
-
-        // Convert public keys to JfPubKey
-        let nodes_pub_keys: Vec<PubKey> = nodes_key_pairs
+        let pub_keys = priv_keys
             .iter()
-            .map(|((_, ver_key), _)| JfPubKey::from_native(*ver_key))
+            .map(BN254Pub::from_private)
             .collect::<Vec<_>>();
+        let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
+            ..num_nodes)
+            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .collect();
 
         let mut handles = vec![];
 
         let master_map = MasterMap::new();
 
-        let config: HotShotConfig<_, _> = HotShotConfig {
+        let config: HotShotConfig<_, _, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
+            known_nodes: pub_keys.clone(),
             min_transactions: 1,
             max_transactions: 10000.try_into().unwrap(),
-            known_nodes: nodes_pub_keys.clone(),
+            known_nodes_with_stake: known_nodes_with_stake.clone(),
             next_view_timeout: Duration::from_secs(60).as_millis() as u64,
             timeout_ratio: (10, 11),
             round_start_delay: Duration::from_millis(1).as_millis() as u64,
@@ -599,17 +593,14 @@ pub mod testing {
         };
 
         // Create HotShot instances.
-        for (node_id, ((sign_key, ver_key), enc_key)) in nodes_key_pairs.iter().enumerate() {
-            let priv_key = (sign_key.clone(), *ver_key);
-            let public_key = JfPubKey::from_native(*ver_key);
-
+        for node_id in 0..num_nodes {
             let handle = init_hotshot(
-                nodes_pub_keys.clone(),
+                pub_keys.clone(),
+                known_nodes_with_stake.clone(),
                 genesis_block.clone(),
                 node_id,
-                priv_key,
-                enc_key.clone(),
-                CommChannels::memory(master_map.clone(), public_key.clone()),
+                priv_keys[node_id].clone(),
+                CommChannels::memory(master_map.clone(), pub_keys[node_id]),
                 config.clone(),
             )
             .await;
@@ -650,19 +641,6 @@ pub mod testing {
             }
         }
     }
-
-    // Submit transaction to given handle.
-    pub async fn submit_txn_to_handle<N: network::Type>(
-        handle: &SystemContextHandle<SeqTypes, Node<N>>,
-        txn: Transaction,
-    ) {
-        let api = HotShotSequencingConsensusApi {
-            inner: handle.hotshot.inner.clone(),
-        };
-        api.send_transaction(DataMessage::SubmitTransaction(txn, ViewNumber::new(0)))
-            .await
-            .expect("Failed to submit transaction");
-    }
 }
 
 #[cfg(test)]
@@ -670,7 +648,7 @@ mod test {
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_testing::test_builder::TestMetadata;
-    use testing::{init_hotshot_handles, submit_txn_to_handle, wait_for_decide_on_handle};
+    use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
     #[async_std::test]
@@ -699,7 +677,10 @@ mod test {
         // Submit target transaction to handle
         let txn = ApplicationTransaction::new(vec![1, 2, 3]);
         let submitted_txn = Transaction::new(TestVm {}.id(), bincode::serialize(&txn).unwrap());
-        submit_txn_to_handle(&handles[0], submitted_txn.clone()).await;
+        handles[0]
+            .submit_transaction(submitted_txn.clone())
+            .await
+            .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
         wait_for_decide_on_handle(&mut events, submitted_txn).await

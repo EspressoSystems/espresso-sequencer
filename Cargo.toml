@@ -10,10 +10,12 @@ members = [
   "sequencer",
   "utils",
 ]
-
 # TODO: remove
 # Patch Jellyfish until the crypto_kx compatibility issue is fixed
-[patch."https://github.com/EspressoSystems/jellyfish"]
-jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
-jf-relation = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
-jf-utils = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
+# [patch."https://github.com/EspressoSystems/jellyfish"]
+# jf-primitives = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
+# jf-relation = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
+# jf-utils = { git = "https://github.com/EspressoSystems//jellyfish", branch = "hotshot-compat" }
+
+[patch."https://github.com/EspressoSystems/hotshot-query-service"]
+hotshot-query-service = { path = "../hotshot-query-service" }
