@@ -2776,7 +2776,6 @@ dependencies = [
  "hotshot-types",
  "hotshot-utils",
  "itertools 0.11.0",
- "jf-primitives",
  "portpicker",
  "prometheus",
  "rand 0.8.5",
