@@ -19,12 +19,8 @@ use tracing::debug;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneralStaticCommittee<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey> {
-    /// All the nodes participating
-    nodes: Vec<PUBKEY>,
     /// All the nodes participating and their stake
     nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
-    /// The nodes on the static committee
-    committee_nodes: Vec<PUBKEY>,
     /// The nodes on the static committee and their stake
     committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
     /// Node type phantom
@@ -41,11 +37,9 @@ impl<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey>
 {
     /// Creates a new dummy elector
     #[must_use]
-    pub fn new(nodes: Vec<PUBKEY>, nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
+    pub fn new(_nodes: Vec<PUBKEY>, nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
         Self {
-            nodes: nodes.clone(),
             nodes_with_stake: nodes_with_stake.clone(),
-            committee_nodes: nodes,
             committee_nodes_with_stake: nodes_with_stake,
             _type_phantom: PhantomData,
             _leaf_phantom: PhantomData,
@@ -107,8 +101,9 @@ where
 
     /// Index the vector of public keys with the current view number
     fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
-        let index = (*view_number % self.nodes.len() as u64) as usize;
-        self.nodes[index].clone()
+        let index = (*view_number % self.nodes_with_stake.len() as u64) as usize;
+        let res = self.nodes_with_stake[index].clone();
+        TYPES::SignatureKey::get_public_key(&res)
     }
 
     /// Simply make the partial signature
@@ -119,7 +114,8 @@ where
     ) -> std::result::Result<Option<StaticVoteToken<PUBKEY>>, ElectionError> {
         // TODO ED Below
         let pub_key = PUBKEY::from_private(private_key);
-        if !self.committee_nodes.contains(&pub_key) {
+        let entry = pub_key.get_stake_table_entry(1u64);
+        if !self.committee_nodes_with_stake.contains(&entry) {
             return Ok(None);
         }
         let mut message: Vec<u8> = vec![];
@@ -137,7 +133,8 @@ where
     ) -> Result<Checked<TYPES::VoteTokenType>, ElectionError> {
         match token {
             Checked::Valid(t) | Checked::Unchecked(t) => {
-                if self.committee_nodes.contains(&pub_key) {
+                let entry = pub_key.get_stake_table_entry(1u64);
+                if self.committee_nodes_with_stake.contains(&entry) {
                     Ok(Checked::Valid(t))
                 } else {
                     Ok(Checked::Inval(t))
@@ -153,18 +150,13 @@ where
 
     fn create_election(
         keys_qc: Vec<PUBKEY::StakeTableEntry>,
-        keys: Vec<PUBKEY>,
         config: TYPES::ElectionConfigType,
     ) -> Self {
-        let mut committee_nodes = keys.clone();
         let mut committee_nodes_with_stake = keys_qc.clone();
-        committee_nodes.truncate(config.num_nodes.try_into().unwrap());
         debug!("Election Membership Size: {}", config.num_nodes);
         committee_nodes_with_stake.truncate(config.num_nodes.try_into().unwrap());
         Self {
             nodes_with_stake: keys_qc,
-            nodes: keys,
-            committee_nodes,
             committee_nodes_with_stake,
             _type_phantom: PhantomData,
             _leaf_phantom: PhantomData,
@@ -172,21 +164,24 @@ where
     }
 
     fn total_nodes(&self) -> usize {
-        self.committee_nodes.len()
+        self.committee_nodes_with_stake.len()
     }
 
     fn success_threshold(&self) -> NonZeroU64 {
-        NonZeroU64::new(((self.committee_nodes.len() as u64 * 2) / 3) + 1).unwrap()
+        NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     fn failure_threshold(&self) -> NonZeroU64 {
-        NonZeroU64::new(((self.committee_nodes.len() as u64) / 3) + 1).unwrap()
+        NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64) / 3) + 1).unwrap()
     }
 
     fn get_committee(
         &self,
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
-        self.committee_nodes.clone().into_iter().collect()
+        // Transfer from committee_nodes_with_stake to pure committee_nodes
+        (0..(self.committee_nodes_with_stake.len()))
+        .map(|node_id| <TYPES as NodeType>::SignatureKey::get_public_key(&self.committee_nodes_with_stake[node_id]))
+        .collect()
     }
 }

@@ -52,7 +52,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
     > = config_toml.into();
 
     // Generate network's public keys
-    config.config.known_nodes = (0..config.config.total_nodes.get())
+    let known_nodes = (0..config.config.total_nodes.get())
         .map(|node_id| {
             TYPES::SignatureKey::generated_from_seed_indexed(
                 config.seed,
@@ -63,7 +63,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
         .collect();
 
     config.config.known_nodes_with_stake = (0..config.config.total_nodes.get())
-        .map(|node_id| config.config.known_nodes[node_id].get_stake_table_entry(1u64))
+        .map(|node_id| known_nodes[node_id].get_stake_table_entry(1u64))
         .collect();
 
     config

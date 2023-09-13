@@ -47,7 +47,6 @@ pub async fn build_system_handle(
     >>::block_genesis())
     .unwrap();
 
-    let known_nodes = config.known_nodes.clone();
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = <BN254Pub as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
     let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
@@ -67,7 +66,6 @@ pub async fn build_system_handle(
     let exchanges =
         <SequencingMemoryImpl as NodeImplementation<SequencingTestTypes>>::Exchanges::create(
             known_nodes_with_stake.clone(),
-            known_nodes.clone(),
             (quorum_election_config, committee_election_config),
             networks,
             public_key,
