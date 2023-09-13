@@ -1,8 +1,9 @@
 //! Provides two types of cerrtificates and their accumulators.
 
-use crate::vote::AccumulatorPlaceholder;
 use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
+use crate::vote::QuorumVoteAccumulator;
+use crate::vote::ViewSyncVoteAccumulator;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
     traits::{
@@ -160,7 +161,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     for QuorumCertificate<TYPES, LEAF>
 {
     type Vote = QuorumVote<TYPES, LEAF>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, LEAF, Self::Vote>;
+    type VoteAccumulator = QuorumVoteAccumulator<TYPES, LEAF, Self::Vote>;
 
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,
@@ -324,7 +325,7 @@ impl<TYPES: NodeType>
     for ViewSyncCertificate<TYPES>
 {
     type Vote = ViewSyncVote<TYPES>;
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, ViewSyncData<TYPES>, Self::Vote>;
+    type VoteAccumulator = ViewSyncVoteAccumulator<TYPES, ViewSyncData<TYPES>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         view_number: TYPES::Time,

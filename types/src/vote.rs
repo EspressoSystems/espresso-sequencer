@@ -333,7 +333,12 @@ pub trait Accumulator2<
     /// Append 1 vote to the accumulator.  If the threshold is not reached, return
     /// the accumulator, else return the `AssembledSignature`
     /// Only called from inside `accumulate_internal`
-    fn append(self, vote: VOTE, vote_node_id: usize, stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,) -> Either<Self, AssembledSignature<TYPES>>;
+    fn append(
+        self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>>;
 }
 
 pub struct DAVoteAccumulator<
@@ -412,7 +417,7 @@ impl<
         if *da_stake_casted >= u64::from(self.success_threshold) {
             // Assemble QC
             let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                // TODO ED Something about stake table entries.  Might be easier to just pass in membership? 
+                // TODO ED Something about stake table entries.  Might be easier to just pass in membership?
                 stake_table_entries.clone(),
                 U256::from(self.success_threshold.get()),
             );
@@ -423,12 +428,90 @@ impl<
                 &self.sig_lists[..],
             );
 
-            // TODO ED Why do we need this line if we have the above line? 
+            // TODO ED Why do we need this line if we have the above line?
             self.da_vote_outcomes.remove(&vote_commitment);
 
             return Either::Right(AssembledSignature::DA(real_qc_sig));
         }
         Either::Left(self)
+    }
+}
+
+// TODO ED Should make these fields a trait for Accumulator, like success threshold, etc. 
+pub struct QuorumVoteAccumulator<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+> {
+    /// Map of all da signatures accumlated so far
+    pub total_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub yes_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+
+    pub no_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+
+    /// A quorum's worth of stake, generally 2f + 1
+    pub success_threshold: NonZeroU64,
+
+    pub failure_threshold: NonZeroU64,
+    /// A list of valid signatures for certificate aggregation
+    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
+    pub signers: BitVec,
+
+    pub phantom: PhantomData<VOTE>,
+}
+
+impl<
+        TYPES: NodeType,
+        COMMITTABLE: Committable + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITTABLE>,
+    > Accumulator2<TYPES, COMMITTABLE, VOTE> for QuorumVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+{
+    fn append(
+        self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>> {
+        todo!()
+    }
+}
+
+pub struct ViewSyncVoteAccumulator<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+> {
+    /// Map of all da signatures accumlated so far
+    pub pre_commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub finalize_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+
+    /// A quorum's worth of stake, generally 2f + 1
+    pub success_threshold: NonZeroU64,
+
+    pub failure_threshold: NonZeroU64, 
+    /// A list of valid signatures for certificate aggregation
+    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
+    pub signers: BitVec,
+
+    pub phantom: PhantomData<VOTE>,
+}
+
+impl<
+        TYPES: NodeType,
+        COMMITTABLE: Committable + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITTABLE>,
+    > Accumulator2<TYPES, COMMITTABLE, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+{
+    fn append(
+        self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>> {
+        todo!()
     }
 }
 
@@ -449,7 +532,12 @@ impl<
         VOTE: VoteType<TYPES, COMMITTABLE>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
 {
-    fn append(self, vote: VOTE, vote_node_id: usize, stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>) -> Either<Self, AssembledSignature<TYPES>> {
+    fn append(
+        self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>> {
         todo!()
     }
 }

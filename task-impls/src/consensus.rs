@@ -18,6 +18,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::vote::QuorumVoteAccumulator;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
     consensus::{Consensus, View},
@@ -220,7 +221,7 @@ where
                     accumulator,
                     &vote,
                     &vote_internal.leaf_commitment,
-                )  {
+                ) {
                     Either::Left(acc) => {
                         state.accumulator = Either::Left(acc);
                         return (None, state);
@@ -901,7 +902,7 @@ where
 
                 // TODO ED Should remove this match because we'd always want to collect votes no matter the type on qc
                 // Though will need a sep accumulator for Timeout votes
-                match vote {
+                match vote.clone() {
                     QuorumVote::Yes(vote_internal) => {
                         let handle_event = HandleEvent(Arc::new(move |event, state| {
                             async move { vote_handle(state, event).await }.boxed()
@@ -918,7 +919,6 @@ where
                             TYPES::Time::new(0)
                         };
 
-
                         // Todo check if we are the leader
                         let new_accumulator = QuorumVoteAccumulator {
                             total_vote_outcomes: HashMap::new(),
@@ -932,7 +932,7 @@ where
                             signers: bitvec![0; self.quorum_exchange.total_nodes()],
                             phantom: PhantomData,
                         };
-        
+
                         // TODO ED Get vote data here instead of cloning into block commitment field of vote
                         let accumulator = self.quorum_exchange.accumulate_vote_2(
                             new_accumulator,
@@ -969,12 +969,17 @@ where
                             let _task = async_spawn(async move {
                                 VoteCollectionTypes::build(builder).launch().await;
                             });
-                            debug!("Starting vote handle for view {:?}", vote_internal.current_view);
+                            debug!(
+                                "Starting vote handle for view {:?}",
+                                vote_internal.current_view
+                            );
                         } else if let Some((_, _, stream_id)) = self.vote_collector {
                             self.event_stream
                                 .direct_message(
                                     stream_id,
-                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(vote_internal)),
+                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(
+                                        vote_internal,
+                                    )),
                                 )
                                 .await;
                         }
