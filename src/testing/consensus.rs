@@ -60,7 +60,6 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             .collect::<Vec<_>>();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
-        let num_nodes = pub_keys.len();
         let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
             ..total_nodes.into())
             .map(|id| pub_keys[id].get_stake_table_entry(1u64))
@@ -80,7 +79,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             num_bootstrap: 0,
             execution_type: ExecutionType::Continuous,
             election_config: None,
-            da_committee_size: num_nodes,
+            da_committee_size: total_nodes.into(),
         };
         let nodes = join_all(
             priv_keys
@@ -93,7 +92,8 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                     let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
                     let master_map = master_map.clone();
-                    let election_config = MockMembership::default_election_config(num_nodes as u64);
+                    let election_config =
+                        MockMembership::default_election_config(total_nodes.get() as u64);
 
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();

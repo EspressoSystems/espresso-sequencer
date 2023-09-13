@@ -42,7 +42,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let mut hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
+//! let mut (hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     query_data.metrics(),
 //!     // Other fields omitted
