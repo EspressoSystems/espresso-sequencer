@@ -447,7 +447,9 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         let mut is_valid_signature = false;
 
         is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
-        let valid_vote_token = self.membership().validate_vote_token(key.clone(), vote_token.clone());
+        let valid_vote_token = self
+            .membership()
+            .validate_vote_token(key.clone(), vote_token.clone());
         is_valid_vote_token = match valid_vote_token {
             Err(_) => {
                 error!("Vote token was invalid");
@@ -562,17 +564,33 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             &vote.get_key(),
             &vote.get_signature(),
             &vote.get_data(),
-            // Ignoring deserialization errors below since we are getting rid of it soon
+            // TODO ED We've had this comment for a while: Ignoring deserialization errors below since we are getting rid of it soon
             &Checked::Unchecked(vote.get_vote_token()),
         ) {
             error!("Invalid vote!");
             return Either::Left(accumulator);
         }
 
+        let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
+        let append_node_id = self
+            .membership()
+            .get_committee_qc_stake_table()
+            .iter()
+            .position(|x| *x == stake_table_entry.clone())
+            .unwrap();
+
         // TODO ED Should make append function take a reference to vote
         match accumulator.append(vote.clone()) {
-            Either::Left(_) => todo!(),
-            Either::Right(_) => todo!(),
+            Either::Left(accumulator) => Either::Left(accumulator),
+            Either::Right(signatures) => {
+                // TODO ED Update this function to just take in the signatures and most recent vote 
+                Either::Right(Self::Certificate::from_signatures_and_commitment(
+                    vote.get_view(),
+                    signatures,
+                    *commit,
+                    Some(0),
+                ))
+            }
         }
     }
 

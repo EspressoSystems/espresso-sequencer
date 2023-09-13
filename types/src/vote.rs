@@ -353,6 +353,7 @@ impl<
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
 {
     fn append(self, _vote: VOTE) -> Either<Self, AssembledSignature<TYPES>> {
+        todo!();
         either::Left(self)
     }
 }
