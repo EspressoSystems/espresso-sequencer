@@ -4,6 +4,7 @@ use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
 use crate::vote::QuorumVoteAccumulator;
 use crate::vote::ViewSyncVoteAccumulator;
+use crate::vote::VoteType;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
     traits::{
@@ -164,14 +165,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     type VoteAccumulator = QuorumVoteAccumulator<TYPES, LEAF, Self::Vote>;
 
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<LEAF>,
-        _relay: Option<u64>,
+        vote: Self::Vote
     ) -> Self {
         let qc = QuorumCertificate {
-            leaf_commitment: commit,
-            view_number,
+            // TODO ED Change this to getter functions
+            leaf_commitment: vote.get_data(),
+            view_number: vote.get_view(),
             signatures,
             is_genesis: false,
         };
@@ -237,15 +237,13 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
     type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::BlockType, Self::Vote>;
 
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<TYPES::BlockType>,
-        _relay: Option<u64>,
+        vote: Self::Vote
     ) -> Self {
         DACertificate {
-            view_number,
+            view_number: vote.get_view(),
             signatures,
-            block_commitment: commit,
+            block_commitment: vote.block_commitment,
         }
     }
 
@@ -328,14 +326,12 @@ impl<TYPES: NodeType>
     type VoteAccumulator = ViewSyncVoteAccumulator<TYPES, ViewSyncData<TYPES>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        _commit: Commitment<ViewSyncData<TYPES>>,
-        relay: Option<u64>,
+        vote: Self::Vote
     ) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
-            round: view_number,
-            relay: relay.unwrap(),
+            round: vote.get_view(),
+            relay: vote.relay,
             signatures: signatures.clone(),
         };
         match signatures {
