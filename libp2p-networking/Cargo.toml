@@ -34,6 +34,7 @@ custom_debug = { workspace = true }
 derive_builder = "0.12.0"
 either = { workspace = true }
 futures = { workspace = true }
+hotshot-constants = { path = "../constants" }
 hotshot-utils = { path = "../utils" }
 libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -41,7 +42,7 @@ libp2p-noise = { version = "0.43.0", default-features = false }
 parking_lot = "0.12.1"
 rand = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0.106"
+serde_json = "1.0.107"
 snafu = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
     "h1-server",
@@ -50,6 +51,7 @@ tide = { version = "0.16", optional = true, default-features = false, features =
 tokio-stream = "0.1.14"
 tracing = { workspace = true }
 void = "1.0.2"
+dashmap = "5.5.3"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 libp2p = { workspace = true, features = ["tokio"] }

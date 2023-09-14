@@ -19,7 +19,7 @@ use crate::{
     message::{ConsensusMessageType, Message, SequencingMessage},
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
-        storage::Storage, Block,
+        storage::Storage, BlockPayload,
     },
 };
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver, UnboundedSender};
@@ -166,7 +166,6 @@ pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSA
     /// Create all exchanges.
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         configs: Self::ElectionConfigs,
         networks: (
             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
@@ -184,7 +183,7 @@ pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSA
     /// Get the view sync exchange.
     fn view_sync_exchange(&self) -> &Self::ViewSyncExchange;
 
-    /// Block the underlying networking interfaces until node is successfully initialized into the
+    /// BlockPayload the underlying networking interfaces until node is successfully initialized into the
     /// networks.
     async fn wait_for_networks_ready(&self);
 
@@ -257,7 +256,6 @@ where
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         configs: Self::ElectionConfigs,
         networks: (
             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
@@ -270,7 +268,6 @@ where
     ) -> Self {
         let quorum_exchange = QUORUMEXCHANGE::create(
             entries.clone(),
-            keys.clone(),
             configs.0.clone(),
             networks.0,
             pk.clone(),
@@ -279,7 +276,6 @@ where
         );
         let view_sync_exchange = VIEWSYNCEXCHANGE::create(
             entries.clone(),
-            keys.clone(),
             configs.0,
             networks.2,
             pk.clone(),
@@ -287,7 +283,7 @@ where
             sk.clone(),
         );
         let committee_exchange =
-            COMMITTEEEXCHANGE::create(entries, keys, configs.1, networks.1, pk, entry, sk);
+            COMMITTEEEXCHANGE::create(entries, configs.1, networks.1, pk, entry, sk);
 
         Self {
             quorum_exchange,
@@ -363,7 +359,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         state: Option<&TYPES::StateType>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as Block>::Transaction;
+    ) -> <TYPES::BlockType as BlockPayload>::Transaction;
 
     /// Creates random transaction if possible
     /// otherwise panics
@@ -372,7 +368,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         leaf: &Self::Leaf,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as Block>::Transaction;
+    ) -> <TYPES::BlockType as BlockPayload>::Transaction;
 
     /// generate a genesis block
     fn block_genesis() -> TYPES::BlockType;
@@ -432,7 +428,7 @@ where
         state: Option<&TYPES::StateType>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as Block>::Transaction {
+    ) -> <TYPES::BlockType as BlockPayload>::Transaction {
         <TYPES::StateType as TestableState>::create_random_transaction(state, rng, padding)
     }
 
@@ -440,7 +436,7 @@ where
         leaf: &Self::Leaf,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as Block>::Transaction {
+    ) -> <TYPES::BlockType as BlockPayload>::Transaction {
         <Self::Leaf as TestableLeaf>::create_random_transaction(leaf, rng, padding)
     }
 
@@ -553,14 +549,14 @@ pub trait NodeType:
     /// The block type that this hotshot setup is using.
     ///
     /// This should be the same block that `StateType::BlockType` is using.
-    type BlockType: Block<Transaction = Self::Transaction>;
+    type BlockType: BlockPayload<Transaction = Self::Transaction>;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
     /// The vote token that this hotshot setup is using.
     type VoteTokenType: VoteToken;
     /// The transaction type that this hotshot setup is using.
     ///
-    /// This should be equal to `Block::Transaction`
+    /// This should be equal to `BlockPayload::Transaction`
     type Transaction: Transaction;
     /// The election config type that this hotshot setup is using.
     type ElectionConfigType: ElectionConfig;

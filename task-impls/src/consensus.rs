@@ -12,6 +12,7 @@ use commit::Committable;
 use core::time::Duration;
 use either::{Either, Left, Right};
 use futures::FutureExt;
+use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -32,7 +33,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteAccumulator, VoteType},
@@ -487,6 +488,18 @@ where
             self.cur_view = new_view;
             self.current_proposal = None;
 
+            // Poll the future leader for lookahead
+            let lookahead_view = new_view + LOOK_AHEAD;
+            if !self.quorum_exchange.is_leader(lookahead_view) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
+                        *lookahead_view,
+                        self.quorum_exchange.get_leader(lookahead_view),
+                    ))
+                    .await;
+            }
+
             // Start polling for proposals for the new view
             self.quorum_exchange
                 .network()
@@ -542,7 +555,7 @@ where
 
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
-                    error!("view too high");
+                    error!("view too high {:?}", proposal.data.clone());
                     return;
                 }
 
@@ -866,7 +879,8 @@ where
                                 "Attempting to publish proposal after voting; now in view: {}",
                                 *new_view
                             );
-                            self.publish_proposal_if_able(qc).await;
+                            self.publish_proposal_if_able(qc.clone(), qc.view_number + 1)
+                                .await;
                         }
                         if !self.vote_if_able().await {
                             // TOOD ED This means we publish the proposal without updating our own view, which doesn't seem right
@@ -1020,7 +1034,10 @@ where
                     *qc.view_number
                 );
 
-                if self.publish_proposal_if_able(qc.clone()).await {
+                if self
+                    .publish_proposal_if_able(qc.clone(), qc.view_number + 1)
+                    .await
+                {
                     self.update_view(qc.view_number + 1).await;
                 }
             }
@@ -1035,7 +1052,17 @@ where
                     self.update_view(view + 1).await;
                 }
             }
+            SequencingHotShotEvent::VidCertRecv(cert) => {
+                debug!("VID cert received for view ! {}", *cert.view_number);
 
+                let view = cert.view_number;
+                self.certs.insert(view, cert); // TODO new cert type for VID https://github.com/EspressoSystems/HotShot/issues/1701
+
+                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
+                if self.vote_if_able().await {
+                    self.update_view(view + 1).await;
+                }
+            }
             SequencingHotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1069,7 +1096,7 @@ where
                 let consensus = self.consensus.read().await;
                 let qc = consensus.high_qc.clone();
                 drop(consensus);
-                if !self.publish_proposal_if_able(qc).await {
+                if !self.publish_proposal_if_able(qc, self.cur_view).await {
                     error!(
                         "Failed to publish proposal on view change.  View = {:?}",
                         self.cur_view
@@ -1097,12 +1124,16 @@ where
     }
 
     /// Sends a proposal if possible from the high qc we have
-    pub async fn publish_proposal_if_able(&self, qc: QuorumCertificate<TYPES, I::Leaf>) -> bool {
+    pub async fn publish_proposal_if_able(
+        &self,
+        _qc: QuorumCertificate<TYPES, I::Leaf>,
+        view: TYPES::Time,
+    ) -> bool {
         // TODO ED This should not be qc view number + 1
-        if !self.quorum_exchange.is_leader(qc.view_number + 1) {
+        if !self.quorum_exchange.is_leader(view) {
             error!(
                 "Somehow we formed a QC but are not the leader for the next view {:?}",
-                qc.view_number + 1
+                view
             );
             return false;
         }
@@ -1161,11 +1192,11 @@ where
 
         let block_commitment = self.block.commit();
         if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("Block is generic block! {:?}", self.cur_view);
+            debug!("BlockPayload is generic block! {:?}", self.cur_view);
         }
 
         let leaf = SequencingLeaf {
-            view_number: *parent_view_number + 1,
+            view_number: view,
             height: parent_leaf.height + 1,
             justify_qc: consensus.high_qc.clone(),
             parent_commitment: parent_leaf.commit(),
@@ -1299,6 +1330,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::QuorumVoteRecv(_)
             | SequencingHotShotEvent::QCFormed(_)
             | SequencingHotShotEvent::DACRecv(_)
+            | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
             | SequencingHotShotEvent::SendDABlockData(_)
             | SequencingHotShotEvent::Timeout(_)

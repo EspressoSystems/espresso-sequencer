@@ -101,6 +101,9 @@ pub trait SignatureKey:
     /// get the stake table entry from the public key and stake value
     fn get_stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry;
 
+    /// only get the public key from the stake table entry
+    fn get_public_key(entry: &Self::StakeTableEntry) -> Self;
+
     /// get the public parameter for the assembled signature checking
     fn get_public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,

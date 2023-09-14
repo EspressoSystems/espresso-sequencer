@@ -39,8 +39,8 @@ pub async fn test_bed<S: 'static + Send + Default + Debug, F, FutF, G: Clone, Fu
 ) where
     FutF: Future<Output = ()>,
     FutG: Future<Output = Result<(), NetworkNodeHandleError>> + 'static + Send + Sync,
-    F: FnOnce(Vec<Arc<NetworkNodeHandle<S>>>, Duration) -> FutF,
-    G: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> FutG + 'static + Send + Sync,
+    F: FnOnce(Vec<Arc<NetworkNodeHandle<S, ()>>>, Duration) -> FutF,
+    G: Fn(NetworkEvent, Arc<NetworkNodeHandle<S, ()>>) -> FutG + 'static + Send + Sync,
 {
     setup_logging();
     setup_backtrace();
@@ -69,7 +69,7 @@ pub async fn test_bed<S: 'static + Send + Default + Debug, F, FutF, G: Clone, Fu
     }
 }
 
-fn gen_peerid_map<S>(handles: &[Arc<NetworkNodeHandle<S>>]) -> HashMap<PeerId, usize> {
+fn gen_peerid_map<S>(handles: &[Arc<NetworkNodeHandle<S, ()>>]) -> HashMap<PeerId, usize> {
     let mut r_val = HashMap::new();
     for handle in handles {
         r_val.insert(handle.peer_id(), handle.id());
@@ -79,7 +79,7 @@ fn gen_peerid_map<S>(handles: &[Arc<NetworkNodeHandle<S>>]) -> HashMap<PeerId, u
 
 /// print the connections for each handle in `handles`
 /// useful for debugging
-pub async fn print_connections<S>(handles: &[Arc<NetworkNodeHandle<S>>]) {
+pub async fn print_connections<S>(handles: &[Arc<NetworkNodeHandle<S, ()>>]) {
     let m = gen_peerid_map(handles);
     warn!("PRINTING CONNECTION STATES");
     for handle in handles.iter() {
@@ -104,7 +104,7 @@ pub async fn spin_up_swarms<S: Debug + Default>(
     num_of_nodes: usize,
     timeout_len: Duration,
     num_bootstrap: usize,
-) -> Result<Vec<Arc<NetworkNodeHandle<S>>>, TestError<S>> {
+) -> Result<Vec<Arc<NetworkNodeHandle<S, ()>>>, TestError<S>> {
     let mut handles = Vec::new();
     let mut bootstrap_addrs = Vec::<(PeerId, Multiaddr)>::new();
     let mut connecting_futs = Vec::new();

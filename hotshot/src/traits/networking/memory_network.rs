@@ -21,9 +21,8 @@ use hotshot_types::{
         election::Membership,
         metrics::{Metrics, NoMetrics},
         network::{
-            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, NetworkMsg,
-            TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
-            ViewMessage,
+            CommunicationChannel, ConnectedNetwork, NetworkMsg, TestableChannelImplementation,
+            TestableNetworkingImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -446,16 +445,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
         };
         boxed_sync(closure)
     }
-
-    #[instrument(name = "MemoryNetwork::lookup_node", skip_all)]
-    async fn lookup_node(&self, _pk: K) -> Result<(), NetworkError> {
-        // no lookup required
-        Ok(())
-    }
-
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
-    }
 }
 
 /// memory identity communication channel
@@ -568,14 +557,6 @@ where
     {
         let closure = async move { self.0.recv_msgs(transmit_type).await };
         boxed_sync(closure)
-    }
-
-    async fn lookup_node(&self, pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        self.0.lookup_node(pk).await
-    }
-
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
     }
 }
 

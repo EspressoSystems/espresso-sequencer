@@ -3,7 +3,7 @@
 //! This module provides the [`State`] trait, which serves as an compatibility over the current
 //! network state, which is modified by the transactions contained within blocks.
 
-use crate::traits::Block;
+use crate::traits::BlockPayload;
 use commit::Committable;
 use espresso_systems_common::hotshot::tag;
 use serde::{de::DeserializeOwned, Serialize};
@@ -19,7 +19,7 @@ use std::{
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
-///   * The type of block that modifies this type of state ([`Block`](State::BlockType))
+///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockType))
 ///   * A method to get a template (empty) next block from the current state
 ///     ([`next_block`](State::next_block))
 ///   * The ability to validate that a block is actually a valid extension of this state
@@ -42,7 +42,7 @@ pub trait State:
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
     /// The type of block this state is associated with
-    type BlockType: Block;
+    type BlockType: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
@@ -109,11 +109,11 @@ where
         state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as Block>::Transaction;
+    ) -> <Self::BlockType as BlockPayload>::Transaction;
 }
 
 /// extra functions required on block to be usable by hotshot-testing
-pub trait TestableBlock: Block + Debug {
+pub trait TestableBlock: BlockPayload + Debug {
     /// generate a genesis block
     fn genesis() -> Self;
 

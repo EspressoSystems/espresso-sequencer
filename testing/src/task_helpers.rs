@@ -6,14 +6,14 @@ use commit::Committable;
 use either::Right;
 use hotshot::{
     certificate::QuorumCertificate,
-    traits::{Block, NodeImplementation, TestableNodeImplementation},
+    traits::{BlockPayload, NodeImplementation, TestableNodeImplementation},
     types::{bn254::BN254Pub, SignatureKey, SystemContextHandle},
     HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
-    data::{QuorumProposal, SequencingLeaf, ViewNumber},
+    data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
         consensus_api::ConsensusSharedApi,
@@ -47,7 +47,6 @@ pub async fn build_system_handle(
     >>::block_genesis())
     .unwrap();
 
-    let known_nodes = config.known_nodes.clone();
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = <BN254Pub as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
     let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
@@ -67,7 +66,6 @@ pub async fn build_system_handle(
     let exchanges =
         <SequencingMemoryImpl as NodeImplementation<SequencingTestTypes>>::Exchanges::create(
             known_nodes_with_stake.clone(),
-            known_nodes.clone(),
             (quorum_election_config, committee_election_config),
             networks,
             public_key,
@@ -162,4 +160,11 @@ pub fn key_pair_for_id(node_id: u64) -> (<BN254Pub as SignatureKey>::PrivateKey,
     let private_key = <BN254Pub as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
     let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
     (private_key, public_key)
+}
+
+pub fn vid_init() -> VidScheme {
+    const NUM_STORAGE_NODES: usize = 10;
+    const NUM_CHUNKS: usize = 5;
+    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
+    VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap()
 }

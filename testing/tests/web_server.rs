@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use async_compatibility_layer::logging::shutdown_logging;
 use hotshot_testing::{
+    completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     node_types::{SequencingTestTypes, SequencingWebImpl},
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::{TestMetadata, TimingData},
@@ -28,6 +31,12 @@ async fn web_server_network() {
             num_successful_views: 35,
             ..Default::default()
         },
+        // allow more time to pass in CI
+        completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+            TimeBasedCompletionTaskDescription {
+                duration: Duration::from_millis(1_200_000),
+            },
+        ),
         ..TestMetadata::default()
     };
     metadata

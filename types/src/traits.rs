@@ -11,5 +11,5 @@ pub mod stake_table;
 pub mod state;
 pub mod storage;
 
-pub use block_contents::Block;
+pub use block_contents::BlockPayload;
 pub use state::State;

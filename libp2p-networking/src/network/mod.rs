@@ -34,7 +34,7 @@ use libp2p::{
 use libp2p_identity::PeerId;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, str::FromStr, sync::Arc, time::Duration};
 use tracing::{info, instrument};
 
 #[cfg(async_executor_impl = "async-std")]
@@ -229,12 +229,12 @@ pub async fn gen_transport(
 /// a single node, connects them to each other
 /// and waits for connections to propagate to all nodes.
 #[instrument]
-pub async fn spin_up_swarm<S: Debug + Default>(
+pub async fn spin_up_swarm<S: Debug + Default, K: Debug + Eq + Hash + Serialize + Clone>(
     timeout_len: Duration,
     known_nodes: Vec<(Option<PeerId>, Multiaddr)>,
     config: NetworkNodeConfig,
     idx: usize,
-    handle: &Arc<NetworkNodeHandle<S>>,
+    handle: &Arc<NetworkNodeHandle<S, K>>,
 ) -> Result<(), NetworkNodeHandleError> {
     info!("known_nodes{:?}", known_nodes);
     handle.add_known_peers(known_nodes).await?;
@@ -248,9 +248,9 @@ pub async fn spin_up_swarm<S: Debug + Default>(
 /// chooses one
 /// # Panics
 /// panics if handles is of length 0
-pub fn get_random_handle<S>(
-    handles: &[Arc<NetworkNodeHandle<S>>],
+pub fn get_random_handle<S, K: Debug + Eq + Hash + Serialize + Clone>(
+    handles: &[Arc<NetworkNodeHandle<S, K>>],
     rng: &mut dyn rand::RngCore,
-) -> Arc<NetworkNodeHandle<S>> {
+) -> Arc<NetworkNodeHandle<S, K>> {
     handles.iter().choose(rng).unwrap().clone()
 }

@@ -134,6 +134,12 @@ impl SignatureKey for BN254Pub {
         }
     }
 
+    fn get_public_key(entry: &Self::StakeTableEntry) -> Self {
+        Self {
+            pub_key: entry.stake_key,
+        }
+    }
+
     fn get_public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
