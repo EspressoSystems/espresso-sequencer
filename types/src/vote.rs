@@ -628,20 +628,33 @@ impl<
             .entry(vote_commitment)
             .or_insert_with(|| (0, BTreeMap::new()));
 
+        // Check for duplicate vote
+        if pre_commit_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
+
         let (commit_stake_casted, commit_vote_map) = self
             .commit_vote_outcomes
             .entry(vote_commitment)
             .or_insert_with(|| (0, BTreeMap::new()));
+
+        if commit_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
 
         let (finalize_stake_casted, finalize_vote_map) = self
             .finalize_vote_outcomes
             .entry(vote_commitment)
             .or_insert_with(|| (0, BTreeMap::new()));
 
+        if finalize_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
+
         // update the active_keys and sig_lists
         // TODO ED Possible bug where a node sends precommit vote and then commit vote after
         // precommit cert is formed, their commit vote won't be counted because of this check
-        // Probably need separate signers vecs. 
+        // Probably need separate signers vecs.
         if self.signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("node id already in signers");
             return Either::Left(self);
@@ -885,6 +898,7 @@ where
         // update the active_keys and sig_lists
         if self.signers.get(node_id).as_deref() == Some(&true) {
             error!("node id already in signers");
+            panic!();
             return Either::Left(self);
         }
         self.signers.set(node_id, true);
