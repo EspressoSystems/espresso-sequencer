@@ -41,9 +41,8 @@ use hotshot_types::{
     HotShotConfig,
 };
 
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::BLSSignatureScheme,
+use jf_primitives::merkle_tree::{
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -221,7 +220,6 @@ pub type Membership = GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>;
 pub type Storage = MemoryStorage<SeqTypes, Leaf>;
 pub type Event = hotshot::types::Event<SeqTypes, Leaf>;
 
-pub type SignatureSchemeType = BLSSignatureScheme;
 pub type SignatureKeyType = BN254Pub;
 type ElectionConfig = StaticElectionConfig;
 
