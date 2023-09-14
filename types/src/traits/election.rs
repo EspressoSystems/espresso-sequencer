@@ -201,12 +201,12 @@ where
     }
 
     /// Build a QC from the threshold signature and commitment
-    // TODO ED Rename this function
+    // TODO ED Rename this function and rework this function parameters
+    // Assumes last vote was valid since it caused a QC to form. 
+    // Removes need for relay on other cert specific fields 
     fn from_signatures_and_commitment(
-        view_number: TIME,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<COMMITTABLE>,
-        relay: Option<u64>,
+        vote: Self::Vote
     ) -> Self;
 
     /// Get the view number.
@@ -216,6 +216,7 @@ where
     fn signatures(&self) -> AssembledSignature<TYPES>;
 
     // TODO (da) the following functions should be refactored into a QC-specific trait.
+    // TODO ED Make an issue for this 
 
     /// Get the leaf commitment.
     fn leaf_commitment(&self) -> Commitment<COMMITTABLE>;
