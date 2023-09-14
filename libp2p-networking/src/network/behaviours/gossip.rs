@@ -4,13 +4,13 @@ use std::{
 };
 
 use libp2p::{
-    gossipsub::{Behaviour, Event, IdentTopic, TopicHash},
+    gossipsub::{Behaviour, Event, IdentTopic, PublishError::Duplicate, TopicHash},
     swarm::{NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
 
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use super::exponential_backoff::ExponentialBackoff;
 
@@ -214,8 +214,12 @@ impl GossipBehaviour {
     /// Publish a given gossip
     pub fn publish_gossip(&mut self, topic: IdentTopic, contents: Vec<u8>) {
         let res = self.gossipsub.publish(topic.clone(), contents.clone());
-        if res.is_err() {
-            error!("error publishing gossip message {:?}", res);
+        if let Err(e) = res {
+            if matches!(e, Duplicate) {
+                debug!("duplicate gossip message");
+            } else {
+                error!("error publishing gossip message {:?}", e);
+            }
             self.in_progress_gossip.push_back((topic, contents));
         }
     }

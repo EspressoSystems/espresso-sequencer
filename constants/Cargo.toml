@@ -1,0 +1,5 @@
+[package]
+name = "hotshot-constants"
+version.workspace = true
+
+[dependencies]

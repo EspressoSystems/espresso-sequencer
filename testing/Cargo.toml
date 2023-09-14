@@ -41,6 +41,7 @@ bitvec = { workspace = true }
 
 [dev-dependencies]
 async-lock = { workspace = true }
+bincode = { workspace = true }    # GG any better options for serialization?
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
