@@ -73,18 +73,19 @@ async fn test_network_task() {
     let mut output = HashMap::new();
 
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(SequencingHotShotEvent::DAProposalSend(
-        da_proposal.clone(),
-        pub_key,
-    ));
-    input.push(SequencingHotShotEvent::VidDisperseSend(
-        da_vid_disperse.clone(),
-        pub_key,
-    ));
-    input.push(SequencingHotShotEvent::QuorumProposalSend(
-        quorum_proposal.clone(),
-        pub_key,
-    ));
+    input.push(SequencingHotShotEvent::BlockReady(block.clone()));
+    // input.push(SequencingHotShotEvent::DAProposalSend(
+    //     da_proposal.clone(),
+    //     pub_key,
+    // ));
+    // input.push(SequencingHotShotEvent::VidDisperseSend(
+    //     da_vid_disperse.clone(),
+    //     pub_key,
+    // ));
+    // input.push(SequencingHotShotEvent::QuorumProposalSend(
+    //     quorum_proposal.clone(),
+    //     pub_key,
+    // ));
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(SequencingHotShotEvent::Shutdown);
 
@@ -92,6 +93,11 @@ async fn test_network_task() {
     output.insert(
         SequencingHotShotEvent::DAProposalSend(da_proposal.clone(), pub_key),
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
+    );
+    output.insert(SequencingHotShotEvent::BlockReady(block.clone()), 2);
+    output.insert(
+        SequencingHotShotEvent::VidDisperseRecv(da_vid_disperse.clone(), pub_key),
+        1,
     );
     output.insert(
         SequencingHotShotEvent::VidDisperseSend(da_vid_disperse, pub_key),
@@ -102,6 +108,8 @@ async fn test_network_task() {
     // view number check in `publish_proposal_if_able` in consensus.rs, and we will see an error in
     // logging, but that is fine for testing as long as the network task is correctly handling
     // events.
+    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(1)), 1);
+    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(2)), 1);
     output.insert(
         SequencingHotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,

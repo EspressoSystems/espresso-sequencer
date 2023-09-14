@@ -36,7 +36,7 @@ use crate::{
     certificate::QuorumCertificate,
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
-        add_view_sync_task,
+        add_transaction_task, add_view_sync_task,
     },
     traits::{NodeImplementation, Storage},
     types::{Event, SystemContextHandle},
@@ -764,6 +764,13 @@ where
         )
         .await;
         let task_runner = add_da_task(
+            task_runner,
+            internal_event_stream.clone(),
+            committee_exchange.clone(),
+            handle.clone(),
+        )
+        .await;
+        let task_runner = add_transaction_task(
             task_runner,
             internal_event_stream.clone(),
             committee_exchange.clone(),

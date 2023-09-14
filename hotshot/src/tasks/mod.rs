@@ -17,12 +17,12 @@ use hotshot_task::{
 use hotshot_task_impls::{
     consensus::{consensus_event_filter, ConsensusTaskTypes, SequencingConsensusTaskState},
     da::{DATaskState, DATaskTypes},
-    transactions::{TransactionTaskState, TransactionsTaskTypes},
     events::SequencingHotShotEvent,
     network::{
         NetworkEventTaskState, NetworkEventTaskTypes, NetworkMessageTaskState,
         NetworkMessageTaskTypes, NetworkTaskKind,
     },
+    transactions::{TransactionTaskState, TransactionsTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
@@ -408,7 +408,6 @@ where
     task_runner.add_task(da_task_id, da_name.to_string(), da_task)
 }
 
-
 /// add the Transaction Handling task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
@@ -448,7 +447,12 @@ where
         id: handle.hotshot.inner.id,
     };
     let transactions_event_handler = HandleEvent(Arc::new(
-        move |event, mut state: TransactionTaskState<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>| {
+        move |event,
+              mut state: TransactionTaskState<
+            TYPES,
+            I,
+            HotShotSequencingConsensusApi<TYPES, I>,
+        >| {
             async move {
                 let completion_status = state.handle_event(event).await;
                 (completion_status, state)

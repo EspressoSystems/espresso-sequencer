@@ -1,12 +1,10 @@
 use crate::events::SequencingHotShotEvent;
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
-    async_primitives::subscribable_rwlock::ReadView,
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use bincode::Options;
 use bitvec::prelude::*;
 use commit::Committable;
 use core::time::Duration;

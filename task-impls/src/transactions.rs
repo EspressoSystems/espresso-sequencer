@@ -13,33 +13,29 @@ use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
     task::{HotShotTaskCompleted, TS},
-    task_impls::{HSTWithEvent},
+    task_impls::HSTWithEvent,
 };
 use hotshot_types::{
     certificate::DACertificate,
-    consensus::{Consensus},
-    data::{SequencingLeaf},
+    consensus::Consensus,
+    data::SequencingLeaf,
     message::{Message, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
-        election::{ConsensusExchange},
+        election::ConsensusExchange,
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         Block, State,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
-use std::{
-    collections::HashSet,
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashSet, sync::Arc, time::Instant};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
 pub struct ConsensusTaskError {}
- 
+
 /// Tracks state of a DA task
 pub struct TransactionTaskState<
     TYPES: NodeType,
@@ -78,7 +74,6 @@ pub struct TransactionTaskState<
     /// This state's ID
     pub id: u64,
 }
-
 
 impl<
         TYPES: NodeType,
@@ -165,9 +160,8 @@ where
                             .filter(|(txn_hash, txn)| {
                                 if included_txns.contains(txn_hash) {
                                     included_txn_count += 1;
-                                    included_txn_size += bincode_opts()
-                                        .serialized_size(txn)
-                                        .unwrap_or_default();
+                                    included_txn_size +=
+                                        bincode_opts().serialized_size(txn).unwrap_or_default();
                                     false
                                 } else {
                                     true
@@ -186,7 +180,6 @@ where
                     .outstanding_transactions_memory_size
                     .update(-(i64::try_from(included_txn_size).unwrap_or(i64::MAX)));
                 return None;
-                
             }
             SequencingHotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
@@ -203,7 +196,6 @@ where
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
-
 
                 // ED Copy of parent_leaf() function from sequencing leader
 
@@ -242,7 +234,9 @@ where
                         continue;
                     }
                 }
-                self.event_stream.publish(SequencingHotShotEvent::BlockReady(block)).await;
+                self.event_stream
+                    .publish(SequencingHotShotEvent::BlockReady(block))
+                    .await;
                 return None;
             }
             SequencingHotShotEvent::Shutdown => {
