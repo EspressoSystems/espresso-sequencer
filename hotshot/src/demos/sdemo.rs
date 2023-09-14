@@ -236,13 +236,6 @@ impl BlockPayload for SDemoBlock {
                 .collect(),
         }
     }
-
-    fn commitment(&self) -> VidResult<Commitment<Self>> {
-        // TODO: Get the payload commitment after VID integration.
-        // <https://github.com/EspressoSystems/HotShot/issues/1673>
-        // <https://github.com/EspressoSystems/jellyfish/issues/369>
-        unimplemented!();
-    }
 }
 
 impl State for SDemoState {

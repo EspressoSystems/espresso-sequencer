@@ -58,14 +58,6 @@ pub trait BlockPayload:
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
-
-    /// Compute the VID payload commitment.
-    ///
-    /// # Errors
-    /// - `VidResult::Err` in case of actual error.
-    /// - `VidResult::Ok(Result::Err)` if verification fails.
-    /// - `VidResult::Ok(Result::Ok)` if verification succeeds.
-    fn commitment(&self) -> VidResult<Commitment<Self>>;
 }
 
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
@@ -158,13 +150,6 @@ pub mod dummy {
 
         fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()
-        }
-
-        fn commitment(&self) -> VidResult<Commitment<Self>> {
-            // TODO: Get the payload commitment after VID integration.
-            // <https://github.com/EspressoSystems/HotShot/issues/1673>
-            // <https://github.com/EspressoSystems/jellyfish/issues/369>
-            unimplemented!();
         }
     }
 
