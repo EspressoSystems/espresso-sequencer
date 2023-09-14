@@ -487,7 +487,12 @@ where
             // }
             self.cur_view = new_view;
             self.current_proposal = None;
-
+            if new_view == TYPES::Time::new(1) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+                    .await;
+            }
             // Start polling for proposals for the new view
             self.quorum_exchange
                 .network()

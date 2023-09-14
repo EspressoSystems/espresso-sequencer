@@ -33,6 +33,8 @@ struct WebServerState<KEY> {
     da_certificates: HashMap<u64, (String, Vec<u8>)>,
     /// view for oldest proposals in memory
     oldest_proposal: u64,
+    /// view for the most recent proposal to help nodes catchup
+    recent_proposal: u64,
     /// view for teh oldest DA certificate
     oldest_certificate: u64,
 
@@ -74,6 +76,7 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             num_txns: 0,
             oldest_vote: 0,
             oldest_proposal: 0,
+            recent_proposal: 0,
             oldest_certificate: 0,
             shutdown: None,
             stake_table: Vec::new(),
@@ -101,6 +104,7 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
 /// Trait defining methods needed for the `WebServerState`
 pub trait WebServerDataSource<KEY> {
     fn get_proposal(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
     fn get_view_sync_proposal(
         &self,
         view_number: u64,
@@ -154,6 +158,10 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 message: format!("Proposal not found for view {view_number}"),
             }),
         }
+    }
+
+    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_proposal(self.recent_proposal)
     }
 
     fn get_view_sync_proposal(
@@ -315,6 +323,10 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     /// Stores a received proposal in the `WebServerState`
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
         debug!("Received proposal for view {}", view_number);
+
+        if view_number > self.recent_proposal {
+            self.recent_proposal = view_number;
+        }
 
         // Only keep proposal history for MAX_VIEWS number of view
         if self.proposals.len() >= MAX_VIEWS {
@@ -493,6 +505,9 @@ where
             state.get_proposal(view_number)
         }
         .boxed()
+    })?
+    .get("getrecentproposal", |_req, state| {
+        async move { state.get_recent_proposal() }.boxed()
     })?
     .get("getviewsyncproposal", |req, state| {
         async move {

@@ -161,6 +161,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
         while self.running.load(Ordering::Relaxed) {
             let endpoint = match message_purpose {
                 MessagePurpose::Proposal => config::get_proposal_route(view_number),
+                MessagePurpose::CurrentProposal => config::get_recent_proposal_route(),
                 MessagePurpose::Vote => config::get_vote_route(view_number, vote_index),
                 MessagePurpose::Data => config::get_transactions_route(tx_index),
                 MessagePurpose::Internal => unimplemented!(),
@@ -220,6 +221,15 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                 //         error!("Proposal receiver error!  It was likely shutdown")
                                 //     }
                                 // }
+                            }
+                            MessagePurpose::CurrentProposal => {
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
                             }
                             MessagePurpose::Vote => {
                                 // error!(
@@ -498,6 +508,7 @@ impl<
 
         let endpoint = match &message.purpose() {
             MessagePurpose::Proposal => config::post_proposal_route(*view_number),
+            MessagePurpose::CurrentProposal => return Err(WebServerNetworkError::EndpointError),
             MessagePurpose::Vote => config::post_vote_route(*view_number),
             MessagePurpose::Data => config::post_transactions_route(),
             MessagePurpose::Internal => return Err(WebServerNetworkError::EndpointError),
@@ -782,6 +793,25 @@ impl<
                         ))
                         .await;
                 }
+            }
+            ConsensusIntentEvent::PollForCurrentProposal => {
+                // create new task
+                let (_, receiver) = unbounded();
+
+                async_spawn({
+                    let inner_clone = self.inner.clone();
+                    async move {
+                        if let Err(e) = inner_clone
+                            .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
+                            .await
+                        {
+                            error!(
+                                "Background receive proposal polling encountered an error: {:?}",
+                                e
+                            );
+                        }
+                    }
+                });
             }
             ConsensusIntentEvent::PollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;

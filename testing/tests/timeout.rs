@@ -30,7 +30,7 @@ async fn test_timeout() {
     metadata.timing_data = timing_data;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
+        node_changes: vec![(Duration::new(0, 5000), dead_nodes)],
     };
 
     // TODO ED Add safety task, etc to confirm TCs are being formed

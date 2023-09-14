@@ -57,6 +57,8 @@ pub struct Messages<TYPES: NodeType, I: NodeImplementation<TYPES>>(pub Vec<Messa
 pub enum MessagePurpose {
     /// Message with a quorum proposal.
     Proposal,
+    /// Message with most recent proposal the server has
+    CurrentProposal,
     /// Message with a quorum vote.
     Vote,
     /// Message with a view sync vote.
