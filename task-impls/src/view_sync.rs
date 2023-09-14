@@ -1015,7 +1015,7 @@ where
                 let accumulator = self.exchange.accumulate_vote_2(
                     self.accumulator.left().unwrap(),
                     &vote,
-                    &vote_data,
+                    &view_sync_data,
                 );
 
                 self.accumulator = match accumulator {
@@ -1027,7 +1027,6 @@ where
                             data: certificate.clone(),
                             signature,
                         };
-                        // error!("Sending view sync cert {:?}", message.clone());
                         self.event_stream
                             .publish(SequencingHotShotEvent::ViewSyncCertificateSend(
                                 message,

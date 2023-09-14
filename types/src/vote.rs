@@ -604,7 +604,128 @@ impl<
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        todo!()
+        let vote_commitment = match vote.get_data() {
+            VoteData::ViewSyncPreCommit(commitment)
+            | VoteData::ViewSyncCommit(commitment)
+            | VoteData::ViewSyncFinalize(commitment) => commitment,
+
+            _ => return Either::Left(self),
+        };
+
+        error!("Vote is {:?}", vote.clone());
+
+        let encoded_key = vote.get_key().to_bytes();
+
+        // Deserialize the signature so that it can be assembeld into a QC
+        // TODO ED Update this once we've gotten rid of EncodedSignature
+        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+            bincode_opts()
+                .deserialize(&vote.get_signature().0)
+                .expect("Deserialization on the signature shouldn't be able to fail.");
+
+        let (pre_commit_stake_casted, pre_commit_vote_map) = self
+            .pre_commit_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        let (commit_stake_casted, commit_vote_map) = self
+            .commit_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        let (finalize_stake_casted, finalize_vote_map) = self
+            .finalize_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        // update the active_keys and sig_lists
+        // TODO ED Possible bug where a node sends precommit vote and then commit vote after
+        // precommit cert is formed, their commit vote won't be counted because of this check
+        // Probably need separate signers vecs. 
+        if self.signers.get(vote_node_id).as_deref() == Some(&true) {
+            error!("node id already in signers");
+            return Either::Left(self);
+        }
+        self.signers.set(vote_node_id, true);
+        self.sig_lists.push(original_signature);
+
+        match vote.get_data() {
+            VoteData::ViewSyncPreCommit(_) => {
+                *pre_commit_stake_casted += u64::from(vote.get_vote_token().vote_count());
+                pre_commit_vote_map.insert(
+                    encoded_key,
+                    (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+                );
+            }
+            VoteData::ViewSyncCommit(_) => {
+                *commit_stake_casted += u64::from(vote.get_vote_token().vote_count());
+                commit_vote_map.insert(
+                    encoded_key,
+                    (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+                );
+            }
+            VoteData::ViewSyncFinalize(_) => {
+                *finalize_stake_casted += u64::from(vote.get_vote_token().vote_count());
+                finalize_vote_map.insert(
+                    encoded_key,
+                    (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+                );
+            }
+            _ => unimplemented!(),
+        }
+
+        if *pre_commit_stake_casted >= u64::from(self.failure_threshold) {
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                stake_table_entries,
+                U256::from(self.failure_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+
+            self.pre_commit_vote_outcomes
+                .remove(&vote_commitment)
+                .unwrap();
+            return Either::Right(AssembledSignature::ViewSyncPreCommit(real_qc_sig));
+        }
+
+        if *commit_stake_casted >= u64::from(self.success_threshold) {
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                stake_table_entries.clone(),
+                U256::from(self.success_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+            self.commit_vote_outcomes.remove(&vote_commitment).unwrap();
+            return Either::Right(AssembledSignature::ViewSyncCommit(real_qc_sig));
+        }
+
+        if *finalize_stake_casted >= u64::from(self.success_threshold) {
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                stake_table_entries.clone(),
+                U256::from(self.success_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+            // TODO ED Why remove?
+            self.finalize_vote_outcomes
+                .remove(&vote_commitment)
+                .unwrap();
+            return Either::Right(AssembledSignature::ViewSyncFinalize(real_qc_sig));
+        }
+
+        Either::Left(self)
     }
 }
 
