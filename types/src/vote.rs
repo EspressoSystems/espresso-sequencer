@@ -221,7 +221,6 @@ impl<TYPES: NodeType> DAVote<TYPES> {
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    #[deprecated]
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
     }
@@ -259,7 +258,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> {
     /// Get the encoded signature.
-    #[deprecated]
+
     pub fn signature(&self) -> EncodedSignature {
         match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.1.clone(),
@@ -269,7 +268,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     /// Get the signature key.
     /// # Panics
     /// If the deserialization fails.
-    #[deprecated]
+
     pub fn signature_key(&self) -> TYPES::SignatureKey {
         let encoded = match &self {
             Self::Yes(vote) | Self::No(vote) => vote.signature.0.clone(),
@@ -567,7 +566,7 @@ pub struct ViewSyncVoteAccumulator<
     COMMITTABLE: Committable + Serialize + Clone,
     VOTE: VoteType<TYPES, COMMITTABLE>,
 > {
-    /// Map of all da signatures accumlated so far
+    /// Map of all pre_commit signatures accumlated so far
     pub pre_commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
     pub commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
     pub finalize_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
@@ -590,18 +589,18 @@ impl<
         VOTE: VoteType<TYPES, COMMITTABLE>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
+    #[allow(clippy::too_many_lines)]
     fn append(
         mut self,
         vote: VOTE,
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        let vote_commitment = match vote.get_data() {
-            VoteData::ViewSyncPreCommit(commitment)
-            | VoteData::ViewSyncCommit(commitment)
-            | VoteData::ViewSyncFinalize(commitment) => commitment,
-
-            _ => return Either::Left(self),
+        let (VoteData::ViewSyncPreCommit(vote_commitment)
+        | VoteData::ViewSyncCommit(vote_commitment)
+        | VoteData::ViewSyncFinalize(vote_commitment)) = vote.get_data()
+        else {
+            return Either::Left(self);
         };
 
         // error!("Vote is {:?}", vote.clone());
@@ -734,7 +733,6 @@ impl<
 }
 
 /// Placeholder accumulator; will be replaced by accumulator for each certificate type
-#[deprecated]
 pub struct AccumulatorPlaceholder<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
@@ -888,7 +886,6 @@ where
         // update the active_keys and sig_lists
         if self.signers.get(node_id).as_deref() == Some(&true) {
             error!("node id already in signers");
-            panic!();
             return Either::Left(self);
         }
         self.signers.set(node_id, true);

@@ -29,8 +29,8 @@ use crate::{
         state::ConsensusTime,
     },
     vote::{
-        Accumulator, DAVote, QuorumVote, TimeoutVote, ViewSyncData, ViewSyncVote, VoteAccumulator,
-        VoteType, YesOrNoVote,
+        DAVote, QuorumVote, TimeoutVote, ViewSyncData, ViewSyncVote, VoteAccumulator, VoteType,
+        YesOrNoVote,
     },
 };
 use bincode::Options;
@@ -505,7 +505,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             TYPES::VoteTokenType,
             Self::Commitment,
         >>::Vote,
-        commit: &Commitment<Self::Commitment>,
+        _commit: &Commitment<Self::Commitment>,
     ) -> Either<
         <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
             TYPES,
