@@ -74,7 +74,7 @@
           in
           import ./cross-shell.nix { 
             inherit pkgs; 
-            RUSTFLAGS = "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+            RUSTFLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
           };
       in
       with pkgs;
