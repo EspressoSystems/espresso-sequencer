@@ -800,47 +800,10 @@ where
                         }
                         #[allow(clippy::cast_precision_loss)]
                         if new_decide_reached {
-                            let mut included_txn_size = 0;
-                            let mut included_txn_count = 0;
-                            let txns = consensus.transactions.cloned().await;
-                            // store transactions in this block we never added to our transactions.
-                            let _ = included_txns_set.iter().map(|hash| {
-                                if !txns.contains_key(hash) {
-                                    consensus.seen_transactions.insert(*hash);
-                                }
-                            });
-                            drop(txns);
-                            consensus
-                                .transactions
-                                .modify(|txns| {
-                                    *txns = txns
-                                        .drain()
-                                        .filter(|(txn_hash, txn)| {
-                                            if included_txns_set.contains(txn_hash) {
-                                                included_txn_count += 1;
-                                                included_txn_size += bincode_opts()
-                                                    .serialized_size(txn)
-                                                    .unwrap_or_default();
-                                                false
-                                            } else {
-                                                true
-                                            }
-                                        })
-                                        .collect();
-                                })
-                                .await;
-
-                            consensus
-                                .metrics
-                                .outstanding_transactions
-                                .update(-included_txn_count);
-                            consensus
-                                .metrics
-                                .outstanding_transactions_memory_size
-                                .update(-(i64::try_from(included_txn_size).unwrap_or(i64::MAX)));
-
                             debug!("about to publish decide");
-                            self.event_stream.publish(SequencingHotShotEvent::LeafDecided(leaf_views.clone())).await;
+                            self.event_stream
+                                .publish(SequencingHotShotEvent::LeafDecided(leaf_views.clone()))
+                                .await;
                             let decide_sent = self.output_event_stream.publish(Event {
                                 view_number: consensus.last_decided_view,
                                 event: EventType::Decide {

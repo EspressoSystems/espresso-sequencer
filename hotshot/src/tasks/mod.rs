@@ -17,6 +17,7 @@ use hotshot_task::{
 use hotshot_task_impls::{
     consensus::{consensus_event_filter, ConsensusTaskTypes, SequencingConsensusTaskState},
     da::{DATaskState, DATaskTypes},
+    transactions::{TransactionTaskState, TransactionsTaskTypes},
     events::SequencingHotShotEvent,
     network::{
         NetworkEventTaskState, NetworkEventTaskTypes, NetworkMessageTaskState,
@@ -407,6 +408,74 @@ where
     task_runner.add_task(da_task_id, da_name.to_string(), da_task)
 }
 
+
+/// add the Transaction Handling task
+/// # Panics
+/// Is unable to panic. This section here is just to satisfy clippy
+pub async fn add_transaction_task<
+    TYPES: NodeType,
+    I: NodeImplementation<
+        TYPES,
+        Leaf = SequencingLeaf<TYPES>,
+        ConsensusMessage = SequencingMessage<TYPES, I>,
+    >,
+>(
+    task_runner: TaskRunner,
+    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    committee_exchange: CommitteeEx<TYPES, I>,
+    handle: SystemContextHandle<TYPES, I>,
+) -> TaskRunner
+where
+    CommitteeEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Certificate = DACertificate<TYPES>,
+        Commitment = TYPES::BlockType,
+    >,
+{
+    // build the da task
+    let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let registry = task_runner.registry.clone();
+    let transactions_state = TransactionTaskState {
+        registry: registry.clone(),
+        api: c_api.clone(),
+        consensus: handle.hotshot.get_consensus(),
+        cur_view: TYPES::Time::new(0),
+        committee_exchange: committee_exchange.into(),
+        event_stream: event_stream.clone(),
+        id: handle.hotshot.inner.id,
+    };
+    let transactions_event_handler = HandleEvent(Arc::new(
+        move |event, mut state: TransactionTaskState<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>| {
+            async move {
+                let completion_status = state.handle_event(event).await;
+                (completion_status, state)
+            }
+            .boxed()
+        },
+    ));
+    let transactions_name = "Transactions Task";
+    let transactions_event_filter = FilterEvent(Arc::new(
+        TransactionTaskState::<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>::filter,
+    ));
+
+    let transactions_task_builder = TaskBuilder::<
+        TransactionsTaskTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
+    >::new(transactions_name.to_string())
+    .register_event_stream(event_stream.clone(), transactions_event_filter)
+    .await
+    .register_registry(&mut registry.clone())
+    .await
+    .register_state(transactions_state)
+    .register_event_handler(transactions_event_handler);
+    // impossible for unwrap to fail
+    // we *just* registered
+    let da_task_id = transactions_task_builder.get_task_id().unwrap();
+    let da_task = TransactionsTaskTypes::build(transactions_task_builder).launch();
+    task_runner.add_task(da_task_id, transactions_name.to_string(), da_task)
+}
 /// add the view sync task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
