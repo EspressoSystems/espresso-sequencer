@@ -1,6 +1,6 @@
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
-    data::DAProposal,
+    data::{DAProposal, VidDisperse},
     message::Proposal,
     traits::node_implementation::{
         NodeImplementation, NodeType, QuorumProposalType, ViewSyncProposalType,
@@ -66,4 +66,28 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     BlockReady(TYPES::BlockType),
     /// Event when consensus decided on a leaf
     LeafDecided(Vec<I::Leaf>),
+    /// Send VID shares to VID storage nodes; emitted by the DA leader
+    ///
+    /// Like [`DAProposalSend`].
+    VidDisperseSend(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Vid disperse data has been received from the network; handled by the DA task
+    ///
+    /// Like [`DAProposalRecv`].
+    VidDisperseRecv(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
+    ///
+    /// Like [`DAVoteSend`]
+    VidVoteSend(DAVote<TYPES>),
+    /// A VID vote has been received by the network; handled by the DA task
+    ///
+    /// Like [`DAVoteRecv`]
+    VidVoteRecv(DAVote<TYPES>),
+    /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
+    ///
+    /// Like [`DACSend`]
+    VidCertSend(DACertificate<TYPES>, TYPES::SignatureKey),
+    /// A VID cert has been recieved by the network; handled by the consensus task
+    ///
+    /// Like [`DACRecv`]
+    VidCertRecv(DACertificate<TYPES>),
 }

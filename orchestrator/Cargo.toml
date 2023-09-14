@@ -23,7 +23,8 @@ tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0.96"
 snafu = { workspace = true }
-toml = "0.5.9" # TODO GG upgrade to toml = { workspace = true }
+# TODO upgrade to toml = { workspace = true } https://github.com/EspressoSystems/HotShot/issues/1698
+toml = "0.5.9"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

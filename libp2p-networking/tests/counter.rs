@@ -12,7 +12,7 @@ use libp2p_networking::network::{
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{fmt::Debug, sync::Arc, time::Duration};
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;
@@ -56,7 +56,7 @@ pub enum CounterMessage {
 #[instrument]
 pub async fn counter_handle_network_event(
     event: NetworkEvent,
-    handle: Arc<NetworkNodeHandle<CounterState>>,
+    handle: Arc<NetworkNodeHandle<CounterState, ()>>,
 ) -> Result<(), NetworkNodeHandleError> {
     use CounterMessage::*;
     use NetworkEvent::*;
@@ -121,8 +121,8 @@ pub async fn counter_handle_network_event(
 /// `requester_handle` asks for `requestee_handle`'s state,
 /// and then `requester_handle` updates its state to equal `requestee_handle`.
 async fn run_request_response_increment<'a>(
-    requester_handle: Arc<NetworkNodeHandle<CounterState>>,
-    requestee_handle: Arc<NetworkNodeHandle<CounterState>>,
+    requester_handle: Arc<NetworkNodeHandle<CounterState, ()>>,
+    requestee_handle: Arc<NetworkNodeHandle<CounterState, ()>>,
     timeout: Duration,
 ) -> Result<(), TestError<CounterState>> {
     async move {
@@ -168,7 +168,7 @@ async fn run_request_response_increment<'a>(
 /// broadcasts `msg` from a randomly chosen handle
 /// then asserts that all nodes match `new_state`
 async fn run_gossip_round(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[Arc<NetworkNodeHandle<CounterState, ()>>],
     msg: CounterMessage,
     new_state: CounterState,
     timeout_duration: Duration,
@@ -234,7 +234,7 @@ async fn run_gossip_round(
 }
 
 async fn run_intersperse_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     for i in 0..NUM_ROUNDS as u32 {
@@ -250,18 +250,21 @@ async fn run_intersperse_many_rounds(
 }
 
 async fn run_dht_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     run_dht_rounds(&handles, timeout, 0, NUM_ROUNDS).await;
 }
 
-async fn run_dht_one_round(handles: Vec<Arc<NetworkNodeHandle<CounterState>>>, timeout: Duration) {
+async fn run_dht_one_round(
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
+    timeout: Duration,
+) {
     run_dht_rounds(&handles, timeout, 0, 1).await;
 }
 
 async fn run_request_response_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     for _i in 0..NUM_ROUNDS {
@@ -273,7 +276,7 @@ async fn run_request_response_many_rounds(
 }
 
 pub async fn run_request_response_one_round(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     run_request_response_increment_all(&handles, timeout).await;
@@ -283,28 +286,28 @@ pub async fn run_request_response_one_round(
 }
 
 pub async fn run_gossip_many_rounds(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     run_gossip_rounds(&handles, NUM_ROUNDS, 0, timeout).await
 }
 
 async fn run_gossip_one_round(
-    handles: Vec<Arc<NetworkNodeHandle<CounterState>>>,
+    handles: Vec<Arc<NetworkNodeHandle<CounterState, ()>>>,
     timeout: Duration,
 ) {
     run_gossip_rounds(&handles, 1, 0, timeout).await
 }
 
 async fn run_dht_rounds(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[Arc<NetworkNodeHandle<CounterState, ()>>],
     timeout: Duration,
     starting_val: usize,
     num_rounds: usize,
 ) {
     let mut rng = rand::thread_rng();
     for i in 0..num_rounds {
-        error!("round: {:?}", i);
+        debug!("begin round {}", i);
         let msg_handle = get_random_handle(handles, &mut rng);
         let mut key = vec![0; DHT_KV_PADDING];
         key.push((starting_val + i) as u8);
@@ -333,7 +336,7 @@ async fn run_dht_rounds(
 
 /// runs `num_rounds` of message broadcast, incrementing the state of all nodes each broadcast
 async fn run_gossip_rounds(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[Arc<NetworkNodeHandle<CounterState, ()>>],
     num_rounds: usize,
     starting_state: CounterState,
     timeout: Duration,
@@ -358,7 +361,7 @@ async fn run_gossip_rounds(
 /// then has all other peers request its state
 /// and update their state to the recv'ed state
 async fn run_request_response_increment_all(
-    handles: &[Arc<NetworkNodeHandle<CounterState>>],
+    handles: &[Arc<NetworkNodeHandle<CounterState, ()>>],
     timeout: Duration,
 ) {
     let mut rng = rand::thread_rng();

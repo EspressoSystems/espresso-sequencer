@@ -13,7 +13,7 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
-    data::{QuorumProposal, SequencingLeaf, ViewNumber},
+    data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
         consensus_api::ConsensusSharedApi,
@@ -162,4 +162,11 @@ pub fn key_pair_for_id(node_id: u64) -> (<BN254Pub as SignatureKey>::PrivateKey,
     let private_key = <BN254Pub as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
     let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
     (private_key, public_key)
+}
+
+pub fn vid_init() -> VidScheme {
+    const NUM_STORAGE_NODES: usize = 10;
+    const NUM_CHUNKS: usize = 5;
+    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
+    VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap()
 }
