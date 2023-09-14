@@ -135,6 +135,8 @@ pub enum ConsensusIntentEvent {
     PollForVotes(u64),
     /// Poll for a proposal for a particular view
     PollForProposal(u64),
+    /// Poll for the most recent proposal the webserver has
+    PollForCurrentProposal,
     /// Poll for a DAC for a particular view
     PollForDAC(u64),
     /// Poll for view sync votes starting at a particular view
@@ -174,6 +176,7 @@ impl ConsensusIntentEvent {
             | ConsensusIntentEvent::PollForViewSyncCertificate(view_number)
             | ConsensusIntentEvent::PollForTransactions(view_number)
             | ConsensusIntentEvent::CancelPollForTransactions(view_number) => *view_number,
+            ConsensusIntentEvent::PollForCurrentProposal => 1,
         }
     }
 }
