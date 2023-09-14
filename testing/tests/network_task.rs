@@ -74,18 +74,18 @@ async fn test_network_task() {
 
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(SequencingHotShotEvent::BlockReady(block.clone()));
-    // input.push(SequencingHotShotEvent::DAProposalSend(
-    //     da_proposal.clone(),
-    //     pub_key,
-    // ));
-    // input.push(SequencingHotShotEvent::VidDisperseSend(
-    //     da_vid_disperse.clone(),
-    //     pub_key,
-    // ));
-    // input.push(SequencingHotShotEvent::QuorumProposalSend(
-    //     quorum_proposal.clone(),
-    //     pub_key,
-    // ));
+    input.push(SequencingHotShotEvent::DAProposalSend(
+        da_proposal.clone(),
+        pub_key,
+    ));
+    input.push(SequencingHotShotEvent::VidDisperseSend(
+        da_vid_disperse.clone(),
+        pub_key,
+    ));
+    input.push(SequencingHotShotEvent::QuorumProposalSend(
+        quorum_proposal.clone(),
+        pub_key,
+    ));
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(SequencingHotShotEvent::Shutdown);
 
