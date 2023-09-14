@@ -35,7 +35,7 @@ pub enum ExecutionType {
 
 /// Holds configuration for a `HotShot`
 #[derive(Clone, custom_debug::Debug, serde::Serialize, serde::Deserialize)]
-pub struct HotShotConfig<K, ENTRY, ELECTIONCONFIG> {
+pub struct HotShotConfig<ENTRY, ELECTIONCONFIG> {
     /// Whether to run one view or continuous views
     pub execution_type: ExecutionType,
     /// Total number of nodes in the network
@@ -44,8 +44,6 @@ pub struct HotShotConfig<K, ENTRY, ELECTIONCONFIG> {
     pub min_transactions: usize,
     /// Maximum transactions per block
     pub max_transactions: NonZeroUsize,
-    /// List of known node's public keys, including own, sorted by nonce ()
-    pub known_nodes: Vec<K>,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
     pub known_nodes_with_stake: Vec<ENTRY>,
     /// List of DA committee nodes for static DA committe

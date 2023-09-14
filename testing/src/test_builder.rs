@@ -219,7 +219,6 @@ impl TestMetadata {
             num_bootstrap: num_bootstrap_nodes,
             min_transactions,
             max_transactions: NonZeroUsize::new(99999).unwrap(),
-            known_nodes,
             known_nodes_with_stake,
             da_committee_size,
             next_view_timeout: 500,
@@ -247,7 +246,7 @@ impl TestMetadata {
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
-            |a: &mut HotShotConfig<TYPES::SignatureKey, <TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
+            |a: &mut HotShotConfig<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
                 a.next_view_timeout = next_view_timeout;
                 a.timeout_ratio = timeout_ratio;
                 a.round_start_delay = round_start_delay;

@@ -166,7 +166,6 @@ pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSA
     /// Create all exchanges.
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         configs: Self::ElectionConfigs,
         networks: (
             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
@@ -257,7 +256,6 @@ where
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         configs: Self::ElectionConfigs,
         networks: (
             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
@@ -270,7 +268,6 @@ where
     ) -> Self {
         let quorum_exchange = QUORUMEXCHANGE::create(
             entries.clone(),
-            keys.clone(),
             configs.0.clone(),
             networks.0,
             pk.clone(),
@@ -279,7 +276,6 @@ where
         );
         let view_sync_exchange = VIEWSYNCEXCHANGE::create(
             entries.clone(),
-            keys.clone(),
             configs.0,
             networks.2,
             pk.clone(),
@@ -287,7 +283,7 @@ where
             sk.clone(),
         );
         let committee_exchange =
-            COMMITTEEEXCHANGE::create(entries, keys, configs.1, networks.1, pk, entry, sk);
+            COMMITTEEEXCHANGE::create(entries, configs.1, networks.1, pk, entry, sk);
 
         Self {
             quorum_exchange,

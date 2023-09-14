@@ -215,7 +215,6 @@ pub trait RunDA<
         // Get KeyPair for certificate Aggregation
         let (pk, sk) =
             TYPES::SignatureKey::generated_from_seed_indexed(config.seed, config.node_index);
-        let known_nodes = config.config.known_nodes.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let entry = pk.get_stake_table_entry(1u64);
 
@@ -240,7 +239,6 @@ pub trait RunDA<
 
         let exchanges = NODE::Exchanges::create(
             known_nodes_with_stake.clone(),
-            known_nodes.clone(),
             (quorum_election_config, committee_election_config),
             (
                 quorum_network.clone(),
