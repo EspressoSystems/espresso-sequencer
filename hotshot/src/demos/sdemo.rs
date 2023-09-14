@@ -31,7 +31,6 @@ use hotshot_types::{
         BlockPayload, State,
     },
 };
-use jf_primitives::vid::VidResult;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;

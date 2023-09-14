@@ -4,7 +4,6 @@
 //! behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
-use jf_primitives::vid::VidResult;
 use serde::{de::DeserializeOwned, Serialize};
 
 use std::{
@@ -71,7 +70,6 @@ pub mod dummy {
     use std::fmt::Display;
 
     use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
-    use jf_primitives::vid::VidResult;
     use rand::Rng;
     use serde::Deserialize;
 
