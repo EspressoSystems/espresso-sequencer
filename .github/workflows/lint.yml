@@ -26,7 +26,7 @@ jobs:
           all_but_latest: true
           access_token: ${{ github.token }}
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         name: Checkout Repository
 
       - uses: Swatinem/rust-cache@v2

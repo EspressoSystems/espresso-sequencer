@@ -31,7 +31,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         name: Checkout Repository
         with:
           submodules: true
