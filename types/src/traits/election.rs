@@ -202,11 +202,11 @@ where
 
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function and rework this function parameters
-    // Assumes last vote was valid since it caused a QC to form. 
-    // Removes need for relay on other cert specific fields 
+    // Assumes last vote was valid since it caused a QC to form.
+    // Removes need for relay on other cert specific fields
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote
+        vote: Self::Vote,
     ) -> Self;
 
     /// Get the view number.
@@ -216,7 +216,7 @@ where
     fn signatures(&self) -> AssembledSignature<TYPES>;
 
     // TODO (da) the following functions should be refactored into a QC-specific trait.
-    // TODO ED Make an issue for this 
+    // TODO ED Make an issue for this
 
     /// Get the leaf commitment.
     fn leaf_commitment(&self) -> Commitment<COMMITTABLE>;
@@ -469,53 +469,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
         accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
-        if !self.is_valid_vote(
-            &vota_meta.encoded_key,
-            &vota_meta.encoded_signature,
-            vota_meta.data.clone(),
-            // Ignoring deserialization errors below since we are getting rid of it soon
-            Checked::Unchecked(vota_meta.vote_token.clone()),
-        ) {
-            error!("Invalid vote!");
-            return Either::Left(accumulator);
-        }
-
-        if let Some(key) = <TYPES::SignatureKey as SignatureKey>::from_bytes(&vota_meta.encoded_key)
-        {
-            let stake_table_entry = key.get_stake_table_entry(1u64);
-            let append_node_id = self
-                .membership()
-                .get_committee_qc_stake_table()
-                .iter()
-                .position(|x| *x == stake_table_entry.clone())
-                .unwrap();
-
-            match accumulator.append((
-                vota_meta.commitment,
-                (
-                    vota_meta.encoded_key.clone(),
-                    (
-                        vota_meta.encoded_signature.clone(),
-                        self.membership().get_committee_qc_stake_table(),
-                        append_node_id,
-                        vota_meta.data,
-                        vota_meta.vote_token,
-                    ),
-                ),
-            )) {
-                Either::Left(accumulator) => Either::Left(accumulator),
-                Either::Right(signatures) => {
-                    Either::Right(Self::Certificate::from_signatures_and_commitment(
-                        vota_meta.view_number,
-                        signatures,
-                        vota_meta.commitment,
-                        vota_meta.relay,
-                    ))
-                }
-            }
-        } else {
-            Either::Left(accumulator)
-        }
+        todo!() // TODO ED Remove this function
     }
 
     /// Add a vote to the accumulating signature.  Return The certificate if the vote
@@ -573,7 +527,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         }
 
         let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
-        // TODO ED Could we make this part of the vote in the future?  It's only a usize. 
+        // TODO ED Could we make this part of the vote in the future?  It's only a usize.
         let append_node_id = self
             .membership()
             .get_committee_qc_stake_table()
@@ -582,15 +536,16 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             .unwrap();
 
         // TODO ED Should make append function take a reference to vote
-        match accumulator.append(vote.clone(), append_node_id, self.membership().get_committee_qc_stake_table()) {
+        match accumulator.append(
+            vote.clone(),
+            append_node_id,
+            self.membership().get_committee_qc_stake_table(),
+        ) {
             Either::Left(accumulator) => Either::Left(accumulator),
             Either::Right(signatures) => {
-                // TODO ED Update this function to just take in the signatures and most recent vote 
+                // TODO ED Update this function to just take in the signatures and most recent vote
                 Either::Right(Self::Certificate::from_signatures_and_commitment(
-                    vote.get_view(),
-                    signatures,
-                    *commit,
-                    Some(0),
+                    signatures, vote.clone(),
                 ))
             }
         }

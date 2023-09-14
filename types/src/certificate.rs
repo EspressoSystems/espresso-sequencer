@@ -168,9 +168,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
         signatures: AssembledSignature<TYPES>,
         vote: Self::Vote
     ) -> Self {
+        let leaf_commitment = match vote.clone() {
+            QuorumVote::Yes(vote_internal) | QuorumVote::No (vote_internal) => vote_internal.leaf_commitment, 
+            _ => unimplemented!()
+        };
         let qc = QuorumCertificate {
-            // TODO ED Change this to getter functions
-            leaf_commitment: vote.get_data(),
+            // TODO ED Change this to getter functions, make get_commitment function
+            leaf_commitment,
             view_number: vote.get_view(),
             signatures,
             is_genesis: false,
@@ -331,7 +335,7 @@ impl<TYPES: NodeType>
     ) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
             round: vote.get_view(),
-            relay: vote.relay,
+            relay: vote.relay(),
             signatures: signatures.clone(),
         };
         match signatures {

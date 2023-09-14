@@ -612,7 +612,7 @@ impl<
             _ => return Either::Left(self),
         };
 
-        error!("Vote is {:?}", vote.clone());
+        // error!("Vote is {:?}", vote.clone());
 
         let encoded_key = vote.get_key().to_bytes();
 
