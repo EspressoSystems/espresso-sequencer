@@ -22,22 +22,16 @@ use hotshot::{
         implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
         NodeImplementation,
     },
-    types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
+    types::SystemContextHandle,
+    HotShotInitializer, SystemContext,
 };
-use hotshot_consensus::traits::SequencingConsensusApi;
+use hotshot_signature_key::bn254::{BN254Priv, BN254Pub};
 use hotshot_types::{
-    data::ViewNumber,
-    message::DataMessage,
     traits::{
-        election::Membership,
-        node_implementation::ExchangesType,
-        signature_key::ed25519::{Ed25519Priv, Ed25519Pub},
-        state::ConsensusTime,
+        election::Membership, node_implementation::ExchangesType, signature_key::SignatureKey,
     },
     ExecutionType, HotShotConfig,
 };
-use rand::{rngs::StdRng, SeedableRng};
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tempdir::TempDir;
@@ -58,17 +52,22 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
     pub async fn init(user_data: UserData) -> Self {
         let dir = TempDir::new("mock_network").unwrap();
         let priv_keys = (0..MINIMUM_NODES)
-            .map(|_| Ed25519Priv::generate())
+            .map(|_| BN254Priv::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
-            .map(Ed25519Pub::from_private)
+            .map(BN254Pub::from_private)
             .collect::<Vec<_>>();
+        let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
-        let num_nodes = pub_keys.len();
+        let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
+            ..total_nodes.into())
+            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .collect();
         let config = HotShotConfig {
-            total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
+            total_nodes,
             known_nodes: pub_keys.clone(),
+            known_nodes_with_stake: known_nodes_with_stake.clone(),
             start_delay: 0,
             round_start_delay: 0,
             next_view_timeout: 10000,
@@ -80,7 +79,7 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
             num_bootstrap: 0,
             execution_type: ExecutionType::Continuous,
             election_config: None,
-            da_committee_size: num_nodes,
+            da_committee_size: total_nodes.into(),
         };
         let nodes = join_all(
             priv_keys
@@ -90,9 +89,11 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                     let path = dir.path().join(format!("node{}", node_id));
                     let user_data = user_data.clone();
                     let pub_keys = pub_keys.clone();
+                    let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
                     let master_map = master_map.clone();
-                    let election_config = MockMembership::default_election_config(num_nodes as u64);
+                    let election_config =
+                        MockMembership::default_election_config(total_nodes.get() as u64);
 
                     async move {
                         let query_data = QueryData::create(&path, user_data).unwrap();
@@ -106,21 +107,18 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                         let da_channel = MemoryCommChannel::new(network.clone());
                         let view_sync_channel = MemoryCommChannel::new(network.clone());
 
-                        let enc_key = jf_primitives::aead::KeyPair::generate(
-                            &mut StdRng::seed_from_u64(0u64),
-                        );
-
                         let exchanges =
                             <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
+                                known_nodes_with_stake.clone(),
                                 pub_keys.clone(),
                                 (election_config.clone(), election_config.clone()),
                                 (consensus_channel, view_sync_channel, da_channel),
                                 pub_keys[node_id],
+                                pub_keys[node_id].get_stake_table_entry(1u64),
                                 priv_key.clone(),
-                                enc_key.clone(),
                             );
 
-                        let hotshot = SystemContext::init(
+                        let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
@@ -151,12 +149,7 @@ impl<UserData> MockNetwork<UserData> {
     }
 
     pub async fn submit_transaction(&self, tx: MockTransaction) {
-        let api = HotShotSequencingConsensusApi {
-            inner: self.nodes[0].hotshot.hotshot.inner.clone(),
-        };
-        api.send_transaction(DataMessage::SubmitTransaction(tx, ViewNumber::new(0)))
-            .await
-            .unwrap()
+        self.handle().submit_transaction(tx).await.unwrap();
     }
 
     pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>> {

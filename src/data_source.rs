@@ -469,7 +469,9 @@ mod test {
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
         for (i, leaf) in qd.get_nth_leaf_iter(0).enumerate() {
-            let Some(leaf) = leaf else { continue; };
+            let Some(leaf) = leaf else {
+                continue;
+            };
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
             assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
@@ -477,7 +479,9 @@ mod test {
                 .get_block_ids_by_proposer_id(&leaf.proposer())
                 .contains(&(i as u64)));
 
-            let Some(Some(block)) = qd.get_nth_block_iter(i).next() else { continue; };
+            let Some(Some(block)) = qd.get_nth_block_iter(i).next() else {
+                continue;
+            };
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
             assert_eq!(block.hash(), block.block().commit());

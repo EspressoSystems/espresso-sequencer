@@ -27,6 +27,7 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
+        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
         RUST_LOG: info
     steps:
       - name: Configure Git

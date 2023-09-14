@@ -24,6 +24,7 @@ use hotshot::{
     },
     types::Message,
 };
+use hotshot_signature_key::bn254::BN254Pub;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
@@ -32,7 +33,6 @@ use hotshot_types::{
         block_contents::Transaction,
         election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, NodeType, SequencingExchanges},
-        signature_key::ed25519::Ed25519Pub,
         state::{State, TestableBlock, TestableState},
     },
     vote::{DAVote, QuorumVote, ViewSyncVote},
@@ -273,8 +273,8 @@ pub struct MockTypes;
 impl NodeType for MockTypes {
     type Time = ViewNumber;
     type BlockType = MockBlock;
-    type SignatureKey = Ed25519Pub;
-    type VoteTokenType = StaticVoteToken<Ed25519Pub>;
+    type SignatureKey = BN254Pub;
+    type VoteTokenType = StaticVoteToken<BN254Pub>;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
