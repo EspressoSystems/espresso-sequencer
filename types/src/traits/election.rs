@@ -93,9 +93,11 @@ pub enum VoteData<COMMITTABLE: Committable + Serialize + Clone> {
 impl<COMMITTABLE: Committable + Serialize + Clone> Committable for VoteData<COMMITTABLE> {
     fn commit(&self) -> Commitment<Self> {
         match self {
-            VoteData::DA(block_commitment) => commit::RawCommitmentBuilder::new("DA Block Commit")
-                .field("block_commitment", *block_commitment)
-                .finalize(),
+            VoteData::DA(block_commitment) => {
+                commit::RawCommitmentBuilder::new("DA BlockPayload Commit")
+                    .field("block_commitment", *block_commitment)
+                    .finalize()
+            }
             VoteData::Yes(leaf_commitment) => commit::RawCommitmentBuilder::new("Yes Vote Commit")
                 .field("leaf_commitment", *leaf_commitment)
                 .finalize(),

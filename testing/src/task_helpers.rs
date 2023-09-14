@@ -6,7 +6,7 @@ use commit::Committable;
 use either::Right;
 use hotshot::{
     certificate::QuorumCertificate,
-    traits::{Block, NodeImplementation, TestableNodeImplementation},
+    traits::{BlockPayload, NodeImplementation, TestableNodeImplementation},
     types::{bn254::BN254Pub, SignatureKey, SystemContextHandle},
     HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
 };
