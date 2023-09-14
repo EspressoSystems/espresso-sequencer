@@ -2,7 +2,7 @@ use crate::HotShot;
 use anyhow::Result;
 use ethers::{
     abi::Tokenize,
-    prelude::SignerMiddleware,
+    prelude::{Address, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
 };
@@ -78,6 +78,17 @@ pub struct TestL1System {
 }
 
 impl TestL1System {
+    pub async fn new(provider: Provider<Http>, hotshot_address: Address) -> Result<Self> {
+        let chain_id = provider.get_chainid().await?.as_u64();
+        let clients = TestClients::new(&provider, chain_id);
+        let hotshot = HotShot::new(hotshot_address, clients.deployer.provider.clone());
+        Ok(Self {
+            clients,
+            hotshot,
+            provider,
+        })
+    }
+
     pub async fn deploy(provider: Provider<Http>) -> Result<Self> {
         let chain_id = provider.get_chainid().await?.as_u64();
         let clients = TestClients::new(&provider, chain_id);

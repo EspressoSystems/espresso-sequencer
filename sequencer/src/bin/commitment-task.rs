@@ -1,4 +1,5 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::{create_signer, HotShot};
 use ethers::{prelude::*, providers::Provider};
@@ -56,6 +57,12 @@ pub struct Options {
     /// If true, the executable will attempt to deploy a HotShot contract instance if a HotShot address is not provided.
     #[clap(long)]
     pub deploy: bool,
+
+    /// If provided, the service will run a basic HTTP server on the given port.
+    ///
+    /// The server provides healthcheck and version endpoints.
+    #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
+    pub port: Option<u16>,
 }
 #[async_std::main]
 async fn main() {
@@ -101,6 +108,10 @@ async fn main() {
         );
     }
 
+    if let Some(port) = opt.port {
+        start_http_server(port);
+    }
+
     let hotshot_contract_options = CommitmentTaskOptions {
         hotshot_address,
         l1_chain_id: None,
@@ -111,4 +122,9 @@ async fn main() {
     };
     tracing::info!("Launching HotShot commitment task..");
     run_hotshot_commitment_task(&hotshot_contract_options).await;
+}
+
+fn start_http_server(port: u16) {
+    let app = tide_disco::App::<(), tide_disco::error::ServerError>::with_state(());
+    spawn(app.serve(format!("0.0.0.0:{port}")));
 }
