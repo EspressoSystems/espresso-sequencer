@@ -67,9 +67,11 @@ async fn main() {
 
     let initial_state = { state.read().await.commit() };
 
-    tracing::info!("Deploying HotShot and Rollup contracts");
+    tracing::info!("Deploying Rollup contracts");
     let provider = create_provider(&opt.l1_provider);
-    let test_system = TestL1System::deploy(provider).await.unwrap();
+    let test_system = TestL1System::new(provider, opt.hotshot_address)
+        .await
+        .unwrap();
     deploy_example_contract(&test_system, initial_state).await;
 
     tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
