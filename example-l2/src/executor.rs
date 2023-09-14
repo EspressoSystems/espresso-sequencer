@@ -209,7 +209,7 @@ mod test {
         api::{HttpOptions, QueryOptions},
         hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
         network,
-        testing::{init_hotshot_handles, submit_txn_to_handle, wait_for_decide_on_handle},
+        testing::{init_hotshot_handles, wait_for_decide_on_handle},
         Node, Vm, VmId,
     };
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
@@ -634,7 +634,10 @@ mod test {
         // Submit transactions to sequencer
         for nonce in 1..=num_txns {
             let txn = test_rollup.test_transaction(1, nonce).await;
-            submit_txn_to_handle(&nodes[0], txn.clone()).await;
+            nodes[0]
+                .submit_transaction(txn.clone())
+                .await
+                .expect("Transaction submission should not fail");
 
             // Wait for the transaction to be sequenced, before we can sequence the next one.
             tracing::info!("Waiting for txn {nonce} to be sequenced");

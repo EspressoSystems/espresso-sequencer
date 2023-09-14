@@ -4,6 +4,7 @@ use cld::ClDuration;
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
+use hotshot_signature_key::bn254::BN254Pub;
 use sequencer::{SignatureKeyType, MAX_NMT_DEPTH};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
@@ -173,14 +174,23 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = Args::parse();
-    let mut config = NetworkConfig::<SignatureKeyType, StaticElectionConfig> {
+    let mut config = NetworkConfig::<
+        SignatureKeyType,
+        <SignatureKeyType as SignatureKey>::StakeTableEntry,
+        StaticElectionConfig,
+    > {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
     let (pub_keys, _): (Vec<_>, Vec<_>) = (0..args.num_nodes.into())
         .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
+    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> =
+        (0..args.num_nodes.into())
+            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .collect();
     config.config.total_nodes = args.num_nodes;
+    config.config.known_nodes_with_stake = known_nodes_with_stake;
     config.config.max_transactions = args
         .max_transactions
         .unwrap_or(NonZeroUsize::new(2_usize.pow(MAX_NMT_DEPTH as u32)).unwrap());

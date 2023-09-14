@@ -1,6 +1,6 @@
 # A simplest nix shell file with the project dependencies and
 # a cross-compilation support.
-{ pkgs }:
+{ pkgs, RUSTFLAGS }:
 pkgs.mkShell rec {
   # Native project dependencies like build utilities and additional routines
   # like container building, linters, etc.
@@ -24,4 +24,6 @@ pkgs.mkShell rec {
     # Enable Rust cross-compilation support
     rustCrossHook
   ];
+
+  inherit RUSTFLAGS;
 }
