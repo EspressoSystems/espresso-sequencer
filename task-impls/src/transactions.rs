@@ -1,14 +1,11 @@
 use crate::events::SequencingHotShotEvent;
 use async_compatibility_layer::{
-    art::{async_spawn, async_timeout},
-    async_primitives::subscribable_rwlock::ReadView,
+    art::async_timeout, async_primitives::subscribable_rwlock::ReadView,
 };
 use async_lock::RwLock;
 use bincode::config::Options;
-use bitvec::prelude::*;
 use commit::Committable;
 use either::{Either, Left, Right};
-use futures::FutureExt;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -61,7 +58,6 @@ pub struct TransactionTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    // pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
 
@@ -309,6 +305,7 @@ where
         Some(txns)
     }
 
+    /// Event filter for the transaction task
     pub fn filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,

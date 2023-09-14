@@ -1,7 +1,5 @@
 use crate::events::SequencingHotShotEvent;
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-};
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
@@ -35,7 +33,7 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteAccumulator, VoteType},
 };
-use hotshot_utils::bincode::bincode_opts;
+
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},

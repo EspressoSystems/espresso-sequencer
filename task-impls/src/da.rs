@@ -1,10 +1,7 @@
 use crate::events::SequencingHotShotEvent;
-use async_compatibility_layer::{
-    art::{async_spawn, async_timeout},
-    async_primitives::subscribable_rwlock::ReadView,
-};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-use bincode::config::Options;
+
 use bitvec::prelude::*;
 use commit::Committable;
 use either::{Either, Left, Right};
@@ -27,19 +24,14 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block, State,
+        Block,
     },
     utils::ViewInner,
     vote::VoteAccumulator,
 };
-use hotshot_utils::bincode::bincode_opts;
-use rand_chacha::rand_core::block;
+
 use snafu::Snafu;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
