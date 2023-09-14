@@ -105,7 +105,7 @@ pub struct DAVoteCollectionTaskState<
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
 
     #[allow(clippy::type_complexity)]
-    pub accumulator2: Either<
+    pub accumulator: Either<
         <DACertificate<TYPES> as SignedCertificate<
             TYPES,
             TYPES::Time,
@@ -114,7 +114,6 @@ pub struct DAVoteCollectionTaskState<
         >>::VoteAccumulator,
         DACertificate<TYPES>,
     >,
-    // TODO ED Make this just "view" since it is only for this task
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
@@ -157,21 +156,20 @@ where
             // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
             // For the case where we receive votes after we've made a certificate
-            if state.accumulator2.is_right() {
+            if state.accumulator.is_right() {
                 debug!("DA accumulator finished view: {:?}", state.cur_view);
                 return (None, state);
             }
 
-            let accumulator2 = state.accumulator2.left().unwrap();
-            // TODO ED Maybe we don't need this to take in commitment?  Can just get it from the vote directly if it is always
-            // going to be passed in as the vote.commitment
+            let accumulator = state.accumulator.left().unwrap();
+
             match state.committee_exchange.accumulate_vote_2(
-                accumulator2,
+                accumulator,
                 &vote,
                 &vote.block_commitment,
             ) {
                 Left(new_accumulator) => {
-                    state.accumulator2 = either::Left(new_accumulator);
+                    state.accumulator = either::Left(new_accumulator);
                 }
 
                 Right(dac) => {
@@ -184,8 +182,7 @@ where
                         ))
                         .await;
 
-                    // TODO ED Rename this to just accumulator
-                    state.accumulator2 = Right(dac.clone());
+                    state.accumulator = Right(dac.clone());
                     state
                         .committee_exchange
                         .network()
@@ -286,8 +283,6 @@ where
     ) -> Option<HotShotTaskCompleted> {
         match event {
             SequencingHotShotEvent::TransactionsRecv(transactions) => {
-                // TODO ED Add validation checks
-
                 let mut consensus = self.consensus.write().await;
                 consensus
                     .get_transactions()
@@ -425,8 +420,7 @@ where
                     phantom: PhantomData,
                 };
 
-                // TODO ED Get vote data here instead of cloning into block commitment field of vote
-                let accumulator2 = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote_2(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,
@@ -436,7 +430,7 @@ where
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 
-                        accumulator2: accumulator2,
+                        accumulator: accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,
@@ -508,8 +502,7 @@ where
                     phantom: PhantomData,
                 };
 
-                // TODO ED Get vote data here instead of cloning into block commitment field of vote
-                let accumulator2 = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote_2(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,
@@ -519,7 +512,7 @@ where
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 
-                        accumulator2: accumulator2,
+                        accumulator: accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,
@@ -625,7 +618,6 @@ where
                 //     }
                 // }
             }
-            // TODO ED Update high QC through QCFormed event
             SequencingHotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
@@ -638,7 +630,6 @@ where
                 // Inject view info into network
                 // ED I think it is possible that you receive a quorum proposal, vote on it and update your view before the da leader has sent their proposal, and therefore you skip polling for this view?
 
-                // TODO ED Only poll if you are on the committee
                 let is_da = self
                     .committee_exchange
                     .membership()

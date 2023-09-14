@@ -198,7 +198,6 @@ where
         Commitment = SequencingLeaf<TYPES>,
     >,
 {
-    // TODO ED Emit a view change event upon new proposal?
     match event {
         SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
             QuorumVote::Yes(vote_internal) => {
@@ -216,8 +215,7 @@ where
                 }
 
                 let accumulator = state.accumulator.left().unwrap();
-                // TODO ED Maybe we don't need this to take in commitment?  Can just get it from the vote directly if it is always
-                // going to be passed in as the vote.commitment
+
                 match state.quorum_exchange.accumulate_vote_2(
                     accumulator,
                     &vote,
@@ -445,7 +443,6 @@ where
 
                         };
 
-                        // TODO ED Only publish event in vote if able
                         if let GeneralConsensusMessage::Vote(vote) = message {
                             debug!("Sending vote to next quorum leader {:?}", vote.get_view());
                             self.event_stream
@@ -914,8 +911,6 @@ where
                     return;
                 }
 
-                // TODO ED Should remove this match because we'd always want to collect votes no matter the type on qc
-                // Though will need a sep accumulator for Timeout votes
                 match vote.clone() {
                     QuorumVote::Yes(vote_internal) => {
                         let handle_event = HandleEvent(Arc::new(move |event, state| {
@@ -947,7 +942,6 @@ where
                             phantom: PhantomData,
                         };
 
-                        // TODO ED Get vote data here instead of cloning into block commitment field of vote
                         let accumulator = self.quorum_exchange.accumulate_vote_2(
                             new_accumulator,
                             &vote,
@@ -1129,7 +1123,6 @@ where
         _qc: QuorumCertificate<TYPES, I::Leaf>,
         view: TYPES::Time,
     ) -> bool {
-        // TODO ED This should not be qc view number + 1
         if !self.quorum_exchange.is_leader(view) {
             error!(
                 "Somehow we formed a QC but are not the leader for the next view {:?}",

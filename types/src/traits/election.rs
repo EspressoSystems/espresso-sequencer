@@ -545,7 +545,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             Either::Right(signatures) => {
                 // TODO ED Update this function to just take in the signatures and most recent vote
                 Either::Right(Self::Certificate::from_signatures_and_commitment(
-                    signatures, vote.clone(),
+                    signatures,
+                    vote.clone(),
                 ))
             }
         }

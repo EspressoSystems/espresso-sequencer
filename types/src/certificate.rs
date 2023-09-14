@@ -119,7 +119,6 @@ pub struct ViewSyncCertificateInternal<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Enum representing whether a signatures is for a 'Yes' or 'No' or 'DA' or 'Genesis' certificate
-// TODO ED Should this be a trait?
 pub enum AssembledSignature<TYPES: NodeType> {
     // (enum, signature)
     /// These signatures are for a 'Yes' certificate
@@ -166,14 +165,15 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote
+        vote: Self::Vote,
     ) -> Self {
         let leaf_commitment = match vote.clone() {
-            QuorumVote::Yes(vote_internal) | QuorumVote::No (vote_internal) => vote_internal.leaf_commitment, 
-            _ => unimplemented!()
+            QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
+                vote_internal.leaf_commitment
+            }
+            _ => unimplemented!(),
         };
         let qc = QuorumCertificate {
-            // TODO ED Change this to getter functions, make get_commitment function
             leaf_commitment,
             view_number: vote.get_view(),
             signatures,
@@ -242,7 +242,7 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote
+        vote: Self::Vote,
     ) -> Self {
         DACertificate {
             view_number: vote.get_view(),
@@ -331,7 +331,7 @@ impl<TYPES: NodeType>
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote
+        vote: Self::Vote,
     ) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
             round: vote.get_view(),

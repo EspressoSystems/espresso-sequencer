@@ -196,7 +196,6 @@ pub enum QuorumVote<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// Negative vote.
     No(YesOrNoVote<TYPES, LEAF>),
     /// Timeout vote.
-    // TODO ED Remove this and make it it's own vote type, since it is not part of the QC type
     Timeout(TimeoutVote<TYPES, LEAF>),
 }
 
@@ -208,7 +207,6 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
         self.signature_key()
     }
     fn get_signature(&self) -> EncodedSignature {
-        // TODO ED Revisit this function
         self.signature.1.clone()
     }
     fn get_data(&self) -> VoteData<TYPES::BlockType> {
@@ -219,7 +217,6 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
     }
 }
 
-// TODO ED Remove this
 impl<TYPES: NodeType> DAVote<TYPES> {
     /// Get the signature key.
     /// # Panics
@@ -398,8 +395,6 @@ impl<
             return Either::Left(self);
         }
 
-        // Update the active_keys and signature lists
-        // TODO ED How does this differ than the check above?
         if self.signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(self);
@@ -428,7 +423,6 @@ impl<
                 &self.sig_lists[..],
             );
 
-            // TODO ED Why do we need this line if we have the above line?
             self.da_vote_outcomes.remove(&vote_commitment);
 
             return Either::Right(AssembledSignature::DA(real_qc_sig));
@@ -510,8 +504,6 @@ impl<
             return Either::Left(self);
         }
 
-        // Update the active_keys and signature lists
-        // TODO ED How does this differ than the check above?
         if self.signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(self);
@@ -731,7 +723,6 @@ impl<
                 self.signers.as_bitslice(),
                 &self.sig_lists[..],
             );
-            // TODO ED Why remove?
             self.finalize_vote_outcomes
                 .remove(&vote_commitment)
                 .unwrap();
@@ -829,7 +820,6 @@ where
     #![allow(clippy::too_many_lines)]
     fn append(
         mut self,
-        // TODO ED Make this its own type to avoid extra long type signature
         val: (
             Commitment<LEAF>,
             (

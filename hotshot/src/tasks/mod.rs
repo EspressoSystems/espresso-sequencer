@@ -4,7 +4,6 @@ use crate::{
     async_spawn, types::SystemContextHandle, DACertificate, HotShotSequencingConsensusApi,
     QuorumCertificate, SequencingQuorumEx,
 };
-use serde::Serialize;
 use async_compatibility_layer::art::{async_sleep, async_spawn_local};
 use commit::Committable;
 use futures::FutureExt;
@@ -42,6 +41,7 @@ use hotshot_types::{
     },
     vote::{ViewSyncData, VoteType},
 };
+use serde::Serialize;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 /// event for global event stream

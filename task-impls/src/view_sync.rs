@@ -1004,7 +1004,6 @@ where
                     *vote_internal.round, vote_internal.relay
                 );
 
-                // TODO ED This isn't ideal, should fix this
                 let vote_data = match vote.get_data() {
                     VoteData::ViewSyncPreCommit(data) => data,
                     VoteData::ViewSyncCommit(data) => data,

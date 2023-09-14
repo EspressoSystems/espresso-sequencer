@@ -894,11 +894,7 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
