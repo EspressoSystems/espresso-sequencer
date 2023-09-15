@@ -1,4 +1,4 @@
-use super::{BN254Priv, EncodedPublicKey, EncodedSignature, SignatureKey};
+use super::{BLSPrivKey, EncodedPublicKey, EncodedSignature, SignatureKey};
 use bincode::Options;
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
@@ -44,7 +44,7 @@ impl Ord for BN254Pub {
 }
 
 impl SignatureKey for BN254Pub {
-    type PrivateKey = BN254Priv;
+    type PrivateKey = BLSPrivKey;
     type StakeTableEntry = JFStakeTableEntry<VerKey>;
     type QCParams = JFQCParams<
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey,

@@ -7,12 +7,12 @@ use std::cmp::Ordering;
 
 /// Private key type for a bn254 keypair
 #[derive(PartialEq, Eq, Clone, Serialize, Deserialize, Debug)]
-pub struct BN254Priv {
+pub struct BLSPrivKey {
     /// The private key for  this keypair
     pub(super) priv_key: QCSignKey,
 }
 
-impl BN254Priv {
+impl BLSPrivKey {
     /// Generate a new private key from scratch
     #[must_use]
     pub fn generate() -> Self {
@@ -54,7 +54,7 @@ impl BN254Priv {
     }
 }
 
-impl PartialOrd for BN254Priv {
+impl PartialOrd for BLSPrivKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_bytes = &self.priv_key.to_string();
         let other_bytes = &other.priv_key.to_string();
@@ -62,7 +62,7 @@ impl PartialOrd for BN254Priv {
     }
 }
 
-impl Ord for BN254Priv {
+impl Ord for BLSPrivKey {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_bytes = &self.priv_key.to_string();
         let other_bytes = &other.priv_key.to_string();
