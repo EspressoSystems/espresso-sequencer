@@ -24,7 +24,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     utils::ViewInner,
     vote::VoteAccumulator,
@@ -646,19 +646,17 @@ where
 
                 return None;
             }
-            SequencingHotShotEvent::BlockReady(block) => {
+            SequencingHotShotEvent::BlockReady(block, view) => {
                 self.committee_exchange
                     .network()
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(
-                        *self.cur_view + 1,
-                    ))
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
                 let signature = self.committee_exchange.sign_da_proposal(&block.commit());
                 let data: DAProposal<TYPES> = DAProposal {
                     deltas: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
-                    view_number: self.cur_view + 1,
+                    view_number: view,
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
@@ -705,7 +703,7 @@ where
                         .publish(SequencingHotShotEvent::VidDisperseSend(
                             Proposal {
                                 data: VidDisperse {
-                                    view_number: self.cur_view + 1, // copied from `data` above
+                                    view_number: view,
                                     commitment: block.commit(),
                                     shares,
                                     common,
@@ -743,7 +741,7 @@ where
             SequencingHotShotEvent::DAProposalRecv(_, _)
                 | SequencingHotShotEvent::DAVoteRecv(_)
                 | SequencingHotShotEvent::Shutdown
-                | SequencingHotShotEvent::BlockReady(_)
+                | SequencingHotShotEvent::BlockReady(_, _)
                 | SequencingHotShotEvent::Timeout(_)
                 | SequencingHotShotEvent::VidDisperseRecv(_, _)
                 | SequencingHotShotEvent::VidVoteRecv(_)

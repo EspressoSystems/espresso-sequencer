@@ -28,7 +28,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteAccumulator, VoteType},
@@ -552,7 +552,7 @@ where
 
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
-                    debug!("Proposal is from an older view.  ");
+                    debug!("Proposal is from an older view {:?}", proposal.data.clone());
                     return;
                 }
 
@@ -840,7 +840,8 @@ where
                                 "Attempting to publish proposal after voting; now in view: {}",
                                 *new_view
                             );
-                            self.publish_proposal_if_able(qc).await;
+                            self.publish_proposal_if_able(qc.clone(), qc.view_number + 1)
+                                .await;
                         }
                         if !self.vote_if_able().await {
                             // TOOD ED This means we publish the proposal without updating our own view, which doesn't seem right
@@ -992,7 +993,10 @@ where
                     *qc.view_number
                 );
 
-                if self.publish_proposal_if_able(qc.clone()).await {
+                if self
+                    .publish_proposal_if_able(qc.clone(), qc.view_number + 1)
+                    .await
+                {
                     self.update_view(qc.view_number + 1).await;
                 }
             }
@@ -1051,7 +1055,7 @@ where
                 let consensus = self.consensus.read().await;
                 let qc = consensus.high_qc.clone();
                 drop(consensus);
-                if !self.publish_proposal_if_able(qc).await {
+                if !self.publish_proposal_if_able(qc, self.cur_view).await {
                     error!(
                         "Failed to publish proposal on view change.  View = {:?}",
                         self.cur_view
@@ -1079,12 +1083,16 @@ where
     }
 
     /// Sends a proposal if possible from the high qc we have
-    pub async fn publish_proposal_if_able(&self, qc: QuorumCertificate<TYPES, I::Leaf>) -> bool {
+    pub async fn publish_proposal_if_able(
+        &self,
+        _qc: QuorumCertificate<TYPES, I::Leaf>,
+        view: TYPES::Time,
+    ) -> bool {
         // TODO ED This should not be qc view number + 1
-        if !self.quorum_exchange.is_leader(qc.view_number + 1) {
+        if !self.quorum_exchange.is_leader(view) {
             error!(
                 "Somehow we formed a QC but are not the leader for the next view {:?}",
-                qc.view_number + 1
+                view
             );
             return false;
         }
@@ -1143,11 +1151,11 @@ where
 
         let block_commitment = self.block.commit();
         if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("Block is generic block! {:?}", self.cur_view);
+            debug!("BlockPayload is generic block! {:?}", self.cur_view);
         }
 
         let leaf = SequencingLeaf {
-            view_number: *parent_view_number + 1,
+            view_number: view,
             height: parent_leaf.height + 1,
             justify_qc: consensus.high_qc.clone(),
             parent_commitment: parent_leaf.commit(),

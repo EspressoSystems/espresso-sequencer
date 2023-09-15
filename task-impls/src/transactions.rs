@@ -21,7 +21,7 @@ use hotshot_types::{
         consensus_api::SequencingConsensusApi,
         election::ConsensusExchange,
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
-        Block, State,
+        BlockPayload, State,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
@@ -231,7 +231,7 @@ where
                     }
                 }
                 self.event_stream
-                    .publish(SequencingHotShotEvent::BlockReady(block))
+                    .publish(SequencingHotShotEvent::BlockReady(block, view + 1))
                     .await;
                 return None;
             }

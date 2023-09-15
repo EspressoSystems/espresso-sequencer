@@ -4,7 +4,7 @@ use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use crate::{
     certificate::QuorumCertificate,
     data::LeafType,
-    traits::{election::SignedCertificate, Block},
+    traits::{election::SignedCertificate, BlockPayload},
 };
 use async_trait::async_trait;
 use commit::Commitment;
@@ -152,7 +152,7 @@ where
     TYPES: NodeType,
     LEAF: LeafType<NodeType = TYPES>,
 {
-    /// Create a new `StoredView` from the given QC, Block and State.
+    /// Create a new `StoredView` from the given QC, `BlockPayload` and State.
     ///
     /// Note that this will set the `parent` to `LeafHash::default()`, so this will not have a parent.
     pub fn from_qc_block_and_state(
@@ -161,7 +161,7 @@ where
         state: LEAF::MaybeState,
         height: u64,
         parent_commitment: Commitment<LEAF>,
-        rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+        rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
         proposer_id: EncodedPublicKey,
     ) -> Self {
         Self {

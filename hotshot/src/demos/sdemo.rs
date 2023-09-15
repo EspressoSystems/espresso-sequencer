@@ -28,7 +28,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock, TestableState},
-        Block, State,
+        BlockPayload, State,
     },
 };
 use rand::Rng;
@@ -84,7 +84,7 @@ pub struct SDemoGenesisBlock {}
 /// Any block after genesis
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct SDemoNormalBlock {
-    /// Block state commitment
+    /// BlockPayload state commitment
     pub previous_state: (),
     /// Transaction vector
     pub transactions: Vec<SDemoTransaction>,
@@ -176,10 +176,14 @@ impl Display for SDemoBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SDemoBlock::Genesis(_) => {
-                write!(f, "SDemo Genesis Block")
+                write!(f, "SDemo Genesis BlockPayload")
             }
             SDemoBlock::Normal(block) => {
-                write!(f, "SDemo Normal Block #txns={}", block.transactions.len())
+                write!(
+                    f,
+                    "SDemo Normal BlockPayload #txns={}",
+                    block.transactions.len()
+                )
             }
         }
     }
@@ -198,7 +202,7 @@ impl TestableBlock for SDemoBlock {
     }
 }
 
-impl Block for SDemoBlock {
+impl BlockPayload for SDemoBlock {
     type Error = SDemoError;
 
     type Transaction = SDemoTransaction;
@@ -280,7 +284,7 @@ impl TestableState for SDemoState {
         _state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as Block>::Transaction {
+    ) -> <Self::BlockType as BlockPayload>::Transaction {
         SDemoTransaction {
             id: rng.gen_range(0..10),
             padding: vec![0; padding as usize],

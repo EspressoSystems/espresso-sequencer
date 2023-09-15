@@ -6,7 +6,7 @@ use hotshot::{
         random_quorom_certificate, random_transaction, random_validating_leaf, VDemoBlock,
         VDemoState,
     },
-    traits::{Block, State, Storage},
+    traits::{BlockPayload, State, Storage},
 };
 use hotshot_types::{data::ViewNumber, traits::state::TestableState};
 use rand::thread_rng;

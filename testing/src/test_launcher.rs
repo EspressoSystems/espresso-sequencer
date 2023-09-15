@@ -94,7 +94,6 @@ where
     pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<
-        TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         TYPES::ElectionConfigType,
     >,
@@ -198,7 +197,6 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
         mut self,
         mut f: impl FnMut(
             &mut HotShotConfig<
-                TYPES::SignatureKey,
                 <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
                 TYPES::ElectionConfigType,
             >,

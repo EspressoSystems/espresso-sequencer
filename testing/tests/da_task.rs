@@ -75,7 +75,10 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(SequencingHotShotEvent::BlockReady(block.clone()));
+    input.push(SequencingHotShotEvent::BlockReady(
+        block.clone(),
+        ViewNumber::new(2),
+    ));
     input.push(SequencingHotShotEvent::DAProposalRecv(
         message.clone(),
         pub_key,
@@ -87,7 +90,10 @@ async fn test_da_task() {
     input.push(SequencingHotShotEvent::Shutdown);
 
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
-    output.insert(SequencingHotShotEvent::BlockReady(block.clone()), 1);
+    output.insert(
+        SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        1,
+    );
     output.insert(SequencingHotShotEvent::SendDABlockData(block), 1);
     output.insert(
         SequencingHotShotEvent::DAProposalSend(message.clone(), pub_key),

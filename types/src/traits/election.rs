@@ -93,9 +93,11 @@ pub enum VoteData<COMMITTABLE: Committable + Serialize + Clone> {
 impl<COMMITTABLE: Committable + Serialize + Clone> Committable for VoteData<COMMITTABLE> {
     fn commit(&self) -> Commitment<Self> {
         match self {
-            VoteData::DA(block_commitment) => commit::RawCommitmentBuilder::new("DA Block Commit")
-                .field("block_commitment", *block_commitment)
-                .finalize(),
+            VoteData::DA(block_commitment) => {
+                commit::RawCommitmentBuilder::new("DA BlockPayload Commit")
+                    .field("block_commitment", *block_commitment)
+                    .finalize()
+            }
             VoteData::Yes(leaf_commitment) => commit::RawCommitmentBuilder::new("Yes Vote Commit")
                 .field("leaf_commitment", *leaf_commitment)
                 .finalize(),
@@ -221,7 +223,6 @@ pub trait Membership<TYPES: NodeType>:
     /// TODO may want to move this to a testableelection trait
     fn create_election(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         config: TYPES::ElectionConfigType,
     ) -> Self;
 
@@ -291,7 +292,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// Join a [`ConsensusExchange`] with the given identity (`pk` and `sk`).
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         config: TYPES::ElectionConfigType,
         network: Self::Networking,
         pk: TYPES::SignatureKey,
@@ -654,16 +654,14 @@ impl<
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         config: TYPES::ElectionConfigType,
         network: Self::Networking,
         pk: TYPES::SignatureKey,
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, keys, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -974,16 +972,14 @@ impl<
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         config: TYPES::ElectionConfigType,
         network: Self::Networking,
         pk: TYPES::SignatureKey,
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, keys, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -1333,16 +1329,14 @@ impl<
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        keys: Vec<TYPES::SignatureKey>,
         config: TYPES::ElectionConfigType,
         network: Self::Networking,
         pk: TYPES::SignatureKey,
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership = <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(
-            entries, keys, config,
-        );
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
         Self {
             network,
             membership,

@@ -96,6 +96,7 @@ hotshot-types = { path = "../types", version = "0.1.0", default-features = false
 hotshot-utils = { path = "../utils" }
 hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+jf-primitives = { workspace = true }
 libp2p = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
@@ -117,6 +118,6 @@ async-std = { workspace = true }
 [dev-dependencies]
 blake3 = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
-serde_json = "1.0.106"
+serde_json = "1.0.107"
 toml = { workspace = true }
 

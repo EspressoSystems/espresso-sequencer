@@ -1,4 +1,5 @@
 use hotshot_types::{ExecutionType, HotShotConfig};
+use std::marker::PhantomData;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
@@ -65,9 +66,10 @@ pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<KEY, ENTRY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<ENTRY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
+    _key_type_phantom: PhantomData<KEY>,
 }
 
 impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
@@ -85,6 +87,7 @@ impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
             election_config_type_name: std::any::type_name::<E>().to_string(),
             web_server_config: None,
             da_web_server_config: None,
+            _key_type_phantom: PhantomData,
         }
     }
 }
@@ -152,6 +155,7 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
             start_delay_seconds: val.start_delay_seconds,
             web_server_config: val.web_server_config,
             da_web_server_config: val.da_web_server_config,
+            _key_type_phantom: PhantomData,
         }
     }
 }
@@ -183,14 +187,13 @@ pub struct HotShotConfigFile {
     pub propose_max_round_time: Duration,
 }
 
-impl<K, ENTRY, E> From<HotShotConfigFile> for HotShotConfig<K, ENTRY, E> {
+impl<ENTRY, E> From<HotShotConfigFile> for HotShotConfig<ENTRY, E> {
     fn from(val: HotShotConfigFile) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: val.total_nodes,
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
-            known_nodes: Vec::new(),
             known_nodes_with_stake: Vec::new(),
             da_committee_size: val.committee_nodes,
             next_view_timeout: val.next_view_timeout,
