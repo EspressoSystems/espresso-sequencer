@@ -53,6 +53,7 @@ case $KERNEL in
   darwin)
   # Build in docker container
   docker run \
+    -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS \
     -v $(pwd):/work \
     -v $HOME/.cargo/registry:/root/.cargo/registry \
     -it ghcr.io/espressosystems/devops-rust:stable \
