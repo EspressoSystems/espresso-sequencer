@@ -12,9 +12,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
-
 jobs:
   static-build:
     runs-on: ubuntu-latest
