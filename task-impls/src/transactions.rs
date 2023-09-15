@@ -33,7 +33,7 @@ use tracing::{debug, error, instrument, warn};
 /// Error type for consensus tasks
 pub struct ConsensusTaskError {}
 
-/// Tracks state of a DA task
+/// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<
@@ -310,7 +310,7 @@ where
         matches!(
             event,
             SequencingHotShotEvent::TransactionsRecv(_)
-                | SequencingHotShotEvent::DAVoteRecv(_)
+                | SequencingHotShotEvent::LeafDecided(_)
                 | SequencingHotShotEvent::Shutdown
                 | SequencingHotShotEvent::ViewChange(_)
         )

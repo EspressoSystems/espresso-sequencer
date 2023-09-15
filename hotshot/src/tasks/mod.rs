@@ -432,7 +432,7 @@ where
         Commitment = TYPES::BlockType,
     >,
 {
-    // build the da task
+    // build the transactions task
     let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
