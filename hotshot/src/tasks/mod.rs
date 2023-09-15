@@ -5,6 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
+use commit::Committable;
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -41,6 +42,7 @@ use hotshot_types::{
     },
     vote::{ViewSyncData, VoteType},
 };
+use serde::Serialize;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 /// event for global event stream
@@ -62,8 +64,9 @@ pub async fn add_network_message_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
+    COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -79,8 +82,7 @@ pub async fn add_network_message_task<
 ) -> TaskRunner
 // This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
 where
-    EXCHANGE::Networking:
-        CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
+    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
 {
     let channel = exchange.network().clone();
     let broadcast_stream = GeneratedStream::<Messages<TYPES, I>>::new(Arc::new(move || {
@@ -172,8 +174,9 @@ pub async fn add_network_event_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
+    COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -190,19 +193,16 @@ pub async fn add_network_event_task<
 ) -> TaskRunner
 // This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
 where
-    EXCHANGE::Networking:
-        CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
+    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
 {
     let filter = NetworkEventTaskState::<
         TYPES,
         I,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         <EXCHANGE as ConsensusExchange<_, _>>::Networking,
     >::filter(task_kind);
     let channel = exchange.network().clone();
-    let network_state: NetworkEventTaskState<_, _, _, _, _, _> = NetworkEventTaskState {
+    let network_state: NetworkEventTaskState<_, _, _, _> = NetworkEventTaskState {
         channel,
         event_stream: event_stream.clone(),
         view: TYPES::Time::genesis(),
@@ -210,7 +210,7 @@ where
     };
     let registry = task_runner.registry.clone();
     let network_event_handler = HandleEvent(Arc::new(
-        move |event, mut state: NetworkEventTaskState<_, _, _, _, MEMBERSHIP, _>| {
+        move |event, mut state: NetworkEventTaskState<_, _, MEMBERSHIP, _>| {
             let membership = exchange.membership().clone();
             async move {
                 let completion_status = state.handle_event(event, &membership).await;
@@ -222,7 +222,7 @@ where
     let networking_name = "Networking Task";
 
     let networking_task_builder =
-        TaskBuilder::<NetworkEventTaskTypes<_, _, _, _, _, _>>::new(networking_name.to_string())
+        TaskBuilder::<NetworkEventTaskTypes<_, _, _, _>>::new(networking_name.to_string())
             .register_event_stream(event_stream.clone(), filter)
             .await
             .register_registry(&mut registry.clone())

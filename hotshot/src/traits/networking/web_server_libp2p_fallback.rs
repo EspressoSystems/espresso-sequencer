@@ -13,7 +13,7 @@ use futures::join;
 use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::{ProposalType, ViewNumber},
+    data::ViewNumber,
     message::Message,
     traits::{
         election::Membership,
@@ -24,7 +24,6 @@ use hotshot_types::{
         },
         node_implementation::NodeType,
     },
-    vote::VoteType,
 };
 use std::{marker::PhantomData, sync::Arc};
 use tracing::error;
@@ -156,13 +155,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
     for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>
 {
     type NETWORK = CombinedNetworks<TYPES, I, MEMBERSHIP>;
@@ -292,18 +286,10 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         CombinedNetworks<TYPES, I, MEMBERSHIP>,
     > for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>

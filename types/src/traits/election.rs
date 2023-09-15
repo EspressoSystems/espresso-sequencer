@@ -19,6 +19,7 @@ use crate::{
     vote::ViewSyncVoteInternal,
 };
 
+use crate::vote::Accumulator2;
 use crate::{
     data::LeafType,
     traits::{
@@ -28,8 +29,8 @@ use crate::{
         state::ConsensusTime,
     },
     vote::{
-        Accumulator, DAVote, QuorumVote, TimeoutVote, ViewSyncData, ViewSyncVote, VoteAccumulator,
-        VoteType, YesOrNoVote,
+        DAVote, QuorumVote, TimeoutVote, ViewSyncData, ViewSyncVote, VoteAccumulator, VoteType,
+        YesOrNoVote,
     },
 };
 use bincode::Options;
@@ -60,6 +61,7 @@ pub enum ElectionError {
 /// the outcome is already knowable.
 ///
 /// This would be a useful general utility.
+#[derive(Clone)]
 pub enum Checked<T> {
     /// This item has been checked, and is valid
     Valid(T),
@@ -183,12 +185,19 @@ where
     COMMITTABLE: Committable + Serialize + Clone,
     TOKEN: VoteToken,
 {
+    /// `VoteType` that is used in this certificate
+    type Vote: VoteType<TYPES, COMMITTABLE>;
+
+    /// `Accumulator` type to accumulate votes.
+    type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
+
     /// Build a QC from the threshold signature and commitment
+    // TODO ED Rename this function and rework this function parameters
+    // Assumes last vote was valid since it caused a QC to form.
+    // Removes need for relay on other cert specific fields
     fn from_signatures_and_commitment(
-        view_number: TIME,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<COMMITTABLE>,
-        relay: Option<u64>,
+        vote: Self::Vote,
     ) -> Self;
 
     /// Get the view number.
@@ -198,6 +207,7 @@ where
     fn signatures(&self) -> AssembledSignature<TYPES>;
 
     // TODO (da) the following functions should be refactored into a QC-specific trait.
+    // TODO ED Make an issue for this
 
     /// Get the leaf commitment.
     fn leaf_commitment(&self) -> Commitment<COMMITTABLE>;
@@ -277,7 +287,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// A proposal for participants to vote on.
     type Proposal: ProposalType<NodeType = TYPES>;
     /// A vote on a [`Proposal`](Self::Proposal).
-    type Vote: VoteType<TYPES>;
+    // TODO ED Make this equal Certificate vote (if possible?)
+    type Vote: VoteType<TYPES, Self::Commitment>;
     /// A [`SignedCertificate`] attesting to a decision taken by the committee.
     type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
         + Hash
@@ -285,7 +296,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
-    type Networking: CommunicationChannel<TYPES, M, Self::Proposal, Self::Vote, Self::Membership>;
+    type Networking: CommunicationChannel<TYPES, M, Self::Membership>;
     /// Commitments to items which are the subject of proposals and decisions.
     type Commitment: Committable + Serialize + Clone;
 
@@ -414,59 +425,38 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         is_valid_signature && is_valid_vote_token
     }
 
+    /// Validate a vote by checking its signature and token.
+    fn is_valid_vote_2(
+        &self,
+        key: &TYPES::SignatureKey,
+        encoded_signature: &EncodedSignature,
+        data: &VoteData<Self::Commitment>,
+        vote_token: &Checked<TYPES::VoteTokenType>,
+    ) -> bool {
+        let is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
+        let valid_vote_token = self
+            .membership()
+            .validate_vote_token(key.clone(), vote_token.clone());
+        let is_valid_vote_token = match valid_vote_token {
+            Err(_) => {
+                error!("Vote token was invalid");
+                false
+            }
+            Ok(Checked::Valid(_)) => true,
+            Ok(Checked::Inval(_) | Checked::Unchecked(_)) => false,
+        };
+
+        is_valid_signature && is_valid_vote_token
+    }
+
     #[doc(hidden)]
+
     fn accumulate_internal(
         &self,
-        vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
-        accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
+        _vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
+        _accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
-        if !self.is_valid_vote(
-            &vota_meta.encoded_key,
-            &vota_meta.encoded_signature,
-            vota_meta.data.clone(),
-            // Ignoring deserialization errors below since we are getting rid of it soon
-            Checked::Unchecked(vota_meta.vote_token.clone()),
-        ) {
-            error!("Invalid vote!");
-            return Either::Left(accumulator);
-        }
-
-        if let Some(key) = <TYPES::SignatureKey as SignatureKey>::from_bytes(&vota_meta.encoded_key)
-        {
-            let stake_table_entry = key.get_stake_table_entry(1u64);
-            let append_node_id = self
-                .membership()
-                .get_committee_qc_stake_table()
-                .iter()
-                .position(|x| *x == stake_table_entry.clone())
-                .unwrap();
-
-            match accumulator.append((
-                vota_meta.commitment,
-                (
-                    vota_meta.encoded_key.clone(),
-                    (
-                        vota_meta.encoded_signature.clone(),
-                        self.membership().get_committee_qc_stake_table(),
-                        append_node_id,
-                        vota_meta.data,
-                        vota_meta.vote_token,
-                    ),
-                ),
-            )) {
-                Either::Left(accumulator) => Either::Left(accumulator),
-                Either::Right(signatures) => {
-                    Either::Right(Self::Certificate::from_signatures_and_commitment(
-                        vota_meta.view_number,
-                        signatures,
-                        vota_meta.commitment,
-                        vota_meta.relay,
-                    ))
-                }
-            }
-        } else {
-            Either::Left(accumulator)
-        }
+        todo!() // TODO ED Remove this function
     }
 
     /// Add a vote to the accumulating signature.  Return The certificate if the vote
@@ -483,6 +473,72 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
         relay: Option<u64>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate>;
+
+    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the `SignedCertificate`
+    // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
+    /// Accumulate vote
+    /// Returns either the accumulate if no threshold was reached, or a `SignedCertificate` if the threshold was reached
+    #[allow(clippy::type_complexity)]
+    fn accumulate_vote_2(
+        &self,
+        accumulator: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::VoteAccumulator,
+        vote: &<<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::Vote,
+        _commit: &Commitment<Self::Commitment>,
+    ) -> Either<
+        <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::VoteAccumulator,
+        Self::Certificate,
+    > {
+        if !self.is_valid_vote_2(
+            &vote.get_key(),
+            &vote.get_signature(),
+            &vote.get_data(),
+            // TODO ED We've had this comment for a while: Ignoring deserialization errors below since we are getting rid of it soon
+            &Checked::Unchecked(vote.get_vote_token()),
+        ) {
+            error!("Invalid vote!");
+            return Either::Left(accumulator);
+        }
+
+        let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
+        // TODO ED Could we make this part of the vote in the future?  It's only a usize.
+        let append_node_id = self
+            .membership()
+            .get_committee_qc_stake_table()
+            .iter()
+            .position(|x| *x == stake_table_entry.clone())
+            .unwrap();
+
+        // TODO ED Should make append function take a reference to vote
+        match accumulator.append(
+            vote.clone(),
+            append_node_id,
+            self.membership().get_committee_qc_stake_table(),
+        ) {
+            Either::Left(accumulator) => Either::Left(accumulator),
+            Either::Right(signatures) => {
+                // TODO ED Update this function to just take in the signatures and most recent vote
+                Either::Right(Self::Certificate::from_signatures_and_commitment(
+                    signatures,
+                    vote.clone(),
+                ))
+            }
+        }
+    }
 
     /// The committee which votes on proposals.
     fn membership(&self) -> &Self::Membership;
@@ -542,7 +598,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
 pub struct CommitteeExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -563,7 +619,7 @@ pub struct CommitteeExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > CommitteeExchangeType<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -641,7 +697,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -803,7 +859,7 @@ pub struct QuorumExchange<
     LEAF: LeafType<NodeType = TYPES>,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -826,7 +882,7 @@ impl<
         LEAF: LeafType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > QuorumExchangeType<TYPES, LEAF, M>
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
@@ -958,7 +1014,7 @@ impl<
         LEAF: LeafType<NodeType = TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, QuorumVote<TYPES, LEAF>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M>
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
@@ -1093,7 +1149,7 @@ pub struct ViewSyncExchange<
     TYPES: NodeType,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -1115,7 +1171,7 @@ impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
@@ -1316,7 +1372,7 @@ impl<
         TYPES: NodeType,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, PROPOSAL, ViewSyncVote<TYPES>, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {

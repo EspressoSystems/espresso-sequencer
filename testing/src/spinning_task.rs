@@ -113,7 +113,8 @@ impl SpinningTaskDescription {
                                                 state.late_start.remove(&idx.try_into().unwrap())
                                             {
                                                 tracing::error!("Spinning up node late");
-                                                node.run_tasks().await;
+                                                let handle = node.run_tasks().await;
+                                                handle.hotshot.start_consensus().await;
                                             }
                                         }
                                         UpDown::Down => {

@@ -12,6 +12,9 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::traits::election::SignedCertificate;
+use hotshot_types::vote::DAVoteAccumulator;
+use hotshot_types::vote::VoteType;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -27,10 +30,10 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
-    vote::VoteAccumulator,
 };
 
 use snafu::Snafu;
+use std::marker::PhantomData;
 use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
@@ -93,10 +96,18 @@ pub struct DAVoteCollectionTaskState<
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
-    /// the vote accumulator
-    pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType>, DACertificate<TYPES>>,
-    // TODO ED Make this just "view" since it is only for this task
+
+    #[allow(clippy::type_complexity)]
+    /// Accumulates DA votes
+    pub accumulator: Either<
+        <DACertificate<TYPES> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            TYPES::BlockType,
+        >>::VoteAccumulator,
+        DACertificate<TYPES>,
+    >,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
@@ -138,29 +149,23 @@ where
             debug!("DA vote recv, collection task {:?}", vote.current_view);
             // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
-            let accumulator = match state.accumulator {
-                Right(_) => {
-                    // For the case where we receive votes after we've made a certificate
-                    debug!("DA accumulator finished view: {:?}", state.cur_view);
-                    return (None, state);
-                }
-                Left(a) => a,
-            };
-            match state.committee_exchange.accumulate_vote(
-                &vote.signature.0,
-                &vote.signature.1,
-                vote.block_commitment,
-                vote.vote_data,
-                vote.vote_token.clone(),
-                state.cur_view,
+            // For the case where we receive votes after we've made a certificate
+            if state.accumulator.is_right() {
+                debug!("DA accumulator finished view: {:?}", state.cur_view);
+                return (None, state);
+            }
+
+            let accumulator = state.accumulator.left().unwrap();
+
+            match state.committee_exchange.accumulate_vote_2(
                 accumulator,
-                None,
+                &vote,
+                &vote.block_commitment,
             ) {
-                Left(acc) => {
-                    state.accumulator = Either::Left(acc);
-                    // debug!("Not enough DA votes! ");
-                    return (None, state);
+                Left(new_accumulator) => {
+                    state.accumulator = either::Left(new_accumulator);
                 }
+
                 Right(dac) => {
                     debug!("Sending DAC! {:?}", dac.view_number);
                     state
@@ -188,32 +193,20 @@ where
         SequencingHotShotEvent::VidVoteRecv(vote) => {
             // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
 
-            debug!("VID vote recv, collection task {:?}", vote.current_view);
+            debug!("VID vote recv, collection task {:?}", vote.get_view());
             // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
-            let accumulator = match state.accumulator {
-                Right(_) => {
-                    // For the case where we receive votes after we've made a certificate
-                    debug!("VID accumulator finished view: {:?}", state.cur_view);
-                    return (None, state);
-                }
-                Left(a) => a,
-            };
-            match state.committee_exchange.accumulate_vote(
-                &vote.signature.0,
-                &vote.signature.1,
-                vote.block_commitment,
-                vote.vote_data,
-                vote.vote_token.clone(),
-                state.cur_view,
+            let accumulator = state.accumulator.left().unwrap();
+
+            match state.committee_exchange.accumulate_vote_2(
                 accumulator,
-                None,
+                &vote,
+                &vote.block_commitment,
             ) {
-                Left(acc) => {
-                    state.accumulator = Either::Left(acc);
-                    // debug!("Not enough VID votes! ");
-                    return (None, state);
+                Left(new_accumulator) => {
+                    state.accumulator = either::Left(new_accumulator);
                 }
+
                 Right(vid_cert) => {
                     debug!("Sending VID cert! {:?}", vid_cert.view_number);
                     state
@@ -372,32 +365,25 @@ where
                     } else {
                         TYPES::Time::new(0)
                     };
-                let acc = VoteAccumulator {
-                    total_vote_outcomes: HashMap::new(),
+
+                let new_accumulator = DAVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
-                    yes_vote_outcomes: HashMap::new(),
-                    no_vote_outcomes: HashMap::new(),
-                    viewsync_precommit_vote_outcomes: HashMap::new(),
-                    viewsync_commit_vote_outcomes: HashMap::new(),
-                    viewsync_finalize_vote_outcomes: HashMap::new(),
                     success_threshold: self.committee_exchange.success_threshold(),
-                    failure_threshold: self.committee_exchange.failure_threshold(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.committee_exchange.total_nodes()],
+                    phantom: PhantomData,
                 };
-                let accumulator = self.committee_exchange.accumulate_vote(
-                    &vote.clone().signature.0,
-                    &vote.clone().signature.1,
-                    vote.clone().block_commitment,
-                    vote.clone().vote_data.clone(),
-                    vote.clone().vote_token.clone(),
-                    vote.clone().current_view,
-                    acc,
-                    None,
+
+                let accumulator = self.committee_exchange.accumulate_vote_2(
+                    new_accumulator,
+                    &vote,
+                    &vote.clone().block_commitment,
                 );
+
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
+
                         accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
@@ -461,32 +447,25 @@ where
                     } else {
                         TYPES::Time::new(0)
                     };
-                let acc = VoteAccumulator {
-                    total_vote_outcomes: HashMap::new(),
+
+                let new_accumulator = DAVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
-                    yes_vote_outcomes: HashMap::new(),
-                    no_vote_outcomes: HashMap::new(),
-                    viewsync_precommit_vote_outcomes: HashMap::new(),
-                    viewsync_commit_vote_outcomes: HashMap::new(),
-                    viewsync_finalize_vote_outcomes: HashMap::new(),
                     success_threshold: self.committee_exchange.success_threshold(),
-                    failure_threshold: self.committee_exchange.failure_threshold(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.committee_exchange.total_nodes()],
+                    phantom: PhantomData,
                 };
-                let accumulator = self.committee_exchange.accumulate_vote(
-                    &vote.clone().signature.0,
-                    &vote.clone().signature.1,
-                    vote.clone().block_commitment,
-                    vote.clone().vote_data.clone(),
-                    vote.clone().vote_token.clone(),
-                    vote.clone().current_view,
-                    acc,
-                    None,
+
+                let accumulator = self.committee_exchange.accumulate_vote_2(
+                    new_accumulator,
+                    &vote,
+                    &vote.clone().block_commitment,
                 );
+
                 if view > collection_view {
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
+
                         accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
@@ -592,7 +571,6 @@ where
                     }
                 }
             }
-            // TODO ED Update high QC through QCFormed event
             SequencingHotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
@@ -605,7 +583,6 @@ where
                 // Inject view info into network
                 // ED I think it is possible that you receive a quorum proposal, vote on it and update your view before the da leader has sent their proposal, and therefore you skip polling for this view?
 
-                // TODO ED Only poll if you are on the committee
                 let is_da = self
                     .committee_exchange
                     .membership()

@@ -13,7 +13,6 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
     message::{Message, MessagePurpose},
     traits::{
         election::Membership,
@@ -25,7 +24,6 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
-    vote::VoteType,
 };
 use hotshot_web_server::{self, config};
 use rand::random;
@@ -48,21 +46,14 @@ use tracing::{debug, error, info};
 pub struct WebCommChannel<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
     Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    PhantomData<(MEMBERSHIP, I, PROPOSAL, VOTE)>,
+    PhantomData<(MEMBERSHIP, I)>,
 );
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     /// Create new communication channel
     #[must_use]
@@ -167,6 +158,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
         while self.running.load(Ordering::Relaxed) {
             let endpoint = match message_purpose {
                 MessagePurpose::Proposal => config::get_proposal_route(view_number),
+                MessagePurpose::CurrentProposal => config::get_recent_proposal_route(),
                 MessagePurpose::Vote => config::get_vote_route(view_number, vote_index),
                 MessagePurpose::Data => config::get_transactions_route(tx_index),
                 MessagePurpose::Internal => unimplemented!(),
@@ -229,6 +221,15 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                 //         error!("Proposal receiver error!  It was likely shutdown")
                                 //     }
                                 // }
+                            }
+                            MessagePurpose::CurrentProposal => {
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
                             }
                             MessagePurpose::Vote => {
                                 // error!(
@@ -552,7 +553,9 @@ impl<
             MessagePurpose::Proposal => config::post_proposal_route(*view_number),
             MessagePurpose::Vote => config::post_vote_route(*view_number),
             MessagePurpose::Data => config::post_transactions_route(),
-            MessagePurpose::Internal => return Err(WebServerNetworkError::EndpointError),
+            MessagePurpose::Internal | MessagePurpose::CurrentProposal => {
+                return Err(WebServerNetworkError::EndpointError)
+            }
             MessagePurpose::ViewSyncProposal => {
                 // error!("Posting view sync proposal route is: {}", config::post_view_sync_proposal_route(*view_number));
                 config::post_view_sync_proposal_route(*view_number)
@@ -573,14 +576,9 @@ impl<
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
     /// Blocks until node is successfully initialized
@@ -825,6 +823,25 @@ impl<
                         ))
                         .await;
                 }
+            }
+            ConsensusIntentEvent::PollForCurrentProposal => {
+                // create new task
+                let (_, receiver) = unbounded();
+
+                async_spawn({
+                    let inner_clone = self.inner.clone();
+                    async move {
+                        if let Err(e) = inner_clone
+                            .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
+                            .await
+                        {
+                            error!(
+                                "Background receive proposal polling encountered an error: {:?}",
+                                e
+                            );
+                        }
+                    }
+                });
             }
             ConsensusIntentEvent::PollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;
@@ -1095,14 +1112,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generator(
         expected_node_count: usize,
@@ -1130,21 +1142,13 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
-    > for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network() -> Box<
         dyn Fn(Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>) -> Self

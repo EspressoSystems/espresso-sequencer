@@ -97,7 +97,6 @@ where
     ) -> Option<HotShotTaskCompleted> {
         match event {
             SequencingHotShotEvent::TransactionsRecv(transactions) => {
-                // TODO ED Add validation checks
                 let mut consensus = self.consensus.write().await;
                 consensus
                     .get_transactions()

@@ -25,12 +25,9 @@ pub struct NodeImpl {}
 pub type ThisLeaf = SequencingLeaf<SDemoTypes>;
 pub type ThisMembership =
     GeneralStaticCommittee<SDemoTypes, ThisLeaf, <SDemoTypes as NodeType>::SignatureKey>;
-pub type DANetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisDAProposal, ThisDAVote, ThisMembership>;
-pub type QuorumNetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisQuorumProposal, ThisQuorumVote, ThisMembership>;
-pub type ViewSyncNetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisViewSyncProposal, ThisViewSyncVote, ThisMembership>;
+pub type DANetwork = WebCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
+pub type QuorumNetwork = WebCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
+pub type ViewSyncNetwork = WebCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
 
 pub type ThisDAProposal = DAProposal<SDemoTypes>;
 pub type ThisDAVote = DAVote<SDemoTypes>;

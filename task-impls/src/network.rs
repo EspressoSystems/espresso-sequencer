@@ -7,7 +7,7 @@ use hotshot_task::{
     GeneratedStream, Merge,
 };
 use hotshot_types::{
-    data::{ProposalType, SequencingLeaf},
+    data::SequencingLeaf,
     message::{
         CommitteeConsensusMessage, GeneralConsensusMessage, Message, MessageKind, Messages,
         SequencingMessage,
@@ -146,10 +146,8 @@ pub struct NetworkEventTaskState<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
+    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
 > {
     /// comm channel
     pub channel: COMMCHANNEL,
@@ -158,7 +156,7 @@ pub struct NetworkEventTaskState<
     /// view number
     pub view: TYPES::Time,
     /// phantom data
-    pub phantom: PhantomData<(PROPOSAL, VOTE, MEMBERSHIP)>,
+    pub phantom: PhantomData<MEMBERSHIP>,
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
 }
 
@@ -169,11 +167,9 @@ impl<
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
-    > TS for NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
+    > TS for NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
 {
 }
 
@@ -184,11 +180,9 @@ impl<
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>,
-    > NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
+    > NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
 {
     /// Handle the given event.
     ///
@@ -218,7 +212,7 @@ impl<
                     GeneralConsensusMessage::Vote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view() + 1)),
+                Some(membership.get_leader(vote.get_view() + 1)),
             ),
             SequencingHotShotEvent::VidDisperseSend(proposal, sender) => (
                 sender,
@@ -384,9 +378,9 @@ pub type NetworkMessageTaskTypes<TYPES, I> = HSTWithMessage<
 >;
 
 /// network event task types
-pub type NetworkEventTaskTypes<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL> = HSTWithEvent<
+pub type NetworkEventTaskTypes<TYPES, I, MEMBERSHIP, COMMCHANNEL> = HSTWithEvent<
     NetworkTaskError,
     SequencingHotShotEvent<TYPES, I>,
     ChannelStream<SequencingHotShotEvent<TYPES, I>>,
-    NetworkEventTaskState<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP, COMMCHANNEL>,
+    NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>,
 >;

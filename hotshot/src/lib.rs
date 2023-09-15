@@ -59,7 +59,7 @@ use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKin
 use hotshot_types::{
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
-    data::{DAProposal, DeltasType, LeafType, ProposalType, QuorumProposal, SequencingLeaf},
+    data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -79,7 +79,7 @@ use hotshot_types::{
         storage::StoredView,
         State,
     },
-    vote::{ViewSyncData, VoteType},
+    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
@@ -935,10 +935,7 @@ impl<
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
     > SequencingConsensusApi<TYPES, I::Leaf, I> for HotShotSequencingConsensusApi<TYPES, I>
 {
-    async fn send_direct_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
@@ -963,10 +960,7 @@ impl<
         Ok(())
     }
 
-    async fn send_direct_da_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
@@ -993,10 +987,7 @@ impl<
 
     // TODO (DA) Refactor ConsensusApi and HotShot to use SystemContextInner directly.
     // <https://github.com/EspressoSystems/HotShot/issues/1194>
-    async fn send_broadcast_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_broadcast_message(
         &self,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError> {
