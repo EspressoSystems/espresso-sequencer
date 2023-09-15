@@ -1,12 +1,12 @@
 [submodule "lib/forge-std"]
-	path = lib/forge-std
+	path = contracts/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
 	branch = v1.4.0
 [submodule "lib/solidity-bytes-utils"]
-	path = lib/solidity-bytes-utils
+	path = contracts/lib/solidity-bytes-utils
 	url = https://github.com/GNSPS/solidity-bytes-utils
 	branch = v0.8.0
 [submodule "lib/bn254"]
-	path = lib/bn254
+	path = contracts/lib/bn254
 	url = https://github.com/EspressoSystems/solidity-bn254
 	branch = v0.1.1
