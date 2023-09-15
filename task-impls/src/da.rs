@@ -17,6 +17,7 @@ use hotshot_task::{
 };
 use hotshot_types::traits::election::SignedCertificate;
 use hotshot_types::vote::DAVoteAccumulator;
+use hotshot_types::vote::VoteType;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -197,59 +198,46 @@ where
                 }
             }
         }
-        SequencingHotShotEvent::VidVoteRecv(_vote) => {
-            // TODO ED Make accumulator for VID
+        SequencingHotShotEvent::VidVoteRecv(vote) => {
             // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
 
-            // debug!("VID vote recv, collection task {:?}", vote.current_view);
-            // // panic!("Vote handle received DA vote for view {}", *vote.current_view);
+            debug!("VID vote recv, collection task {:?}", vote.get_view());
+            // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
-            // let accumulator = match state.accumulator {
-            //     Right(_) => {
-            //         // For the case where we receive votes after we've made a certificate
-            //         debug!("VID accumulator finished view: {:?}", state.cur_view);
-            //         return (None, state);
-            //     }
-            //     Left(a) => a,
-            // };
-            // match state.committee_exchange.accumulate_vote(
-            //     &vote.signature.0,
-            //     &vote.signature.1,
-            //     vote.block_commitment,
-            //     vote.vote_data,
-            //     vote.vote_token.clone(),
-            //     state.cur_view,
-            //     accumulator,
-            //     None,
-            // ) {
-            //     Left(acc) => {
-            //         state.accumulator = Either::Left(acc);
-            //         // debug!("Not enough VID votes! ");
-            //         return (None, state);
-            //     }
-            //     Right(vid_cert) => {
-            //         debug!("Sending VID cert! {:?}", vid_cert.view_number);
-            //         state
-            //             .event_stream
-            //             .publish(SequencingHotShotEvent::VidCertSend(
-            //                 vid_cert.clone(),
-            //                 state.committee_exchange.public_key().clone(),
-            //             ))
-            //             .await;
+            let accumulator = state.accumulator.left().unwrap();
 
-            //         state.accumulator = Right(vid_cert.clone());
-            //         state
-            //             .committee_exchange
-            //             .network()
-            //             .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-            //                 *vid_cert.view_number,
-            //             ))
-            //             .await;
+            match state.committee_exchange.accumulate_vote_2(
+                accumulator,
+                &vote,
+                &vote.block_commitment,
+            ) {
+                Left(new_accumulator) => {
+                    state.accumulator = either::Left(new_accumulator);
+                }
 
-            //         // Return completed at this point
-            //         return (Some(HotShotTaskCompleted::ShutDown), state);
-            //     }
-            // }
+                Right(vid_cert) => {
+                    debug!("Sending VID cert! {:?}", vid_cert.view_number);
+                    state
+                        .event_stream
+                        .publish(SequencingHotShotEvent::VidCertSend(
+                            vid_cert.clone(),
+                            state.committee_exchange.public_key().clone(),
+                        ))
+                        .await;
+
+                    state.accumulator = Right(vid_cert.clone());
+                    state
+                        .committee_exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *vid_cert.view_number,
+                        ))
+                        .await;
+
+                    // Return completed at this point
+                    return (Some(HotShotTaskCompleted::ShutDown), state);
+                }
+            }
         }
         SequencingHotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
         _ => {
@@ -543,81 +531,80 @@ where
                         .await;
                 };
             }
-            SequencingHotShotEvent::VidDisperseRecv(_disperse, _sender) => {
-                // TODO ED Make accumulator for this
+            SequencingHotShotEvent::VidDisperseRecv(disperse, sender) => {
                 // TODO copy-pasted from DAProposalRecv https://github.com/EspressoSystems/HotShot/issues/1690
-                // debug!(
-                //     "VID disperse received for view: {:?}",
-                //     disperse.data.get_view_number()
-                // );
+                debug!(
+                    "VID disperse received for view: {:?}",
+                    disperse.data.get_view_number()
+                );
 
-                // // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
-                // let view = disperse.data.get_view_number();
+                // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
+                let view = disperse.data.get_view_number();
 
-                // // Allow a DA proposal that is one view older, in case we have voted on a quorum
-                // // proposal and updated the view.
-                // // `self.cur_view` should be at least 1 since there is a view change before getting
-                // // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
-                // // cause an overflow error.
-                // if view < self.cur_view - 1 {
-                //     warn!("Throwing away VID disperse data that is more than one view older");
-                //     return None;
-                // }
+                // Allow a DA proposal that is one view older, in case we have voted on a quorum
+                // proposal and updated the view.
+                // `self.cur_view` should be at least 1 since there is a view change before getting
+                // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
+                // cause an overflow error.
+                if view < self.cur_view - 1 {
+                    warn!("Throwing away VID disperse data that is more than one view older");
+                    return None;
+                }
 
-                // debug!("VID disperse data is fresh.");
-                // let block_commitment = disperse.data.commitment;
+                debug!("VID disperse data is fresh.");
+                let block_commitment = disperse.data.commitment;
 
-                // // ED Is this the right leader?
-                // let view_leader_key = self.committee_exchange.get_leader(view);
-                // if view_leader_key != sender {
-                //     error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
-                //     return None;
-                // }
+                // ED Is this the right leader?
+                let view_leader_key = self.committee_exchange.get_leader(view);
+                if view_leader_key != sender {
+                    error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
+                    return None;
+                }
 
-                // if !view_leader_key.validate(&disperse.signature, block_commitment.as_ref()) {
-                //     error!("Could not verify VID proposal sig.");
-                //     return None;
-                // }
+                if !view_leader_key.validate(&disperse.signature, block_commitment.as_ref()) {
+                    error!("Could not verify VID proposal sig.");
+                    return None;
+                }
 
-                // let vote_token = self.committee_exchange.make_vote_token(view);
-                // match vote_token {
-                //     Err(e) => {
-                //         error!("Failed to generate vote token for {:?} {:?}", view, e);
-                //     }
-                //     Ok(None) => {
-                //         debug!("We were not chosen for VID quorum on {:?}", view);
-                //     }
-                //     Ok(Some(vote_token)) => {
-                //         // Generate and send vote
-                //         let vote = self.committee_exchange.create_vid_message(
-                //             block_commitment,
-                //             view,
-                //             vote_token,
-                //         );
+                let vote_token = self.committee_exchange.make_vote_token(view);
+                match vote_token {
+                    Err(e) => {
+                        error!("Failed to generate vote token for {:?} {:?}", view, e);
+                    }
+                    Ok(None) => {
+                        debug!("We were not chosen for VID quorum on {:?}", view);
+                    }
+                    Ok(Some(vote_token)) => {
+                        // Generate and send vote
+                        let vote = self.committee_exchange.create_vid_message(
+                            block_commitment,
+                            view,
+                            vote_token,
+                        );
 
-                //         // ED Don't think this is necessary?
-                //         // self.cur_view = view;
+                        // ED Don't think this is necessary?
+                        // self.cur_view = view;
 
-                //         debug!("Sending vote to the VID leader {:?}", vote.current_view);
-                //         self.event_stream
-                //             .publish(SequencingHotShotEvent::VidVoteSend(vote))
-                //             .await;
-                //         let mut consensus = self.consensus.write().await;
+                        debug!("Sending vote to the VID leader {:?}", vote.current_view);
+                        self.event_stream
+                            .publish(SequencingHotShotEvent::VidVoteSend(vote))
+                            .await;
+                        let mut consensus = self.consensus.write().await;
 
-                //         // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                //         // there is already a view there: the replica task may have inserted a `Leaf` view which
-                //         // contains strictly more information.
-                //         consensus.state_map.entry(view).or_insert(View {
-                //             view_inner: ViewInner::DA {
-                //                 block: block_commitment,
-                //             },
-                //         });
+                        // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                        // there is already a view there: the replica task may have inserted a `Leaf` view which
+                        // contains strictly more information.
+                        consensus.state_map.entry(view).or_insert(View {
+                            view_inner: ViewInner::DA {
+                                block: block_commitment,
+                            },
+                        });
 
-                //         // Record the block we have promised to make available.
-                //         // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                //         // consensus.saved_blocks.insert(proposal.data.deltas);
-                //     }
-                // }
+                        // Record the block we have promised to make available.
+                        // TODO https://github.com/EspressoSystems/HotShot/issues/1692
+                        // consensus.saved_blocks.insert(proposal.data.deltas);
+                    }
+                }
             }
             SequencingHotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
