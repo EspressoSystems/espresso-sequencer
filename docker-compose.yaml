@@ -1,5 +1,20 @@
-version: "1"
+version: "3"
+
+networks:
+  default:
+    name: espresso-sequencer
+
 services:
+  demo-l1-network:
+    image: ghcr.io/foundry-rs/foundry:latest
+    ports:
+      - $ESPRESSO_SEQUENCER_L1_PORT:8545
+    # The way the foundry image handles arguments is strange, the double quotes
+    # make it work here.
+    command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC'"
+    healthcheck:
+      test: ["CMD", "cast", "chain-id"]
+
   orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
     ports:
@@ -13,6 +28,8 @@ services:
       - ESPRESSO_ORCHESTRATOR_MIN_PROPOSE_TIME=0s
       - ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME=1s
       - RUST_LOG
+      - RUST_LOG_FORMAT
+    stop_grace_period: 1s
 
   da-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
@@ -21,9 +38,11 @@ services:
     environment:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG=error
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
 
   consensus-server:
     image: ghcr.io/espressosystems/espresso-sequencer/web-server:main
@@ -32,9 +51,11 @@ services:
     environment:
       - ESPRESSO_WEB_SERVER_PORT
       - RUST_LOG=error
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
 
   sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -50,9 +71,12 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
+
   sequencer1:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -67,9 +91,12 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
+
   sequencer2:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -84,9 +111,12 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
+
   sequencer3:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
@@ -101,15 +131,18 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
+
   sequencer4:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     # Run the API server (with options taken from the environment)
-    command: sequencer -- http -- query
+    command: sequencer
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
@@ -118,9 +151,11 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       orchestrator:
         condition: service_healthy
+    stop_grace_period: 1s
 
   commitment-task:
     image: ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
@@ -133,21 +168,14 @@ services:
       - ESPRESSO_COMMITMENT_TASK_PORT
       - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       sequencer0:
         condition: service_healthy
       demo-l1-network:
         condition: service_healthy
-
-  demo-l1-network:
-    image: ghcr.io/foundry-rs/foundry:latest
-    ports:
-      - $ESPRESSO_SEQUENCER_L1_PORT:8545
-    # The way the foundry image handles arguments is strange, the double quotes
-    # make it work here.
-    command: "'anvil --host 0.0.0.0 --chain-id 1337'"
-    healthcheck:
-      test: ["CMD", "cast", "chain-id"]
+    stop_grace_period: 1s
 
   example-rollup:
     image: ghcr.io/espressosystems/espresso-sequencer/example-rollup:main
@@ -159,6 +187,7 @@ services:
       - ESPRESSO_DEMO_ROLLUP_PORT
       - ESPRESSO_DEMO_ROLLUP_MNEMONIC
       - RUST_LOG
+      - RUST_LOG_FORMAT
     ports:
       - "$ESPRESSO_DEMO_ROLLUP_PORT:$ESPRESSO_DEMO_ROLLUP_PORT"
     depends_on:
@@ -166,3 +195,4 @@ services:
         condition: service_healthy
       commitment-task:
         condition: service_healthy
+    stop_grace_period: 1s
