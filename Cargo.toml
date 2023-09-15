@@ -10,3 +10,11 @@ members = [
   "sequencer",
   "utils",
 ]
+
+[patch."https://github.com/EspressoSystems/hotshot"]
+hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
