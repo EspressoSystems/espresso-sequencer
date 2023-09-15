@@ -418,8 +418,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     fn accumulate_internal(
         &self,
         vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
-        accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
+        accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>,
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
         if !self.is_valid_vote(
             &vota_meta.encoded_key,
             &vota_meta.encoded_signature,
@@ -480,9 +480,9 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         vote_data: VoteData<Self::Commitment>,
         vote_token: TYPES::VoteTokenType,
         view_number: TYPES::Time,
-        accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
+        accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>,
         relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate>;
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate>;
 
     /// The committee which votes on proposals.
     fn membership(&self) -> &Self::Membership;
@@ -696,9 +696,9 @@ impl<
         vote_data: VoteData<Self::Commitment>,
         vote_token: TYPES::VoteTokenType,
         view_number: TYPES::Time,
-        accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
+        accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>,
         _relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
         let meta = VoteMetaData {
             encoded_key: encoded_key.clone(),
             encoded_signature: encoded_signature.clone(),
@@ -1008,9 +1008,9 @@ impl<
         vote_data: VoteData<Self::Commitment>,
         vote_token: TYPES::VoteTokenType,
         view_number: TYPES::Time,
-        accumlator: VoteAccumulator<TYPES::VoteTokenType, LEAF>,
+        accumlator: VoteAccumulator<TYPES::VoteTokenType, LEAF, TYPES>,
         _relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, LEAF>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, LEAF, TYPES>, Self::Certificate> {
         let meta = VoteMetaData {
             encoded_key: encoded_key.clone(),
             encoded_signature: encoded_signature.clone(),
@@ -1363,9 +1363,9 @@ impl<
         vote_data: VoteData<Self::Commitment>,
         vote_token: TYPES::VoteTokenType,
         view_number: TYPES::Time,
-        accumlator: VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>>,
+        accumlator: VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>,
         relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>, Self::Certificate> {
         let meta = VoteMetaData {
             encoded_key: encoded_key.clone(),
             encoded_signature: encoded_signature.clone(),

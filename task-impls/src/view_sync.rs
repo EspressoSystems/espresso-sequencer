@@ -217,7 +217,7 @@ pub struct ViewSyncRelayTaskState<
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
     pub accumulator: Either<
-        VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>>,
+        VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>,
         ViewSyncCertificate<TYPES>,
     >,
     /// Our node id; for logging

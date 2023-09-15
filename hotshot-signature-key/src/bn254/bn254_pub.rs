@@ -50,7 +50,6 @@ impl SignatureKey for BN254Pub {
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey,
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::PublicParameter,
     >;
-    type SignatureKeySignatureScheme = BLSOverBN254CurveSignatureScheme;
     type PureAssembledSignatureType = <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
     type QCType = (
         Self::PureAssembledSignatureType,
@@ -169,7 +168,7 @@ impl SignatureKey for BN254Pub {
     fn assemble(
         real_qc_pp: &Self::QCParams,
         signers: &BitSlice,
-        sigs: &[<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature],
+        sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::assemble(real_qc_pp, signers, sigs)
             .expect("this assembling shouldn't fail")

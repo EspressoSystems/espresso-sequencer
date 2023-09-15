@@ -103,7 +103,7 @@ pub struct DAVoteCollectionTaskState<
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
     /// the vote accumulator
     pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType>, DACertificate<TYPES>>,
+        Either<VoteAccumulator<TYPES::VoteTokenType, TYPES::BlockType, TYPES>, DACertificate<TYPES>>,
     // TODO ED Make this just "view" since it is only for this task
     /// the current view
     pub cur_view: TYPES::Time,

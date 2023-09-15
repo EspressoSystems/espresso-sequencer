@@ -150,7 +150,7 @@ pub struct VoteCollectionTaskState<
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, I::Leaf>, QuorumCertificate<TYPES, I::Leaf>>,
+        Either<VoteAccumulator<TYPES::VoteTokenType, I::Leaf, TYPES>, QuorumCertificate<TYPES, I::Leaf>>,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
     /// The event stream shared by all tasks

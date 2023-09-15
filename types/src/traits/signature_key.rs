@@ -3,9 +3,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, Serializatio
 use bitvec::prelude::*;
 use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;
-use jf_primitives::signatures::{
-    bls_over_bn254::BLSOverBN254CurveSignatureScheme, SignatureScheme,
-};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, hash::Hash};
 use tagged_base64::tagged;
@@ -70,8 +67,6 @@ pub trait SignatureKey:
         + for<'a> Deserialize<'a>;
     /// The type of the quorum certificate parameters used for assembled signature
     type QCParams: Send + Sync + Sized + Clone + Debug + Hash;
-    /// An aggregateable signature scheme used from jellyfish
-    type SignatureKeySignatureScheme: Send + Sync + Sized + Debug;
     /// The type of the assembled signature, without `BitVec`
     type PureAssembledSignatureType: Send
         + Sync
@@ -138,6 +133,6 @@ pub trait SignatureKey:
     fn assemble(
         real_qc_pp: &Self::QCParams,
         signers: &BitSlice,
-        sigs: &[<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature],
+        sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType;
 }
