@@ -191,17 +191,6 @@ where
     /// `Accumulator` type to accumulate votes.
     type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
 
-    /// Accumulates votes given an accumulator, vote, and commit.  
-    /// Returns either the accumulator or a certificate
-    fn accumulate_vote(
-        self,
-        accumulator: Self::VoteAccumulator,
-        vote: Self::Vote,
-        commit: COMMITTABLE,
-    ) -> Either<Self::VoteAccumulator, Self> {
-        todo!()
-    }
-
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function and rework this function parameters
     // Assumes last vote was valid since it caused a QC to form.
@@ -444,14 +433,11 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         data: &VoteData<Self::Commitment>,
         vote_token: &Checked<TYPES::VoteTokenType>,
     ) -> bool {
-        let mut is_valid_vote_token = false;
-        let mut is_valid_signature = false;
-
-        is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
+        let is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
         let valid_vote_token = self
             .membership()
             .validate_vote_token(key.clone(), vote_token.clone());
-        is_valid_vote_token = match valid_vote_token {
+        let is_valid_vote_token = match valid_vote_token {
             Err(_) => {
                 error!("Vote token was invalid");
                 false
@@ -464,10 +450,11 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     }
 
     #[doc(hidden)]
+
     fn accumulate_internal(
         &self,
-        vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
-        accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
+        _vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
+        _accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate> {
         todo!() // TODO ED Remove this function
     }
@@ -487,10 +474,11 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         relay: Option<u64>,
     ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment>, Self::Certificate>;
 
-    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the SignedCertificate
+    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the `SignedCertificate`
     // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
     /// Accumulate vote
-    /// Returns either the accumulate if no threshold was reached, or a SignedCertificate if the threshold was reached
+    /// Returns either the accumulate if no threshold was reached, or a `SignedCertificate` if the threshold was reached
+    #[allow(clippy::type_complexity)]
     fn accumulate_vote_2(
         &self,
         accumulator: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<

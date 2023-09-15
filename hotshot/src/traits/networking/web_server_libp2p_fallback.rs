@@ -13,7 +13,7 @@ use futures::join;
 use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::{ProposalType, ViewNumber},
+    data::ViewNumber,
     message::Message,
     traits::{
         election::Membership,

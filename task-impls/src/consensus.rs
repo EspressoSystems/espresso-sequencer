@@ -36,7 +36,7 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{QuorumVote, VoteAccumulator, VoteType},
+    vote::{QuorumVote, VoteType},
 };
 use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;

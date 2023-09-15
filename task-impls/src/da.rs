@@ -105,6 +105,7 @@ pub struct DAVoteCollectionTaskState<
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
 
     #[allow(clippy::type_complexity)]
+    /// Accumulates DA votes
     pub accumulator: Either<
         <DACertificate<TYPES> as SignedCertificate<
             TYPES,
@@ -196,7 +197,7 @@ where
                 }
             }
         }
-        SequencingHotShotEvent::VidVoteRecv(vote) => {
+        SequencingHotShotEvent::VidVoteRecv(_vote) => {
             // TODO ED Make accumulator for VID
             // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
 
@@ -430,7 +431,7 @@ where
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 
-                        accumulator: accumulator,
+                        accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,
@@ -512,7 +513,7 @@ where
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 
-                        accumulator: accumulator,
+                        accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,
@@ -542,7 +543,7 @@ where
                         .await;
                 };
             }
-            SequencingHotShotEvent::VidDisperseRecv(disperse, sender) => {
+            SequencingHotShotEvent::VidDisperseRecv(_disperse, _sender) => {
                 // TODO ED Make accumulator for this
                 // TODO copy-pasted from DAProposalRecv https://github.com/EspressoSystems/HotShot/issues/1690
                 // debug!(

@@ -9,13 +9,12 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::election::VoteData;
 use hotshot_types::{
     traits::{
         election::{Membership, SignedCertificate},
         network::ConsensusIntentEvent,
     },
-    vote::{ViewSyncVoteAccumulator, VoteType},
+    vote::ViewSyncVoteAccumulator,
 };
 
 use bitvec::prelude::*;
@@ -32,7 +31,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::{ViewSyncData, ViewSyncVote, VoteAccumulator},
+    vote::{ViewSyncData, ViewSyncVote},
 };
 use snafu::Snafu;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
@@ -223,6 +222,7 @@ pub struct ViewSyncRelayTaskState<
     /// View sync exchange
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
+    #[allow(clippy::type_complexity)]
     pub accumulator: Either<
         <ViewSyncCertificate<TYPES> as SignedCertificate<
             TYPES,
@@ -1003,13 +1003,6 @@ where
                     "Accumulating view sync vote {} relay {}",
                     *vote_internal.round, vote_internal.relay
                 );
-
-                let vote_data = match vote.get_data() {
-                    VoteData::ViewSyncPreCommit(data) => data,
-                    VoteData::ViewSyncCommit(data) => data,
-                    VoteData::ViewSyncFinalize(data) => data,
-                    _ => unimplemented!(),
-                };
 
                 let accumulator = self.exchange.accumulate_vote_2(
                     self.accumulator.left().unwrap(),

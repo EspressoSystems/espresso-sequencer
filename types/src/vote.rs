@@ -42,7 +42,7 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     fn get_signature(&self) -> EncodedSignature;
     /// Get the data this vote was signed over
     fn get_data(&self) -> VoteData<COMMITTABLE>;
-    // Get the vote token of this vote
+    /// Get the vote token of this vote
     fn get_vote_token(&self) -> TYPES::VoteTokenType;
 }
 
@@ -245,13 +245,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
     fn get_data(&self) -> VoteData<LEAF> {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_data.clone(),
-            QuorumVote::Timeout(v) => unimplemented!(),
+            QuorumVote::Timeout(_) => unimplemented!(),
         }
     }
     fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
         match self {
             QuorumVote::Yes(v) | QuorumVote::No(v) => v.vote_token.clone(),
-            QuorumVote::Timeout(v) => unimplemented!(),
+            QuorumVote::Timeout(_) => unimplemented!(),
         }
     }
 }
@@ -337,6 +337,7 @@ pub trait Accumulator2<
     ) -> Either<Self, AssembledSignature<TYPES>>;
 }
 
+/// Accumulates DA votes
 pub struct DAVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
@@ -350,7 +351,7 @@ pub struct DAVoteAccumulator<
     pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
-
+    /// Phantom data to specify the vote this accumulator is for
     pub phantom: PhantomData<VOTE>,
 }
 
@@ -360,17 +361,14 @@ impl<
         VOTE: VoteType<TYPES, COMMITTABLE>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for DAVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
-    // TODO ED We could make this the default impl, so it works for both TC and DAC
     fn append(
         mut self,
         vote: VOTE,
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        // TODO ED Make this a function on VoteType trait
-        let vote_commitment = match vote.get_data() {
-            VoteData::DA(commitment) => commitment,
-            _ => return Either::Left(self),
+        let VoteData::DA(vote_commitment) = vote.get_data() else {
+            return Either::Left(self);
         };
 
         let encoded_key = vote.get_key().to_bytes();
@@ -430,27 +428,28 @@ impl<
     }
 }
 
-// TODO ED Should make these fields a trait for Accumulator, like success threshold, etc.
+/// Accumulate quorum votes
 pub struct QuorumVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
     VOTE: VoteType<TYPES, COMMITTABLE>,
 > {
-    /// Map of all da signatures accumlated so far
+    /// Map of all signatures accumlated so far
     pub total_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    /// Map of all yes signatures accumlated so far
     pub yes_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
-
+    /// Map of all no signatures accumlated so far
     pub no_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
-
+    /// A failure threshold, generally f + 1
     pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
     pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
-
+    /// Phantom data to ensure this struct is over a specific `VoteType` implementation
     pub phantom: PhantomData<VOTE>,
 }
 
@@ -466,10 +465,9 @@ impl<
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        let vote_commitment = match vote.get_data() {
-            VoteData::Yes(commitment) | VoteData::No(commitment) => commitment,
-
-            _ => return Either::Left(self),
+        let (VoteData::Yes(vote_commitment) | VoteData::No(vote_commitment)) = vote.get_data()
+        else {
+            return Either::Left(self);
         };
 
         let encoded_key = vote.get_key().to_bytes();
@@ -561,6 +559,7 @@ impl<
     }
 }
 
+/// Accumulates view sync votes
 pub struct ViewSyncVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
@@ -568,18 +567,20 @@ pub struct ViewSyncVoteAccumulator<
 > {
     /// Map of all pre_commit signatures accumlated so far
     pub pre_commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    /// Map of all ommit signatures accumlated so far
     pub commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    /// Map of all finalize signatures accumlated so far
     pub finalize_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
-
+    /// A quorum's failure threshold, generally f + 1
     pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
     pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
-
+    /// Phantom data since we want the accumulator to be attached to a single `VoteType`  
     pub phantom: PhantomData<VOTE>,
 }
 
@@ -750,11 +751,11 @@ impl<
 {
     fn append(
         self,
-        vote: VOTE,
-        vote_node_id: usize,
-        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        _vote: VOTE,
+        _vote_node_id: usize,
+        _stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
-        todo!()
+        either::Left(self)
     }
 }
 

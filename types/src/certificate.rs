@@ -171,7 +171,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
             QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
                 vote_internal.leaf_commitment
             }
-            _ => unimplemented!(),
+            QuorumVote::Timeout(_) => unimplemented!(),
         };
         let qc = QuorumCertificate {
             leaf_commitment,

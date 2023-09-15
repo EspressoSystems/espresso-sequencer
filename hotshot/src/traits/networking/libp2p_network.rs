@@ -15,7 +15,7 @@ use bincode::Options;
 use hotshot_constants::{KAD_DEFAULT_REPUB_INTERVAL_SEC, LOOK_AHEAD};
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::{ProposalType, ViewNumber},
+    data::ViewNumber,
     message::{Message, MessageKind},
     traits::{
         election::Membership,

@@ -4,7 +4,7 @@ use crate::{
     async_spawn, types::SystemContextHandle, DACertificate, HotShotSequencingConsensusApi,
     QuorumCertificate, SequencingQuorumEx,
 };
-use async_compatibility_layer::art::{async_sleep, async_spawn_local};
+use async_compatibility_layer::art::async_sleep;
 use commit::Committable;
 use futures::FutureExt;
 use hotshot_task::{
