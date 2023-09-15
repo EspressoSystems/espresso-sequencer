@@ -21,7 +21,7 @@ use tagged_base64::tagged;
     Ord,
 )]
 pub struct EncodedPublicKey(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey
+    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, 
 );
 
 /// Type saftey wrapper for byte encoded signature
@@ -29,7 +29,7 @@ pub struct EncodedPublicKey(
     Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct EncodedSignature(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature
+    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>,
 );
 
 impl AsRef<[u8]> for EncodedSignature {
