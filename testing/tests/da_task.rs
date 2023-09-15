@@ -21,7 +21,7 @@ use std::collections::HashMap;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_da_task() {
     use hotshot::{
-        demos::sdemo::{SDemoBlock, SDemoNormalBlock},
+        block_impl::{NormalBlockPayload, VIDBlockPayload},
         tasks::add_da_task,
     };
     use hotshot_task_impls::harness::run_harness;
@@ -39,7 +39,7 @@ async fn test_da_task() {
         };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let block = SDemoBlock::Normal(SDemoNormalBlock {
+    let block = VIDBlockPayload::Normal(NormalBlockPayload {
         previous_state: (),
         transactions: Vec::new(),
     });

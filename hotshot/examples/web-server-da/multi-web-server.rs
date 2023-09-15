@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_compatibility_layer::{art::async_spawn, channel::oneshot};
 use clap::Parser;
-use hotshot::demos::sdemo::SDemoTypes;
+use hotshot::demo::SDemoTypes;
 use tracing::error;
 
 #[derive(Parser, Debug)]

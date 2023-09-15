@@ -1,6 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demos::sdemo::SDemoTypes;
+use hotshot::demo::SDemoTypes;
 use tracing::{info, instrument};
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};

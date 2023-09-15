@@ -1,6 +1,6 @@
 use crate::infra_da::WebServerDARun;
 use hotshot::{
-    demos::sdemo::SDemoTypes,
+    demo::SDemoTypes,
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{MemoryStorage, WebCommChannel},

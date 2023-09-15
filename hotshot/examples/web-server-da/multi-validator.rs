@@ -3,7 +3,7 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
-use hotshot::demos::sdemo::SDemoTypes;
+use hotshot::demo::SDemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use std::net::IpAddr;
 use tracing::instrument;

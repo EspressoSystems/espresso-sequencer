@@ -19,12 +19,11 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Data availability support
-// pub mod da;
+pub mod block_impl;
 /// Contains structures and functions for committee election
 pub mod certificate;
 #[cfg(feature = "demo")]
-pub mod demos;
+pub mod demo;
 /// Contains traits consumed by [`HotShot`]
 pub mod traits;
 /// Contains types used by the crate
