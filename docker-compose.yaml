@@ -11,7 +11,7 @@ services:
       - $ESPRESSO_SEQUENCER_L1_PORT:8545
     # The way the foundry image handles arguments is strange, the double quotes
     # make it work here.
-    command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC'"
+    command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC --accounts 20'"
     healthcheck:
       test: ["CMD", "cast", "chain-id"]
 
