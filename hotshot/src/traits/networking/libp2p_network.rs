@@ -15,7 +15,7 @@ use bincode::Options;
 use hotshot_constants::{KAD_DEFAULT_REPUB_INTERVAL_SEC, LOOK_AHEAD};
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::{ProposalType, ViewNumber},
+    data::ViewNumber,
     message::{Message, MessageKind},
     traits::{
         election::Membership,
@@ -29,7 +29,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::VoteType,
 };
 use hotshot_utils::bincode::bincode_opts;
 use libp2p_identity::PeerId;
@@ -759,21 +758,14 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 pub struct Libp2pCommChannel<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
     Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
-    PhantomData<(TYPES, I, PROPOSAL, VOTE, MEMBERSHIP)>,
+    PhantomData<(TYPES, I, MEMBERSHIP)>,
 );
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 {
     /// create a new libp2p communication channel
     #[must_use]
@@ -782,14 +774,9 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 where
     MessageKind<TYPES, I>: ViewMessage<TYPES>,
 {
@@ -831,14 +818,9 @@ where
 // top
 // we don't really want to make this the default implementation because that forces it to require ConnectedNetwork to be implemented. The struct we implement over might use multiple ConnectedNetworks
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 where
     MessageKind<TYPES, I>: ViewMessage<TYPES>,
 {
@@ -912,21 +894,13 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
-    > for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+    > for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>

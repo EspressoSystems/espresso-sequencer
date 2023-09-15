@@ -112,7 +112,6 @@ where
         view_number: TYPES::Time,
         private_key: &<PUBKEY as SignatureKey>::PrivateKey,
     ) -> std::result::Result<Option<StaticVoteToken<PUBKEY>>, ElectionError> {
-        // TODO ED Below
         let pub_key = PUBKEY::from_private(private_key);
         let entry = pub_key.get_stake_table_entry(1u64);
         if !self.committee_nodes_with_stake.contains(&entry) {

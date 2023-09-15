@@ -11,11 +11,7 @@ use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 use super::{election::Membership, node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{
-    data::{ProposalType, ViewNumber},
-    message::MessagePurpose,
-    vote::VoteType,
-};
+use crate::{data::ViewNumber, message::MessagePurpose};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -207,13 +203,8 @@ pub trait ViewMessage<TYPES: NodeType> {
 /// API for interacting directly with a consensus committee
 /// intended to be implemented for both DA and for validating consensus committees
 #[async_trait]
-pub trait CommunicationChannel<
-    TYPES: NodeType,
-    M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->: Clone + Debug + Send + Sync + 'static
+pub trait CommunicationChannel<TYPES: NodeType, M: NetworkMsg, MEMBERSHIP: Membership<TYPES>>:
+    Clone + Debug + Send + Sync + 'static
 {
     /// Underlying Network implementation's type
     type NETWORK;
@@ -356,11 +347,9 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
 pub trait TestableChannelImplementation<
     TYPES: NodeType,
     M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK,
->: CommunicationChannel<TYPES, M, PROPOSAL, VOTE, MEMBERSHIP>
+>: CommunicationChannel<TYPES, M, MEMBERSHIP>
 {
     /// generates the `CommunicationChannel` given it's associated network type
     fn generate_network() -> Box<dyn Fn(Arc<NETWORK>) -> Self + 'static>;

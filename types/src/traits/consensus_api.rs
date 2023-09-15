@@ -2,7 +2,7 @@
 
 use crate::{
     certificate::QuorumCertificate,
-    data::{LeafType, ProposalType},
+    data::LeafType,
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
@@ -12,7 +12,6 @@ use crate::{
         signature_key::SignatureKey,
         storage::StorageError,
     },
-    vote::VoteType,
 };
 use async_trait::async_trait;
 
@@ -130,27 +129,21 @@ pub trait SequencingConsensusApi<
 >: ConsensusSharedApi<TYPES, LEAF, I>
 {
     /// Send a direct message to the given recipient
-    async fn send_direct_message<PROPOSAL: ProposalType<NodeType = TYPES>, VOTE: VoteType<TYPES>>(
+    async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// send a direct message using the DA communication channel
-    async fn send_direct_da_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// Send a broadcast message to the entire network.
-    async fn send_broadcast_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_broadcast_message(
         &self,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError>;
