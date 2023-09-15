@@ -70,6 +70,19 @@ pub trait SignatureKey:
         + for<'a> Deserialize<'a>;
     /// The type of the quorum certificate parameters used for assembled signature
     type QCParams: Send + Sync + Sized + Clone + Debug + Hash;
+    /// An aggregateable signature scheme used from jellyfish
+    type SignatureKeySignatureScheme: Send + Sync + Sized + Debug;
+    /// The type of the assembled signature, without `BitVec`
+    type PureAssembledSignatureType: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Hash
+        + PartialEq
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>;
     /// The type of the assembled qc: assembled signature + `BitVec`
     type QCType: Send
         + Sync
@@ -117,7 +130,7 @@ pub trait SignatureKey:
     fn get_sig_proof(
         signature: &Self::QCType,
     ) -> (
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature,
+        Self::PureAssembledSignatureType,
         BitVec,
     );
 
