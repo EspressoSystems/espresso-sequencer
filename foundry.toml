@@ -8,7 +8,7 @@ test = 'contracts/test'
 libs = ['contracts/lib']
 script = "contracts/script"
 broadcast = "contracts/broadcast"
-
+cache_path = "contracts/cache"
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
 solc = "0.8.20"

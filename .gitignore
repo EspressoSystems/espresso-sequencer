@@ -18,7 +18,6 @@ target/
 # vscode stuff
 .vscode
 
-# solidity files cache
-cache/
-
 node_modules/
+
+**/*DS_Store
