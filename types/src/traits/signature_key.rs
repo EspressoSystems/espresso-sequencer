@@ -20,17 +20,13 @@ use tagged_base64::tagged;
     PartialOrd,
     Ord,
 )]
-pub struct EncodedPublicKey(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, 
-);
+pub struct EncodedPublicKey(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
 /// Type saftey wrapper for byte encoded signature
 #[derive(
     Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub struct EncodedSignature(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>,
-);
+pub struct EncodedSignature(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
 impl AsRef<[u8]> for EncodedSignature {
     fn as_ref(&self) -> &[u8] {
@@ -122,12 +118,7 @@ pub trait SignatureKey:
     fn check(real_qc_pp: &Self::QCParams, data: &[u8], qc: &Self::QCType) -> bool;
 
     /// get the assembled signature and the `BitVec` separately from the assembled signature
-    fn get_sig_proof(
-        signature: &Self::QCType,
-    ) -> (
-        Self::PureAssembledSignatureType,
-        BitVec,
-    );
+    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec);
 
     /// assemble the signature from the partial signature and the indication of signers in `BitVec`
     fn assemble(

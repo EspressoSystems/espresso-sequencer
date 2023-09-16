@@ -455,7 +455,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         &self,
         _vota_meta: VoteMetaData<Self::Commitment, TYPES::VoteTokenType, TYPES::Time>,
         _accumulator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate>
+    {
         todo!() // TODO ED Remove this function
     }
 
@@ -754,7 +755,8 @@ impl<
         view_number: TYPES::Time,
         accumlator: VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>,
         _relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate>
+    {
         let meta = VoteMetaData {
             encoded_key: encoded_key.clone(),
             encoded_signature: encoded_signature.clone(),
@@ -1421,7 +1423,8 @@ impl<
         view_number: TYPES::Time,
         accumlator: VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>,
         relay: Option<u64>,
-    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>, Self::Certificate> {
+    ) -> Either<VoteAccumulator<TYPES::VoteTokenType, ViewSyncData<TYPES>, TYPES>, Self::Certificate>
+    {
         let meta = VoteMetaData {
             encoded_key: encoded_key.clone(),
             encoded_signature: encoded_signature.clone(),

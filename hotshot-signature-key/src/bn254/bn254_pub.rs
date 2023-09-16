@@ -50,11 +50,9 @@ impl SignatureKey for BLSPubKey {
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey,
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::PublicParameter,
     >;
-    type PureAssembledSignatureType = <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
-    type QCType = (
-        Self::PureAssembledSignatureType,
-        BitVec,
-    );
+    type PureAssembledSignatureType =
+        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
+    type QCType = (Self::PureAssembledSignatureType, BitVec);
 
     #[instrument(skip(self))]
     fn validate(&self, signature: &EncodedSignature, data: &[u8]) -> bool {
@@ -156,12 +154,7 @@ impl SignatureKey for BLSPubKey {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::check(real_qc_pp, msg, qc).is_ok()
     }
 
-    fn get_sig_proof(
-        signature: &Self::QCType,
-    ) -> (
-        Self::PureAssembledSignatureType,
-        BitVec,
-    ) {
+    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec) {
         signature.clone()
     }
 
