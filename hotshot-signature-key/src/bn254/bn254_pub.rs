@@ -22,12 +22,12 @@ use typenum::U32;
 /// This type makes use of noise for non-determinisitc signatures.
 #[derive(Clone, PartialEq, Eq, Hash, Copy, Serialize, Deserialize, Debug)]
 
-pub struct BN254Pub {
+pub struct BLSPubKey {
     /// The public key for this keypair
     pub_key: VerKey,
 }
 
-impl PartialOrd for BN254Pub {
+impl PartialOrd for BLSPubKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_bytes = &self.pub_key.to_string();
         let other_bytes = &other.pub_key.to_string();
@@ -35,7 +35,7 @@ impl PartialOrd for BN254Pub {
     }
 }
 
-impl Ord for BN254Pub {
+impl Ord for BLSPubKey {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_bytes = &self.pub_key.to_string();
         let other_bytes = &other.pub_key.to_string();
@@ -43,7 +43,7 @@ impl Ord for BN254Pub {
     }
 }
 
-impl SignatureKey for BN254Pub {
+impl SignatureKey for BLSPubKey {
     type PrivateKey = BLSPrivKey;
     type StakeTableEntry = JFStakeTableEntry<VerKey>;
     type QCParams = JFQCParams<
@@ -114,7 +114,7 @@ impl SignatureKey for BN254Pub {
     fn from_bytes(bytes: &EncodedPublicKey) -> Option<Self> {
         let x: Result<VerKey, _> = bincode_opts().deserialize(&bytes.0);
         match x {
-            Ok(pub_key) => Some(BN254Pub { pub_key }),
+            Ok(pub_key) => Some(BLSPubKey { pub_key }),
             Err(e) => {
                 debug!(?e, "Failed to deserialize public key");
                 None

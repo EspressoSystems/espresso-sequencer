@@ -1,7 +1,7 @@
 // use ark_bls12_381::Parameters as Param381;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use espresso_systems_common::hotshot::tag;
-use hotshot_signature_key::bn254::BN254Pub;
+use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     data::LeafType,
     traits::{
@@ -30,7 +30,7 @@ pub struct GeneralStaticCommittee<T, LEAF: LeafType<NodeType = T>, PUBKEY: Signa
 }
 
 /// static committee using a vrf kp
-pub type StaticCommittee<T, LEAF> = GeneralStaticCommittee<T, LEAF, BN254Pub>;
+pub type StaticCommittee<T, LEAF> = GeneralStaticCommittee<T, LEAF, BLSPubKey>;
 
 impl<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey>
     GeneralStaticCommittee<T, LEAF, PUBKEY>

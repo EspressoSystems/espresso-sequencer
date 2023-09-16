@@ -11,7 +11,7 @@ use hotshot::{
         },
         NodeImplementation,
     },
-    types::bn254::BN254Pub,
+    types::bn254::BLSPubKey,
 };
 use hotshot_types::{
     certificate::ViewSyncCertificate,
@@ -43,7 +43,7 @@ pub struct SequencingTestTypes;
 impl NodeType for SequencingTestTypes {
     type Time = ViewNumber;
     type BlockType = SDemoBlock;
-    type SignatureKey = BN254Pub;
+    type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = SDemoTransaction;
     type ElectionConfigType = StaticElectionConfig;
