@@ -3,9 +3,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, Serializatio
 use bitvec::prelude::*;
 use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;
-use jf_primitives::signatures::{
-    bls_over_bn254::BLSOverBN254CurveSignatureScheme, SignatureScheme,
-};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, hash::Hash};
 use tagged_base64::tagged;
@@ -24,7 +21,7 @@ use tagged_base64::tagged;
     Ord,
 )]
 pub struct EncodedPublicKey(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey
+    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, 
 );
 
 /// Type saftey wrapper for byte encoded signature
@@ -32,7 +29,7 @@ pub struct EncodedPublicKey(
     Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct EncodedSignature(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature
+    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>,
 );
 
 impl AsRef<[u8]> for EncodedSignature {
@@ -70,6 +67,17 @@ pub trait SignatureKey:
         + for<'a> Deserialize<'a>;
     /// The type of the quorum certificate parameters used for assembled signature
     type QCParams: Send + Sync + Sized + Clone + Debug + Hash;
+    /// The type of the assembled signature, without `BitVec`
+    type PureAssembledSignatureType: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Hash
+        + PartialEq
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>;
     /// The type of the assembled qc: assembled signature + `BitVec`
     type QCType: Send
         + Sync
@@ -117,7 +125,7 @@ pub trait SignatureKey:
     fn get_sig_proof(
         signature: &Self::QCType,
     ) -> (
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature,
+        Self::PureAssembledSignatureType,
         BitVec,
     );
 
@@ -125,6 +133,6 @@ pub trait SignatureKey:
     fn assemble(
         real_qc_pp: &Self::QCParams,
         signers: &BitSlice,
-        sigs: &[<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature],
+        sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType;
 }

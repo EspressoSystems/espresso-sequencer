@@ -96,7 +96,6 @@ pub struct DAVoteCollectionTaskState<
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
-
     #[allow(clippy::type_complexity)]
     /// Accumulates DA votes
     pub accumulator: Either<
