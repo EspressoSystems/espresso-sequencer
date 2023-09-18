@@ -182,6 +182,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES, I::Leaf>,
         metrics: Box<dyn Metrics>,
     ) -> Result<Self, HotShotError<TYPES>> {
+       
         debug!("Creating a new hotshot");
 
         let consensus_metrics = Arc::new(ConsensusMetrics::new(

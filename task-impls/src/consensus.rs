@@ -34,6 +34,7 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteType},
 };
+use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 
 use snafu::Snafu;
 use std::{
@@ -88,6 +89,8 @@ pub struct SequencingConsensusTaskState<
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
+
+    pub timeout_exchange: Arc<SequencingTimeoutEx<TYPES, I>>,
 
     /// Consensus api
     pub api: A,
