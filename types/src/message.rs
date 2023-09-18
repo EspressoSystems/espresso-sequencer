@@ -13,7 +13,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote, VoteType},
+    vote::{DAVote, QuorumVote, TimeoutVote, TimeoutVote2, ViewSyncVote, VoteType},
 };
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
@@ -201,6 +201,8 @@ where
             }
             GeneralConsensusMessage::ViewSyncVote(_)
             | GeneralConsensusMessage::ViewSyncCertificate(_) => todo!(),
+            | GeneralConsensusMessage::TimeoutVote(_) => todo!(),
+
         }
     }
 }
@@ -322,6 +324,9 @@ where
     /// Message with a view sync certificate.
     ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
 
+    /// Message with a Timeout vote
+    TimeoutVote(TimeoutVote2<TYPES>),
+
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
@@ -416,6 +421,9 @@ impl<
                     GeneralConsensusMessage::ViewSyncCertificate(message) => {
                         message.data.get_view_number()
                     }
+                    GeneralConsensusMessage::TimeoutVote(message) => {
+                        message.get_view()
+                    }
                 }
             }
             Right(committee_message) => {
@@ -447,6 +455,7 @@ impl<
                 GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
                 GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
                 GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
+                GeneralConsensusMessage::TimeoutVote(_) => todo!(),
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,

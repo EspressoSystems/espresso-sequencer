@@ -1069,10 +1069,32 @@ where
                     );
                 }
             }
+            SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
+                panic!()
+            }
             SequencingHotShotEvent::Timeout(view) => {
+                let vote_token = self.timeout_exchange.make_vote_token(view);
 
-                // TODO ED Why I here and not in quorum exchange? 
-                self.timeout_exchange.create_timeout_message::<I>(view);
+                match vote_token {
+                    Err(e) => {
+                        error!("Failed to generate vote token for {:?} {:?}", view, e);
+                    }
+                    Ok(None) => {
+                        debug!("We were not chosen for consensus committee on {:?}", view);
+                    }
+                    Ok(Some(vote_token)) => {
+                        // TODO ED Why I here and not in quorum exchange?
+                        let message = self
+                            .timeout_exchange
+                            .create_timeout_message::<I>(view, vote_token);
+
+                        if let GeneralConsensusMessage::TimeoutVote(vote) = message {
+                            self.event_stream
+                                .publish(SequencingHotShotEvent::TimeoutVoteSend(vote))
+                                .await;
+                        }
+                    }
+                }
 
                 self.quorum_exchange
                     .network()

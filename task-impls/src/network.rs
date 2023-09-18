@@ -89,6 +89,9 @@ impl<
                             GeneralConsensusMessage::ViewSyncCertificate(view_sync_message) => {
                                 SequencingHotShotEvent::ViewSyncCertificateRecv(view_sync_message)
                             }
+                            GeneralConsensusMessage::TimeoutVote(message) => {
+                                SequencingHotShotEvent::TimeoutVoteRecv(message)
+                            }
                             GeneralConsensusMessage::InternalTrigger(_) => {
                                 error!("Got unexpected message type in network task!");
                                 return;
@@ -282,6 +285,16 @@ impl<
                     Some(membership.get_leader(vote.round() + vote.relay())),
                 )
             }
+            SequencingHotShotEvent::TimeoutVoteSend(vote) => {
+                (
+                    vote.get_key(),
+                    MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                        GeneralConsensusMessage::TimeoutVote(vote.clone()),
+                    ))),
+                    TransmitType::Direct,
+                    Some(membership.get_leader(vote.get_view())),
+                )
+            }
             SequencingHotShotEvent::ViewChange(view) => {
                 self.view = view;
                 return None;
@@ -336,6 +349,8 @@ impl<
                 | SequencingHotShotEvent::DACSend(_, _)
                 | SequencingHotShotEvent::VidCertSend(_, _)
                 | SequencingHotShotEvent::ViewChange(_)
+                | SequencingHotShotEvent::TimeoutVoteSend(_)
+
         )
     }
 

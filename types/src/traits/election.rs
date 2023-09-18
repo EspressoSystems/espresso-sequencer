@@ -1491,6 +1491,7 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
     fn create_timeout_message<I: NodeImplementation<TYPES>>(
         &self,
         view: TYPES::Time,
+        vote_token: TYPES::VoteTokenType,
     ) -> GeneralConsensusMessage<TYPES, I>
     where
         I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
@@ -1502,12 +1503,13 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
                 .as_ref(),
         );
 
-        // GeneralConsensusMessage::<TYPES, I>::TODO {
-        //     signature: (self.public_key.to_bytes(), signature),
-        //     current_view: view,
-        //     vote_data: VoteData::Timeout(view.commit()),
-        // })
-        todo!()
+        GeneralConsensusMessage::<TYPES, I>::TimeoutVote(TimeoutVote2 {
+            signature: (self.public_key().to_bytes(), signature),
+            current_view: view,
+            vote_token
+        })
+    
+     
     }
 }
 
@@ -1577,14 +1579,14 @@ impl<
 
     fn accumulate_vote(
         &self,
-        encoded_key: &EncodedPublicKey,
-        encoded_signature: &EncodedSignature,
-        leaf_commitment: Commitment<Self::Commitment>,
-        vote_data: VoteData<Self::Commitment>,
-        vote_token: <TYPES as NodeType>::VoteTokenType,
-        view_number: <TYPES as NodeType>::Time,
-        accumlator: VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
-        relay: Option<u64>,
+        _encoded_key: &EncodedPublicKey,
+        _encoded_signature: &EncodedSignature,
+        _leaf_commitment: Commitment<Self::Commitment>,
+        _vote_data: VoteData<Self::Commitment>,
+        _vote_token: <TYPES as NodeType>::VoteTokenType,
+        _view_number: <TYPES as NodeType>::Time,
+        _accumlator: VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
+        _relay: Option<u64>,
     ) -> Either<
         VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
         Self::Certificate,

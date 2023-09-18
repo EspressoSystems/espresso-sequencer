@@ -5,7 +5,7 @@ use hotshot_types::{
     traits::node_implementation::{
         NodeImplementation, NodeType, QuorumProposalType, ViewSyncProposalType,
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
+    vote::{DAVote, QuorumVote, ViewSyncVote, TimeoutVote2},
 };
 
 use crate::view_sync::ViewSyncPhase;
@@ -19,6 +19,8 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     QuorumProposalRecv(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// A quorum vote has been received from the network; handled by the consensus task
     QuorumVoteRecv(QuorumVote<TYPES, I::Leaf>),
+    TimeoutVoteRecv(TimeoutVote2<TYPES>),
+    TimeoutVoteSend(TimeoutVote2<TYPES>),
     /// A DA proposal has been received from the network; handled by the DA task
     DAProposalRecv(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
