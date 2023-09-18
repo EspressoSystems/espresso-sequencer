@@ -2,7 +2,6 @@
 use std::{
     collections::HashSet,
     fmt::{Debug, Display},
-    ops::Deref,
 };
 
 use commit::{Commitment, Committable};
@@ -12,30 +11,17 @@ use snafu::Snafu;
 
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct VIDTransaction {
-    /// identifier for the transaction
-    pub id: u64,
-    /// padding to add to txn (to make it larger and thereby more realistic)
-    pub padding: Vec<u8>,
-}
-
-impl Deref for VIDTransaction {
-    type Target = u64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.id
-    }
-}
+pub struct VIDTransaction(pub Vec<u8>);
 
 impl Committable for VIDTransaction {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("SDemo Txn Comm")
-            .u64_field("id", self.id)
-            .finalize()
+        // TODO: Use use VID block commitment.
+        // <https://github.com/EspressoSystems/HotShot/issues/1730>
+        commit::RawCommitmentBuilder::new("Txn Comm").finalize()
     }
 
     fn tag() -> String {
-        "SEQUENCING_DEMO_TXN".to_string()
+        "SEQUENCING_TXN".to_string()
     }
 }
 
@@ -44,11 +30,14 @@ impl Transaction for VIDTransaction {}
 impl VIDTransaction {
     /// create a new transaction
     #[must_use]
-    pub fn new(id: u64) -> Self {
-        Self {
-            id,
-            padding: vec![],
-        }
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl Default for VIDTransaction {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -73,10 +62,9 @@ pub struct VIDBlockPayload(pub Vec<VIDTransaction>);
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        let mut builder = commit::RawCommitmentBuilder::new("Normal Comm");
-        for txn in &self.0 {
-            builder = builder.u64_field("transaction", **txn);
-        }
+        // TODO: Use use VID block commitment.
+        // <https://github.com/EspressoSystems/HotShot/issues/1730>
+        let builder = commit::RawCommitmentBuilder::new("BlockPayload Comm");
         builder.finalize()
     }
 
