@@ -15,7 +15,6 @@ use example_l2::{
 use futures::join;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -52,15 +51,6 @@ async fn main() {
         output_stream: None,
     };
 
-    let hotshot_contract_options = CommitmentTaskOptions {
-        hotshot_address: opt.hotshot_address,
-        l1_chain_id: None,
-        l1_provider: opt.l1_provider.clone(),
-        sequencer_mnemonic: opt.rollup_mnemonic,
-        sequencer_account_index: opt.hotshot_account_index,
-        query_service_url: Some(opt.sequencer_url),
-    };
-
     let serve_api = async {
         serve(&api_options, state.clone()).await.unwrap();
     };
@@ -74,10 +64,6 @@ async fn main() {
         .unwrap();
     deploy_example_contract(&test_system, initial_state).await;
 
-    tracing::info!("Launching Example Rollup API, Executor, and HotShot commitment task..");
-    join!(
-        run_executor(&executor_options, state.clone()),
-        run_hotshot_commitment_task(&hotshot_contract_options),
-        serve_api,
-    );
+    tracing::info!("Launching Example Rollup API and Executor");
+    join!(run_executor(&executor_options, state.clone()), serve_api,);
 }
