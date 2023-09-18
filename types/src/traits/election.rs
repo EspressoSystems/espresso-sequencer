@@ -9,9 +9,9 @@ use super::{
 };
 use crate::{
     certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, ViewSyncCertificate, VoteMetaData,
+        AssembledSignature, DACertificate, QuorumCertificate, ViewSyncCertificate, VoteMetaData, TimeoutCertificate,
     },
-    data::{DAProposal, ProposalType},
+    data::{DAProposal, ProposalType}, vote::TimeoutVote2,
 };
 
 use crate::{
@@ -1445,6 +1445,102 @@ impl<
     }
     fn private_key(&self) -> &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey {
         &self.private_key
+    }
+}
+
+// TODO ED All the exchange structs are the same.  We could just considate them into one struct
+/// Standard implementation of a Timeout Exchange based on Hot Stuff consensus.
+#[derive(Derivative)]
+#[derivative(Clone, Debug)]
+pub struct TimeoutExchange<
+    TYPES: NodeType,
+    PROPOSAL: ProposalType<NodeType = TYPES>,
+    MEMBERSHIP: Membership<TYPES>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    M: NetworkMsg,
+> {
+    /// The network being used by this exchange.
+    network: NETWORK,
+    /// The committee which votes on proposals.
+    membership: MEMBERSHIP,
+    /// This participant's public key.
+    public_key: TYPES::SignatureKey,
+    /// Entry with public key and staking value for certificate aggregation in the stake table.
+    entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+    /// This participant's private key.
+    #[derivative(Debug = "ignore")]
+    private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    #[doc(hidden)]
+    _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
+}
+
+// TODO ED Get rid of ProposalType as generic, is debt left over from Validating Consensus
+impl<
+        TYPES: NodeType,
+        PROPOSAL: ProposalType<NodeType = TYPES>,
+        MEMBERSHIP: Membership<TYPES>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        M: NetworkMsg,
+    > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+{
+    type Proposal = PROPOSAL;
+    type Vote = TimeoutVote2<TYPES>;
+    type Certificate = TimeoutCertificate<TYPES>;
+    type Membership = MEMBERSHIP;
+    type Networking = NETWORK;
+    type Commitment = TYPES::Time;
+
+    fn create(
+        entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        config: TYPES::ElectionConfigType,
+        network: Self::Networking,
+        pk: TYPES::SignatureKey,
+        entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    ) -> Self {
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        Self {
+            network,
+            membership,
+            public_key: pk,
+            entry,
+            private_key: sk,
+            _pd: PhantomData,
+        }
+    }
+
+    fn network(&self) -> &NETWORK {
+        &self.network
+    }
+
+    fn vote_data(&self, _commit: Commitment<Self::Commitment>) -> VoteData<Self::Commitment> {
+        unimplemented!()
+    }
+
+
+    fn membership(&self) -> &Self::Membership {
+        &self.membership
+    }
+    fn public_key(&self) -> &TYPES::SignatureKey {
+        &self.public_key
+    }
+    fn private_key(&self) -> &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey {
+        &self.private_key
+    }
+
+    fn accumulate_vote(
+        &self,
+        encoded_key: &EncodedPublicKey,
+        encoded_signature: &EncodedSignature,
+        leaf_commitment: Commitment<Self::Commitment>,
+        vote_data: VoteData<Self::Commitment>,
+        vote_token: <TYPES as NodeType>::VoteTokenType,
+        view_number: <TYPES as NodeType>::Time,
+        accumlator: VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
+        relay: Option<u64>,
+    ) -> Either<VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
+        todo!()
     }
 }
 
