@@ -1,8 +1,10 @@
 //! Provides two types of cerrtificates and their accumulators.
 
+use crate::vote::AccumulatorPlaceholder;
 use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
 use crate::vote::QuorumVoteAccumulator;
+use crate::vote::TimeoutVote2;
 use crate::vote::ViewSyncVoteAccumulator;
 use crate::vote::VoteType;
 use crate::{
@@ -81,6 +83,45 @@ pub struct TimeoutCertificate<TYPES: NodeType> {
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
+}
+
+impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::Time>
+    for TimeoutCertificate<TYPES>
+{
+    type Vote = TimeoutVote2<TYPES>;
+
+    type VoteAccumulator = AccumulatorPlaceholder<TYPES, TYPES::Time, Self::Vote>;
+
+    fn from_signatures_and_commitment(
+        signatures: AssembledSignature<TYPES>,
+        vote: Self::Vote,
+    ) -> Self {
+        todo!()
+    }
+
+    fn view_number(&self) -> TYPES::Time {
+        todo!()
+    }
+
+    fn signatures(&self) -> AssembledSignature<TYPES> {
+        todo!()
+    }
+
+    fn leaf_commitment(&self) -> Commitment<TYPES::Time> {
+        todo!()
+    }
+
+    fn set_leaf_commitment(&mut self, commitment: Commitment<TYPES::Time>) {
+        todo!()
+    }
+
+    fn is_genesis(&self) -> bool {
+        todo!()
+    }
+
+    fn genesis() -> Self {
+        todo!()
+    }
 }
 
 /// Certificate for view sync.
