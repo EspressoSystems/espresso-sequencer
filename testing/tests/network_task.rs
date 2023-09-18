@@ -74,6 +74,10 @@ async fn test_network_task() {
     let mut output = HashMap::new();
 
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
+    input.push(SequencingHotShotEvent::BlockReady(
+        block.clone(),
+        ViewNumber::new(2),
+    ));
     input.push(SequencingHotShotEvent::DAProposalSend(
         da_proposal.clone(),
         pub_key,
@@ -95,9 +99,20 @@ async fn test_network_task() {
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
     output.insert(
+        SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        2,
+    );
+    output.insert(
+        SequencingHotShotEvent::VidDisperseRecv(da_vid_disperse.clone(), pub_key),
+        1,
+    );
+    output.insert(
         SequencingHotShotEvent::VidDisperseSend(da_vid_disperse, pub_key),
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
+    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(1)), 1);
+    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(2)), 1);
+
     // Only one output from the input.
     // The consensus task will fail to send a second proposal, like the DA task does, due to the
     // view number check in `publish_proposal_if_able` in consensus.rs, and we will see an error in

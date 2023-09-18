@@ -1,10 +1,7 @@
 use crate::events::SequencingHotShotEvent;
-use async_compatibility_layer::{
-    art::{async_spawn, async_timeout},
-    async_primitives::subscribable_rwlock::ReadView,
-};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-use bincode::config::Options;
+
 use bitvec::prelude::*;
 use commit::Committable;
 use either::{Either, Left, Right};
@@ -30,18 +27,14 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        BlockPayload, State,
+        BlockPayload,
     },
     utils::ViewInner,
 };
-use hotshot_utils::bincode::bincode_opts;
+
 use snafu::Snafu;
 use std::marker::PhantomData;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
@@ -73,7 +66,6 @@ pub struct DATaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    // pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
 
@@ -271,33 +263,6 @@ where
         event: SequencingHotShotEvent<TYPES, I>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            SequencingHotShotEvent::TransactionsRecv(transactions) => {
-                let mut consensus = self.consensus.write().await;
-                consensus
-                    .get_transactions()
-                    .modify(|txns| {
-                        for transaction in transactions {
-                            let size = bincode_opts().serialized_size(&transaction).unwrap_or(0);
-
-                            // If we didn't already know about this transaction, update our mempool metrics.
-                            if !consensus.seen_transactions.remove(&transaction.commit())
-                                && txns.insert(transaction.commit(), transaction).is_none()
-                            {
-                                consensus.metrics.outstanding_transactions.update(1);
-                                consensus
-                                    .metrics
-                                    .outstanding_transactions_memory_size
-                                    .update(i64::try_from(size).unwrap_or_else(|e| {
-                                        warn!("Conversion failed: {e}. Using the max value.");
-                                        i64::MAX
-                                    }));
-                            }
-                        }
-                    })
-                    .await;
-
-                return None;
-            }
             SequencingHotShotEvent::DAProposalRecv(proposal, sender) => {
                 debug!(
                     "DA proposal received for view: {:?}",
@@ -643,8 +608,6 @@ where
                         .await;
                 }
 
-                // TODO ED Make this a new task so it doesn't block main DA task
-
                 // If we are not the next leader (DA leader for this view) immediately exit
                 if !self.committee_exchange.is_leader(self.cur_view + 1) {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
@@ -658,62 +621,19 @@ where
                     .inject_consensus_info(ConsensusIntentEvent::PollForVotes(*self.cur_view + 1))
                     .await;
 
-                // ED Copy of parent_leaf() function from sequencing leader
-
-                let consensus = self.consensus.read().await;
-                let parent_view_number = &consensus.high_qc.view_number;
-
-                let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
-                    error!(
-                        "Couldn't find high QC parent in state map. Parent view {:?}",
-                        parent_view_number
-                    );
-                    return None;
-                };
-                let Some(leaf) = parent_view.get_leaf_commitment() else {
-                    error!(
-                        ?parent_view_number,
-                        ?parent_view,
-                        "Parent of high QC points to a view without a proposal"
-                    );
-                    return None;
-                };
-                let Some(leaf) = consensus.saved_leaves.get(&leaf) else {
-                    error!("Failed to find high QC parent.");
-                    return None;
-                };
-                let parent_leaf = leaf.clone();
-
-                // Prepare the DA Proposal
-                //         let Some(parent_leaf) = self.parent_leaf().await else {
-                //     warn!("Couldn't find high QC parent in state map.");
-                //     return None;
-                // };
-
-                drop(consensus);
-
-                let mut block = <TYPES as NodeType>::StateType::next_block(None);
-                let txns = self.wait_for_transactions(parent_leaf).await?;
-
+                return None;
+            }
+            SequencingHotShotEvent::BlockReady(block, view) => {
                 self.committee_exchange
                     .network()
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(
-                        *self.cur_view + 1,
-                    ))
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
-
-                for txn in txns {
-                    if let Ok(new_block) = block.add_transaction_raw(&txn) {
-                        block = new_block;
-                        continue;
-                    }
-                }
 
                 let signature = self.committee_exchange.sign_da_proposal(&block.commit());
                 let data: DAProposal<TYPES> = DAProposal {
                     deltas: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
-                    view_number: self.cur_view + 1,
+                    view_number: view,
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
@@ -760,7 +680,7 @@ where
                         .publish(SequencingHotShotEvent::VidDisperseSend(
                             Proposal {
                                 data: VidDisperse {
-                                    view_number: self.cur_view + 1, // copied from `data` above
+                                    view_number: view,
                                     commitment: block.commit(),
                                     shares,
                                     common,
@@ -772,8 +692,6 @@ where
                         ))
                         .await;
                 }
-
-                return None;
             }
 
             SequencingHotShotEvent::Timeout(view) => {
@@ -793,70 +711,6 @@ where
         None
     }
 
-    /// return None if we can't get transactions
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Vote Collection Task", level = "error")]
-
-    async fn wait_for_transactions(
-        &self,
-        parent_leaf: SequencingLeaf<TYPES>,
-    ) -> Option<Vec<TYPES::Transaction>> {
-        let task_start_time = Instant::now();
-
-        // let parent_leaf = self.parent_leaf().await?;
-        let previous_used_txns = match parent_leaf.deltas {
-            Either::Left(block) => block.contained_transactions(),
-            Either::Right(_commitment) => HashSet::new(),
-        };
-
-        let consensus = self.consensus.read().await;
-
-        let receiver = consensus.transactions.subscribe().await;
-
-        loop {
-            let all_txns = consensus.transactions.cloned().await;
-            debug!("Size of transactions: {}", all_txns.len());
-            let unclaimed_txns: Vec<_> = all_txns
-                .iter()
-                .filter(|(txn_hash, _txn)| !previous_used_txns.contains(txn_hash))
-                .collect();
-
-            let time_past = task_start_time.elapsed();
-            if unclaimed_txns.len() < self.api.min_transactions()
-                && (time_past < self.api.propose_max_round_time())
-            {
-                let duration = self.api.propose_max_round_time() - time_past;
-                let result = async_timeout(duration, receiver.recv()).await;
-                match result {
-                    Err(_) => {
-                        // Fall through below to updating new block
-                        error!(
-                            "propose_max_round_time passed, sending transactions we have so far"
-                        );
-                    }
-                    Ok(Err(e)) => {
-                        // Something unprecedented is wrong, and `transactions` has been dropped
-                        error!("Channel receiver error for SubscribableRwLock {:?}", e);
-                        return None;
-                    }
-                    Ok(Ok(_)) => continue,
-                }
-            }
-            break;
-        }
-        let all_txns = consensus.transactions.cloned().await;
-        let txns: Vec<TYPES::Transaction> = all_txns
-            .iter()
-            .filter_map(|(txn_hash, txn)| {
-                if previous_used_txns.contains(txn_hash) {
-                    None
-                } else {
-                    Some(txn.clone())
-                }
-            })
-            .collect();
-        Some(txns)
-    }
-
     /// Filter the DA event.
     pub fn filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
         matches!(
@@ -864,7 +718,7 @@ where
             SequencingHotShotEvent::DAProposalRecv(_, _)
                 | SequencingHotShotEvent::DAVoteRecv(_)
                 | SequencingHotShotEvent::Shutdown
-                | SequencingHotShotEvent::TransactionsRecv(_)
+                | SequencingHotShotEvent::BlockReady(_, _)
                 | SequencingHotShotEvent::Timeout(_)
                 | SequencingHotShotEvent::VidDisperseRecv(_, _)
                 | SequencingHotShotEvent::VidVoteRecv(_)
