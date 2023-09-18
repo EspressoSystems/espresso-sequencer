@@ -292,7 +292,7 @@ impl<
                         GeneralConsensusMessage::TimeoutVote(vote.clone()),
                     ))),
                     TransmitType::Direct,
-                    Some(membership.get_leader(vote.get_view())),
+                    Some(membership.get_leader(vote.get_view() + 1)),
                 )
             }
             SequencingHotShotEvent::ViewChange(view) => {

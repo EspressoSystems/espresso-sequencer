@@ -109,15 +109,15 @@ pub struct TimeoutVote2<TYPES: NodeType> {
 
 impl<TYPES: NodeType> VoteType<TYPES, TYPES::Time> for TimeoutVote2<TYPES> {
     fn get_view(&self) -> <TYPES as NodeType>::Time {
-        todo!()
+        self.current_view
     }
 
     fn get_key(&self) -> <TYPES as NodeType>::SignatureKey {
-        todo!()
+        <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
     }
 
     fn get_signature(&self) -> EncodedSignature {
-        todo!()
+        self.signature.1.clone()
     }
 
     fn get_data(&self) -> VoteData<TYPES::Time> {
