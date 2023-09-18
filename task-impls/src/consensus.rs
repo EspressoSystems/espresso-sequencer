@@ -15,6 +15,8 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::traits::election::TimeoutExchangeType;
+use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 use hotshot_types::vote::QuorumVoteAccumulator;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
@@ -34,7 +36,6 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, VoteType},
 };
-use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 
 use snafu::Snafu;
 use std::{
@@ -90,6 +91,7 @@ pub struct SequencingConsensusTaskState<
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
 
+    /// The timeout exchange
     pub timeout_exchange: Arc<SequencingTimeoutEx<TYPES, I>>,
 
     /// Consensus api
@@ -1068,8 +1070,10 @@ where
                 }
             }
             SequencingHotShotEvent::Timeout(view) => {
-                // The view sync module will handle updating views in the case of timeout
-                // TODO ED In the future send a timeout vote
+
+                // TODO ED Why I here and not in quorum exchange? 
+                self.timeout_exchange.create_timeout_message::<I>(view);
+
                 self.quorum_exchange
                     .network()
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))

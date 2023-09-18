@@ -1476,7 +1476,40 @@ pub struct TimeoutExchange<
     _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
 }
 
-pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {}
+impl<
+        TYPES: NodeType,
+        PROPOSAL: ProposalType<NodeType = TYPES>,
+        MEMBERSHIP: Membership<TYPES>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        M: NetworkMsg,
+    > TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+{
+}
+
+pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
+    // TODO ED Clean this function up
+    fn create_timeout_message<I: NodeImplementation<TYPES>>(
+        &self,
+        view: TYPES::Time,
+    ) -> GeneralConsensusMessage<TYPES, I>
+    where
+        I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    {
+        let signature = TYPES::SignatureKey::sign(
+            &self.private_key(),
+            VoteData::<TYPES::Time>::Timeout(view.commit())
+                .commit()
+                .as_ref(),
+        );
+
+        // GeneralConsensusMessage::<TYPES, I>::TODO {
+        //     signature: (self.public_key.to_bytes(), signature),
+        //     current_view: view,
+        //     vote_data: VoteData::Timeout(view.commit()),
+        // })
+        todo!()
+    }
+}
 
 impl<
         TYPES: NodeType,

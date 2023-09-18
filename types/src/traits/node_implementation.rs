@@ -349,7 +349,7 @@ pub type SequencingQuorumEx<TYPES, I> =
         Message<TYPES, I>,
     >>::QuorumExchange;
 
-    pub type SequencingTimeoutEx<TYPES, I> =
+pub type SequencingTimeoutEx<TYPES, I> =
     <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
         TYPES,
         <I as NodeImplementation<TYPES>>::Leaf,
