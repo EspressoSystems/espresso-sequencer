@@ -6,7 +6,7 @@
 //! These implementations are useful in examples and integration testing, but are not suitable for
 //! production use.
 use crate::{
-    block_impl::{BlockPayloadError, NormalBlockPayload, VIDBlockPayload, VIDTransaction},
+    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
     traits::election::static_committee::{StaticElectionConfig, StaticVoteToken},
 };
 use commit::{Commitment, Committable};
@@ -73,18 +73,14 @@ impl State for SDemoState {
     type Time = ViewNumber;
 
     fn next_block(_state: Option<Self>) -> Self::BlockType {
-        VIDBlockPayload::Normal(NormalBlockPayload {
-            previous_state: (),
-            transactions: Vec::new(),
-        })
+        VIDBlockPayload(Vec::new())
     }
 
-    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool {
-        match block {
-            VIDBlockPayload::Genesis(_) => {
-                view_number == &ViewNumber::genesis() && view_number == &self.view_number
-            }
-            VIDBlockPayload::Normal(_n) => self.view_number < *view_number,
+    fn validate_block(&self, _block: &Self::BlockType, view_number: &Self::Time) -> bool {
+        if view_number == &ViewNumber::genesis() {
+            &self.view_number == view_number
+        } else {
+            self.view_number < *view_number
         }
     }
 
@@ -133,9 +129,9 @@ impl TestableState for SDemoState {
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct SDemoTypes;
+pub struct DemoTypes;
 
-impl NodeType for SDemoTypes {
+impl NodeType for DemoTypes {
     type Time = ViewNumber;
     type BlockType = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
@@ -150,11 +146,11 @@ impl NodeType for SDemoTypes {
 #[derivative(Clone(bound = ""))]
 pub struct SDemoNode<MEMBERSHIP>(PhantomData<MEMBERSHIP>)
 where
-    MEMBERSHIP: Membership<SDemoTypes> + std::fmt::Debug;
+    MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug;
 
 impl<MEMBERSHIP> SDemoNode<MEMBERSHIP>
 where
-    MEMBERSHIP: Membership<SDemoTypes> + std::fmt::Debug,
+    MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
     /// Create a new `SDemoNode`
     #[must_use]
@@ -165,7 +161,7 @@ where
 
 impl<MEMBERSHIP> Debug for SDemoNode<MEMBERSHIP>
 where
-    MEMBERSHIP: Membership<SDemoTypes> + std::fmt::Debug,
+    MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SDemoNode")
@@ -176,7 +172,7 @@ where
 
 impl<MEMBERSHIP> Default for SDemoNode<MEMBERSHIP>
 where
-    MEMBERSHIP: Membership<SDemoTypes> + std::fmt::Debug,
+    MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
     fn default() -> Self {
         Self::new()

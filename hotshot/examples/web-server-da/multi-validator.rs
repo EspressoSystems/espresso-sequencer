@@ -3,7 +3,7 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
-use hotshot::demo::SDemoTypes;
+use hotshot::demo::DemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use std::net::IpAddr;
 use tracing::instrument;
@@ -49,7 +49,7 @@ async fn main() {
     for _ in 0..args.num_nodes {
         let node = async_spawn(async move {
             infra_da::main_entry_point::<
-                SDemoTypes,
+                DemoTypes,
                 ThisMembership,
                 DANetwork,
                 QuorumNetwork,

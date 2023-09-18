@@ -21,7 +21,7 @@ use std::collections::HashMap;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_network_task() {
-    use hotshot::block_impl::{NormalBlockPayload, VIDBlockPayload};
+    use hotshot::block_impl::VIDBlockPayload;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
@@ -40,10 +40,7 @@ async fn test_network_task() {
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
-    let block = VIDBlockPayload::Normal(NormalBlockPayload {
-        previous_state: (),
-        transactions: Vec::new(),
-    });
+    let block = VIDBlockPayload(Vec::new());
     let block_commitment = block.commit();
     let signature = committee_exchange.sign_da_proposal(&block_commitment);
     let da_proposal = Proposal {

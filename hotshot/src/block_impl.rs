@@ -63,48 +63,21 @@ pub enum BlockPayloadError {
     GenesisFailed,
     /// Genesis reencountered after initialization
     GenesisAfterStart,
-    /// no transasctions added to genesis
-    GenesisCantHaveTransactions,
     /// invalid block
     InvalidBlock,
 }
 
-/// genesis block
+/// A [`BlockPayload`] that contains a list of `VIDTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct GenesisBlockPayload {}
-
-/// Any block after genesis
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct NormalBlockPayload {
-    /// [`BlockPayload`] state commitment
-    pub previous_state: (),
-    /// [`VIDTransaction`] vector
-    pub transactions: Vec<VIDTransaction>,
-}
-
-/// The block for the sequencing demo
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub enum VIDBlockPayload {
-    /// genesis block payload
-    Genesis(GenesisBlockPayload),
-    /// normal block payload
-    Normal(NormalBlockPayload),
-}
+pub struct VIDBlockPayload(pub Vec<VIDTransaction>);
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        match &self {
-            VIDBlockPayload::Genesis(_) => {
-                commit::RawCommitmentBuilder::new("Genesis Comm").finalize()
-            }
-            VIDBlockPayload::Normal(block) => {
-                let mut builder = commit::RawCommitmentBuilder::new("Normal Comm");
-                for txn in &block.transactions {
-                    builder = builder.u64_field("transaction", **txn);
-                }
-                builder.finalize()
-            }
+        let mut builder = commit::RawCommitmentBuilder::new("Normal Comm");
+        for txn in &self.0 {
+            builder = builder.u64_field("transaction", **txn);
         }
+        builder.finalize()
     }
 
     fn tag() -> String {
@@ -114,27 +87,17 @@ impl Committable for VIDBlockPayload {
 
 impl Display for VIDBlockPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VIDBlockPayload::Genesis(_) => {
-                write!(f, "Genesis BlockPayload")
-            }
-            VIDBlockPayload::Normal(block) => {
-                write!(f, "Normal BlockPayload #txns={}", block.transactions.len())
-            }
-        }
+        write!(f, "BlockPayload #txns={}", self.0.len())
     }
 }
 
 impl TestableBlock for VIDBlockPayload {
     fn genesis() -> Self {
-        VIDBlockPayload::Genesis(GenesisBlockPayload {})
+        VIDBlockPayload(Vec::new())
     }
 
     fn txn_count(&self) -> u64 {
-        match self {
-            VIDBlockPayload::Genesis(_) => 0,
-            VIDBlockPayload::Normal(n) => n.transactions.len() as u64,
-        }
+        self.0.len() as u64
     }
 }
 
@@ -151,24 +114,12 @@ impl BlockPayload for VIDBlockPayload {
         &self,
         tx: &Self::Transaction,
     ) -> std::result::Result<Self, Self::Error> {
-        match self {
-            VIDBlockPayload::Genesis(_) => Err(BlockPayloadError::GenesisCantHaveTransactions),
-            VIDBlockPayload::Normal(n) => {
-                let mut new = n.clone();
-                new.transactions.push(tx.clone());
-                Ok(VIDBlockPayload::Normal(new))
-            }
-        }
+        let mut new = self.0.clone();
+        new.push(tx.clone());
+        Ok(VIDBlockPayload(new))
     }
 
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-        match self {
-            VIDBlockPayload::Genesis(_) => HashSet::new(),
-            VIDBlockPayload::Normal(n) => n
-                .transactions
-                .iter()
-                .map(commit::Committable::commit)
-                .collect(),
-        }
+        self.0.iter().map(commit::Committable::commit).collect()
     }
 }

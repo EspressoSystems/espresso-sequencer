@@ -1,6 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demo::SDemoTypes;
+use hotshot::demo::DemoTypes;
 use tracing::{info, instrument};
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};
@@ -29,7 +29,7 @@ async fn main() {
         args.host, args.port
     );
     infra_da::main_entry_point::<
-        SDemoTypes,
+        DemoTypes,
         ThisMembership,
         DANetwork,
         QuorumNetwork,
