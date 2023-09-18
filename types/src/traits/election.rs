@@ -9,9 +9,11 @@ use super::{
 };
 use crate::{
     certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, ViewSyncCertificate, VoteMetaData, TimeoutCertificate,
+        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate,
+        ViewSyncCertificate, VoteMetaData,
     },
-    data::{DAProposal, ProposalType}, vote::TimeoutVote2,
+    data::{DAProposal, ProposalType},
+    vote::TimeoutVote2,
 };
 
 use crate::{
@@ -1474,6 +1476,18 @@ pub struct TimeoutExchange<
     _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
 }
 
+pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {}
+
+impl<
+        TYPES: NodeType,
+        PROPOSAL: ProposalType<NodeType = TYPES>,
+        MEMBERSHIP: Membership<TYPES>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        M: NetworkMsg,
+    > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+{
+}
+
 // TODO ED Get rid of ProposalType as generic, is debt left over from Validating Consensus
 impl<
         TYPES: NodeType,
@@ -1518,7 +1532,6 @@ impl<
         unimplemented!()
     }
 
-
     fn membership(&self) -> &Self::Membership {
         &self.membership
     }
@@ -1539,7 +1552,10 @@ impl<
         view_number: <TYPES as NodeType>::Time,
         accumlator: VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
         relay: Option<u64>,
-    ) -> Either<VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>, Self::Certificate> {
+    ) -> Either<
+        VoteAccumulator<<TYPES as NodeType>::VoteTokenType, Self::Commitment, TYPES>,
+        Self::Certificate,
+    > {
         todo!()
     }
 }
