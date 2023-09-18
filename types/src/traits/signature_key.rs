@@ -3,9 +3,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, Serializatio
 use bitvec::prelude::*;
 use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;
-use jf_primitives::signatures::{
-    bls_over_bn254::BLSOverBN254CurveSignatureScheme, SignatureScheme,
-};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, hash::Hash};
 use tagged_base64::tagged;
@@ -23,17 +20,13 @@ use tagged_base64::tagged;
     PartialOrd,
     Ord,
 )]
-pub struct EncodedPublicKey(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey
-);
+pub struct EncodedPublicKey(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
 /// Type saftey wrapper for byte encoded signature
 #[derive(
     Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub struct EncodedSignature(
-    #[debug(with = "custom_debug::hexbuf")] pub Vec<u8>, // pub <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature
-);
+pub struct EncodedSignature(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
 impl AsRef<[u8]> for EncodedSignature {
     fn as_ref(&self) -> &[u8] {
@@ -70,6 +63,17 @@ pub trait SignatureKey:
         + for<'a> Deserialize<'a>;
     /// The type of the quorum certificate parameters used for assembled signature
     type QCParams: Send + Sync + Sized + Clone + Debug + Hash;
+    /// The type of the assembled signature, without `BitVec`
+    type PureAssembledSignatureType: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Hash
+        + PartialEq
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>;
     /// The type of the assembled qc: assembled signature + `BitVec`
     type QCType: Send
         + Sync
@@ -114,17 +118,12 @@ pub trait SignatureKey:
     fn check(real_qc_pp: &Self::QCParams, data: &[u8], qc: &Self::QCType) -> bool;
 
     /// get the assembled signature and the `BitVec` separately from the assembled signature
-    fn get_sig_proof(
-        signature: &Self::QCType,
-    ) -> (
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature,
-        BitVec,
-    );
+    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec);
 
     /// assemble the signature from the partial signature and the indication of signers in `BitVec`
     fn assemble(
         real_qc_pp: &Self::QCParams,
         signers: &BitSlice,
-        sigs: &[<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature],
+        sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType;
 }

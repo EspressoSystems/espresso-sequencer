@@ -18,9 +18,6 @@ use commit::{Commitment, Committable};
 use either::Either;
 use ethereum_types::U256;
 use hotshot_utils::bincode::bincode_opts;
-use jf_primitives::signatures::{
-    bls_over_bn254::BLSOverBN254CurveSignatureScheme, SignatureScheme,
-};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -348,7 +345,7 @@ pub struct DAVoteAccumulator<
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
-    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
     /// Phantom data to specify the vote this accumulator is for
@@ -375,7 +372,7 @@ impl<
 
         // Deserialize the signature so that it can be assembeld into a QC
         // TODO ED Update this once we've gotten rid of EncodedSignature
-        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             bincode_opts()
                 .deserialize(&vote.get_signature().0)
                 .expect("Deserialization on the signature shouldn't be able to fail.");
@@ -446,7 +443,7 @@ pub struct QuorumVoteAccumulator<
     /// A failure threshold, generally f + 1
     pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
-    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
     /// Phantom data to ensure this struct is over a specific `VoteType` implementation
@@ -474,7 +471,7 @@ impl<
 
         // Deserialize the signature so that it can be assembeld into a QC
         // TODO ED Update this once we've gotten rid of EncodedSignature
-        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             bincode_opts()
                 .deserialize(&vote.get_signature().0)
                 .expect("Deserialization on the signature shouldn't be able to fail.");
@@ -577,7 +574,7 @@ pub struct ViewSyncVoteAccumulator<
     /// A quorum's failure threshold, generally f + 1
     pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
-    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
     /// Phantom data since we want the accumulator to be attached to a single `VoteType`  
@@ -610,7 +607,7 @@ impl<
 
         // Deserialize the signature so that it can be assembeld into a QC
         // TODO ED Update this once we've gotten rid of EncodedSignature
-        let original_signature: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             bincode_opts()
                 .deserialize(&vote.get_signature().0)
                 .expect("Deserialization on the signature shouldn't be able to fail.");
@@ -771,7 +768,7 @@ type VoteMap<C, TOKEN> = HashMap<
 
 /// Describe the process of collecting signatures on block or leaf commitment, to form a DAC or QC,
 /// respectively.
-pub struct VoteAccumulator<TOKEN, COMMITMENT: Committable + Serialize + Clone> {
+pub struct VoteAccumulator<TOKEN, COMMITMENT: Committable + Serialize + Clone, TYPES: NodeType> {
     /// Map of all signatures accumlated so far
     pub total_vote_outcomes: VoteMap<COMMITMENT, TOKEN>,
     /// Map of all da signatures accumlated so far
@@ -791,7 +788,7 @@ pub struct VoteAccumulator<TOKEN, COMMITMENT: Committable + Serialize + Clone> {
     /// Enough stake to know that we cannot possibly get a quorum, generally f + 1
     pub failure_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
-    pub sig_lists: Vec<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature>,
+    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
     pub signers: BitVec,
 }
@@ -812,7 +809,7 @@ impl<TOKEN, LEAF: Committable + Serialize + Clone, TYPES: NodeType>
             ),
         ),
         AssembledSignature<TYPES>,
-    > for VoteAccumulator<TOKEN, LEAF>
+    > for VoteAccumulator<TOKEN, LEAF, TYPES>
 where
     TOKEN: Clone + VoteToken,
 {
@@ -836,7 +833,7 @@ where
         let (commitment, (key, (sig, entries, node_id, vote_data, token))) = val;
 
         // Desereialize the sig so that it can be assembeld into a QC
-        let origianl_sig: <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature =
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             bincode_opts()
                 .deserialize(&sig.0)
                 .expect("Deserialization on the signature shouldn't be able to fail.");
@@ -890,7 +887,7 @@ where
             return Either::Left(self);
         }
         self.signers.set(node_id, true);
-        self.sig_lists.push(origianl_sig);
+        self.sig_lists.push(original_signature);
 
         *total_stake_casted += u64::from(token.vote_count());
         total_vote_map.insert(key.clone(), (sig.clone(), vote_data.clone(), token.clone()));

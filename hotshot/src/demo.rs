@@ -12,7 +12,7 @@ use crate::{
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use either::Either;
-use hotshot_signature_key::bn254::BN254Pub;
+use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     certificate::{AssembledSignature, QuorumCertificate},
     data::{
@@ -138,7 +138,7 @@ pub struct SDemoTypes;
 impl NodeType for SDemoTypes {
     type Time = ViewNumber;
     type BlockType = VIDBlockPayload;
-    type SignatureKey = BN254Pub;
+    type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
