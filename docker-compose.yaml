@@ -5,15 +5,25 @@ networks:
     name: espresso-sequencer
 
 services:
+  #demo-l1-network:
+  #  image: ghcr.io/foundry-rs/foundry:latest
+  #  ports:
+  #    - $ESPRESSO_SEQUENCER_L1_PORT:8545
+  #  # The way the foundry image handles arguments is strange, the double quotes
+  #  # make it work here.
+  #  command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC'"
+  #  healthcheck:
+  #    test: ["CMD", "cast", "chain-id"]
   demo-l1-network:
-    image: ghcr.io/foundry-rs/foundry:latest
+    image: ghcr.io/espressosystems/op-espresso-integration/l1:integration
     ports:
-      - $ESPRESSO_SEQUENCER_L1_PORT:8545
-    # The way the foundry image handles arguments is strange, the double quotes
-    # make it work here.
-    command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC'"
-    healthcheck:
-      test: ["CMD", "cast", "chain-id"]
+      - "8545:8545"
+      - "8546:8546"
+      - "7060:6060"
+    volumes:
+      - "./genesis-l1.json:/genesis.json"
+      - "./test-jwt-secret.txt:/config/test-jwt-secret.txt"
+
 
   orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
@@ -69,6 +79,7 @@ services:
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
       - RUST_LOG_FORMAT
@@ -88,6 +99,7 @@ services:
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - RUST_LOG
@@ -106,6 +118,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -126,6 +139,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -146,6 +160,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_DA_SERVER_URL
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
@@ -164,7 +179,8 @@ services:
     command: commitment-task --deploy
     environment:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
-      - ESPRESSO_SEQUENCER_HOTSHOT_ACCOUNT_INDEX
+      - ESPRESSO_SEQUENCER_HOTSHOT_ACCOUNT_INDEX=3
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG=true
       - ESPRESSO_COMMITMENT_TASK_PORT
       - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -173,8 +189,8 @@ services:
     depends_on:
       sequencer0:
         condition: service_healthy
-      demo-l1-network:
-        condition: service_healthy
+          #demo-l1-network:
+          #condition: service_healthy
     stop_grace_period: 1s
 
   example-rollup:
