@@ -18,7 +18,7 @@ impl Committable for VIDTransaction {
     fn commit(&self) -> Commitment<Self> {
         let builder = commit::RawCommitmentBuilder::new("Txn Comm");
         let mut hasher = Keccak256::new();
-        hasher.update(self.0.clone());
+        hasher.update(&self.0);
         let generic_array = hasher.finalize();
         builder.generic_byte_array(&generic_array).finalize()
     }
