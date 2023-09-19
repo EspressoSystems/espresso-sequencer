@@ -15,8 +15,10 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::certificate::TimeoutCertificate;
 use hotshot_types::traits::election::TimeoutExchangeType;
 use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
+use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::vote::QuorumVoteAccumulator;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
@@ -74,6 +76,13 @@ pub struct SequencingConsensusTaskState<
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
         Commitment = TYPES::BlockType,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
     /// The global task registry
@@ -146,9 +155,19 @@ pub struct VoteCollectionTaskState<
         Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
         Commitment = SequencingLeaf<TYPES>,
     >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
+    >,
 {
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
+
+    pub timeout_exchange: Arc<SequencingTimeoutEx<TYPES, I>>,
+
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
@@ -159,6 +178,17 @@ pub struct VoteCollectionTaskState<
             SequencingLeaf<TYPES>,
         >>::VoteAccumulator,
         QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
+    >,
+
+    /// Accumulator for votes
+    pub timeout_accumulator: Either<
+        <TimeoutCertificate<TYPES> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            TYPES::Time,
+        >>::VoteAccumulator,
+        TimeoutCertificate<TYPES>,
     >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
@@ -177,6 +207,13 @@ where
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
         Commitment = SequencingLeaf<TYPES>,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
 }
@@ -197,6 +234,13 @@ where
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
         Commitment = SequencingLeaf<TYPES>,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
     match event {
@@ -247,6 +291,7 @@ where
                     }
                 }
             }
+
             QuorumVote::Timeout(_vote) => {
                 error!("The next leader has received an unexpected vote!");
                 return (None, state);
@@ -255,6 +300,9 @@ where
                 error!("The next leader has received an unexpected vote!");
             }
         },
+        SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
+            panic!()
+        }
         SequencingHotShotEvent::Shutdown => {
             return (Some(HotShotTaskCompleted::ShutDown), state);
         }
@@ -285,6 +333,13 @@ where
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
         Commitment = TYPES::BlockType,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
@@ -883,6 +938,8 @@ where
                     return;
                 }
 
+                // TODO ED Insert TimeoutVote accumulator stuff here
+
                 match vote.clone() {
                     QuorumVote::Yes(vote_internal) => {
                         let handle_event = HandleEvent(Arc::new(move |event, state| {
@@ -920,10 +977,23 @@ where
                             &vote_internal.clone().leaf_commitment,
                         );
 
+                        let timeout_accumulator = DAVoteAccumulator {
+                            da_vote_outcomes: HashMap::new(),
+
+                            // TODO ED Don't use quorum exchange here
+                            success_threshold: self.quorum_exchange.success_threshold(),
+
+                            sig_lists: Vec::new(),
+                            signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                            phantom: PhantomData,
+                        };
+
                         if vote_internal.current_view > collection_view {
                             let state = VoteCollectionTaskState {
                                 quorum_exchange: self.quorum_exchange.clone(),
+                                timeout_exchange: self.timeout_exchange.clone(),
                                 accumulator,
+                                timeout_accumulator: either::Left(timeout_accumulator),
                                 cur_view: vote_internal.current_view,
                                 event_stream: self.event_stream.clone(),
                                 id: self.id,
@@ -967,6 +1037,108 @@ where
                     QuorumVote::Timeout(_) | QuorumVote::No(_) => {
                         error!("The next leader has received an unexpected vote!");
                     }
+                }
+            }
+            SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
+                // debug!("Received quroum vote: {:?}", vote.get_view());
+
+                if !self.timeout_exchange.is_leader(vote.get_view() + 1) {
+                    error!(
+                        "We are not the leader for view {} are we the leader for view + 1? {}",
+                        *vote.get_view() + 1,
+                        self.timeout_exchange.is_leader(vote.get_view() + 2)
+                    );
+                    return;
+                }
+
+                // // TODO ED Insert TimeoutVote accumulator stuff here
+
+                // match vote.clone() {
+                //     QuorumVote::Yes(vote_internal)=> {
+                let handle_event = HandleEvent(Arc::new(move |event, state| {
+                    async move { vote_handle(state, event).await }.boxed()
+                }));
+                let collection_view =
+                    if let Some((collection_view, collection_task, _)) = &self.vote_collector {
+                        if vote.get_view() > *collection_view {
+                            // ED I think we'd want to let that task timeout to avoid a griefing vector
+                            self.registry.shutdown_task(*collection_task).await;
+                        }
+                        *collection_view
+                    } else {
+                        TYPES::Time::new(0)
+                    };
+
+                //         // Todo check if we are the leader
+                // TODO ED Make this a default accum
+                let new_accumulator = DAVoteAccumulator {
+                    da_vote_outcomes: HashMap::new(),
+
+                    // TODO ED Don't use quorum exchange here
+                    success_threshold: self.quorum_exchange.success_threshold(),
+
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                let timeout_accumulator = self.timeout_exchange.accumulate_vote_2(
+                    new_accumulator,
+                    &vote,
+                    &vote.get_view().commit(),
+                );
+
+                let quorum_accumulator = QuorumVoteAccumulator {
+                    total_vote_outcomes: HashMap::new(),
+                    yes_vote_outcomes: HashMap::new(),
+                    no_vote_outcomes: HashMap::new(),
+
+                    success_threshold: self.quorum_exchange.success_threshold(),
+                    failure_threshold: self.quorum_exchange.failure_threshold(),
+
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                // self.timeout_accumulator = accumulator;
+
+                if vote.get_view() > collection_view {
+                    let state = VoteCollectionTaskState {
+                        quorum_exchange: self.quorum_exchange.clone(),
+                        timeout_exchange: self.timeout_exchange.clone(),
+                        accumulator: either::Left(quorum_accumulator),
+                        timeout_accumulator,
+                        cur_view: vote.get_view(),
+                        event_stream: self.event_stream.clone(),
+                        id: self.id,
+                    };
+                    let name = "Quorum Vote Collection";
+                    let filter = FilterEvent(Arc::new(|event| {
+                        matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_))
+                    }));
+
+                    let builder =
+                        TaskBuilder::<VoteCollectionTypes<TYPES, I>>::new(name.to_string())
+                            .register_event_stream(self.event_stream.clone(), filter)
+                            .await
+                            .register_registry(&mut self.registry.clone())
+                            .await
+                            .register_state(state)
+                            .register_event_handler(handle_event);
+                    let id = builder.get_task_id().unwrap();
+                    let stream_id = builder.get_stream_id().unwrap();
+
+                    self.vote_collector = Some((vote.get_view(), id, stream_id));
+
+                    let _task = async_spawn(async move {
+                        VoteCollectionTypes::build(builder).launch().await;
+                    });
+                    debug!("Starting vote handle for view {:?}", vote.get_view());
+                } else if let Some((_, _, stream_id)) = self.vote_collector {
+                    self.event_stream
+                        .direct_message(stream_id, SequencingHotShotEvent::TimeoutVoteRecv(vote))
+                        .await;
                 }
             }
             SequencingHotShotEvent::QCFormed(qc) => {
@@ -1068,9 +1240,6 @@ where
                         self.cur_view
                     );
                 }
-            }
-            SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
-                panic!()
             }
             SequencingHotShotEvent::Timeout(view) => {
                 let vote_token = self.timeout_exchange.make_vote_token(view);
@@ -1251,6 +1420,13 @@ where
         Certificate = DACertificate<TYPES>,
         Commitment = TYPES::BlockType,
     >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
+    >,
 {
 }
 
@@ -1299,6 +1475,13 @@ where
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
         Commitment = TYPES::BlockType,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
     if let SequencingHotShotEvent::Shutdown = event {

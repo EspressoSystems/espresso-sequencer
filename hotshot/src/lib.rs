@@ -55,6 +55,8 @@ use hotshot_task::{
     task_launcher::TaskRunner,
 };
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
+use hotshot_types::certificate::TimeoutCertificate;
+use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 
 use hotshot_types::{
     certificate::{DACertificate, ViewSyncCertificate},
@@ -182,7 +184,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES, I::Leaf>,
         metrics: Box<dyn Metrics>,
     ) -> Result<Self, HotShotError<TYPES>> {
-       
         debug!("Creating a new hotshot");
 
         let consensus_metrics = Arc::new(ConsensusMetrics::new(
@@ -684,6 +685,14 @@ where
             Commitment = ViewSyncData<TYPES>,
             Membership = MEMBERSHIP,
         > + 'static,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+            TYPES,
+            Message<TYPES, I>,
+            Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+            Certificate = TimeoutCertificate<TYPES>,
+            Commitment = TYPES::Time,
+            Membership = MEMBERSHIP,
+        > + 'static,
 {
     fn transactions(
         &self,
@@ -706,6 +715,7 @@ where
         let quorum_exchange = self.inner.exchanges.quorum_exchange().clone();
         let committee_exchange = self.inner.exchanges.committee_exchange().clone();
         let view_sync_exchange = self.inner.exchanges.view_sync_exchange().clone();
+        let timeout_exchange = self.inner.exchanges.timeout_exchange().clone();
 
         let handle = SystemContextHandle {
             registry,

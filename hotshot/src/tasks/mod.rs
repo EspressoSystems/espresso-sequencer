@@ -26,6 +26,8 @@ use hotshot_task_impls::{
     transactions::{TransactionTaskState, TransactionsTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
+use hotshot_types::certificate::TimeoutCertificate;
+use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{ProposalType, QuorumProposal, SequencingLeaf},
@@ -271,6 +273,13 @@ where
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
         Commitment = TYPES::BlockType,
+    >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = TYPES::Time,
     >,
 {
     let consensus = handle.hotshot.get_consensus();

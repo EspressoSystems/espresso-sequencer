@@ -593,6 +593,7 @@ impl<
 /// Accumulates view sync votes
 pub struct ViewSyncVoteAccumulator<
     TYPES: NodeType,
+    // TODO ED : Doesn't need to be generic over vote or committable, we can infer that from the accumulator type (unless it is a generic type)
     COMMITTABLE: Committable + Serialize + Clone,
     VOTE: VoteType<TYPES, COMMITTABLE>,
 > {

@@ -90,8 +90,8 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
 {
     type Vote = TimeoutVote2<TYPES>;
 
-    type VoteAccumulator = AccumulatorPlaceholder<TYPES, TYPES::Time, Self::Vote>;
-
+    type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::Time, Self::Vote>; 
+    
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
         vote: Self::Vote,
