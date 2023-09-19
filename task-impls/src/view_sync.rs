@@ -489,102 +489,102 @@ where
             }
             &SequencingHotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
-                if view_number < TYPES::Time::new(*self.current_view) {
-                    return;
-                }
+                // if view_number < TYPES::Time::new(*self.current_view) {
+                //     return;
+                // }
 
-                self.num_timeouts_tracked += 1;
-                error!("Num timeouts tracked is {}", self.num_timeouts_tracked);
+                // self.num_timeouts_tracked += 1;
+                // error!("Num timeouts tracked is {}", self.num_timeouts_tracked);
 
-                if self.num_timeouts_tracked > 2 {
-                    error!("Too many timeouts!  This shouldn't happen");
-                }
+                // if self.num_timeouts_tracked > 2 {
+                //     error!("Too many timeouts!  This shouldn't happen");
+                // }
 
-                // TODO ED Make this a configurable variable
-                if self.num_timeouts_tracked == 2 {
-                    // Start polling for view sync certificates
-                    self.exchange
-                        .network()
-                        .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncCertificate(
-                            *view_number + 1,
-                        ))
-                        .await;
+                // // TODO ED Make this a configurable variable
+                // if self.num_timeouts_tracked == 2 {
+                //     // Start polling for view sync certificates
+                //     self.exchange
+                //         .network()
+                //         .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncCertificate(
+                //             *view_number + 1,
+                //         ))
+                //         .await;
 
-                    self.exchange
-                        .network()
-                        .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncVotes(
-                            *view_number + 1,
-                        ))
-                        .await;
-                    // panic!("Starting view sync!");
-                    // Spawn replica task
+                //     self.exchange
+                //         .network()
+                //         .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncVotes(
+                //             *view_number + 1,
+                //         ))
+                //         .await;
+                //     // panic!("Starting view sync!");
+                //     // Spawn replica task
 
-                    let mut replica_state = ViewSyncReplicaTaskState {
-                        current_view: self.current_view,
-                        next_view: TYPES::Time::new(*view_number + 1),
-                        relay: 0,
-                        finalized: false,
-                        sent_view_change_event: false,
-                        phase: ViewSyncPhase::None,
-                        exchange: self.exchange.clone(),
-                        api: self.api.clone(),
-                        event_stream: self.event_stream.clone(),
-                        view_sync_timeout: self.view_sync_timeout,
-                        id: self.id,
-                    };
+                //     let mut replica_state = ViewSyncReplicaTaskState {
+                //         current_view: self.current_view,
+                //         next_view: TYPES::Time::new(*view_number + 1),
+                //         relay: 0,
+                //         finalized: false,
+                //         sent_view_change_event: false,
+                //         phase: ViewSyncPhase::None,
+                //         exchange: self.exchange.clone(),
+                //         api: self.api.clone(),
+                //         event_stream: self.event_stream.clone(),
+                //         view_sync_timeout: self.view_sync_timeout,
+                //         id: self.id,
+                //     };
 
-                    // TODO ED Make all these view numbers into a single variable to avoid errors
-                    let result = replica_state
-                        .handle_event(SequencingHotShotEvent::ViewSyncTrigger(view_number + 1))
-                        .await;
+                //     // TODO ED Make all these view numbers into a single variable to avoid errors
+                //     let result = replica_state
+                //         .handle_event(SequencingHotShotEvent::ViewSyncTrigger(view_number + 1))
+                //         .await;
 
-                    if result.0 == Some(HotShotTaskCompleted::ShutDown) {
-                        // The protocol has finished
-                        return;
-                    }
+                //     if result.0 == Some(HotShotTaskCompleted::ShutDown) {
+                //         // The protocol has finished
+                //         return;
+                //     }
 
-                    replica_state = result.1;
+                //     replica_state = result.1;
 
-                    let name = format!(
-                        "View Sync Replica Task: Attempting to enter view {:?} from view {:?}",
-                        self.next_view, self.current_view
-                    );
+                //     let name = format!(
+                //         "View Sync Replica Task: Attempting to enter view {:?} from view {:?}",
+                //         self.next_view, self.current_view
+                //     );
 
-                    let replica_handle_event = HandleEvent(Arc::new(
-                        move |event, state: ViewSyncReplicaTaskState<TYPES, I, A>| {
-                            async move { state.handle_event(event).await }.boxed()
-                        },
-                    ));
+                //     let replica_handle_event = HandleEvent(Arc::new(
+                //         move |event, state: ViewSyncReplicaTaskState<TYPES, I, A>| {
+                //             async move { state.handle_event(event).await }.boxed()
+                //         },
+                //     ));
 
-                    let filter = FilterEvent(Arc::new(Self::filter));
-                    let builder =
-                        TaskBuilder::<ViewSyncReplicaTaskStateTypes<TYPES, I, A>>::new(name)
-                            .register_event_stream(replica_state.event_stream.clone(), filter)
-                            .await
-                            .register_registry(&mut self.registry.clone())
-                            .await
-                            .register_state(replica_state)
-                            .register_event_handler(replica_handle_event);
+                //     let filter = FilterEvent(Arc::new(Self::filter));
+                //     let builder =
+                //         TaskBuilder::<ViewSyncReplicaTaskStateTypes<TYPES, I, A>>::new(name)
+                //             .register_event_stream(replica_state.event_stream.clone(), filter)
+                //             .await
+                //             .register_registry(&mut self.registry.clone())
+                //             .await
+                //             .register_state(replica_state)
+                //             .register_event_handler(replica_handle_event);
 
-                    let event_stream_id = builder.get_stream_id().unwrap();
+                //     let event_stream_id = builder.get_stream_id().unwrap();
 
-                    self.replica_task_map.insert(
-                        TYPES::Time::new(*view_number + 1),
-                        ViewSyncTaskInfo { event_stream_id },
-                    );
+                //     self.replica_task_map.insert(
+                //         TYPES::Time::new(*view_number + 1),
+                //         ViewSyncTaskInfo { event_stream_id },
+                //     );
 
-                    let _view_sync_replica_task = async_spawn(async move {
-                        ViewSyncReplicaTaskStateTypes::build(builder).launch().await
-                    });
-                } else {
-                    // If this is the first timeout we've seen advance to the next view
-                    self.current_view += 1;
-                    self.event_stream
-                        .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
-                            *self.current_view,
-                        )))
-                        .await;
-                }
+                //     let _view_sync_replica_task = async_spawn(async move {
+                //         ViewSyncReplicaTaskStateTypes::build(builder).launch().await
+                //     });
+                // } else {
+                //     // If this is the first timeout we've seen advance to the next view
+                //     // self.current_view += 1;
+                //     // self.event_stream
+                //     //     .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
+                //     //         *self.current_view,
+                //     //     )))
+                //     //     .await;
+                // }
             }
 
             _ => {}

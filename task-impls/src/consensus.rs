@@ -18,7 +18,6 @@ use hotshot_task::{
 use hotshot_types::certificate::TimeoutCertificate;
 use hotshot_types::traits::election::TimeoutExchangeType;
 use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
-use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::vote::QuorumVoteAccumulator;
 use hotshot_types::vote::TimeoutVoteAccumulator;
 use hotshot_types::{
@@ -672,6 +671,21 @@ where
                     return;
                 }
 
+                if proposal.data.justify_qc.view_number() != proposal.data.view_number - 1 {
+                    // TODO ED Add timeout cert logic
+                    if proposal.data.timeout_certificate.is_none() {
+                        error!("Proposal needed a timeout cert but didn't have one {:?}", proposal.data.clone());
+                        return
+                    }
+                    else {
+                        error!("Proposal for view {} had timeout certificate", *view);
+                    }
+                    // TODO ED Check timeout cert validity
+                }
+
+                // TODO ED This needs to be moved further down so we only update the view after fully validating the qc. 
+                self.update_view(view).await;
+
                 // TODO ED How does this play in with the timeout cert? 
                 self.current_proposal = Some(proposal.data.clone());
 
@@ -685,14 +699,7 @@ where
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
                     Ok(Some(vote_token)) => {
-                        if proposal.data.justify_qc.view_number() != proposal.data.view_number - 1 {
-                            // TODO ED Add timeout cert logic
-                            if proposal.data.timeout_certificate.is_none() {
-                                error!("Proposal needed a timeout cert but didn't have one {:?}", proposal.data.clone());
-                                return
-                            }
-                            // TODO ED Check timeout cert validity
-                        }
+   
 
                         debug!("We were chosen for consensus committee on {:?}", view);
                         let consensus = self.consensus.upgradable_read().await;
@@ -975,7 +982,7 @@ where
                         }
 
                         // Update current view and publish a view change event so other tasks also update
-                        self.update_view(new_view).await;
+                        // self.update_view(new_view).await;
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
                             debug!("Sending vote to next leader {:?}", vote);
@@ -1221,7 +1228,7 @@ where
                         .publish_proposal_if_able(self.consensus.read().await.high_qc.clone(), qc.clone().view_number + 1, Some(qc.clone()))
                         .await
                     {
-                        self.update_view(qc.view_number + 1).await;
+                        // self.update_view(qc.view_number + 1).await;
                     }
                     else {
                         error!("Wasn't able to publish proposal");
@@ -1260,7 +1267,7 @@ where
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
-                        self.update_view(qc.view_number + 1).await;
+                        // self.update_view(qc.view_number + 1).await;
                     }
                 }
             }
@@ -1272,7 +1279,7 @@ where
 
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
-                    self.update_view(view + 1).await;
+                    // self.update_view(view + 1).await;
                 }
             }
             SequencingHotShotEvent::VidCertRecv(cert) => {
@@ -1283,7 +1290,7 @@ where
 
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
-                    self.update_view(view + 1).await;
+                    // self.update_view(view + 1).await;
                 }
             }
             SequencingHotShotEvent::ViewChange(new_view) => {
@@ -1293,10 +1300,10 @@ where
 
                 // update the view in state to the one in the message
                 // Publish a view change event to the application
-                if !self.update_view(new_view).await {
-                    debug!("view not updated");
-                    return;
-                }
+                // if !self.update_view(new_view).await {
+                //     debug!("view not updated");
+                //     return;
+                // }
 
                 self.output_event_stream
                     .publish(Event {
