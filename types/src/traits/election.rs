@@ -300,6 +300,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// Network used by [`Membership`](Self::Membership) to communicate.
     type Networking: CommunicationChannel<TYPES, M, Self::Membership>;
     /// Commitments to items which are the subject of proposals and decisions.
+    // TODO ED The above isn't true for all proposals (Timeout, ViewSync)
     type Commitment: Committable + Serialize + Clone;
 
     /// Join a [`ConsensusExchange`] with the given identity (`pk` and `sk`).
@@ -786,6 +787,7 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
     ConsensusExchange<TYPES, M>
 {
     /// Create a message with a positive vote on validating or commitment proposal.
+    // TODO ED This returns just a general message type, it's not even bound to a proposal, and this is just a function on the QC.  Make proprosal doesn't really apply to all cert types.  
     fn create_yes_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
         &self,
         justify_qc_commitment: Commitment<Self::Certificate>,
