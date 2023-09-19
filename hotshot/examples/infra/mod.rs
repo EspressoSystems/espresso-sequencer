@@ -69,7 +69,6 @@ pub fn load_config_from_file<TYPES: NodeType>(
     config
 }
 
-/// yeesh maybe we should just implement SignatureKey for this...
 pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&seed);

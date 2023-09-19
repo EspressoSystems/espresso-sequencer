@@ -25,16 +25,21 @@ docs = []
 doc-images = []
 hotshot-testing = []
 
-# [[example]]
-# name = "libp2p-validator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/validator.rs"
-#
-# [[example]]
-# name = "libp2p-orchestrator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/orchestrator.rs"
-#
+[[example]]
+name = "libp2p-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/validator.rs"
+
+[[example]]
+name = "libp2p-multi-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/multi-validator.rs"
+
+[[example]]
+name = "libp2p-orchestrator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/orchestrator.rs"
+
 # [[example]]
 # name = "web-server-orchestrator"
 # required-features = ["demo", "libp2p/rsa"]

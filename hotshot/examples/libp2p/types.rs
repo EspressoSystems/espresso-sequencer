@@ -1,60 +1,75 @@
-use crate::infra::Libp2pRun;
-use hotshot::traits::implementations::MemoryStorage;
+use crate::infra_da::Libp2pDARun;
 use hotshot::{
-    demos::vdemo::VDemoTypes,
+    demos::sdemo::SDemoTypes,
     traits::{
-        election::static_committee::GeneralStaticCommittee, implementations::Libp2pCommChannel,
+        election::static_committee::GeneralStaticCommittee,
+        implementations::{Libp2pCommChannel, MemoryStorage},
     },
 };
-use hotshot_types::message::{Message, ValidatingMessage};
-use hotshot_types::traits::{
-    election::QuorumExchange,
-    node_implementation::{ChannelMaps, NodeImplementation, ValidatingExchanges},
-};
 use hotshot_types::{
-    data::{ValidatingLeaf, ValidatingProposal},
-    traits::node_implementation::NodeType,
-    vote::QuorumVote,
+    certificate::ViewSyncCertificate,
+    data::{DAProposal, QuorumProposal, SequencingLeaf},
+    message::{Message, SequencingMessage},
+    traits::{
+        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
+        node_implementation::{ChannelMaps, NodeImplementation, NodeType, SequencingExchanges},
+    },
+    vote::{DAVote, QuorumVote, ViewSyncVote},
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = ValidatingLeaf<VDemoTypes>;
+pub type ThisLeaf = SequencingLeaf<SDemoTypes>;
 pub type ThisMembership =
-    GeneralStaticCommittee<VDemoTypes, ThisLeaf, <VDemoTypes as NodeType>::SignatureKey>;
-pub type ThisNetwork =
-    Libp2pCommChannel<VDemoTypes, NodeImpl, ThisProposal, ThisVote, ThisMembership>;
+    GeneralStaticCommittee<SDemoTypes, ThisLeaf, <SDemoTypes as NodeType>::SignatureKey>;
+pub type DANetwork = Libp2pCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
+pub type QuorumNetwork = Libp2pCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
+pub type ViewSyncNetwork = Libp2pCommChannel<SDemoTypes, NodeImpl, ThisMembership>;
 
-pub type ThisProposal = ValidatingProposal<VDemoTypes, ThisLeaf>;
-pub type ThisVote = QuorumVote<VDemoTypes, ThisLeaf>;
+pub type ThisDAProposal = DAProposal<SDemoTypes>;
+pub type ThisDAVote = DAVote<SDemoTypes>;
 
-impl NodeImplementation<VDemoTypes> for NodeImpl {
-    type Storage = MemoryStorage<VDemoTypes, Self::Leaf>;
-    type Leaf = ValidatingLeaf<VDemoTypes>;
-    type Exchanges = ValidatingExchanges<
-        VDemoTypes,
-        Message<VDemoTypes, Self>,
+pub type ThisQuorumProposal = QuorumProposal<SDemoTypes, ThisLeaf>;
+pub type ThisQuorumVote = QuorumVote<SDemoTypes, ThisLeaf>;
+
+pub type ThisViewSyncProposal = ViewSyncCertificate<SDemoTypes>;
+pub type ThisViewSyncVote = ViewSyncVote<SDemoTypes>;
+
+impl NodeImplementation<SDemoTypes> for NodeImpl {
+    type Storage = MemoryStorage<SDemoTypes, Self::Leaf>;
+    type Leaf = SequencingLeaf<SDemoTypes>;
+    type Exchanges = SequencingExchanges<
+        SDemoTypes,
+        Message<SDemoTypes, Self>,
         QuorumExchange<
-            VDemoTypes,
+            SDemoTypes,
             Self::Leaf,
-            ThisProposal,
+            ThisQuorumProposal,
             ThisMembership,
-            ThisNetwork,
-            Message<VDemoTypes, Self>,
+            QuorumNetwork,
+            Message<SDemoTypes, Self>,
+        >,
+        CommitteeExchange<SDemoTypes, ThisMembership, DANetwork, Message<SDemoTypes, Self>>,
+        ViewSyncExchange<
+            SDemoTypes,
+            ThisViewSyncProposal,
+            ThisMembership,
+            ViewSyncNetwork,
+            Message<SDemoTypes, Self>,
         >,
     >;
-    type ConsensusMessage = ValidatingMessage<VDemoTypes, Self>;
+    type ConsensusMessage = SequencingMessage<SDemoTypes, Self>;
 
     fn new_channel_maps(
-        start_view: <VDemoTypes as NodeType>::Time,
+        start_view: <SDemoTypes as NodeType>::Time,
     ) -> (
-        ChannelMaps<VDemoTypes, Self>,
-        Option<ChannelMaps<VDemoTypes, Self>>,
+        ChannelMaps<SDemoTypes, Self>,
+        Option<ChannelMaps<SDemoTypes, Self>>,
     ) {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = Libp2pRun<VDemoTypes, NodeImpl, ThisMembership>;
+pub type ThisRun = Libp2pDARun<SDemoTypes, NodeImpl, ThisMembership>;
