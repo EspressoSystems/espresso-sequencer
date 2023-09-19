@@ -91,25 +91,29 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
 {
     type Vote = TimeoutVote2<TYPES>;
 
-    type VoteAccumulator = TimeoutVoteAccumulator<TYPES, TYPES::Time, Self::Vote>; 
-    
+    type VoteAccumulator = TimeoutVoteAccumulator<TYPES, TYPES::Time, Self::Vote>;
+
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
         vote: Self::Vote,
     ) -> Self {
-        todo!()
+        let qc = TimeoutCertificate {
+            view_number: vote.get_view(),
+            signatures,
+        };
+        qc
     }
 
     fn view_number(&self) -> TYPES::Time {
-        todo!()
+        self.view_number
     }
 
     fn signatures(&self) -> AssembledSignature<TYPES> {
-        todo!()
+        self.signatures.clone()
     }
 
     fn leaf_commitment(&self) -> Commitment<TYPES::Time> {
-        todo!()
+        self.view_number.commit()
     }
 
     fn set_leaf_commitment(&mut self, commitment: Commitment<TYPES::Time>) {

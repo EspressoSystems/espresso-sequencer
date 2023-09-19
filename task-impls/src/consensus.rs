@@ -275,7 +275,7 @@ where
                         debug!("QCFormed! {:?}", qc.view_number);
                         state
                             .event_stream
-                            .publish(SequencingHotShotEvent::QCFormed(qc.clone()))
+                            .publish(SequencingHotShotEvent::QCFormed(either::Left(qc.clone())))
                             .await;
                         state.accumulator = Either::Right(qc.clone());
 
@@ -302,12 +302,58 @@ where
             }
         },
         SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
-            panic!()
+            if state.timeout_accumulator.is_right() {
+                return (None, state);
+            }
+
+            if vote.get_view() != state.cur_view {
+                error!(
+                    "Vote view does not match! vote view is {} current view is {}",
+                    *vote.get_view(),
+                    *state.cur_view
+                );
+                return (None, state);
+            }
+
+            let accumulator = state.timeout_accumulator.left().unwrap();
+
+            match state.timeout_exchange.accumulate_vote_2(
+                accumulator,
+                &vote,
+                &vote.get_view().commit(),
+            ) {
+                Either::Left(acc) => {
+                    state.timeout_accumulator = Either::Left(acc);
+                    return (None, state);
+                }
+                Either::Right(qc) => {
+                    debug!("QCFormed! {:?}", qc.view_number);
+                    // TODO ED Make Timeout QC Formed Event
+                    state
+                        .event_stream
+                        .publish(SequencingHotShotEvent::QCFormed(either::Right(qc.clone())))
+                        .await;
+                    state.timeout_accumulator = Either::Right(qc.clone());
+
+                    // No longer need to poll for votes
+                    state
+                        .quorum_exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
+
+                    return (Some(HotShotTaskCompleted::ShutDown), state);
+                }
+            }
         }
         SequencingHotShotEvent::Shutdown => {
             return (Some(HotShotTaskCompleted::ShutDown), state);
         }
-        _ => {error!("Unexpected event")}
+        _ => {
+            error!("Unexpected event")
+        }
     }
     (None, state)
 }
@@ -626,6 +672,7 @@ where
                     return;
                 }
 
+                // TODO ED How does this play in with the timeout cert? 
                 self.current_proposal = Some(proposal.data.clone());
 
                 let vote_token = self.quorum_exchange.make_vote_token(view);
@@ -638,11 +685,20 @@ where
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
                     Ok(Some(vote_token)) => {
+                        if proposal.data.justify_qc.view_number() != proposal.data.view_number - 1 {
+                            // TODO ED Add timeout cert logic
+                            if proposal.data.timeout_certificate.is_none() {
+                                error!("Proposal needed a timeout cert but didn't have one {:?}", proposal.data.clone());
+                                return
+                            }
+                            // TODO ED Check timeout cert validity
+                        }
+
                         debug!("We were chosen for consensus committee on {:?}", view);
                         let consensus = self.consensus.upgradable_read().await;
                         let message;
 
-                        // TODO ED Insert TC logic here
+                        
 
                         // Construct the leaf.
                         let justify_qc = proposal.data.justify_qc;
@@ -904,7 +960,7 @@ where
                                 "Attempting to publish proposal after voting; now in view: {}",
                                 *new_view
                             );
-                            self.publish_proposal_if_able(qc.clone(), qc.view_number + 1)
+                            self.publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                                 .await;
                         }
                         if !self.vote_if_able().await {
@@ -1001,7 +1057,11 @@ where
                             };
                             let name = "Quorum Vote Collection";
                             let filter = FilterEvent(Arc::new(|event| {
-                                matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_) | SequencingHotShotEvent::TimeoutVoteRecv(_))
+                                matches!(
+                                    event,
+                                    SequencingHotShotEvent::QuorumVoteRecv(_)
+                                        | SequencingHotShotEvent::TimeoutVoteRecv(_)
+                                )
                             }));
 
                             let builder =
@@ -1042,7 +1102,6 @@ where
             }
             SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
                 // debug!("Received quroum vote: {:?}", vote.get_view());
-                
 
                 if !self.timeout_exchange.is_leader(vote.get_view() + 1) {
                     error!(
@@ -1052,8 +1111,6 @@ where
                     );
                     return;
                 }
-
-                
 
                 // // TODO ED Insert TimeoutVote accumulator stuff here
 
@@ -1119,7 +1176,11 @@ where
                     };
                     let name = "Quorum Vote Collection";
                     let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_) | SequencingHotShotEvent::TimeoutVoteRecv(_))
+                        matches!(
+                            event,
+                            SequencingHotShotEvent::QuorumVoteRecv(_)
+                                | SequencingHotShotEvent::TimeoutVoteRecv(_)
+                        )
                     }));
 
                     let builder =
@@ -1145,42 +1206,62 @@ where
                         .await;
                 }
             }
-            SequencingHotShotEvent::QCFormed(qc) => {
+            SequencingHotShotEvent::QCFormed(cert) => {
                 debug!("QC Formed event happened!");
 
-                let mut consensus = self.consensus.write().await;
-                consensus.high_qc = qc.clone();
+                if let either::Right(qc) = cert.clone() {
+                    // So we don't create a QC on the first view unless we are the leader
+                    debug!(
+                        "Attempting to publish proposal after forming a QC for view {}",
+                        *qc.view_number
+                    );
 
-                drop(consensus);
+                    // TODO ED Clean this up, get rid of clones
+                    if self
+                        .publish_proposal_if_able(self.consensus.read().await.high_qc.clone(), qc.clone().view_number + 1, Some(qc.clone()))
+                        .await
+                    {
+                        self.update_view(qc.view_number + 1).await;
+                    }
+                    else {
+                        error!("Wasn't able to publish proposal");
+                    }
+                }
+                if let either::Left(qc) = cert {
+                    let mut consensus = self.consensus.write().await;
+                    consensus.high_qc = qc.clone();
 
-                // View may have already been updated by replica if they voted for this QC
-                // TODO ED We should separate leader state from replica state, they shouldn't share the same view
-                // Leader task should only run for a specific view, and never update its current view, but instead spawn another task
-                // let _res = self.update_view(qc.view_number + 1).await;
+                    drop(consensus);
 
-                // Start polling for votes for the next view
-                // if _res {
-                // if self.quorum_exchange.is_leader(qc.view_number + 2) {
-                //     self.quorum_exchange
-                //         .network()
-                //         .inject_consensus_info(
-                //             (ConsensusIntentEvent::PollForVotes(*qc.view_number + 1)),
-                //         )
-                //         .await;
-                // }
-                // }
+                    // View may have already been updated by replica if they voted for this QC
+                    // TODO ED We should separate leader state from replica state, they shouldn't share the same view
+                    // Leader task should only run for a specific view, and never update its current view, but instead spawn another task
+                    // let _res = self.update_view(qc.view_number + 1).await;
 
-                // So we don't create a QC on the first view unless we are the leader
-                debug!(
-                    "Attempting to publish proposal after forming a QC for view {}",
-                    *qc.view_number
-                );
+                    // Start polling for votes for the next view
+                    // if _res {
+                    // if self.quorum_exchange.is_leader(qc.view_number + 2) {
+                    //     self.quorum_exchange
+                    //         .network()
+                    //         .inject_consensus_info(
+                    //             (ConsensusIntentEvent::PollForVotes(*qc.view_number + 1)),
+                    //         )
+                    //         .await;
+                    // }
+                    // }
 
-                if self
-                    .publish_proposal_if_able(qc.clone(), qc.view_number + 1)
-                    .await
-                {
-                    self.update_view(qc.view_number + 1).await;
+                    // So we don't create a QC on the first view unless we are the leader
+                    debug!(
+                        "Attempting to publish proposal after forming a QC for view {}",
+                        *qc.view_number
+                    );
+
+                    if self
+                        .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
+                        .await
+                    {
+                        self.update_view(qc.view_number + 1).await;
+                    }
                 }
             }
             SequencingHotShotEvent::DACRecv(cert) => {
@@ -1238,7 +1319,7 @@ where
                 let consensus = self.consensus.read().await;
                 let qc = consensus.high_qc.clone();
                 drop(consensus);
-                if !self.publish_proposal_if_able(qc, self.cur_view).await {
+                if !self.publish_proposal_if_able(qc, self.cur_view, None).await {
                     error!(
                         "Failed to publish proposal on view change.  View = {:?}",
                         self.cur_view
@@ -1292,6 +1373,7 @@ where
         &self,
         _qc: QuorumCertificate<TYPES, I::Leaf>,
         view: TYPES::Time,
+        timeout_certificate: Option<TimeoutCertificate<TYPES>>
     ) -> bool {
         if !self.quorum_exchange.is_leader(view) {
             error!(
@@ -1380,8 +1462,7 @@ where
             view_number: leaf.view_number,
             height: leaf.height,
             justify_qc: consensus.high_qc.clone(),
-            // TODO ED Update this to be the actual TC if there is one
-            timeout_certificate: None,
+            timeout_certificate: timeout_certificate.or_else(|| { None }),
             proposer_id: leaf.proposer_id,
             dac: None,
         };
