@@ -5,6 +5,7 @@ use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
 use crate::vote::QuorumVoteAccumulator;
 use crate::vote::TimeoutVote2;
+use crate::vote::TimeoutVoteAccumulator;
 use crate::vote::ViewSyncVoteAccumulator;
 use crate::vote::VoteType;
 use crate::{
@@ -90,7 +91,7 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
 {
     type Vote = TimeoutVote2<TYPES>;
 
-    type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::Time, Self::Vote>; 
+    type VoteAccumulator = TimeoutVoteAccumulator<TYPES, TYPES::Time, Self::Vote>; 
     
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -168,6 +169,8 @@ pub enum AssembledSignature<TYPES: NodeType> {
     No(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for a 'DA' certificate
     DA(<TYPES::SignatureKey as SignatureKey>::QCType),
+
+    Timeout(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for genesis certificate
     Genesis(),
     /// These signatures are for ViewSyncPreCommit

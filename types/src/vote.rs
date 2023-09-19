@@ -25,7 +25,7 @@ use std::{
     marker::PhantomData,
     num::NonZeroU64,
 };
-use tracing::error;
+use tracing::{error, warn};
 
 /// The vote sent by consensus messages.
 pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone>:
@@ -121,11 +121,11 @@ impl<TYPES: NodeType> VoteType<TYPES, TYPES::Time> for TimeoutVote2<TYPES> {
     }
 
     fn get_data(&self) -> VoteData<TYPES::Time> {
-        todo!()
+        VoteData::Timeout(self.get_view().commit())
     }
 
     fn get_vote_token(&self) -> <TYPES as NodeType>::VoteTokenType {
-        todo!()
+        self.vote_token.clone()
     }
 }
 
@@ -368,6 +368,98 @@ pub trait Accumulator2<
     ) -> Either<Self, AssembledSignature<TYPES>>;
 }
 
+// TODO ED Make a default accumulator
+pub struct TimeoutVoteAccumulator<
+    TYPES: NodeType,
+    COMMITTABLE: Committable + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITTABLE>,
+> {
+    /// Map of all da signatures accumlated so far
+    pub da_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    /// A quorum's worth of stake, generally 2f + 1
+    pub success_threshold: NonZeroU64,
+    /// A list of valid signatures for certificate aggregation
+    pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
+    /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
+    pub signers: BitVec,
+    /// Phantom data to specify the vote this accumulator is for
+    pub phantom: PhantomData<VOTE>,
+}
+
+impl<
+        TYPES: NodeType,
+        COMMITTABLE: Committable + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITTABLE>,
+    > Accumulator2<TYPES, COMMITTABLE, VOTE> for TimeoutVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+{
+    fn append(
+        mut self,
+        vote: VOTE,
+        vote_node_id: usize,
+        stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+    ) -> Either<Self, AssembledSignature<TYPES>> {
+        
+        let VoteData::Timeout(vote_commitment) = vote.get_data() else {
+            return Either::Left(self);
+        };
+
+        let encoded_key = vote.get_key().to_bytes();
+
+        // Deserialize the signature so that it can be assembeld into a QC
+        // TODO ED Update this once we've gotten rid of EncodedSignature
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
+            bincode_opts()
+                .deserialize(&vote.get_signature().0)
+                .expect("Deserialization on the signature shouldn't be able to fail.");
+
+        let (da_stake_casted, da_vote_map) = self
+            .da_vote_outcomes
+            .entry(vote_commitment)
+            .or_insert_with(|| (0, BTreeMap::new()));
+
+        // Check for duplicate vote
+        // TODO ED Re-encoding signature key to bytes until we get rid of EncodedKey
+        // Have to do this because SignatureKey is not hashable
+        if da_vote_map.contains_key(&encoded_key) {
+            return Either::Left(self);
+        }
+
+        if self.signers.get(vote_node_id).as_deref() == Some(&true) {
+            error!("Node id is already in signers list");
+            return Either::Left(self);
+        }
+        self.signers.set(vote_node_id, true);
+        self.sig_lists.push(original_signature);
+
+        // Already checked that vote data was for a DA vote above
+        *da_stake_casted += u64::from(vote.get_vote_token().vote_count());
+        da_vote_map.insert(
+            encoded_key,
+            (vote.get_signature(), vote.get_data(), vote.get_vote_token()),
+        );
+
+        if *da_stake_casted >= u64::from(self.success_threshold) {
+            // Assemble QC
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                // TODO ED Something about stake table entries.  Might be easier to just pass in membership?
+                stake_table_entries.clone(),
+                U256::from(self.success_threshold.get()),
+            );
+
+            let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+                &real_qc_pp,
+                self.signers.as_bitslice(),
+                &self.sig_lists[..],
+            );
+
+            self.da_vote_outcomes.remove(&vote_commitment);
+
+            return Either::Right(AssembledSignature::Timeout(real_qc_sig));
+        }
+        Either::Left(self)
+    }
+}
+
 /// Accumulates DA votes
 pub struct DAVoteAccumulator<
     TYPES: NodeType,
@@ -398,6 +490,14 @@ impl<
         vote_node_id: usize,
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
+
+        match vote.get_data() {
+            VoteData::DA(_) => warn!("DA vote data"),
+            VoteData::Timeout(_) => panic!(),
+            _ => error!("Wrong vote data")
+           
+        }
+        
         let VoteData::DA(vote_commitment) = vote.get_data() else {
             return Either::Left(self);
         };

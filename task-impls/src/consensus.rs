@@ -20,6 +20,7 @@ use hotshot_types::traits::election::TimeoutExchangeType;
 use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::vote::QuorumVoteAccumulator;
+use hotshot_types::vote::TimeoutVoteAccumulator;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
     consensus::{Consensus, View},
@@ -306,7 +307,7 @@ where
         SequencingHotShotEvent::Shutdown => {
             return (Some(HotShotTaskCompleted::ShutDown), state);
         }
-        _ => {}
+        _ => {error!("Unexpected event")}
     }
     (None, state)
 }
@@ -977,7 +978,7 @@ where
                             &vote_internal.clone().leaf_commitment,
                         );
 
-                        let timeout_accumulator = DAVoteAccumulator {
+                        let timeout_accumulator = TimeoutVoteAccumulator {
                             da_vote_outcomes: HashMap::new(),
 
                             // TODO ED Don't use quorum exchange here
@@ -1000,7 +1001,7 @@ where
                             };
                             let name = "Quorum Vote Collection";
                             let filter = FilterEvent(Arc::new(|event| {
-                                matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_))
+                                matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_) | SequencingHotShotEvent::TimeoutVoteRecv(_))
                             }));
 
                             let builder =
@@ -1041,6 +1042,7 @@ where
             }
             SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
                 // debug!("Received quroum vote: {:?}", vote.get_view());
+                
 
                 if !self.timeout_exchange.is_leader(vote.get_view() + 1) {
                     error!(
@@ -1050,6 +1052,8 @@ where
                     );
                     return;
                 }
+
+                
 
                 // // TODO ED Insert TimeoutVote accumulator stuff here
 
@@ -1071,7 +1075,7 @@ where
 
                 //         // Todo check if we are the leader
                 // TODO ED Make this a default accum
-                let new_accumulator = DAVoteAccumulator {
+                let new_accumulator = TimeoutVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
 
                     // TODO ED Don't use quorum exchange here
@@ -1115,7 +1119,7 @@ where
                     };
                     let name = "Quorum Vote Collection";
                     let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_))
+                        matches!(event, SequencingHotShotEvent::QuorumVoteRecv(_) | SequencingHotShotEvent::TimeoutVoteRecv(_))
                     }));
 
                     let builder =
@@ -1257,6 +1261,7 @@ where
                             .timeout_exchange
                             .create_timeout_message::<I>(view, vote_token);
 
+                        // error!("Sending timeout vote for view {}", *view);
                         if let GeneralConsensusMessage::TimeoutVote(vote) = message {
                             self.event_stream
                                 .publish(SequencingHotShotEvent::TimeoutVoteSend(vote))

@@ -90,6 +90,7 @@ impl<
                                 SequencingHotShotEvent::ViewSyncCertificateRecv(view_sync_message)
                             }
                             GeneralConsensusMessage::TimeoutVote(message) => {
+                                // error!("Recv timeout vote in network task for view {:?}", message.get_view());
                                 SequencingHotShotEvent::TimeoutVoteRecv(message)
                             }
                             GeneralConsensusMessage::InternalTrigger(_) => {

@@ -885,6 +885,10 @@ pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES
             signatures_bytes.extend("No".as_bytes());
             Some(signatures.clone())
         }
+        AssembledSignature::Timeout(signatures) => {
+            signatures_bytes.extend("Timeout".as_bytes());
+            Some(signatures.clone())
+        }
         AssembledSignature::ViewSyncPreCommit(signatures) => {
             signatures_bytes.extend("ViewSyncPreCommit".as_bytes());
             Some(signatures.clone())
