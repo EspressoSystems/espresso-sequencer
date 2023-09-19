@@ -1,8 +1,11 @@
-use hotshot::traits::implementations::CombinedNetworks;
+use hotshot::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
+    traits::implementations::CombinedNetworks,
+};
 use std::{marker::PhantomData, sync::Arc};
 
 use hotshot::{
-    demos::sdemo::{SDemoBlock, SDemoState, SDemoTransaction},
+    demo::SDemoState,
     traits::{
         election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
         implementations::{
@@ -41,10 +44,10 @@ use serde::{Deserialize, Serialize};
 pub struct SequencingTestTypes;
 impl NodeType for SequencingTestTypes {
     type Time = ViewNumber;
-    type BlockType = SDemoBlock;
+    type BlockType = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
-    type Transaction = SDemoTransaction;
+    type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = SDemoState;
 }

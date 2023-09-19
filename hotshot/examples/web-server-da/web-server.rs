@@ -1,4 +1,4 @@
-use hotshot::demos::sdemo::SDemoTypes;
+use hotshot::demo::DemoTypes;
 use std::sync::Arc;
 
 use async_compatibility_layer::{
@@ -23,7 +23,7 @@ async fn main() {
     let (server_shutdown_sender, server_shutdown) = oneshot();
     let _sender = Arc::new(server_shutdown_sender);
     let _result = hotshot_web_server::run_web_server::<
-        <SDemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+        <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
     >(Some(server_shutdown), args.port)
     .await;
 }

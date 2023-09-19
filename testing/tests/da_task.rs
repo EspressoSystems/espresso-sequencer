@@ -20,10 +20,7 @@ use std::collections::HashMap;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_da_task() {
-    use hotshot::{
-        demos::sdemo::{SDemoBlock, SDemoNormalBlock},
-        tasks::add_da_task,
-    };
+    use hotshot::{block_impl::VIDBlockPayload, tasks::add_da_task};
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{message::Proposal, traits::election::CommitteeExchangeType};
@@ -39,10 +36,7 @@ async fn test_da_task() {
         };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let block = SDemoBlock::Normal(SDemoNormalBlock {
-        previous_state: (),
-        transactions: Vec::new(),
-    });
+    let block = VIDBlockPayload(Vec::new());
     let block_commitment = block.commit();
     let signature = committee_exchange.sign_da_proposal(&block_commitment);
     let proposal = DAProposal {

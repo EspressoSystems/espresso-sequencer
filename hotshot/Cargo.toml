@@ -109,6 +109,7 @@ nll = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
+sha3 = "^0.10"
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
