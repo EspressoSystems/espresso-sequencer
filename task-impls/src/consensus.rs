@@ -1319,12 +1319,13 @@ where
                 let consensus = self.consensus.read().await;
                 let qc = consensus.high_qc.clone();
                 drop(consensus);
-                if !self.publish_proposal_if_able(qc, self.cur_view, None).await {
-                    error!(
-                        "Failed to publish proposal on view change.  View = {:?}",
-                        self.cur_view
-                    );
-                }
+                // TODO ED Do not want to publish proposal on view change
+                // if !self.publish_proposal_if_able(qc, self.cur_view, None).await {
+                //     error!(
+                //         "Failed to publish proposal on view change.  View = {:?}",
+                //         self.cur_view
+                //     );
+                // }
             }
             SequencingHotShotEvent::Timeout(view) => {
                 let vote_token = self.timeout_exchange.make_vote_token(view);
