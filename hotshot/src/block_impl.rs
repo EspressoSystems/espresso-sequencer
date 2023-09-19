@@ -7,17 +7,20 @@ use std::{
 use commit::{Commitment, Committable};
 use hotshot_types::traits::{block_contents::Transaction, state::TestableBlock, BlockPayload};
 use serde::{Deserialize, Serialize};
+use sha3::{Digest, Keccak256};
 use snafu::Snafu;
 
 /// The transaction in a [`VIDBlockPayload`].
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDTransaction(pub Vec<u8>);
 
 impl Committable for VIDTransaction {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: Use use VID block commitment.
-        // <https://github.com/EspressoSystems/HotShot/issues/1730>
-        commit::RawCommitmentBuilder::new("Txn Comm").finalize()
+        let builder = commit::RawCommitmentBuilder::new("Txn Comm");
+        let mut hasher = Keccak256::new();
+        hasher.update(self.0.clone());
+        let generic_array = hasher.finalize();
+        builder.generic_byte_array(&generic_array).finalize()
     }
 
     fn tag() -> String {
@@ -32,12 +35,6 @@ impl VIDTransaction {
     #[must_use]
     pub fn new() -> Self {
         Self(Vec::new())
-    }
-}
-
-impl Default for VIDTransaction {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
