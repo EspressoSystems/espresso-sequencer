@@ -8,6 +8,8 @@
 async fn test_timeout() {
     use std::time::Duration;
 
+    use hotshot_testing::node_types::SequencingLibp2pImpl;
+
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         node_types::{SequencingMemoryImpl, SequencingTestTypes},
@@ -30,7 +32,7 @@ async fn test_timeout() {
     metadata.timing_data = timing_data;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_secs(1), dead_nodes)],
+        node_changes: vec![(Duration::from_millis(500), dead_nodes)],
     };
 
     // TODO ED Add safety task, etc to confirm TCs are being formed
@@ -38,7 +40,7 @@ async fn test_timeout() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(60000),
+                duration: Duration::from_millis(10000),
             },
         );
     metadata

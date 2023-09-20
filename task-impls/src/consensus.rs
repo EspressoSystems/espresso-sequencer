@@ -988,7 +988,7 @@ where
                         // self.update_view(new_view).await;
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!("Sending vote to next leader {:?}", vote);
+                            // debug!("Sending vote to next leader {:?}", vote);
                         };
                     }
                 }

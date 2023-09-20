@@ -701,6 +701,7 @@ where
             }
 
             SequencingHotShotEvent::Shutdown => {
+                error!("Shutting down because of shutdown signal!");
                 return Some(HotShotTaskCompleted::ShutDown);
             }
             _ => {
