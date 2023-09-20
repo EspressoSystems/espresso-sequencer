@@ -146,7 +146,7 @@ pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteTok
     /// Commitment to what's voted on.  E.g. the leaf for a `QuorumCertificate`
     pub commitment: Commitment<COMMITTABLE>,
     /// Data of the vote, yes, no, timeout, or DA
-    pub data: VoteData<COMMITTABLE>,
+    pub data: VoteData<Commitment<COMMITTABLE>>,
     /// The votes's token
     pub vote_token: T,
     /// View number for the vote

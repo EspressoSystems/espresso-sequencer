@@ -10,7 +10,6 @@ async-compatibility-layer = { workspace = true }
 async-trait = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
-nll = { workspace = true }
 serde = { workspace = true }
 snafu = { workspace = true }
 async-lock = { workspace = true }

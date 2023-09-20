@@ -25,16 +25,21 @@ docs = []
 doc-images = []
 hotshot-testing = []
 
-# [[example]]
-# name = "libp2p-validator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/validator.rs"
-#
-# [[example]]
-# name = "libp2p-orchestrator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/orchestrator.rs"
-#
+[[example]]
+name = "libp2p-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/validator.rs"
+
+[[example]]
+name = "libp2p-multi-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/multi-validator.rs"
+
+[[example]]
+name = "libp2p-orchestrator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/orchestrator.rs"
+
 # [[example]]
 # name = "web-server-orchestrator"
 # required-features = ["demo", "libp2p/rsa"]
@@ -100,10 +105,10 @@ jf-primitives = { workspace = true }
 libp2p = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
-nll = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
+sha3 = "^0.10"
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }

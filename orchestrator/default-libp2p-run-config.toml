@@ -1,4 +1,4 @@
-rounds = 100
+rounds = 10
 transactions_per_round = 10
 node_index = 0
 seed = [
@@ -57,17 +57,18 @@ num_txn_per_round = 10
 base_port = 9000
 
 [config]
-total_nodes = 5
+total_nodes = 10
+committee_nodes = 5
 max_transactions = 100
 min_transactions = 0
-next_view_timeout = 10000
+next_view_timeout = 30000
 timeout_ratio = [
     11,
     10,
 ]
 round_start_delay = 1
 start_delay = 1
-num_bootstrap = 5
+num_bootstrap = 4
 
 [config.propose_min_round_time]
 secs = 0
