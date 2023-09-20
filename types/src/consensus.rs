@@ -73,6 +73,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
 }
 
 /// The metrics being collected for the consensus algorithm
+#[derive(Debug)]
 pub struct ConsensusMetrics {
     /// The current view
     pub current_view: Box<dyn Gauge>,

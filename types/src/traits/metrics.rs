@@ -6,6 +6,8 @@
 //! - [`Histogram`]: stores multiple float values based for a graph (example usage: CPU %)
 //! - [`Label`]: Stores the last string (example usage: current version, network online/offline)
 
+use std::fmt::Debug;
+
 /// The metrics type.
 pub trait Metrics: Send + Sync {
     /// Create a [`Counter`] with an optional `unit_label`.
@@ -76,12 +78,12 @@ impl Label for NoMetrics {
 }
 
 /// An ever-incrementing counter
-pub trait Counter: Send + Sync {
+pub trait Counter: Send + Sync + Debug {
     /// Add a value to the counter
     fn add(&self, amount: usize);
 }
 /// A gauge that stores the latest value.
-pub trait Gauge: Send + Sync {
+pub trait Gauge: Send + Sync + Debug {
     /// Set the gauge value
     fn set(&self, amount: usize);
 
@@ -90,7 +92,7 @@ pub trait Gauge: Send + Sync {
 }
 
 /// A histogram which will record a series of points.
-pub trait Histogram: Send + Sync {
+pub trait Histogram: Send + Sync + Debug {
     /// Add a point to this histogram.
     fn add_point(&self, point: f64);
 }
