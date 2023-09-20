@@ -42,12 +42,12 @@ use crate::{
 };
 use async_compatibility_layer::{
     art::{async_spawn, async_spawn_local},
-    async_primitives::{broadcast::BroadcastSender, subscribable_rwlock::SubscribableRwLock},
+    async_primitives::broadcast::BroadcastSender,
     channel::UnboundedSender,
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use custom_debug::Debug;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
@@ -83,7 +83,7 @@ use hotshot_types::{
 };
 use snafu::ResultExt;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     marker::PhantomData,
     num::NonZeroUsize,
     sync::Arc,

@@ -43,7 +43,12 @@ use hotshot_types::{
     vote::{ViewSyncData, VoteType},
 };
 use serde::Serialize;
-use std::{collections::{HashMap, HashSet}, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
