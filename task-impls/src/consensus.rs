@@ -301,6 +301,7 @@ where
             }
         },
         SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
+            error!("received timeout vote for view {}", *vote.get_view());
             if state.timeout_accumulator.is_right() {
                 return (None, state);
             }
@@ -472,7 +473,7 @@ where
                             );
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
+                            debug!("Sending vote to next quorum leader {:?}", vote.get_view() + 1);
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -585,7 +586,7 @@ where
             //     self.certs.remove(&v);
             // }
             self.cur_view = new_view;
-            self.current_proposal = None;
+            
 
             if new_view == TYPES::Time::new(1) {
                 self.quorum_exchange
@@ -633,7 +634,8 @@ where
             let timeout = self.timeout;
             self.timeout_task = async_spawn({
                 let stream = self.event_stream.clone();
-                let view_number = self.cur_view;
+                // TODO ED + 1 here because of the logic change to view update.  This indicates we haven't seen evidence for view change for this view within the time window
+                let view_number = self.cur_view + 1;
                 async move {
                     async_sleep(Duration::from_millis(timeout)).await;
                     stream
@@ -974,8 +976,9 @@ where
                             // TOOD ED This means we publish the proposal without updating our own view, which doesn't seem right
                             return;
                         }
+                        self.current_proposal = None;
 
-                        // ED Only do this GC if we are able to vote
+
                         for v in (*self.cur_view)..=(*view) {
                             let time = TYPES::Time::new(v);
                             self.certs.remove(&time);
@@ -1280,6 +1283,8 @@ where
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
                     // self.update_view(view + 1).await;
+                    self.current_proposal = None;
+
                 }
             }
             SequencingHotShotEvent::VidCertRecv(cert) => {
@@ -1291,6 +1296,8 @@ where
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
                     // self.update_view(view + 1).await;
+                    self.current_proposal = None;
+
                 }
             }
             SequencingHotShotEvent::ViewChange(new_view) => {
@@ -1364,7 +1371,7 @@ where
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
                 debug!(
-                    "We received a timeout event in the consensus task for view {}!",
+                    "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
             }
@@ -1479,7 +1486,7 @@ where
             data: proposal,
             signature,
         };
-        debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
+        debug!("Sending proposal for view {:?} \n {:?}", leaf.view_number, "");
 
         self.event_stream
             .publish(SequencingHotShotEvent::QuorumProposalSend(

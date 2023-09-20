@@ -287,6 +287,7 @@ impl<
                 )
             }
             SequencingHotShotEvent::TimeoutVoteSend(vote) => {
+                // error!("Sending timeout vote to leader of view {}", *vote.get_view() + 1);
                 (
                     vote.get_key(),
                     MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
