@@ -496,9 +496,9 @@ where
                 self.num_timeouts_tracked += 1;
                 error!("Num timeouts tracked is {}", self.num_timeouts_tracked);
 
-                // if self.num_timeouts_tracked > 2 {
-                //     error!("Too many timeouts!  This shouldn't happen");
-                // }
+                if self.num_timeouts_tracked > 3 {
+                    error!("Too many timeouts!  This shouldn't happen");
+                }
 
                 // TODO ED Make this a configurable variable
                 if self.num_timeouts_tracked > 2 {

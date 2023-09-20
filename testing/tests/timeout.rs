@@ -23,7 +23,13 @@ async fn test_timeout() {
         next_view_timeout: 1000,
         ..Default::default()
     };
-    let mut metadata = TestMetadata::default();
+
+    // TODO ED Reduce down to 5 nodes once memory network issues is resolved
+    let mut metadata = TestMetadata {
+        total_nodes: 10,
+        start_nodes: 10,
+        ..Default::default()
+    };
     let dead_nodes = vec![ChangeNode {
         idx: 0,
         updown: UpDown::Down,
@@ -40,11 +46,13 @@ async fn test_timeout() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(10000),
+                duration: Duration::from_millis(30000),
             },
         );
+
+    // TODO ED Test with memory network once issue is resolved. 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
         .launch()
         .run_test()
         .await;
