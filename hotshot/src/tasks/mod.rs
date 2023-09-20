@@ -43,7 +43,7 @@ use hotshot_types::{
     vote::{ViewSyncData, VoteType},
 };
 use serde::Serialize;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{collections::{HashMap, HashSet}, marker::PhantomData, sync::Arc, time::Duration};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -441,6 +441,8 @@ where
         registry: registry.clone(),
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
+        transactions: Arc::default(),
+        seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
         committee_exchange: committee_exchange.into(),
         event_stream: event_stream.clone(),

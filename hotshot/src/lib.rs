@@ -133,11 +133,6 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// a reference to the metrics that the implementor is using.
     _metrics: Box<dyn Metrics>,
 
-    /// Transactions
-    /// (this is shared btwn hotshot and `Consensus`)
-    transactions:
-        Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>,
-
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
 
@@ -219,8 +214,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             state_map,
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
-            transactions: Arc::default(),
-            seen_transactions: HashSet::new(),
             saved_leaves,
             saved_blocks,
             // TODO this is incorrect
@@ -231,17 +224,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             invalid_qc: 0,
         };
         let consensus = Arc::new(RwLock::new(consensus));
-        let txns = consensus.read().await.get_transactions();
 
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
             channel_maps: I::new_channel_maps(start_view),
             consensus,
-            transactions: txns,
             public_key,
             private_key,
             config,
-            // networking,
             storage,
             exchanges: Arc::new(exchanges),
             event_sender: RwLock::default(),
@@ -546,11 +536,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 /// [`HotShot`] implementations that depend on [`TYPES::ConsensusType`].
 #[async_trait]
 pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Get the [`transactions`] field of [`HotShot`].
-    fn transactions(
-        &self,
-    ) -> &Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>;
-
     /// Get the [`hotstuff`] field of [`HotShot`].
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>>;
 
@@ -684,12 +669,6 @@ where
             Membership = MEMBERSHIP,
         > + 'static,
 {
-    fn transactions(
-        &self,
-    ) -> &Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>> {
-        &self.inner.transactions
-    }
-
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
         &self.inner.consensus
     }
