@@ -105,7 +105,6 @@ jf-primitives = { workspace = true }
 libp2p = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
-nll = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true, features = ["rc"] }

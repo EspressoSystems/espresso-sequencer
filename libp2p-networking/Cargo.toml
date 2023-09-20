@@ -9,7 +9,7 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 
 [features]
 default = ["webui"]
-webui = ["tide"]
+webui = []
 
 # # this only has effect on linux
 # lossy_network = [
@@ -47,8 +47,6 @@ snafu = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
     "h1-server",
 ] }
-# TODO do we want this as non optional??
-tokio-stream = "0.1.14"
 tracing = { workspace = true }
 void = "1.0.2"
 dashmap = "5.5.3"
@@ -56,6 +54,7 @@ dashmap = "5.5.3"
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 libp2p = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true }
+tokio-stream = "0.1.14"
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 libp2p = { workspace = true, features = ["async-std"] }
 async-std = { workspace = true }
@@ -76,5 +75,3 @@ netlink-sys = { git = "https://github.com/espressosystems/netlink.git", version 
 ], optional = true }
 netlink-packet-generic = { git = "https://github.com/espressosystems/netlink.git", version = "0.2.0", optional = true }
 
-[dev-dependencies]
-clap = { version = "4.4", features = ["derive", "env"] }
