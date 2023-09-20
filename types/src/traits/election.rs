@@ -165,7 +165,7 @@ where
     TOKEN: VoteToken,
 {
     /// `VoteType` that is used in this certificate
-    type Vote: VoteType<TYPES, COMMITTABLE>;
+    type Vote: VoteType<TYPES, Commitment<COMMITTABLE>>;
 
     /// `Accumulator` type to accumulate votes.
     type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
@@ -267,7 +267,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     type Proposal: ProposalType<NodeType = TYPES>;
     /// A vote on a [`Proposal`](Self::Proposal).
     // TODO ED Make this equal Certificate vote (if possible?)
-    type Vote: VoteType<TYPES, Self::Commitment>;
+    type Vote: VoteType<TYPES, Commitment<Self::Commitment>>;
     /// A [`SignedCertificate`] attesting to a decision taken by the committee.
     type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
         + Hash

@@ -28,7 +28,7 @@ use std::{
 use tracing::error;
 
 /// The vote sent by consensus messages.
-pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone>:
+pub trait VoteType<TYPES: NodeType, COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone>:
     Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq
 {
     /// Get the view this vote was cast for
@@ -38,7 +38,7 @@ pub trait VoteType<TYPES: NodeType, COMMITTABLE: Committable + Serialize + Clone
     /// Get the signature associated with this vote
     fn get_signature(&self) -> EncodedSignature;
     /// Get the data this vote was signed over
-    fn get_data(&self) -> VoteData<Commitment<COMMITTABLE>>;
+    fn get_data(&self) -> VoteData<COMMITMENT>;
     /// Get the vote token of this vote
     fn get_vote_token(&self) -> TYPES::VoteTokenType;
 }
@@ -196,7 +196,7 @@ pub enum QuorumVote<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     Timeout(TimeoutVote<TYPES, LEAF>),
 }
 
-impl<TYPES: NodeType> VoteType<TYPES, TYPES::BlockType> for DAVote<TYPES> {
+impl<TYPES: NodeType> VoteType<TYPES, Commitment<TYPES::BlockType>> for DAVote<TYPES> {
     fn get_view(&self) -> TYPES::Time {
         self.current_view
     }
@@ -223,7 +223,7 @@ impl<TYPES: NodeType> DAVote<TYPES> {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, LEAF>
+impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> VoteType<TYPES, Commitment<LEAF>>
     for QuorumVote<TYPES, LEAF>
 {
     fn get_view(&self) -> TYPES::Time {
@@ -275,7 +275,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> QuorumVote<TYPES, LEAF> 
     }
 }
 
-impl<TYPES: NodeType> VoteType<TYPES, ViewSyncData<TYPES>> for ViewSyncVote<TYPES> {
+impl<TYPES: NodeType> VoteType<TYPES, Commitment<ViewSyncData<TYPES>>> for ViewSyncVote<TYPES> {
     fn get_view(&self) -> TYPES::Time {
         match self {
             ViewSyncVote::PreCommit(v) | ViewSyncVote::Commit(v) | ViewSyncVote::Finalize(v) => {
@@ -320,7 +320,7 @@ pub trait Accumulator<T, U>: Sized {
 pub trait Accumulator2<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
 >: Sized
 {
     /// Append 1 vote to the accumulator.  If the threshold is not reached, return
@@ -338,10 +338,10 @@ pub trait Accumulator2<
 pub struct DAVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
 > {
     /// Map of all da signatures accumlated so far
-    pub da_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub da_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
@@ -355,7 +355,7 @@ pub struct DAVoteAccumulator<
 impl<
         TYPES: NodeType,
         COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, COMMITTABLE>,
+        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for DAVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
     fn append(
@@ -429,14 +429,14 @@ impl<
 pub struct QuorumVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
 > {
     /// Map of all signatures accumlated so far
-    pub total_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub total_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
     /// Map of all yes signatures accumlated so far
-    pub yes_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub yes_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
     /// Map of all no signatures accumlated so far
-    pub no_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub no_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
@@ -453,7 +453,7 @@ pub struct QuorumVoteAccumulator<
 impl<
         TYPES: NodeType,
         COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, COMMITTABLE>,
+        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for QuorumVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
     fn append(
@@ -560,14 +560,14 @@ impl<
 pub struct ViewSyncVoteAccumulator<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
 > {
     /// Map of all pre_commit signatures accumlated so far
-    pub pre_commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub pre_commit_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
     /// Map of all ommit signatures accumlated so far
-    pub commit_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub commit_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
     /// Map of all finalize signatures accumlated so far
-    pub finalize_vote_outcomes: VoteMap<COMMITTABLE, TYPES::VoteTokenType>,
+    pub finalize_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
@@ -584,7 +584,7 @@ pub struct ViewSyncVoteAccumulator<
 impl<
         TYPES: NodeType,
         COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, COMMITTABLE>,
+        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITTABLE, VOTE>
 {
     #[allow(clippy::too_many_lines)]
@@ -734,7 +734,7 @@ impl<
 pub struct AccumulatorPlaceholder<
     TYPES: NodeType,
     COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
 > {
     /// Phantom data to make compiler happy
     pub phantom: PhantomData<(TYPES, VOTE, COMMITTABLE)>,
@@ -743,7 +743,7 @@ pub struct AccumulatorPlaceholder<
 impl<
         TYPES: NodeType,
         COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, COMMITTABLE>,
+        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
 {
     fn append(
@@ -758,17 +758,23 @@ impl<
 
 /// Mapping of commitments to vote tokens by key.
 // TODO ED Remove this whole token generic
-type VoteMap<C, TOKEN> = HashMap<
-    Commitment<C>,
+type VoteMap<COMMITMENT, TOKEN> = HashMap<
+    COMMITMENT,
     (
         u64,
-        BTreeMap<EncodedPublicKey, (EncodedSignature, VoteData<Commitment<C>>, TOKEN)>,
+        BTreeMap<EncodedPublicKey, (EncodedSignature, VoteData<COMMITMENT>, TOKEN)>,
     ),
 >;
 
 /// Describe the process of collecting signatures on block or leaf commitment, to form a DAC or QC,
 /// respectively.
-pub struct VoteAccumulator<TOKEN, COMMITMENT: Committable + Serialize + Clone, TYPES: NodeType> {
+///
+/// TODO GG used only in election.rs; move this to there and make it private?
+pub struct VoteAccumulator<
+    TOKEN,
+    COMMITMENT: Serialize + for<'a> Deserialize<'a> + Clone,
+    TYPES: NodeType,
+> {
     /// Map of all signatures accumlated so far
     pub total_vote_outcomes: VoteMap<COMMITMENT, TOKEN>,
     /// Map of all da signatures accumlated so far
@@ -809,7 +815,7 @@ impl<TOKEN, LEAF: Committable + Serialize + Clone, TYPES: NodeType>
             ),
         ),
         AssembledSignature<TYPES>,
-    > for VoteAccumulator<TOKEN, LEAF, TYPES>
+    > for VoteAccumulator<TOKEN, Commitment<LEAF>, TYPES>
 where
     TOKEN: Clone + VoteToken,
 {

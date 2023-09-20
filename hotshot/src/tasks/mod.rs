@@ -5,7 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -66,7 +66,7 @@ pub async fn add_network_message_task<
     >,
     COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -176,7 +176,7 @@ pub async fn add_network_event_task<
     >,
     COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
