@@ -111,6 +111,7 @@ mod test {
         sync::{Arc, Mutex},
     };
 
+    #[derive(Debug)]
     struct TestMetrics {
         prefix: String,
         values: Arc<Mutex<Inner>>,
