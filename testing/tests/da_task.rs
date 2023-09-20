@@ -49,13 +49,13 @@ async fn test_da_task() {
     };
     let vid = vid_init();
     let message_bytes = bincode::serialize(&message).unwrap();
-    let (shares, common) = vid.dispersal_data(&message_bytes).unwrap();
+    let vid_disperse = vid.disperse(&message_bytes).unwrap();
     let vid_proposal = Proposal {
         data: VidDisperse {
             view_number: message.data.view_number,
             commitment: block_commitment,
-            shares,
-            common,
+            shares: vid_disperse.shares,
+            common: vid_disperse.common,
         },
         signature: message.signature.clone(),
     };
