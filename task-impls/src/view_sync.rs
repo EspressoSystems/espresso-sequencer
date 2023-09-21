@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 use crate::events::SequencingHotShotEvent;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::Either::{self, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -228,7 +228,7 @@ pub struct ViewSyncRelayTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            ViewSyncData<TYPES>,
+            Commitment<ViewSyncData<TYPES>>,
         >>::VoteAccumulator,
         ViewSyncCertificate<TYPES>,
     >,

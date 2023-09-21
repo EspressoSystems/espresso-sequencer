@@ -1,9 +1,11 @@
 use crate::events::SequencingHotShotEvent;
+use async_compatibility_layer::async_primitives::subscribable_rwlock::SubscribableRwLock;
 use async_compatibility_layer::{
     art::async_timeout, async_primitives::subscribable_rwlock::ReadView,
 };
 use async_lock::RwLock;
 use bincode::config::Options;
+use commit::Commitment;
 use commit::Committable;
 use either::{Either, Left, Right};
 use hotshot_task::{
@@ -26,8 +28,15 @@ use hotshot_types::{
 };
 use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
-use std::{collections::HashSet, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Instant,
+};
 use tracing::{debug, error, instrument, warn};
+
+/// A type alias for `HashMap<Commitment<T>, T>`
+type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -60,6 +69,12 @@ pub struct TransactionTaskState<
 
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
+
+    /// A list of undecided transactions
+    pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
+
+    /// A list of transactions we've seen decided, but didn't receive
+    pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
 
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -97,15 +112,14 @@ where
     ) -> Option<HotShotTaskCompleted> {
         match event {
             SequencingHotShotEvent::TransactionsRecv(transactions) => {
-                let mut consensus = self.consensus.write().await;
-                consensus
-                    .get_transactions()
+                let consensus = self.consensus.read().await;
+                self.transactions
                     .modify(|txns| {
                         for transaction in transactions {
                             let size = bincode_opts().serialized_size(&transaction).unwrap_or(0);
 
                             // If we didn't already know about this transaction, update our mempool metrics.
-                            if !consensus.seen_transactions.remove(&transaction.commit())
+                            if !self.seen_transactions.remove(&transaction.commit())
                                 && txns.insert(transaction.commit(), transaction).is_none()
                             {
                                 consensus.metrics.outstanding_transactions.update(1);
@@ -138,17 +152,16 @@ where
                         Right(_) => {}
                     }
                 }
-                let mut consensus = self.consensus.write().await;
-                let txns = consensus.transactions.cloned().await;
+                let consensus = self.consensus.read().await;
+                let txns = self.transactions.cloned().await;
 
                 let _ = included_txns.iter().map(|hash| {
                     if !txns.contains_key(hash) {
-                        consensus.seen_transactions.insert(*hash);
+                        self.seen_transactions.insert(*hash);
                     }
                 });
                 drop(txns);
-                consensus
-                    .transactions
+                self.transactions
                     .modify(|txns| {
                         *txns = txns
                             .drain()
@@ -255,12 +268,10 @@ where
             Either::Right(_commitment) => HashSet::new(),
         };
 
-        let consensus = self.consensus.read().await;
-
-        let receiver = consensus.transactions.subscribe().await;
+        let receiver = self.transactions.subscribe().await;
 
         loop {
-            let all_txns = consensus.transactions.cloned().await;
+            let all_txns = self.transactions.cloned().await;
             debug!("Size of transactions: {}", all_txns.len());
             let unclaimed_txns: Vec<_> = all_txns
                 .iter()
@@ -290,7 +301,7 @@ where
             }
             break;
         }
-        let all_txns = consensus.transactions.cloned().await;
+        let all_txns = self.transactions.cloned().await;
         let txns: Vec<TYPES::Transaction> = all_txns
             .iter()
             .filter_map(|(txn_hash, txn)| {

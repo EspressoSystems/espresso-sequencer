@@ -34,7 +34,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
-nll = { workspace = true }
 serde = { workspace = true }
 ethereum-types = { workspace = true }
 bitvec = { workspace = true }

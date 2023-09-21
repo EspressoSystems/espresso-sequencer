@@ -86,12 +86,12 @@ pub struct TimeoutCertificate<TYPES: NodeType> {
     pub signatures: AssembledSignature<TYPES>,
 }
 
-impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::Time>
+impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::Time>>
     for TimeoutCertificate<TYPES>
 {
     type Vote = TimeoutVote2<TYPES>;
 
-    type VoteAccumulator = TimeoutVoteAccumulator<TYPES, TYPES::Time, Self::Vote>;
+    type VoteAccumulator = TimeoutVoteAccumulator<TYPES, Commitment<TYPES::Time>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -194,7 +194,7 @@ pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteTok
     /// Commitment to what's voted on.  E.g. the leaf for a `QuorumCertificate`
     pub commitment: Commitment<COMMITTABLE>,
     /// Data of the vote, yes, no, timeout, or DA
-    pub data: VoteData<COMMITTABLE>,
+    pub data: VoteData<Commitment<COMMITTABLE>>,
     /// The votes's token
     pub vote_token: T,
     /// View number for the vote
@@ -205,11 +205,11 @@ pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteTok
 }
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, LEAF>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<LEAF>>
     for QuorumCertificate<TYPES, LEAF>
 {
     type Vote = QuorumVote<TYPES, LEAF>;
-    type VoteAccumulator = QuorumVoteAccumulator<TYPES, LEAF, Self::Vote>;
+    type VoteAccumulator = QuorumVoteAccumulator<TYPES, Commitment<LEAF>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -282,11 +282,12 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
     }
 }
 
-impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::BlockType>
+impl<TYPES: NodeType>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::BlockType, Self::Vote>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -371,11 +372,12 @@ impl<TYPES: NodeType> Committable for ViewSyncCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, ViewSyncData<TYPES>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<ViewSyncData<TYPES>>>
     for ViewSyncCertificate<TYPES>
 {
     type Vote = ViewSyncVote<TYPES>;
-    type VoteAccumulator = ViewSyncVoteAccumulator<TYPES, ViewSyncData<TYPES>, Self::Vote>;
+    type VoteAccumulator =
+        ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,

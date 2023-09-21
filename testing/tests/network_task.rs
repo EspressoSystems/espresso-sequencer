@@ -21,7 +21,7 @@ use std::collections::HashMap;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_network_task() {
-    use hotshot::demos::sdemo::{SDemoBlock, SDemoNormalBlock};
+    use hotshot::block_impl::VIDBlockPayload;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
@@ -40,10 +40,7 @@ async fn test_network_task() {
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
-    let block = SDemoBlock::Normal(SDemoNormalBlock {
-        previous_state: (),
-        transactions: Vec::new(),
-    });
+    let block = VIDBlockPayload(Vec::new());
     let block_commitment = block.commit();
     let signature = committee_exchange.sign_da_proposal(&block_commitment);
     let da_proposal = Proposal {
@@ -56,15 +53,15 @@ async fn test_network_task() {
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
     let vid = vid_init();
     let da_proposal_bytes = bincode::serialize(&da_proposal).unwrap();
-    let (shares, common) = vid.dispersal_data(&da_proposal_bytes).unwrap();
+    let vid_disperse = vid.disperse(&da_proposal_bytes).unwrap();
     // TODO for now reuse the same block commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
         data: VidDisperse {
             view_number: da_proposal.data.view_number,
             commitment: block_commitment,
-            shares,
-            common,
+            shares: vid_disperse.shares,
+            common: vid_disperse.common,
         },
         signature: da_proposal.signature.clone(),
     };

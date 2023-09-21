@@ -1,11 +1,14 @@
 use crate::infra::{load_config_from_file, OrchestratorArgs};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot::{
     traits::{
-        implementations::{MemoryStorage, WebCommChannel, WebServerNetwork},
+        implementations::{
+            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, WebCommChannel, WebServerNetwork,
+        },
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
@@ -17,6 +20,7 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
+use hotshot_types::HotShotConfig;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{QuorumProposal, SequencingLeaf, TestableLeaf},
@@ -33,8 +37,17 @@ use hotshot_types::{
         },
         state::{ConsensusTime, TestableBlock, TestableState},
     },
-    HotShotConfig,
 };
+use libp2p_identity::{
+    ed25519::{self, SecretKey},
+    Keypair,
+};
+use libp2p_networking::{
+    network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType},
+    reexport::Multiaddr,
+};
+use std::{collections::BTreeSet, sync::Arc};
+use std::{num::NonZeroUsize, str::FromStr};
 // use libp2p::{
 //     identity::{
 //         ed25519::{Keypair as EdKeypair, SecretKey},
@@ -43,7 +56,7 @@ use hotshot_types::{
 //     multiaddr::{self, Protocol},
 //     Multiaddr,
 // };
-// use libp2p_identity::PeerId;
+use libp2p_identity::PeerId;
 // use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
 use std::{
     //collections::{BTreeSet, VecDeque},
@@ -376,15 +389,6 @@ pub trait RunDA<
 
 // WEB SERVER
 
-/// Alias for the [`WebCommChannel`] for sequencing consensus.
-type StaticDAComm<TYPES, I, MEMBERSHIP> = WebCommChannel<TYPES, I, MEMBERSHIP>;
-
-/// Alias for the ['WebCommChannel'] for validating consensus
-type StaticQuorumComm<TYPES, I, MEMBERSHIP> = WebCommChannel<TYPES, I, MEMBERSHIP>;
-
-/// Alias for the ['WebCommChannel'] for view sync consensus
-type StaticViewSyncComm<TYPES, I, MEMBERSHIP> = WebCommChannel<TYPES, I, MEMBERSHIP>;
-
 /// Represents a web server-based run
 pub struct WebServerDARun<
     TYPES: NodeType,
@@ -396,9 +400,9 @@ pub struct WebServerDARun<
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         TYPES::ElectionConfigType,
     >,
-    quorum_network: StaticQuorumComm<TYPES, I, MEMBERSHIP>,
-    da_network: StaticDAComm<TYPES, I, MEMBERSHIP>,
-    view_sync_network: StaticViewSyncComm<TYPES, I, MEMBERSHIP>,
+    quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    da_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    view_sync_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
 }
 
 #[async_trait]
@@ -440,9 +444,9 @@ impl<
     RunDA<
         TYPES,
         MEMBERSHIP,
-        StaticDAComm<TYPES, NODE, MEMBERSHIP>,
-        StaticQuorumComm<TYPES, NODE, MEMBERSHIP>,
-        StaticViewSyncComm<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
         NODE,
     > for WebServerDARun<TYPES, NODE, MEMBERSHIP>
 where
@@ -516,6 +520,235 @@ where
     }
 
     fn get_view_sync_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.view_sync_network.clone()
+    }
+
+    fn get_config(
+        &self,
+    ) -> NetworkConfig<
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        TYPES::ElectionConfigType,
+    > {
+        self.config.clone()
+    }
+}
+
+// Libp2p
+
+/// Represents a libp2p-based run
+pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+{
+    config: NetworkConfig<
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        TYPES::ElectionConfigType,
+    >,
+    quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    da_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    view_sync_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+}
+
+#[async_trait]
+impl<
+        TYPES: NodeType,
+        MEMBERSHIP: Membership<TYPES> + Debug,
+        NODE: NodeImplementation<
+            TYPES,
+            Leaf = SequencingLeaf<TYPES>,
+            Exchanges = SequencingExchanges<
+                TYPES,
+                Message<TYPES, NODE>,
+                QuorumExchange<
+                    TYPES,
+                    SequencingLeaf<TYPES>,
+                    QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+                CommitteeExchange<
+                    TYPES,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+                ViewSyncExchange<
+                    TYPES,
+                    ViewSyncCertificate<TYPES>,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+            >,
+            Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+            ConsensusMessage = SequencingMessage<TYPES, NODE>,
+        >,
+    >
+    RunDA<
+        TYPES,
+        MEMBERSHIP,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        NODE,
+    > for Libp2pDARun<TYPES, NODE, MEMBERSHIP>
+where
+    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::BlockType: TestableBlock,
+    SequencingLeaf<TYPES>: TestableLeaf,
+    Self: Sync,
+{
+    async fn initialize_networking(
+        config: NetworkConfig<
+            TYPES::SignatureKey,
+            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            TYPES::ElectionConfigType,
+        >,
+    ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
+        let (pubkey, _privkey) =
+            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+                config.seed,
+                config.node_index,
+            );
+        let mut config = config;
+        let libp2p_config = config
+            .libp2p_config
+            .take()
+            .expect("Configuration is not for a Libp2p network");
+        let bs_len = libp2p_config.bootstrap_nodes.len();
+        let bootstrap_nodes: Vec<(PeerId, Multiaddr)> = libp2p_config
+            .bootstrap_nodes
+            .iter()
+            .map(|(addr, pair)| {
+                let kp = Keypair::from_protobuf_encoding(pair).unwrap();
+                let peer_id = PeerId::from_public_key(&kp.public());
+                let multiaddr =
+                    Multiaddr::from_str(&format!("/ip4/{}/udp/{}/quic-v1", addr.ip(), addr.port()))
+                        .unwrap();
+                (peer_id, multiaddr)
+            })
+            .collect();
+        let identity = libp2p_generate_indexed_identity(config.seed, config.node_index);
+        let node_type = if (config.node_index as usize) < bs_len {
+            NetworkNodeType::Bootstrap
+        } else {
+            NetworkNodeType::Regular
+        };
+        let node_index = config.node_index;
+        let port_index = match libp2p_config.index_ports {
+            true => node_index,
+            false => 0,
+        };
+        let bound_addr: Multiaddr = format!(
+            "/{}/{}/udp/{}/quic-v1",
+            if libp2p_config.public_ip.is_ipv4() {
+                "ip4"
+            } else {
+                "ip6"
+            },
+            libp2p_config.public_ip,
+            libp2p_config.base_port as u64 + port_index
+        )
+        .parse()
+        .unwrap();
+
+        // generate network
+        let mut config_builder = NetworkNodeConfigBuilder::default();
+        assert!(config.config.total_nodes.get() > 2);
+        let replicated_nodes = NonZeroUsize::new(config.config.total_nodes.get() - 2).unwrap();
+        config_builder.replication_factor(replicated_nodes);
+        config_builder.identity(identity.clone());
+
+        config_builder.bound_addr(Some(bound_addr.clone()));
+
+        let to_connect_addrs = bootstrap_nodes
+            .iter()
+            .map(|(peer_id, multiaddr)| (Some(*peer_id), multiaddr.clone()))
+            .collect();
+
+        config_builder.to_connect_addrs(to_connect_addrs);
+
+        let mesh_params =
+        // NOTE I'm arbitrarily choosing these.
+        match node_type {
+            NetworkNodeType::Bootstrap => MeshParams {
+                mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
+                mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
+                mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
+                mesh_n: libp2p_config.bootstrap_mesh_n,
+            },
+            NetworkNodeType::Regular => MeshParams {
+                mesh_n_high: libp2p_config.mesh_n_high,
+                mesh_n_low: libp2p_config.mesh_n_low,
+                mesh_outbound_min: libp2p_config.mesh_outbound_min,
+                mesh_n: libp2p_config.mesh_n,
+            },
+            NetworkNodeType::Conductor => unreachable!(),
+        };
+        config_builder.mesh_params(Some(mesh_params));
+
+        let mut all_keys = BTreeSet::new();
+        let mut da_keys = BTreeSet::new();
+        for i in 0..config.config.total_nodes.get() as u64 {
+            let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
+            let pubkey = TYPES::SignatureKey::from_private(&privkey);
+            if i < config.config.da_committee_size as u64 {
+                da_keys.insert(pubkey.clone());
+            }
+            all_keys.insert(pubkey);
+        }
+
+        let node_config = config_builder.build().unwrap();
+        let underlying_quorum_network = Libp2pNetwork::new(
+            NoMetrics::boxed(),
+            node_config,
+            pubkey.clone(),
+            Arc::new(RwLock::new(
+                bootstrap_nodes
+                    .iter()
+                    .map(|(peer_id, addr)| (Some(*peer_id), addr.clone()))
+                    .collect(),
+            )),
+            bs_len,
+            config.node_index as usize,
+            // NOTE: this introduces an invariant that the keys are assigned using this indexed
+            // function
+            all_keys,
+            da_keys,
+        )
+        .await
+        .unwrap();
+
+        underlying_quorum_network.wait_for_ready().await;
+
+        // Create the network
+        let quorum_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        let view_sync_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        let da_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        Libp2pDARun {
+            config,
+            quorum_network,
+            da_network,
+            view_sync_network,
+        }
+    }
+
+    fn get_da_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.da_network.clone()
+    }
+
+    fn get_quorum_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.quorum_network.clone()
+    }
+
+    fn get_view_sync_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.view_sync_network.clone()
     }
 
@@ -612,4 +845,13 @@ pub async fn main_entry_point<
 
     info!("All nodes are ready!  Starting HotShot");
     run.run_hotshot(hotshot).await;
+}
+
+pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&seed);
+    hasher.update(&index.to_le_bytes());
+    let new_seed = *hasher.finalize().as_bytes();
+    let sk_bytes = SecretKey::try_from_bytes(new_seed).unwrap();
+    <ed25519::Keypair as From<SecretKey>>::from(sk_bytes).into()
 }

@@ -3,7 +3,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -103,7 +103,7 @@ pub struct DAVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            TYPES::BlockType,
+            Commitment<TYPES::BlockType>,
         >>::VoteAccumulator,
         DACertificate<TYPES>,
     >,
@@ -672,7 +672,7 @@ where
 
                     let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
                     let message_bytes = bincode::serialize(&message).unwrap();
-                    let (shares, common) = vid.dispersal_data(&message_bytes).unwrap();
+                    let vid_disperse = vid.disperse(&message_bytes).unwrap();
                     // TODO for now reuse the same block commitment and signature as DA committee
                     // https://github.com/EspressoSystems/jellyfish/issues/369
 
@@ -681,9 +681,9 @@ where
                             Proposal {
                                 data: VidDisperse {
                                     view_number: view,
-                                    commitment: block.commit(),
-                                    shares,
-                                    common,
+                                    commitment: block.commit(), // TODO GG should be vid_disperse.commit but that's a big change
+                                    shares: vid_disperse.shares,
+                                    common: vid_disperse.common,
                                 },
                                 signature: message.signature,
                             },

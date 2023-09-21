@@ -134,7 +134,7 @@ pub mod dummy {
         type Transaction = DummyTransaction;
 
         fn new() -> Self {
-            <Self as TestableBlock>::genesis()
+            Self { nonce: 0 }
         }
 
         fn add_transaction_raw(

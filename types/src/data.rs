@@ -173,11 +173,13 @@ pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::Time,
     /// Block commitment
+    ///
+    /// TODO GG type should be `<VidScheme as VidSchemeTrait>::Common` but that's a big change.
     pub commitment: Commitment<TYPES::BlockType>,
     /// VID shares dispersed among storage nodes
-    pub shares: Vec<<VidScheme as VidSchemeTrait>::StorageShare>,
+    pub shares: Vec<<VidScheme as VidSchemeTrait>::Share>,
     /// VID common data sent to all storage nodes
-    pub common: <VidScheme as VidSchemeTrait>::StorageCommon,
+    pub common: <VidScheme as VidSchemeTrait>::Common,
 }
 
 /// Trusted KZG setup for VID.
