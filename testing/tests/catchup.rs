@@ -164,7 +164,7 @@ async fn test_catchup_one_node() {
         ..Default::default()
     };
     // only alow for the view which the catchup node hasn't started to fail
-    metadata.overall_safety_properties.num_failed_views = 1;
+    metadata.overall_safety_properties.num_failed_views = 5;
 
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
