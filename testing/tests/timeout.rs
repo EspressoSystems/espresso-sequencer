@@ -9,7 +9,9 @@ async fn test_timeout() {
     use std::time::Duration;
 
     use hotshot_testing::node_types::SequencingLibp2pImpl;
+    use hotshot_testing::node_types::SequencingWebImpl;
 
+    use hotshot_testing::overall_safety_task::OverallSafetyPropertiesDescription;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         node_types::{SequencingMemoryImpl, SequencingTestTypes},
@@ -37,6 +39,11 @@ async fn test_timeout() {
 
     metadata.timing_data = timing_data;
 
+    metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        num_successful_views: 50,
+        ..Default::default()
+    };
+
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(Duration::from_millis(500), dead_nodes)],
     };
@@ -46,13 +53,13 @@ async fn test_timeout() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(30000),
+                duration: Duration::from_secs(30),
             },
         );
 
-    // TODO ED Test with memory network once issue is resolved. 
+    // TODO ED Test with memory network once issue is resolved.
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
         .launch()
         .run_test()
         .await;

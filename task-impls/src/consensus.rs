@@ -473,7 +473,10 @@ where
                             );
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!("Sending vote to next quorum leader {:?}", vote.get_view() + 1);
+                            debug!(
+                                "Sending vote to next quorum leader {:?}",
+                                vote.get_view() + 1
+                            );
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -586,14 +589,15 @@ where
             //     self.certs.remove(&v);
             // }
             self.cur_view = new_view;
-            
 
-            if new_view == TYPES::Time::new(1) {
-                self.quorum_exchange
-                    .network()
-                    .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
-                    .await;
-            }
+            // TODO ED These injects aren't right
+            // Commenting out because HotShot doesn't start on 1 now
+            // if new_view == TYPES::Time::new(1) {
+            //     self.quorum_exchange
+            //         .network()
+            //         .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+            //         .await;
+            // }
 
             // Poll the future leader for lookahead
             let lookahead_view = new_view + LOOK_AHEAD;
@@ -610,14 +614,15 @@ where
             // Start polling for proposals for the new view
             self.quorum_exchange
                 .network()
-                .inject_consensus_info(ConsensusIntentEvent::PollForProposal(*self.cur_view))
+                .inject_consensus_info(ConsensusIntentEvent::PollForProposal(*self.cur_view + 1))
                 .await;
 
             self.quorum_exchange
                 .network()
-                .inject_consensus_info(ConsensusIntentEvent::PollForDAC(*self.cur_view))
+                .inject_consensus_info(ConsensusIntentEvent::PollForDAC(*self.cur_view + 1))
                 .await;
 
+            // TODO ED I think this poll is still correct (actually want to poll for it in both views, in case this node just doesn't receive the latest proposal, but that is more of a web server issue specifically)
             if self.quorum_exchange.is_leader(self.cur_view + 1) {
                 debug!("Polling for quorum votes for view {}", *self.cur_view);
                 self.quorum_exchange
@@ -676,19 +681,21 @@ where
                 if proposal.data.justify_qc.view_number() != proposal.data.view_number - 1 {
                     // TODO ED Add timeout cert logic
                     if proposal.data.timeout_certificate.is_none() {
-                        error!("Proposal needed a timeout cert but didn't have one {:?}", proposal.data.clone());
-                        return
-                    }
-                    else {
+                        error!(
+                            "Proposal needed a timeout cert but didn't have one {:?}",
+                            proposal.data.clone()
+                        );
+                        return;
+                    } else {
                         error!("Proposal for view {} had timeout certificate", *view);
                     }
                     // TODO ED Check timeout cert validity
                 }
 
-                // TODO ED This needs to be moved further down so we only update the view after fully validating the qc. 
+                // TODO ED This needs to be moved further down so we only update the view after fully validating the qc.
                 self.update_view(view).await;
 
-                // TODO ED How does this play in with the timeout cert? 
+                // TODO ED How does this play in with the timeout cert?
                 self.current_proposal = Some(proposal.data.clone());
 
                 let vote_token = self.quorum_exchange.make_vote_token(view);
@@ -701,13 +708,9 @@ where
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
                     Ok(Some(vote_token)) => {
-   
-
                         debug!("We were chosen for consensus committee on {:?}", view);
                         let consensus = self.consensus.upgradable_read().await;
                         let message;
-
-                        
 
                         // Construct the leaf.
                         let justify_qc = proposal.data.justify_qc;
@@ -978,7 +981,6 @@ where
                         }
                         self.current_proposal = None;
 
-
                         for v in (*self.cur_view)..=(*view) {
                             let time = TYPES::Time::new(v);
                             self.certs.remove(&time);
@@ -1228,12 +1230,15 @@ where
 
                     // TODO ED Clean this up, get rid of clones
                     if self
-                        .publish_proposal_if_able(self.consensus.read().await.high_qc.clone(), qc.clone().view_number + 1, Some(qc.clone()))
+                        .publish_proposal_if_able(
+                            self.consensus.read().await.high_qc.clone(),
+                            qc.clone().view_number + 1,
+                            Some(qc.clone()),
+                        )
                         .await
                     {
                         // self.update_view(qc.view_number + 1).await;
-                    }
-                    else {
+                    } else {
                         error!("Wasn't able to publish proposal");
                     }
                 }
@@ -1284,7 +1289,6 @@ where
                 if self.vote_if_able().await {
                     // self.update_view(view + 1).await;
                     self.current_proposal = None;
-
                 }
             }
             SequencingHotShotEvent::VidCertRecv(cert) => {
@@ -1297,7 +1301,6 @@ where
                 if self.vote_if_able().await {
                     // self.update_view(view + 1).await;
                     self.current_proposal = None;
-
                 }
             }
             SequencingHotShotEvent::ViewChange(new_view) => {
@@ -1342,6 +1345,10 @@ where
                 // }
             }
             SequencingHotShotEvent::Timeout(view) => {
+                // TODO ED This is not an ideal check, we should have the timeout task receive view change events and then cancel itself
+                if self.cur_view >= view {
+                    return;
+                }
                 let vote_token = self.timeout_exchange.make_vote_token(view);
 
                 match vote_token {
@@ -1388,7 +1395,7 @@ where
         &self,
         _qc: QuorumCertificate<TYPES, I::Leaf>,
         view: TYPES::Time,
-        timeout_certificate: Option<TimeoutCertificate<TYPES>>
+        timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
         if !self.quorum_exchange.is_leader(view) {
             error!(
@@ -1477,7 +1484,7 @@ where
             view_number: leaf.view_number,
             height: leaf.height,
             justify_qc: consensus.high_qc.clone(),
-            timeout_certificate: timeout_certificate.or_else(|| { None }),
+            timeout_certificate: timeout_certificate.or_else(|| None),
             proposer_id: leaf.proposer_id,
             dac: None,
         };
@@ -1486,7 +1493,10 @@ where
             data: proposal,
             signature,
         };
-        debug!("Sending proposal for view {:?} \n {:?}", leaf.view_number, "");
+        debug!(
+            "Sending proposal for view {:?} \n {:?}",
+            leaf.view_number, ""
+        );
 
         self.event_stream
             .publish(SequencingHotShotEvent::QuorumProposalSend(
