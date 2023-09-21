@@ -146,20 +146,18 @@ async fn test_consensus_vote() {
 
     let handle = build_system_handle(2).await.0;
     let (private_key, public_key) = key_pair_for_id(1);
+    let (private_key_2, public_key_2) = key_pair_for_id(2);
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
+    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
     input.push(SequencingHotShotEvent::QuorumProposalRecv(
         proposal.clone(),
         public_key,
     ));
-
-    input.push(SequencingHotShotEvent::Shutdown);
-
     output.insert(
         SequencingHotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
         1,
@@ -168,10 +166,14 @@ async fn test_consensus_vote() {
     if let GeneralConsensusMessage::Vote(vote) =
         build_vote(&handle, proposal, ViewNumber::new(1)).await
     {
-        output.insert(SequencingHotShotEvent::QuorumVoteSend(vote), 1);
+        output.insert(SequencingHotShotEvent::QuorumVoteSend(vote.clone()), 1);
+        input.push(SequencingHotShotEvent::QuorumVoteRecv(vote.clone()));
+        output.insert(SequencingHotShotEvent::QuorumVoteRecv(vote), 1);
     }
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 2);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
+
+    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
+
+    input.push(SequencingHotShotEvent::Shutdown);
     output.insert(SequencingHotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, event_stream| {
