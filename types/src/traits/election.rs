@@ -158,17 +158,17 @@ pub trait ElectionConfig:
 }
 
 /// A certificate of some property which has been signed by a quroum of nodes.
-pub trait SignedCertificate<TYPES: NodeType, TIME, TOKEN, COMMITTABLE>
+pub trait SignedCertificate<TYPES: NodeType, TIME, TOKEN, COMMITMENT>
 where
     Self: Send + Sync + Clone + Serialize + for<'a> Deserialize<'a>,
-    COMMITTABLE: Committable + Serialize + Clone,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
     TOKEN: VoteToken,
 {
     /// `VoteType` that is used in this certificate
-    type Vote: VoteType<TYPES, Commitment<COMMITTABLE>>;
+    type Vote: VoteType<TYPES, COMMITMENT>;
 
     /// `Accumulator` type to accumulate votes.
-    type VoteAccumulator: Accumulator2<TYPES, COMMITTABLE, Self::Vote>;
+    type VoteAccumulator: Accumulator2<TYPES, COMMITMENT, Self::Vote>;
 
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function and rework this function parameters
@@ -189,10 +189,10 @@ where
     // TODO ED Make an issue for this
 
     /// Get the leaf commitment.
-    fn leaf_commitment(&self) -> Commitment<COMMITTABLE>;
+    fn leaf_commitment(&self) -> COMMITMENT;
 
     /// Set the leaf commitment.
-    fn set_leaf_commitment(&mut self, commitment: Commitment<COMMITTABLE>);
+    fn set_leaf_commitment(&mut self, commitment: COMMITMENT);
 
     /// Get whether the certificate is for the genesis block.
     fn is_genesis(&self) -> bool;
@@ -269,7 +269,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     // TODO ED Make this equal Certificate vote (if possible?)
     type Vote: VoteType<TYPES, Commitment<Self::Commitment>>;
     /// A [`SignedCertificate`] attesting to a decision taken by the committee.
-    type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
+    type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<Self::Commitment>>
         + Hash
         + Eq;
     /// The committee eligible to make decisions.
@@ -468,13 +468,13 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Self::Commitment,
+            Commitment<Self::Commitment>,
         >>::VoteAccumulator,
         vote: &<<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Self::Commitment,
+            Commitment<Self::Commitment>,
         >>::Vote,
         _commit: &Commitment<Self::Commitment>,
     ) -> Either<
@@ -482,7 +482,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Self::Commitment,
+            Commitment<Self::Commitment>,
         >>::VoteAccumulator,
         Self::Certificate,
     > {

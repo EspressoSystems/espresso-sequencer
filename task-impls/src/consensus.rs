@@ -4,7 +4,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use bitvec::prelude::*;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use core::time::Duration;
 use either::{Either, Left, Right};
 use futures::FutureExt;
@@ -151,7 +151,7 @@ pub struct VoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            SequencingLeaf<TYPES>,
+            Commitment<SequencingLeaf<TYPES>>,
         >>::VoteAccumulator,
         QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
     >,

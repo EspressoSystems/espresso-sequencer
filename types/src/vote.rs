@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
+    hash::Hash,
     marker::PhantomData,
     num::NonZeroU64,
 };
@@ -319,8 +320,8 @@ pub trait Accumulator<T, U>: Sized {
 /// Accumulator trait used to accumulate votes into an `AssembledSignature`
 pub trait Accumulator2<
     TYPES: NodeType,
-    COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITMENT>,
 >: Sized
 {
     /// Append 1 vote to the accumulator.  If the threshold is not reached, return
@@ -337,11 +338,11 @@ pub trait Accumulator2<
 /// Accumulates DA votes
 pub struct DAVoteAccumulator<
     TYPES: NodeType,
-    COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITMENT>,
 > {
     /// Map of all da signatures accumlated so far
-    pub da_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub da_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
     /// A list of valid signatures for certificate aggregation
@@ -354,9 +355,9 @@ pub struct DAVoteAccumulator<
 
 impl<
         TYPES: NodeType,
-        COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
-    > Accumulator2<TYPES, COMMITTABLE, VOTE> for DAVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+        COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone + Copy + PartialEq + Eq + Hash,
+        VOTE: VoteType<TYPES, COMMITMENT>,
+    > Accumulator2<TYPES, COMMITMENT, VOTE> for DAVoteAccumulator<TYPES, COMMITMENT, VOTE>
 {
     fn append(
         mut self,
@@ -428,15 +429,15 @@ impl<
 /// Accumulate quorum votes
 pub struct QuorumVoteAccumulator<
     TYPES: NodeType,
-    COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITMENT>,
 > {
     /// Map of all signatures accumlated so far
-    pub total_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub total_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
     /// Map of all yes signatures accumlated so far
-    pub yes_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub yes_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
     /// Map of all no signatures accumlated so far
-    pub no_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub no_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
@@ -452,9 +453,9 @@ pub struct QuorumVoteAccumulator<
 
 impl<
         TYPES: NodeType,
-        COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
-    > Accumulator2<TYPES, COMMITTABLE, VOTE> for QuorumVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+        COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone + Copy + PartialEq + Eq + Hash,
+        VOTE: VoteType<TYPES, COMMITMENT>,
+    > Accumulator2<TYPES, COMMITMENT, VOTE> for QuorumVoteAccumulator<TYPES, COMMITMENT, VOTE>
 {
     fn append(
         mut self,
@@ -559,15 +560,15 @@ impl<
 /// Accumulates view sync votes
 pub struct ViewSyncVoteAccumulator<
     TYPES: NodeType,
-    COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITMENT>,
 > {
     /// Map of all pre_commit signatures accumlated so far
-    pub pre_commit_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub pre_commit_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
     /// Map of all ommit signatures accumlated so far
-    pub commit_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub commit_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
     /// Map of all finalize signatures accumlated so far
-    pub finalize_vote_outcomes: VoteMap<Commitment<COMMITTABLE>, TYPES::VoteTokenType>,
+    pub finalize_vote_outcomes: VoteMap<COMMITMENT, TYPES::VoteTokenType>,
 
     /// A quorum's worth of stake, generally 2f + 1
     pub success_threshold: NonZeroU64,
@@ -583,9 +584,9 @@ pub struct ViewSyncVoteAccumulator<
 
 impl<
         TYPES: NodeType,
-        COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
-    > Accumulator2<TYPES, COMMITTABLE, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITTABLE, VOTE>
+        COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone + Copy + PartialEq + Eq + Hash,
+        VOTE: VoteType<TYPES, COMMITMENT>,
+    > Accumulator2<TYPES, COMMITMENT, VOTE> for ViewSyncVoteAccumulator<TYPES, COMMITMENT, VOTE>
 {
     #[allow(clippy::too_many_lines)]
     fn append(
@@ -733,18 +734,18 @@ impl<
 /// Placeholder accumulator; will be replaced by accumulator for each certificate type
 pub struct AccumulatorPlaceholder<
     TYPES: NodeType,
-    COMMITTABLE: Committable + Serialize + Clone,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+    VOTE: VoteType<TYPES, COMMITMENT>,
 > {
     /// Phantom data to make compiler happy
-    pub phantom: PhantomData<(TYPES, VOTE, COMMITTABLE)>,
+    pub phantom: PhantomData<(TYPES, VOTE, COMMITMENT)>,
 }
 
 impl<
         TYPES: NodeType,
-        COMMITTABLE: Committable + Serialize + Clone,
-        VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
-    > Accumulator2<TYPES, COMMITTABLE, VOTE> for AccumulatorPlaceholder<TYPES, COMMITTABLE, VOTE>
+        COMMITMENT: for<'a> Deserialize<'a> + Serialize + Clone,
+        VOTE: VoteType<TYPES, COMMITMENT>,
+    > Accumulator2<TYPES, COMMITMENT, VOTE> for AccumulatorPlaceholder<TYPES, COMMITMENT, VOTE>
 {
     fn append(
         self,
