@@ -5,8 +5,7 @@ use async_std::{
 };
 use clap::Parser;
 use futures::{future::BoxFuture, FutureExt, StreamExt};
-use hotshot::{types::Event, types::SystemContextHandle, HotShotSequencingConsensusApi};
-use hotshot_consensus::SequencingConsensusApi;
+use hotshot::{types::Event, types::SystemContextHandle};
 use hotshot_query_service::{
     availability::{
         self, AvailabilityDataSource, BlockQueryData, Error as AvailabilityError,
@@ -16,14 +15,7 @@ use hotshot_query_service::{
     status::{self, StatusDataSource},
     Error,
 };
-use hotshot_types::{
-    data::ViewNumber,
-    message::DataMessage,
-    traits::{
-        metrics::{Metrics, NoMetrics},
-        state::ConsensusTime,
-    },
-};
+use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -69,7 +61,7 @@ impl SubmitOptions {
     ) -> io::Result<()>
     where
         S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>,
+        S::State: Send + Sync + Borrow<SystemContextHandle<SeqTypes, Node<N>>>,
     {
         // Include API specification in binary
         let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))
@@ -83,14 +75,12 @@ impl SubmitOptions {
         submit_api
             .post("submit", |req, state| {
                 async move {
-                    let state =
-                        Borrow::<HotShotSequencingConsensusApi<SeqTypes, Node<N>>>::borrow(state);
+                    let state = Borrow::<SystemContextHandle<SeqTypes, Node<N>>>::borrow(state);
                     state
-                        .send_transaction(DataMessage::SubmitTransaction(
+                        .submit_transaction(
                             req.body_auto::<Transaction>()
                                 .map_err(|err| Error::internal(err.to_string()))?,
-                            ViewNumber::new(0),
-                        ))
+                        )
                         .await
                         .map_err(|err| Error::internal(err.to_string()))
                 }
@@ -178,9 +168,7 @@ impl Options {
             let mut events = handle.get_event_stream(Default::default()).await.0;
 
             let state = Arc::new(RwLock::new(AppState::<N> {
-                submit_state: HotShotSequencingConsensusApi {
-                    inner: handle.hotshot.inner.clone(),
-                },
+                submit_state: handle.clone(),
                 query_state,
                 blocks_by_time,
             }));
@@ -330,11 +318,8 @@ impl Options {
             (handle, node_index, task)
         } else {
             let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
-            let mut app = App::<_, hotshot_query_service::Error>::with_state(RwLock::new(
-                HotShotSequencingConsensusApi {
-                    inner: handle.hotshot.inner.clone(),
-                },
-            ));
+            let mut app =
+                App::<_, hotshot_query_service::Error>::with_state(RwLock::new(handle.clone()));
 
             // Initialize submit API
             if let Some(submit) = self.submit {
@@ -384,13 +369,13 @@ pub type HandleFromMetrics<N> = Box<
 >;
 
 struct AppState<N: network::Type> {
-    submit_state: HotShotSequencingConsensusApi<SeqTypes, Node<N>>,
+    submit_state: SystemContextHandle<SeqTypes, Node<N>>,
     query_state: QueryData<SeqTypes, Node<N>, ()>,
     blocks_by_time: BTreeMap<u64, Vec<u64>>,
 }
 
-impl<N: network::Type> Borrow<HotShotSequencingConsensusApi<SeqTypes, Node<N>>> for AppState<N> {
-    fn borrow(&self) -> &HotShotSequencingConsensusApi<SeqTypes, Node<N>> {
+impl<N: network::Type> Borrow<SystemContextHandle<SeqTypes, Node<N>>> for AppState<N> {
+    fn borrow(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         &self.submit_state
     }
 }

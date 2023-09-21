@@ -35,7 +35,7 @@ jobs:
           echo "DEVSHELL=.#armCrossShell" >> $GITHUB_ENV
 
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Nix
         uses: cachix/install-nix-action@v22
@@ -83,7 +83,7 @@ jobs:
     needs: static-build
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download executables AMD
         uses: actions/download-artifact@v3
@@ -109,31 +109,31 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate sequencer docker metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: sequencer
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
 
       - name: Generate web-server docker metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: web-server
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/web-server
 
       - name: Generate orchestrator docker metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: orchestrator
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
 
       - name: Generate commitment task docker metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: commitment-task
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
 
       - name: Generate example rollup metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: example-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
