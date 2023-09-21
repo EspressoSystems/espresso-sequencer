@@ -502,7 +502,6 @@ where
 
                 // TODO ED Make this a configurable variable
                 if self.num_timeouts_tracked > 2 {
-                    panic!();
                     // Start polling for view sync certificates
                     self.exchange
                         .network()
