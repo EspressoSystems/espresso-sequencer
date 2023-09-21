@@ -455,7 +455,7 @@ impl<
                 GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
                 GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
                 GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
-                GeneralConsensusMessage::TimeoutVote(_) => todo!(),
+                GeneralConsensusMessage::TimeoutVote(_) => MessagePurpose::Vote,
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,

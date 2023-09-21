@@ -27,6 +27,7 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::certificate::TimeoutCertificate;
+use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
@@ -308,6 +309,16 @@ where
         id: handle.hotshot.inner.id,
         qc: None,
     };
+    consensus_state
+        .quorum_exchange
+        .network()
+        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+        .await;
+    consensus_state
+        .quorum_exchange
+        .network()
+        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(1))
+        .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";
     let consensus_event_handler = HandleEvent(Arc::new(

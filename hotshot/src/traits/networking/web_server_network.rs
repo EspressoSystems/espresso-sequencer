@@ -147,6 +147,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
         message_purpose: MessagePurpose,
         view_number: u64,
     ) -> Result<(), NetworkError> {
+        error!("Polling for view {}", view_number);
         let mut vote_index = 0;
         let mut tx_index = 0;
 
@@ -206,6 +207,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                 error!("We should not receive transactions in this function");
                             }
                             MessagePurpose::Proposal => {
+                                error!("Received proposal");
                                 // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                                 self.broadcast_poll_queue
                                     .write()

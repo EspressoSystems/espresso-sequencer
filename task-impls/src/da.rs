@@ -588,6 +588,7 @@ where
                     .get_committee(self.cur_view + 1)
                     .contains(self.committee_exchange.public_key());
 
+                // TODO ED Is this right?
                 if is_da {
                     debug!("Polling for DA proposals for view {}", *self.cur_view + 1);
                     self.committee_exchange

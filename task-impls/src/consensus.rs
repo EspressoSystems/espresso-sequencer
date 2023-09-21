@@ -1310,10 +1310,10 @@ where
 
                 // update the view in state to the one in the message
                 // Publish a view change event to the application
-                // if !self.update_view(new_view).await {
-                //     debug!("view not updated");
-                //     return;
-                // }
+                if !self.update_view(new_view).await {
+                    debug!("view not updated");
+                    return;
+                }
 
                 self.output_event_stream
                     .publish(Event {
@@ -1346,7 +1346,7 @@ where
             }
             SequencingHotShotEvent::Timeout(view) => {
                 // TODO ED This is not an ideal check, we should have the timeout task receive view change events and then cancel itself
-                if self.cur_view >= view {
+                if self.cur_view > view {
                     return;
                 }
                 let vote_token = self.timeout_exchange.make_vote_token(view);
@@ -1373,10 +1373,10 @@ where
                     }
                 }
 
-                self.quorum_exchange
-                    .network()
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
-                    .await;
+                // self.quorum_exchange
+                //     .network()
+                //     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
+                //     .await;
                 debug!(
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
