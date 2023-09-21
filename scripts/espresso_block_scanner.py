@@ -11,7 +11,7 @@ import sys
 
 parser = argparse.ArgumentParser(
     prog="Espresso Block Scanner",
-    description="Scans the espresso ledger looking for  transactions. FOr each transaction it  prints out the namespace  block containing it",
+    description="Scans the espresso ledger looking for transactions. For each transaction it  prints out the namespace  block containing it",
     epilog="",
 )
 
@@ -36,7 +36,7 @@ while True:
     except urllib.error.URLError as ex:
         # Server is down, reset block number to 0
 
-        print("URLERROR:" + url + ". Ttrying again in 10 secs")
+        print("URLERROR:" + url + ". Trying again in 10 secs")
         print(ex)
         time.sleep(10)
         block_number = 0
@@ -66,11 +66,7 @@ while True:
                 seen_vms.add(vm)
 
                 print(
-                    "### New transactions for vm "
-                    + str(vm)
-                    + " found on Espresso Block "
-                    + str(block_number)
-                    + " ###"
+                    f"### New transactions for vm {vm} found on Espresso Block {block_number} ###"
                 )
                 namespace_block_url = f"{url}{block_number}/namespace/{vm}"
                 print("GET " + namespace_block_url)
