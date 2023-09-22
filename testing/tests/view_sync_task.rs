@@ -74,15 +74,7 @@ async fn test_view_sync_task() {
     output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(3)), 1);
     output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
-    // 2 `Timeout` events will trigger a replica task to handle a `ViewSyncTrigger` event, which
-    // will then publish a `ViewSyncVoteSend` event.
     output.insert(SequencingHotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
-    // output.insert(
-    //     SequencingHotShotEvent::ViewSyncTimeout(ViewNumber::new(5), 0, ViewSyncPhase::None),
-    //     1,
-    // );
-    // Triggered by the `Timeout` events.
-    // output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(3)), 1);
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(4)), 1);
 

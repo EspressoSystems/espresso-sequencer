@@ -172,7 +172,7 @@ where
     // TODO ED Rename this function and rework this function parameters
     // Assumes last vote was valid since it caused a QC to form.
     // Removes need for relay on other cert specific fields
-    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self;
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self;
 
     /// Get the view number.
     fn view_number(&self) -> TIME;
@@ -185,9 +185,6 @@ where
 
     /// Get the leaf commitment.
     fn leaf_commitment(&self) -> COMMITMENT;
-
-    /// Set the leaf commitment.
-    fn set_leaf_commitment(&mut self, commitment: COMMITMENT);
 
     /// Get whether the certificate is for the genesis block.
     fn is_genesis(&self) -> bool;
@@ -461,7 +458,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             Either::Left(accumulator) => Either::Left(accumulator),
             Either::Right(signatures) => {
                 // TODO ED Update this function to just take in the signatures and most recent vote
-                Either::Right(Self::Certificate::create_certificateure(
+                Either::Right(Self::Certificate::create_certificate(
                     signatures,
                     vote.clone(),
                 ))

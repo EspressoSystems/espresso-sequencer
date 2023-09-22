@@ -295,8 +295,10 @@ where
                 error!("The next leader has received an unexpected vote!");
             }
         },
+        // TODO: Code below is redundant of code above; can be fixed
+        // during exchange refactor
+        // https://github.com/EspressoSystems/HotShot/issues/1799
         SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
-            error!("received timeout vote for view {}", *vote.get_view());
             if state.timeout_accumulator.is_right() {
                 return (None, state);
             }
@@ -1044,8 +1046,6 @@ where
                 }
             }
             SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
-                // debug!("Received quroum vote: {:?}", vote.get_view());
-
                 if !self.timeout_exchange.is_leader(vote.get_view() + 1) {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
@@ -1190,9 +1190,7 @@ where
                 let view = cert.view_number;
                 self.certs.insert(view, cert);
 
-                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
-                    // self.update_view(view + 1).await;
                     self.current_proposal = None;
                 }
             }
@@ -1204,7 +1202,6 @@ where
 
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {
-                    // self.update_view(view + 1).await;
                     self.current_proposal = None;
                 }
             }

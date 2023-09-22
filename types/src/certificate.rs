@@ -87,7 +87,7 @@ impl<TYPES: NodeType>
 
     type VoteAccumulator = TimeoutVoteAccumulator<TYPES, Commitment<TYPES::Time>, Self::Vote>;
 
-    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         TimeoutCertificate {
             view_number: vote.get_view(),
             signatures,
@@ -104,10 +104,6 @@ impl<TYPES: NodeType>
 
     fn leaf_commitment(&self) -> Commitment<TYPES::Time> {
         self.view_number.commit()
-    }
-
-    fn set_leaf_commitment(&mut self, _commitment: Commitment<TYPES::Time>) {
-        unimplemented!()
     }
 
     fn is_genesis(&self) -> bool {
@@ -182,7 +178,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     type Vote = QuorumVote<TYPES, LEAF>;
     type VoteAccumulator = QuorumVoteAccumulator<TYPES, Commitment<LEAF>, Self::Vote>;
 
-    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let leaf_commitment = match vote.clone() {
             QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
                 vote_internal.leaf_commitment
@@ -208,10 +204,6 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
 
     fn leaf_commitment(&self) -> Commitment<LEAF> {
         self.leaf_commitment
-    }
-
-    fn set_leaf_commitment(&mut self, commitment: Commitment<LEAF>) {
-        self.leaf_commitment = commitment;
     }
 
     fn is_genesis(&self) -> bool {
@@ -256,7 +248,7 @@ impl<TYPES: NodeType>
     type Vote = DAVote<TYPES>;
     type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
 
-    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         DACertificate {
             view_number: vote.get_view(),
             signatures,
@@ -274,10 +266,6 @@ impl<TYPES: NodeType>
 
     fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
         self.block_commitment
-    }
-
-    fn set_leaf_commitment(&mut self, _commitment: Commitment<TYPES::BlockType>) {
-        // This function is only useful for QC. Will be removed after we have separated cert traits.
     }
 
     fn is_genesis(&self) -> bool {
@@ -336,7 +324,7 @@ impl<TYPES: NodeType>
     type VoteAccumulator =
         ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
-    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
             round: vote.get_view(),
             relay: vote.relay(),
@@ -379,11 +367,6 @@ impl<TYPES: NodeType>
     // TODO (da) the following functions should be refactored into a QC-specific trait.
     /// Get the leaf commitment.
     fn leaf_commitment(&self) -> Commitment<ViewSyncData<TYPES>> {
-        todo!()
-    }
-
-    /// Set the leaf commitment.
-    fn set_leaf_commitment(&mut self, _commitment: Commitment<ViewSyncData<TYPES>>) {
         todo!()
     }
 
