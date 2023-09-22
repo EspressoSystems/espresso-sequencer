@@ -75,8 +75,9 @@ async fn test_view_sync_task() {
     output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
     output.insert(SequencingHotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
+    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(3)), 1);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(4)), 1);
+    // output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(4)), 1);
 
     output.insert(SequencingHotShotEvent::Shutdown, 1);
 

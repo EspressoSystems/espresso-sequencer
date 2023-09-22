@@ -578,7 +578,7 @@ where
                     });
                 } else {
                     // If this is the first timeout we've seen advance to the next view
-                    self.current_view = view_number + 1;
+                    self.current_view = view_number;
                     self.event_stream
                         .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
                             *self.current_view,
