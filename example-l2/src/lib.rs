@@ -32,10 +32,6 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_DEMO_HOTSHOT_ADDRESS")]
     pub hotshot_address: Address,
 
-    /// Address of Rollup contract on layer 1.
-    #[clap(long, env = "ESPRESSO_DEMO_ROLLUP_ADDRESS")]
-    pub rollup_address: Address,
-
     /// Mnemonic phrase for the rollup wallet.
     ///
     /// This is the wallet that will be used to send batch proofs of transaction validity to the rollup

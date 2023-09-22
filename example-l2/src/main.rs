@@ -41,16 +41,6 @@ async fn main() {
         sequencer_url: opt.sequencer_url.clone(),
     };
 
-    let executor_options = ExecutorOptions {
-        hotshot_address: opt.hotshot_address,
-        l1_provider: opt.l1_provider.clone(),
-        rollup_account_index: opt.rollup_account_index,
-        rollup_address: opt.rollup_address,
-        rollup_mnemonic: opt.rollup_mnemonic.clone(),
-        sequencer_url: opt.sequencer_url.clone(),
-        output_stream: None,
-    };
-
     let serve_api = async {
         serve(&api_options, state.clone()).await.unwrap();
     };
@@ -62,7 +52,17 @@ async fn main() {
     let test_system = TestL1System::new(provider, opt.hotshot_address)
         .await
         .unwrap();
-    deploy_example_contract(&test_system, initial_state).await;
+    let rollup_contract = deploy_example_contract(&test_system, initial_state).await;
+
+    let executor_options = ExecutorOptions {
+        hotshot_address: opt.hotshot_address,
+        l1_provider: opt.l1_provider.clone(),
+        rollup_address: rollup_contract.address(),
+        rollup_account_index: opt.rollup_account_index,
+        rollup_mnemonic: opt.rollup_mnemonic.clone(),
+        sequencer_url: opt.sequencer_url.clone(),
+        output_stream: None,
+    };
 
     tracing::info!("Launching Example Rollup API and Executor");
     join!(run_executor(&executor_options, state.clone()), serve_api,);
