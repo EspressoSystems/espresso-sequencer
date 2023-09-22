@@ -675,7 +675,7 @@ where
 
                     if timeout_cert.view_number != view - 1 {
                         warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
-                        return; 
+                        return;
                     }
 
                     if !self
