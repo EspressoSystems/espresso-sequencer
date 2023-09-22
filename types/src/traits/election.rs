@@ -433,7 +433,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             &vote.get_key(),
             &vote.get_signature(),
             &vote.get_data(),
-            // TODO ED We've had this comment for a while: Ignoring deserialization errors below since we are getting rid of it soon
             &Checked::Unchecked(vote.get_vote_token()),
         ) {
             error!("Invalid vote!");
@@ -457,7 +456,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         ) {
             Either::Left(accumulator) => Either::Left(accumulator),
             Either::Right(signatures) => {
-                // TODO ED Update this function to just take in the signatures and most recent vote
                 Either::Right(Self::Certificate::create_certificate(
                     signatures,
                     vote.clone(),

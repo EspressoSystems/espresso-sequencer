@@ -215,48 +215,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.maybe_do_genesis_init().await;
     }
 
-    /// iterate through all events on a [`NodeImplementation`] and determine if the node finished
-    /// successfully
-    /// # Errors
-    /// Errors if unable to obtain storage
-    /// # Panics
-    /// Panics if the event stream is shut down while this is running
-    // pub async fn collect_round_events(
-    //     &mut self,
-    // ) -> Result<
-    //     (
-    //         Vec<<I as NodeImplementation<TYPES>>::Leaf>,
-    //         QuorumCertificate<TYPES, <I as NodeImplementation<TYPES>>::Leaf>,
-    //     ),
-    //     HotShotError<TYPES>,
-    // > {
-    //     // TODO we should probably do a view check
-    //     // but we can do that later. It's non-obvious how to get the view number out
-    //     // to check against
-    //
-    //     // drain all events from this node
-    //     let mut results = Ok((vec![], QuorumCertificate::genesis()));
-    //     loop {
-    //         // unwrap is fine here since the thing hasn't been shut down
-    //         let event = self.next_event().await.unwrap();
-    //         match event.event {
-    //             EventType::ReplicaViewTimeout { view_number: time } => {
-    //                 error!(?event, "Replica timed out!");
-    //                 results = Err(HotShotError::ViewTimeoutError {
-    //                     view_number: time,
-    //                     state: RoundTimedoutState::TestCollectRoundEventsTimedOut,
-    //                 });
-    //             }
-    //             EventType::Decide { leaf_chain, qc } => {
-    //                 results = Ok((leaf_chain.to_vec(), (*qc).clone()));
-    //             }
-    //             EventType::ViewFinished { view_number: _ } => return results,
-    //             event => {
-    //                 debug!("recv-ed event {:?}", event);
-    //             }
-    //         }
-    //     }
-    // }
 
     /// Provides a reference to the underlying storage for this [`SystemContext`], allowing access to
     /// historical data
