@@ -4,8 +4,11 @@ use std::{
     fmt::{Debug, Display},
 };
 
+use crate::{
+    data::{test_srs, VidScheme, VidSchemeTrait},
+    traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
+};
 use commit::{Commitment, Committable};
-use hotshot_types::traits::{block_contents::Transaction, state::TestableBlock, BlockPayload};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use snafu::Snafu;
@@ -28,7 +31,11 @@ impl Committable for VIDTransaction {
     }
 }
 
-impl Transaction for VIDTransaction {}
+impl Transaction for VIDTransaction {
+    fn bytes(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
 
 impl VIDTransaction {
     /// create a new transaction
@@ -55,14 +62,31 @@ pub enum BlockPayloadError {
 
 /// A [`BlockPayload`] that contains a list of `VIDTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct VIDBlockPayload(pub Vec<VIDTransaction>);
+pub struct VIDBlockPayload {
+    /// List of transactions.
+    pub transactions: Vec<VIDTransaction>,
+    /// VID commitment.
+    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
+}
+
+impl VIDBlockPayload {
+    /// Constructor.
+    #[must_use]
+    pub fn new(
+        transactions: Vec<VIDTransaction>,
+        commitment: <VidScheme as VidSchemeTrait>::Commit,
+    ) -> Self {
+        Self {
+            transactions,
+            commitment,
+        }
+    }
+}
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: Use use VID block commitment.
-        // <https://github.com/EspressoSystems/HotShot/issues/1730>
         let builder = commit::RawCommitmentBuilder::new("BlockPayload Comm");
-        builder.finalize()
+        builder.generic_byte_array(&self.commitment).finalize()
     }
 
     fn tag() -> String {
@@ -72,17 +96,30 @@ impl Committable for VIDBlockPayload {
 
 impl Display for VIDBlockPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BlockPayload #txns={}", self.0.len())
+        write!(f, "BlockPayload #txns={}", self.transactions.len())
     }
 }
 
 impl TestableBlock for VIDBlockPayload {
     fn genesis() -> Self {
-        VIDBlockPayload(Vec::new())
+        /// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        const NUM_STORAGE_NODES: usize = 10;
+        /// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        const NUM_CHUNKS: usize = 5;
+
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+        let srs = test_srs(NUM_STORAGE_NODES);
+
+        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+
+        let txn = vec![0u8];
+        tracing::error!("here genesis");
+        let vid_disperse = vid.disperse(&txn).unwrap();
+        VIDBlockPayload::new(vec![VIDTransaction(txn)], vid_disperse.commit)
     }
 
     fn txn_count(&self) -> u64 {
-        self.0.len() as u64
+        self.transactions.len() as u64
     }
 }
 
@@ -91,20 +128,10 @@ impl BlockPayload for VIDBlockPayload {
 
     type Transaction = VIDTransaction;
 
-    fn new() -> Self {
-        <Self as TestableBlock>::genesis()
-    }
-
-    fn add_transaction_raw(
-        &self,
-        tx: &Self::Transaction,
-    ) -> std::result::Result<Self, Self::Error> {
-        let mut new = self.0.clone();
-        new.push(tx.clone());
-        Ok(VIDBlockPayload(new))
-    }
-
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-        self.0.iter().map(commit::Committable::commit).collect()
+        self.transactions
+            .iter()
+            .map(commit::Committable::commit)
+            .collect()
     }
 }

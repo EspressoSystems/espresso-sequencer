@@ -5,15 +5,13 @@
 //!
 //! These implementations are useful in examples and integration testing, but are not suitable for
 //! production use.
-use crate::{
-    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
-    traits::election::static_committee::{StaticElectionConfig, StaticVoteToken},
-};
+use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use either::Either;
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
+    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
     certificate::{AssembledSignature, QuorumCertificate},
     data::{
         fake_commitment, genesis_proposer_id, random_commitment, LeafType, SequencingLeaf,
@@ -71,10 +69,6 @@ impl State for SDemoState {
     type BlockType = VIDBlockPayload;
 
     type Time = ViewNumber;
-
-    fn next_block(_state: Option<Self>) -> Self::BlockType {
-        VIDBlockPayload(Vec::new())
-    }
 
     fn validate_block(&self, _block: &Self::BlockType, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {

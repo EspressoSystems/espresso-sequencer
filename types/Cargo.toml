@@ -43,6 +43,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+sha3 = "^0.10"
 snafu = { workspace = true }
 tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.2.4" }
 time = { workspace = true }

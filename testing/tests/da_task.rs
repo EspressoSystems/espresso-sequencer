@@ -6,6 +6,7 @@ use hotshot_testing::{
     task_helpers::vid_init,
 };
 use hotshot_types::{
+    block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
     traits::{
         consensus_api::ConsensusSharedApi, election::ConsensusExchange,
@@ -20,10 +21,12 @@ use std::collections::HashMap;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_da_task() {
-    use hotshot::{block_impl::VIDBlockPayload, tasks::add_da_task};
+    use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{message::Proposal, traits::election::CommitteeExchangeType};
+    use hotshot_types::{
+        block_impl::VIDBlockPayload, message::Proposal, traits::election::CommitteeExchangeType,
+    };
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -36,9 +39,13 @@ async fn test_da_task() {
         };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let block = VIDBlockPayload(Vec::new());
-    let block_commitment = block.commit();
-    let signature = committee_exchange.sign_da_proposal(&block_commitment);
+    let vid = vid_init();
+    let txn = vec![0u8];
+    tracing::error!("here da task");
+    let vid_disperse = vid.disperse(&txn).unwrap();
+    let block_commitment = vid_disperse.commit;
+    let block = VIDBlockPayload::new(vec![VIDTransaction(txn)], block_commitment);
+    let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
         deltas: block.clone(),
         view_number: ViewNumber::new(2),
@@ -47,13 +54,10 @@ async fn test_da_task() {
         data: proposal,
         signature,
     };
-    let vid = vid_init();
-    let message_bytes = bincode::serialize(&message).unwrap();
-    let vid_disperse = vid.disperse(&message_bytes).unwrap();
     let vid_proposal = Proposal {
         data: VidDisperse {
             view_number: message.data.view_number,
-            commitment: block_commitment,
+            commitment: block.commit(),
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },
@@ -88,7 +92,7 @@ async fn test_da_task() {
         SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         1,
     );
-    output.insert(SequencingHotShotEvent::SendDABlockData(block), 1);
+    output.insert(SequencingHotShotEvent::SendDABlockData(block.clone()), 1);
     output.insert(
         SequencingHotShotEvent::DAProposalSend(message.clone(), pub_key),
         1,
@@ -98,7 +102,7 @@ async fn test_da_task() {
         .unwrap()
         .unwrap();
     let da_vote =
-        committee_exchange.create_da_message(block_commitment, ViewNumber::new(2), vote_token);
+        committee_exchange.create_da_message(block.commit(), ViewNumber::new(2), vote_token);
     output.insert(SequencingHotShotEvent::DAVoteSend(da_vote), 1);
     output.insert(
         SequencingHotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
@@ -110,7 +114,7 @@ async fn test_da_task() {
         .unwrap()
         .unwrap();
     let vid_vote =
-        committee_exchange.create_vid_message(block_commitment, ViewNumber::new(2), vote_token);
+        committee_exchange.create_vid_message(block.commit(), ViewNumber::new(2), vote_token);
     output.insert(SequencingHotShotEvent::VidVoteSend(vid_vote), 1);
 
     output.insert(SequencingHotShotEvent::DAProposalRecv(message, pub_key), 1);

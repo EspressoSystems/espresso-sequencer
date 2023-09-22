@@ -20,8 +20,6 @@ use std::{
 ///   * Must have a predefined error type ([`BlockPayload::Error`])
 ///   * Must have a transaction type that can be compared for equality, serialized and serialized,
 ///     sent between threads, and can have a hash produced of it
-///   * Must be able to be produced incrementally by appending transactions
-///     ([`add_transaction_raw`](BlockPayload::add_transaction_raw))
 ///   * Must be hashable
 pub trait BlockPayload:
     Serialize
@@ -42,18 +40,6 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
-    /// Construct an empty or genesis block.
-    fn new() -> Self;
-
-    /// Attempts to add a transaction, returning an Error if it would result in a structurally
-    /// invalid block
-    ///
-    /// # Errors
-    ///
-    /// Should return an error if this transaction leads to an invalid block
-    fn add_transaction_raw(&self, tx: &Self::Transaction)
-        -> std::result::Result<Self, Self::Error>;
-
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
@@ -63,6 +49,8 @@ pub trait BlockPayload:
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
+    /// Get the transaction bytes.
+    fn bytes(&self) -> Vec<u8>;
 }
 
 /// Dummy implementation of `BlockPayload` for unit tests
@@ -112,7 +100,11 @@ pub mod dummy {
             "DUMMY_TXN".to_string()
         }
     }
-    impl super::Transaction for DummyTransaction {}
+    impl super::Transaction for DummyTransaction {
+        fn bytes(&self) -> Vec<u8> {
+            Vec::new()
+        }
+    }
 
     impl std::error::Error for DummyError {}
 
@@ -132,19 +124,6 @@ pub mod dummy {
         type Error = DummyError;
 
         type Transaction = DummyTransaction;
-
-        fn new() -> Self {
-            Self { nonce: 0 }
-        }
-
-        fn add_transaction_raw(
-            &self,
-            _tx: &Self::Transaction,
-        ) -> std::result::Result<Self, Self::Error> {
-            Ok(Self {
-                nonce: self.nonce + 1,
-            })
-        }
 
         fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()

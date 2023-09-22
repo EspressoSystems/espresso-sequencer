@@ -20,8 +20,6 @@ use std::{
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
 ///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockType))
-///   * A method to get a template (empty) next block from the current state
-///     ([`next_block`](State::next_block))
 ///   * The ability to validate that a block is actually a valid extension of this state
 ///     ([`validate_block`](State::validate_block))
 ///   * The ability to produce a new state, with the modifications from the block applied
@@ -45,9 +43,6 @@ pub trait State:
     type BlockType: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
-
-    /// Returns an empty, template next block given this current state
-    fn next_block(prev_commitment: Option<Self>) -> Self::BlockType;
 
     /// Returns true if and only if the provided block is valid and can extend this state
     fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool;
@@ -164,13 +159,6 @@ pub mod dummy {
 
         type BlockType = DummyBlock;
         type Time = ViewNumber;
-
-        fn next_block(state: Option<Self>) -> Self::BlockType {
-            match state {
-                Some(state) => DummyBlock { nonce: state.nonce },
-                None => unimplemented!(),
-            }
-        }
 
         fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
             false

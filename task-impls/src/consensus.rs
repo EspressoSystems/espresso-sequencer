@@ -83,8 +83,8 @@ pub struct SequencingConsensusTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// Current block submitted to DA
-    pub block: TYPES::BlockType,
+    /// Current block submitted to DA, if any.
+    pub block: Option<TYPES::BlockType>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -1078,7 +1078,7 @@ where
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
-                self.block = block;
+                self.block = Some(block);
             }
             _ => {}
         }
@@ -1150,10 +1150,13 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = self.block.commit();
-        if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("BlockPayload is generic block! {:?}", self.cur_view);
-        }
+        let block_commitment = match &self.block {
+            Some(block) => block.commit(),
+            None => {
+                debug!("No block yet.");
+                return false;
+            }
+        };
 
         let leaf = SequencingLeaf {
             view_number: view,

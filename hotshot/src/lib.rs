@@ -19,7 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-pub mod block_impl;
 /// Contains structures and functions for committee election
 pub mod certificate;
 #[cfg(feature = "demo")]
@@ -56,6 +55,7 @@ use hotshot_task::{
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
@@ -649,7 +649,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,

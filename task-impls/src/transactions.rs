@@ -13,15 +13,17 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::DACertificate,
     consensus::Consensus,
-    data::SequencingLeaf,
+    data::{SequencingLeaf, VidScheme, VidSchemeTrait},
     message::{Message, SequencingMessage},
     traits::{
+        block_contents::Transaction,
         consensus_api::SequencingConsensusApi,
         election::ConsensusExchange,
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
-        BlockPayload, State,
+        BlockPayload,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
@@ -72,7 +74,7 @@ pub struct TransactionTaskState<
 }
 
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -220,18 +222,52 @@ where
 
                 drop(consensus);
 
-                let mut block = <TYPES as NodeType>::StateType::next_block(None);
+                let block;
                 let txns = self.wait_for_transactions(parent_leaf).await?;
 
-                for txn in txns {
-                    if let Ok(new_block) = block.add_transaction_raw(&txn) {
-                        block = new_block;
-                        continue;
+                debug!("Prepare VID shares");
+                if txns.len() > 0 {
+                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
+                    const NUM_STORAGE_NODES: usize = 10;
+                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
+                    const NUM_CHUNKS: usize = 5;
+
+                    // TODO https://github.com/EspressoSystems/HotShot/issues/1686
+                    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
+
+                    let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                    // TODO https://github.com/EspressoSystems/jellyfish/issues/375
+                    let mut txns_flatten = Vec::new();
+                    for txn in &txns {
+                        txns_flatten.extend(txn.bytes());
                     }
+                    tracing::error!("here txn task {:?}", txns);
+                    let vid_disperse = vid.disperse(&txns_flatten).unwrap();
+                    block = VIDBlockPayload::new(txns, vid_disperse.commit);
+
+                    // TODO Commenting out the following code since we need to update the proposal,
+                    // signature, and exchange for VID dispersal. They were copy-pasted from DA
+                    // code.
+                    // self.event_stream
+                    //     .publish(SequencingHotShotEvent::VidDisperseSend(
+                    //         Proposal {
+                    //             data: VidDisperse {
+                    //                 view_number: view + 1,
+                    //                 commitment: block.commit(),
+                    //                 shares: vid_disperse.shares,
+                    //                 common: vid_disperse.common,
+                    //             },
+                    //             signature: message.signature,
+                    //         },
+                    //         // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
+                    //         self.committee_exchange.public_key().clone(),
+                    //     ))
+                    //     .await;
+
+                    self.event_stream
+                        .publish(SequencingHotShotEvent::BlockReady(block, view + 1))
+                        .await;
                 }
-                self.event_stream
-                    .publish(SequencingHotShotEvent::BlockReady(block, view + 1))
-                    .await;
                 return None;
             }
             SequencingHotShotEvent::Shutdown => {
@@ -241,7 +277,25 @@ where
         }
         None
     }
+}
 
+impl<
+        TYPES: NodeType,
+        I: NodeImplementation<
+            TYPES,
+            Leaf = SequencingLeaf<TYPES>,
+            ConsensusMessage = SequencingMessage<TYPES, I>,
+        >,
+        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+    > TransactionTaskState<TYPES, I, A>
+where
+    CommitteeEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Certificate = DACertificate<TYPES>,
+        Commitment = TYPES::BlockType,
+    >,
+{
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
         &self,

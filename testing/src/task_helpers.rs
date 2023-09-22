@@ -6,13 +6,14 @@ use commit::Committable;
 use either::Right;
 use hotshot::{
     certificate::QuorumCertificate,
-    traits::{BlockPayload, NodeImplementation, TestableNodeImplementation},
+    traits::{NodeImplementation, TestableNodeImplementation},
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
+    block_impl::VIDBlockPayload,
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
@@ -21,7 +22,7 @@ use hotshot_types::{
         metrics::NoMetrics,
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
-        state::ConsensusTime,
+        state::{ConsensusTime, TestableBlock},
     },
 };
 
@@ -116,8 +117,7 @@ async fn build_quorum_proposal_and_signature(
     let parent_leaf = leaf.clone();
 
     // every event input is seen on the event stream in the output.
-
-    let block_commitment = <SequencingTestTypes as NodeType>::BlockType::new().commit();
+    let block = <VIDBlockPayload as TestableBlock>::genesis();
     let leaf = SequencingLeaf {
         view_number: ViewNumber::new(view),
         height: parent_leaf.height + 1,
@@ -125,14 +125,14 @@ async fn build_quorum_proposal_and_signature(
         parent_commitment: parent_leaf.commit(),
         // Use the block commitment rather than the block, so that the replica can construct
         // the same leaf with the commitment.
-        deltas: Right(block_commitment),
+        deltas: Right(block.commit()),
         rejected: vec![],
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
     let proposal = QuorumProposal::<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>> {
-        block_commitment,
+        block_commitment: block.commit(),
         view_number: ViewNumber::new(view),
         height: 1,
         justify_qc: QuorumCertificate::genesis(),

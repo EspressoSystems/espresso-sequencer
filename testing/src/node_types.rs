@@ -1,7 +1,4 @@
-use hotshot::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
-    traits::implementations::CombinedNetworks,
-};
+use hotshot::traits::implementations::CombinedNetworks;
 use std::{marker::PhantomData, sync::Arc};
 
 use hotshot::{
@@ -17,6 +14,7 @@ use hotshot::{
     types::bn254::BLSPubKey,
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
     data::{QuorumProposal, SequencingLeaf, ViewNumber},
     message::{Message, SequencingMessage},

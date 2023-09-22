@@ -27,6 +27,7 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
@@ -38,7 +39,6 @@ use hotshot_types::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
         },
         state::ConsensusTime,
-        BlockPayload,
     },
     vote::{ViewSyncData, VoteType},
 };
@@ -284,7 +284,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: TYPES::BlockType::new(),
+        block: None,
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
@@ -412,7 +412,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,

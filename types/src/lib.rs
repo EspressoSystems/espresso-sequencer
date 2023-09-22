@@ -11,6 +11,7 @@
 
 use std::{num::NonZeroUsize, time::Duration};
 
+pub mod block_impl;
 pub mod certificate;
 pub mod consensus;
 pub mod data;
