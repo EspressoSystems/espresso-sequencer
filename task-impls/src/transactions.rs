@@ -263,10 +263,6 @@ where
                         .await;
 
                     self.event_stream
-                        .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
-                        .await;
-
-                    self.event_stream
                         .publish(SequencingHotShotEvent::VidDisperseSend(
                             Proposal {
                                 data: VidDisperse {
@@ -330,7 +326,6 @@ where
 
         loop {
             let all_txns = self.transactions.cloned().await;
-            tracing::error!("All txns {:?}", all_txns);
             debug!("Size of transactions: {}", all_txns.len());
             // TODO (Keyao) How to prevent duplicate txn now that we've removed the ID?
             // let unclaimed_txns: Vec<_> = all_txns
@@ -370,7 +365,7 @@ where
                 // if previous_used_txns.contains(txn_hash) {
                 //     None
                 // } else {
-                    Some(txn.clone())
+                Some(txn.clone())
                 // }
             })
             .collect();

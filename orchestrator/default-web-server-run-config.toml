@@ -57,7 +57,7 @@ secs = 0
 nanos = 0
 
 [config.propose_max_round_time]
-secs = 1
+secs = 2
 nanos = 0
 
 [web_server_config]

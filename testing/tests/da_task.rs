@@ -103,10 +103,6 @@ async fn test_da_task() {
     let da_vote =
         committee_exchange.create_da_message(block.commit(), ViewNumber::new(2), vote_token);
     output.insert(SequencingHotShotEvent::DAVoteSend(da_vote), 1);
-    output.insert(
-        SequencingHotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
-        1,
-    );
 
     let vote_token = committee_exchange
         .make_vote_token(ViewNumber::new(2))
