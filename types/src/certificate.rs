@@ -86,7 +86,8 @@ pub struct TimeoutCertificate<TYPES: NodeType> {
     pub signatures: AssembledSignature<TYPES>,
 }
 
-impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::Time>>
+impl<TYPES: NodeType>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::Time>>
     for TimeoutCertificate<TYPES>
 {
     type Vote = TimeoutVote2<TYPES>;
@@ -334,17 +335,10 @@ impl<TYPES: NodeType> Committable for ViewSyncCertificate<TYPES> {
         let signatures_bytes = serialize_signature(&self.signatures());
 
         let mut builder = commit::RawCommitmentBuilder::new("View Sync Certificate Commitment")
-            // .field("leaf commitment", self.leaf_commitment)
-            // .u64_field("view number", *self.view_number.deref())
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes);
 
-        // builder = builder
-        //     .field("Leaf commitment", self.leaf_commitment)
-        //     .u64_field("View number", *self.view_number.deref());
-
         let certificate_internal = match &self {
-            // TODO ED Not the best way to do this
             ViewSyncCertificate::PreCommit(certificate_internal) => {
                 builder = builder.var_size_field("View Sync Phase", "PreCommit".as_bytes());
                 certificate_internal

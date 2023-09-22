@@ -1500,7 +1500,6 @@ impl<
 }
 
 pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
-    // TODO ED Clean this function up
     fn create_timeout_message<I: NodeImplementation<TYPES>>(
         &self,
         view: TYPES::Time,
@@ -1515,7 +1514,6 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
                 .get_commit().as_ref()
                 
         );
-        // TODO ED Should not use le bytes
 
         GeneralConsensusMessage::<TYPES, I>::TimeoutVote(TimeoutVote2 {
             signature: (self.public_key().to_bytes(), signature),

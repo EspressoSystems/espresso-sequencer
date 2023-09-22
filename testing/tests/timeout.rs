@@ -26,6 +26,7 @@ async fn test_timeout() {
     };
 
     // TODO ED Reduce down to 5 nodes once memory network issues is resolved
+    // https://github.com/EspressoSystems/HotShot/issues/1790
     let mut metadata = TestMetadata {
         total_nodes: 10,
         start_nodes: 10,
@@ -47,7 +48,6 @@ async fn test_timeout() {
         node_changes: vec![(Duration::from_millis(500), dead_nodes)],
     };
 
-    // TODO ED Add safety task, etc to confirm TCs are being formed
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
@@ -56,7 +56,8 @@ async fn test_timeout() {
             },
         );
 
-    // TODO ED Test with memory network once issue is resolved.
+    // TODO ED Test with memory network once issue is resolved
+    // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
         .launch()

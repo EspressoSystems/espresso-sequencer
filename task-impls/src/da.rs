@@ -161,8 +161,6 @@ where
                 &vote,
                 &vote.block_commitment,
             ) {
-                
-
                 Left(new_accumulator) => {
                     error!("Not enough DA votes yet");
                     state.accumulator = either::Left(new_accumulator);
@@ -582,16 +580,14 @@ where
                     error!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-                // Inject view info into network
-                // ED I think it is possible that you receive a quorum proposal, vote on it and update your view before the da leader has sent their proposal, and therefore you skip polling for this view?
 
+                // Inject view info into network
                 let is_da = self
                     .committee_exchange
                     .membership()
                     .get_committee(self.cur_view + 1)
                     .contains(self.committee_exchange.public_key());
 
-                // TODO ED Is this right?
                 if is_da {
                     debug!("Polling for DA proposals for view {}", *self.cur_view + 1);
                     self.committee_exchange
@@ -640,22 +636,12 @@ where
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
-                // let message = SequencingMessage::<TYPES, I>(Right(
-                //     CommitteeConsensusMessage::DAProposal(Proposal { data, signature }),
-                // ));
                 let message = Proposal { data, signature };
-                // Brodcast DA proposal
-                // TODO ED We should send an event to do this, but just getting it to work for now
 
                 self.event_stream
                     .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
                     .await;
-                // if let Err(e) = self.api.send_da_broadcast(message.clone()).await {
-                //     consensus.metrics.failed_to_send_messages.add(1);
-                //     warn!(?message, ?e, "Could not broadcast leader proposal");
-                // } else {
-                //     consensus.metrics.outgoing_broadcast_messages.add(1);
-                // }
+
                 self.event_stream
                     .publish(SequencingHotShotEvent::DAProposalSend(
                         message.clone(),

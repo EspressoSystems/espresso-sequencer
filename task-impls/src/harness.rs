@@ -107,8 +107,6 @@ pub fn handle_event<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         *num_expected -= 1;
     }
 
-    // TODO ED Remove
-    error!("Event is {:?}", event);
 
     if state.expected_output.is_empty() {
         return (Some(HotShotTaskCompleted::ShutDown), state);
