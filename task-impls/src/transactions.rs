@@ -235,7 +235,6 @@ where
 
                 drop(consensus);
 
-                let block;
                 let txns = self.wait_for_transactions(parent_leaf).await?;
 
                 debug!("Prepare VID shares");
@@ -255,10 +254,16 @@ where
                         txns_flatten.extend(txn.bytes());
                     }
                     let vid_disperse = vid.disperse(&txns_flatten).unwrap();
-                    block = VIDBlockPayload::new(txns, vid_disperse.commit);
+                    let block = VIDBlockPayload::new(txns, vid_disperse.commit);
 
+                    // TODO (Keyao) Is the order of the following events and events in the original
+                    // DA task correct?
                     self.event_stream
                         .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
+                        .await;
+
+                    self.event_stream
+                        .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
                         .await;
 
                     self.event_stream

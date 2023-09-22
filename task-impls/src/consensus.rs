@@ -80,7 +80,7 @@ pub struct SequencingConsensusTaskState<
     pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
     /// View timeout from config.
     pub timeout: u64,
-    /// View number this view is executing in
+    /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
     /// Current block submitted to DA
