@@ -330,11 +330,14 @@ where
 
         loop {
             let all_txns = self.transactions.cloned().await;
+            tracing::error!("All txns {:?}", all_txns);
             debug!("Size of transactions: {}", all_txns.len());
-            let unclaimed_txns: Vec<_> = all_txns
-                .iter()
-                .filter(|(txn_hash, _txn)| !previous_used_txns.contains(txn_hash))
-                .collect();
+            // TODO (Keyao) How to prevent duplicate txn now that we've removed the ID?
+            // let unclaimed_txns: Vec<_> = all_txns
+            //     .iter()
+            //     .filter(|(txn_hash, _txn)| !previous_used_txns.contains(txn_hash))
+            //     .collect();
+            let unclaimed_txns = all_txns;
 
             let time_past = task_start_time.elapsed();
             if unclaimed_txns.len() < self.api.min_transactions()
@@ -363,11 +366,12 @@ where
         let txns: Vec<TYPES::Transaction> = all_txns
             .iter()
             .filter_map(|(txn_hash, txn)| {
-                if previous_used_txns.contains(txn_hash) {
-                    None
-                } else {
+                // TODO (Keyao) How to prevent duplicate txn now that we've removed the ID?
+                // if previous_used_txns.contains(txn_hash) {
+                //     None
+                // } else {
                     Some(txn.clone())
-                }
+                // }
             })
             .collect();
         Some(txns)

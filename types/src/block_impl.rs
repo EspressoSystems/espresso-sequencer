@@ -37,14 +37,6 @@ impl Transaction for VIDTransaction {
     }
 }
 
-impl VIDTransaction {
-    /// create a new transaction
-    #[must_use]
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-}
-
 /// The error type for block payload.
 #[derive(Snafu, Debug)]
 pub enum BlockPayloadError {
