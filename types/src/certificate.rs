@@ -121,7 +121,7 @@ impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType
     }
 
     fn is_genesis(&self) -> bool {
-        todo!()
+        false
     }
 
     fn genesis() -> Self {

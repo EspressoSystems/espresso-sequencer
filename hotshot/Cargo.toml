@@ -76,7 +76,6 @@ required-features = ["demo", "libp2p/rsa"]
 path = "examples/web-server-da/multi-web-server.rs"
 
 [dependencies]
-# TODO ED We should upgrade ark libraries to 0.4
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }

@@ -39,6 +39,8 @@ use hotshot_types::{
     vote::{QuorumVote, VoteType},
 };
 
+use tracing::warn;
+
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
@@ -328,7 +330,6 @@ where
                 }
                 Either::Right(qc) => {
                     debug!("QCFormed! {:?}", qc.view_number);
-                    // TODO ED Make Timeout QC Formed Event
                     state
                         .event_stream
                         .publish(SequencingHotShotEvent::QCFormed(either::Right(qc.clone())))
@@ -583,21 +584,11 @@ where
             );
 
             // Remove old certs, we won't vote on past views
-            // TODO ED Put back in once we fix other errors
-            // for view in *self.cur_view..*new_view - 1 {
-            //     let v = TYPES::Time::new(view);
-            //     self.certs.remove(&v);
-            // }
+            for view in *self.cur_view..*new_view - 1 {
+                let v = TYPES::Time::new(view);
+                self.certs.remove(&v);
+            }
             self.cur_view = new_view;
-
-            // TODO ED These injects aren't right
-            // Commenting out because HotShot doesn't start on 1 now
-            // if new_view == TYPES::Time::new(1) {
-            //     self.quorum_exchange
-            //         .network()
-            //         .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
-            //         .await;
-            // }
 
             // Poll the future leader for lookahead
             let lookahead_view = new_view + LOOK_AHEAD;
@@ -622,7 +613,6 @@ where
                 .inject_consensus_info(ConsensusIntentEvent::PollForDAC(*self.cur_view + 1))
                 .await;
 
-            // TODO ED I think this poll is still correct (actually want to poll for it in both views, in case this node just doesn't receive the latest proposal, but that is more of a web server issue specifically)
             if self.quorum_exchange.is_leader(self.cur_view + 1) {
                 debug!("Polling for quorum votes for view {}", *self.cur_view);
                 self.quorum_exchange
@@ -639,7 +629,8 @@ where
             let timeout = self.timeout;
             self.timeout_task = async_spawn({
                 let stream = self.event_stream.clone();
-                // TODO ED + 1 here because of the logic change to view update.  This indicates we haven't seen evidence for view change for this view within the time window
+                // Nuance: We timeout on the view + 1 here because that means that we have
+                // not seen evidence to transition to this new view
                 let view_number = self.cur_view + 1;
                 async move {
                     async_sleep(Duration::from_millis(timeout)).await;
@@ -678,28 +669,77 @@ where
                     return;
                 }
 
-                if proposal.data.justify_qc.view_number() != proposal.data.view_number - 1 {
-                    // TODO ED Add timeout cert logic
-                    if proposal.data.timeout_certificate.is_none() {
-                        error!(
-                            "Proposal needed a timeout cert but didn't have one {:?}",
-                            proposal.data.clone()
-                        );
+                // Verify a timeout certificate exists and is valid
+                if proposal.data.justify_qc.view_number() != view - 1 {
+                    let Some(timeout_cert) = proposal.data.timeout_certificate.clone() else {
+                        warn!(
+                            "Quorum proposal for view {} needed a timeout certificate but did not have one",
+                            *view);
                         return;
-                    } else {
-                        error!("Proposal for view {} had timeout certificate", *view);
+                    };
+
+                    if !self
+                        .timeout_exchange
+                        .is_valid_cert(&timeout_cert.clone(), view.commit())
+                    {
+                        warn!("Timeout certificate for view {} was invalid", *view);
+                        return;
                     }
-                    // TODO ED Check timeout cert validity
                 }
 
-                // TODO ED This needs to be moved further down so we only update the view after fully validating the qc.
+                let justify_qc = proposal.data.justify_qc.clone();
+
+                if !self
+                    .quorum_exchange
+                    .is_valid_cert(&justify_qc, justify_qc.leaf_commitment)
+                {
+                    error!("Invalid justify_qc in proposal for view {}", *view);
+                    return;
+                }
+
+                // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
-                // TODO ED How does this play in with the timeout cert?
                 self.current_proposal = Some(proposal.data.clone());
 
+                let consensus = self.consensus.upgradable_read().await;
+
+                // Construct the leaf.
+                let parent = if justify_qc.is_genesis() {
+                    self.genesis_leaf().await
+                } else {
+                    consensus
+                        .saved_leaves
+                        .get(&justify_qc.leaf_commitment())
+                        .cloned()
+                };
+
+                // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
+                let Some(parent) = parent else {
+                    error!(
+                        "Proposal's parent missing from storage with commitment: {:?}",
+                        justify_qc.leaf_commitment()
+                    );
+                    return;
+                };
+                let parent_commitment = parent.commit();
+                let leaf: SequencingLeaf<_> = SequencingLeaf {
+                    view_number: view,
+                    height: proposal.data.height,
+                    justify_qc: justify_qc.clone(),
+                    parent_commitment,
+                    deltas: Right(proposal.data.block_commitment),
+                    rejected: Vec::new(),
+                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                    proposer_id: sender.to_bytes(),
+                };
+                let justify_qc_commitment = justify_qc.commit();
+                let leaf_commitment = leaf.commit();
+
                 let vote_token = self.quorum_exchange.make_vote_token(view);
-                // TODO: do some of this logic without the vote token check, only do that when voting.
+
+                // TODO Put vote token creation inside message creation functions
+                // https://github.com/EspressoSystems/HotShot/issues/1795.
                 match vote_token {
                     Err(e) => {
                         error!("Failed to generate vote token for {:?} {:?}", view, e);
@@ -709,81 +749,23 @@ where
                     }
                     Ok(Some(vote_token)) => {
                         debug!("We were chosen for consensus committee on {:?}", view);
-                        let consensus = self.consensus.upgradable_read().await;
-                        let message;
 
-                        // Construct the leaf.
-                        let justify_qc = proposal.data.justify_qc;
-                        let parent = if justify_qc.is_genesis() {
-                            self.genesis_leaf().await
-                        } else {
-                            consensus
-                                .saved_leaves
-                                .get(&justify_qc.leaf_commitment())
-                                .cloned()
-                        };
-
-                        // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                        let Some(parent) = parent else {
-                            error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
-                            );
-                            return;
-                        };
-                        let parent_commitment = parent.commit();
-                        let leaf: SequencingLeaf<_> = SequencingLeaf {
-                            view_number: view,
-                            height: proposal.data.height,
-                            justify_qc: justify_qc.clone(),
-                            parent_commitment,
-                            deltas: Right(proposal.data.block_commitment),
-                            rejected: Vec::new(),
-                            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                            proposer_id: sender.to_bytes(),
-                        };
-                        let justify_qc_commitment = justify_qc.commit();
-                        let leaf_commitment = leaf.commit();
-
-                        // Validate the `justify_qc`.
-                        if !self
-                            .quorum_exchange
-                            .is_valid_cert(&justify_qc, parent_commitment)
-                        {
-                            error!("Invalid justify_qc in proposal!. parent commitment is {:?} justify qc is {:?}", parent_commitment, justify_qc.clone());
-
-                            message = self.quorum_exchange.create_no_message::<I>(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
-                        }
-                        // Validate the `height`.
-                        else if leaf.height != parent.height + 1 {
+                        // Validate the `height`
+                        // TODO Remove height from proposal validation; view number is sufficient
+                        // https://github.com/EspressoSystems/HotShot/issues/1796
+                        if leaf.height != parent.height + 1 {
                             error!(
                                 "Incorrect height in proposal (expected {}, got {})",
                                 parent.height + 1,
                                 leaf.height
                             );
-                            message = self.quorum_exchange.create_no_message(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
+                            return;
                         }
                         // Validate the signature.
                         else if !view_leader_key
                             .validate(&proposal.signature, leaf_commitment.as_ref())
                         {
                             error!(?proposal.signature, "Could not verify proposal.");
-                            message = self.quorum_exchange.create_no_message(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
                         }
                         // Create a positive vote if either liveness or safety check
                         // passes.
@@ -811,20 +793,6 @@ where
                             // Skip if both saftey and liveness checks fail.
                             if !safety_check && !liveness_check {
                                 error!("Failed safety check and liveness check");
-                                message = self.quorum_exchange.create_no_message(
-                                    justify_qc_commitment,
-                                    leaf_commitment,
-                                    view,
-                                    vote_token,
-                                );
-                            } else {
-                                // Generate a message with yes vote.
-                                message = self.quorum_exchange.create_yes_message(
-                                    justify_qc_commitment,
-                                    leaf_commitment,
-                                    view,
-                                    vote_token,
-                                );
                             }
                         }
 
@@ -976,7 +944,6 @@ where
                                 .await;
                         }
                         if !self.vote_if_able().await {
-                            // TOOD ED This means we publish the proposal without updating our own view, which doesn't seem right
                             return;
                         }
                         self.current_proposal = None;
@@ -985,13 +952,6 @@ where
                             let time = TYPES::Time::new(v);
                             self.certs.remove(&time);
                         }
-
-                        // Update current view and publish a view change event so other tasks also update
-                        // self.update_view(new_view).await;
-
-                        if let GeneralConsensusMessage::Vote(vote) = message {
-                            // debug!("Sending vote to next leader {:?}", vote);
-                        };
                     }
                 }
             }
@@ -1006,8 +966,6 @@ where
                     );
                     return;
                 }
-
-                // TODO ED Insert TimeoutVote accumulator stuff here
 
                 match vote.clone() {
                     QuorumVote::Yes(vote_internal) => {
@@ -1046,14 +1004,13 @@ where
                             &vote_internal.clone().leaf_commitment,
                         );
 
+                        // TODO Create default functions for accumulators
+                        // https://github.com/EspressoSystems/HotShot/issues/1797
                         let timeout_accumulator = TimeoutVoteAccumulator {
                             da_vote_outcomes: HashMap::new(),
-
-                            // TODO ED Don't use quorum exchange here
-                            success_threshold: self.quorum_exchange.success_threshold(),
-
+                            success_threshold: self.timeout_exchange.success_threshold(),
                             sig_lists: Vec::new(),
-                            signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                            signers: bitvec![0; self.timeout_exchange.total_nodes()],
                             phantom: PhantomData,
                         };
 
@@ -1124,10 +1081,6 @@ where
                     return;
                 }
 
-                // // TODO ED Insert TimeoutVote accumulator stuff here
-
-                // match vote.clone() {
-                //     QuorumVote::Yes(vote_internal)=> {
                 let handle_event = HandleEvent(Arc::new(move |event, state| {
                     async move { vote_handle(state, event).await }.boxed()
                 }));
@@ -1143,15 +1096,13 @@ where
                     };
 
                 //         // Todo check if we are the leader
-                // TODO ED Make this a default accum
                 let new_accumulator = TimeoutVoteAccumulator {
                     da_vote_outcomes: HashMap::new(),
 
-                    // TODO ED Don't use quorum exchange here
-                    success_threshold: self.quorum_exchange.success_threshold(),
+                    success_threshold: self.timeout_exchange.success_threshold(),
 
                     sig_lists: Vec::new(),
-                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
                     phantom: PhantomData,
                 };
 
@@ -1222,24 +1173,23 @@ where
                 debug!("QC Formed event happened!");
 
                 if let either::Right(qc) = cert.clone() {
-                    // So we don't create a QC on the first view unless we are the leader
                     debug!(
-                        "Attempting to publish proposal after forming a QC for view {}",
+                        "Attempting to publish proposal after forming a TC for view {}",
                         *qc.view_number
                     );
 
-                    // TODO ED Clean this up, get rid of clones
+                    let view = qc.view_number + 1;
+
                     if self
                         .publish_proposal_if_able(
                             self.consensus.read().await.high_qc.clone(),
-                            qc.clone().view_number + 1,
+                            view,
                             Some(qc.clone()),
                         )
                         .await
                     {
-                        // self.update_view(qc.view_number + 1).await;
                     } else {
-                        error!("Wasn't able to publish proposal");
+                        warn!("Wasn't able to publish proposal");
                     }
                 }
                 if let either::Left(qc) = cert {
@@ -1247,25 +1197,6 @@ where
                     consensus.high_qc = qc.clone();
 
                     drop(consensus);
-
-                    // View may have already been updated by replica if they voted for this QC
-                    // TODO ED We should separate leader state from replica state, they shouldn't share the same view
-                    // Leader task should only run for a specific view, and never update its current view, but instead spawn another task
-                    // let _res = self.update_view(qc.view_number + 1).await;
-
-                    // Start polling for votes for the next view
-                    // if _res {
-                    // if self.quorum_exchange.is_leader(qc.view_number + 2) {
-                    //     self.quorum_exchange
-                    //         .network()
-                    //         .inject_consensus_info(
-                    //             (ConsensusIntentEvent::PollForVotes(*qc.view_number + 1)),
-                    //         )
-                    //         .await;
-                    // }
-                    // }
-
-                    // So we don't create a QC on the first view unless we are the leader
                     debug!(
                         "Attempting to publish proposal after forming a QC for view {}",
                         *qc.view_number
@@ -1275,7 +1206,7 @@ where
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
-                        // self.update_view(qc.view_number + 1).await;
+                        warn!("Wasn't able to publish proposal");
                     }
                 }
             }
@@ -1324,11 +1255,6 @@ where
                     })
                     .await;
 
-                debug!("View changed to {}", *new_view);
-
-                // ED Need to update the view here?  What does otherwise?
-                // self.update_view(qc.view_number + 1).await;
-                // So we don't create a QC on the first view unless we are the leader
                 if !self.quorum_exchange.is_leader(self.cur_view) {
                     return;
                 }
@@ -1336,16 +1262,9 @@ where
                 let consensus = self.consensus.read().await;
                 let qc = consensus.high_qc.clone();
                 drop(consensus);
-                // TODO ED Do not want to publish proposal on view change
-                // if !self.publish_proposal_if_able(qc, self.cur_view, None).await {
-                //     error!(
-                //         "Failed to publish proposal on view change.  View = {:?}",
-                //         self.cur_view
-                //     );
-                // }
             }
             SequencingHotShotEvent::Timeout(view) => {
-                // TODO ED This is not an ideal check, we should have the timeout task receive view change events and then cancel itself
+                // NOTE: We may optionally have the timeout task listen for view change events
                 if self.cur_view > view {
                     return;
                 }
@@ -1359,12 +1278,11 @@ where
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
                     Ok(Some(vote_token)) => {
-                        // TODO ED Why I here and not in quorum exchange?
                         let message = self
                             .timeout_exchange
                             .create_timeout_message::<I>(view, vote_token);
 
-                        // error!("Sending timeout vote for view {}", *view);
+                        debug!("Sending timeout vote for view {}", *view);
                         if let GeneralConsensusMessage::TimeoutVote(vote) = message {
                             self.event_stream
                                 .publish(SequencingHotShotEvent::TimeoutVoteSend(vote))
@@ -1372,18 +1290,12 @@ where
                         }
                     }
                 }
-
-                // self.quorum_exchange
-                //     .network()
-                //     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
-                //     .await;
                 debug!(
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
-                // ED TODO Should make sure this is actually the most recent block
                 self.block = block;
             }
             _ => {}

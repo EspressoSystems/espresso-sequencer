@@ -116,8 +116,6 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
     /// The last tx_index we saw from the web server
     tx_index: Arc<RwLock<u64>>,
 
-    // TODO ED This should be TYPES::Time
-    // Theoretically there should never be contention for this lock...
     /// Task map for quorum proposals.
     proposal_task_map:
         Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,

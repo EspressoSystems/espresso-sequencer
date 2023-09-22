@@ -256,7 +256,6 @@ pub trait RunDA<
         let adjusted_padding = if padding < size { 0 } else { padding - size };
         let mut txns: VecDeque<TYPES::Transaction> = VecDeque::new();
 
-        // TODO ED: In the future we should have each node generate transactions every round to simulate a more realistic network
         let tx_to_gen = transactions_per_round * rounds * 3;
         {
             let mut txn_rng = rand::thread_rng();
