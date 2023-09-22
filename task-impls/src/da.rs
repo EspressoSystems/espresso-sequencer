@@ -12,9 +12,6 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::election::SignedCertificate;
-use hotshot_types::vote::DAVoteAccumulator;
-use hotshot_types::vote::VoteType;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -22,7 +19,7 @@ use hotshot_types::{
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
-        election::{CommitteeExchangeType, ConsensusExchange, Membership},
+        election::{CommitteeExchangeType, ConsensusExchange, Membership, SignedCertificate},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
@@ -30,11 +27,11 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
+    vote::{DAVoteAccumulator, VoteType},
 };
 
 use snafu::Snafu;
-use std::marker::PhantomData;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]

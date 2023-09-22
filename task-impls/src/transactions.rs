@@ -1,12 +1,11 @@
 use crate::events::SequencingHotShotEvent;
-use async_compatibility_layer::async_primitives::subscribable_rwlock::SubscribableRwLock;
 use async_compatibility_layer::{
-    art::async_timeout, async_primitives::subscribable_rwlock::ReadView,
+    art::async_timeout,
+    async_primitives::subscribable_rwlock::{ReadView, SubscribableRwLock},
 };
 use async_lock::RwLock;
 use bincode::config::Options;
-use commit::Commitment;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::{Either, Left, Right};
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},

@@ -1,19 +1,15 @@
 //! Provides two types of cerrtificates and their accumulators.
 
-use crate::vote::DAVoteAccumulator;
-use crate::vote::QuorumVote;
-use crate::vote::QuorumVoteAccumulator;
-use crate::vote::TimeoutVote;
-use crate::vote::TimeoutVoteAccumulator;
-use crate::vote::ViewSyncVoteAccumulator;
-use crate::vote::VoteType;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
     traits::{
         election::SignedCertificate, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::{DAVote, ViewSyncData, ViewSyncVote},
+    vote::{
+        DAVote, DAVoteAccumulator, QuorumVote, QuorumVoteAccumulator, TimeoutVote,
+        TimeoutVoteAccumulator, ViewSyncData, ViewSyncVote, ViewSyncVoteAccumulator, VoteType,
+    },
 };
 use bincode::Options;
 use commit::{Commitment, Committable};

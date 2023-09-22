@@ -15,28 +15,25 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::certificate::TimeoutCertificate;
-use hotshot_types::traits::election::TimeoutExchangeType;
-use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
-use hotshot_types::vote::QuorumVoteAccumulator;
-use hotshot_types::vote::TimeoutVoteAccumulator;
 use hotshot_types::{
-    certificate::{DACertificate, QuorumCertificate},
+    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate},
     consensus::{Consensus, View},
     data::{LeafType, ProposalType, QuorumProposal, SequencingLeaf},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
+        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx},
+        node_implementation::{
+            CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx, SequencingTimeoutEx,
+        },
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{QuorumVote, VoteType},
+    vote::{QuorumVote, QuorumVoteAccumulator, TimeoutVoteAccumulator, VoteType},
 };
 
 use tracing::warn;

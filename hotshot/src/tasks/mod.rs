@@ -26,19 +26,17 @@ use hotshot_task_impls::{
     transactions::{TransactionTaskState, TransactionsTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
-use hotshot_types::certificate::TimeoutCertificate;
-use hotshot_types::traits::network::ConsensusIntentEvent;
-use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
+    certificate::{TimeoutCertificate, ViewSyncCertificate},
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
         election::{ConsensusExchange, Membership},
-        network::{CommunicationChannel, TransmitType},
+        network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, SequencingTimeoutEx,
+            ViewSyncEx,
         },
         state::ConsensusTime,
         BlockPayload,

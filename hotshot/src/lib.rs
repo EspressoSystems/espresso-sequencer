@@ -54,8 +54,9 @@ use hotshot_task::{
     task_launcher::TaskRunner,
 };
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
-use hotshot_types::certificate::TimeoutCertificate;
-use hotshot_types::traits::node_implementation::SequencingTimeoutEx;
+use hotshot_types::{
+    certificate::TimeoutCertificate, traits::node_implementation::SequencingTimeoutEx,
+};
 
 use hotshot_types::{
     certificate::{DACertificate, ViewSyncCertificate},
@@ -244,16 +245,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(Self { inner })
     }
 
-    /// "Starts" consensus by sending a `ViewChange` event
+    /// "Starts" consensus by sending a `QCFormed` event
     pub async fn start_consensus(&self) {
-        // self.inner
-        //     .internal_event_stream
-        //     .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(1)))
-        //     .await;
-
-        // ED This isn't ideal...
-        // async_sleep(Duration::new(1, 0)).await;
-
         self.inner
             .internal_event_stream
             .publish(SequencingHotShotEvent::QCFormed(either::Left(

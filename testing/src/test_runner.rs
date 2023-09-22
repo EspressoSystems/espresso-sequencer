@@ -3,8 +3,10 @@ use super::{
     overall_safety_task::{OverallSafetyTask, RoundCtx},
     txn_task::TxnTask,
 };
-use crate::spinning_task::UpDown;
-use crate::test_launcher::{Networks, TestLauncher};
+use crate::{
+    spinning_task::UpDown,
+    test_launcher::{Networks, TestLauncher},
+};
 use hotshot::types::SystemContextHandle;
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
@@ -22,8 +24,7 @@ use hotshot_types::{
     },
     HotShotConfig,
 };
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[allow(deprecated)]
 use tracing::info;

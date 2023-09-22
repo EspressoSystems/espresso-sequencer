@@ -21,7 +21,6 @@ use crate::{
     vote::ViewSyncVoteInternal,
 };
 
-use crate::vote::Accumulator;
 use crate::{
     data::LeafType,
     traits::{
@@ -30,7 +29,7 @@ use crate::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::{DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType, YesOrNoVote},
+    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType, YesOrNoVote},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};

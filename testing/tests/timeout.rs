@@ -9,10 +9,10 @@ async fn test_timeout() {
 
     use hotshot_testing::node_types::SequencingWebImpl;
 
-    use hotshot_testing::overall_safety_task::OverallSafetyPropertiesDescription;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         node_types::SequencingTestTypes,
+        overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
     };

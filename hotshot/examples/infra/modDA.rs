@@ -20,7 +20,6 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_types::HotShotConfig;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{QuorumProposal, SequencingLeaf, TestableLeaf},
@@ -37,6 +36,7 @@ use hotshot_types::{
         },
         state::{ConsensusTime, TestableBlock, TestableState},
     },
+    HotShotConfig,
 };
 use libp2p_identity::{
     ed25519::{self, SecretKey},
@@ -46,8 +46,7 @@ use libp2p_networking::{
     network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType},
     reexport::Multiaddr,
 };
-use std::{collections::BTreeSet, sync::Arc};
-use std::{num::NonZeroUsize, str::FromStr};
+use std::{collections::BTreeSet, num::NonZeroUsize, str::FromStr, sync::Arc};
 // use libp2p::{
 //     identity::{
 //         ed25519::{Keypair as EdKeypair, SecretKey},
