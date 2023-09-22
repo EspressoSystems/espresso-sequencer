@@ -6,8 +6,8 @@
 //! - [`Histogram`]: stores multiple float values based for a graph (example usage: CPU %)
 //! - [`Label`]: Stores the last string (example usage: current version, network online/offline)
 
-use std::fmt::Debug;
 use dyn_clone::DynClone;
+use std::fmt::Debug;
 
 /// The metrics type.
 pub trait Metrics: Send + Sync {

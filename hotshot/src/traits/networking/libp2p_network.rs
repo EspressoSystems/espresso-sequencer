@@ -441,7 +441,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
 
                 let connected_num = handle.num_connected().await?;
                 metrics_connected_peers.set(connected_num);
-                
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
                 }

@@ -9,12 +9,11 @@ pub mod libp2p_network;
 pub mod memory_network;
 pub mod web_server_libp2p_fallback;
 pub mod web_server_network;
-
+use hotshot_types::traits::metrics::{Counter, Gauge, Metrics};
 pub use hotshot_types::traits::network::{
     ChannelSendSnafu, CouldNotDeliverSnafu, FailedToDeserializeSnafu, FailedToSerializeSnafu,
     NetworkError, NetworkReliability, NoSuchNodeSnafu, ShutDownSnafu,
 };
-use hotshot_types::traits::metrics::{Counter, Gauge, Metrics};
 
 /// Contains the metrics that we're interested in from the networking interfaces
 #[derive(Clone)]
