@@ -159,7 +159,6 @@ where
                 &vote.block_commitment,
             ) {
                 Left(new_accumulator) => {
-                    error!("Not enough DA votes yet");
                     state.accumulator = either::Left(new_accumulator);
                 }
 

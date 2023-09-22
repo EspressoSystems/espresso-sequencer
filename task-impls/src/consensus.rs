@@ -673,9 +673,13 @@ where
                         return;
                     };
 
+                    if timeout_cert.view_number != view - 1 {
+                        warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
+                    }
+
                     if !self
                         .timeout_exchange
-                        .is_valid_cert(&timeout_cert.clone(), view.commit())
+                        .is_valid_cert(&timeout_cert.clone(), timeout_cert.view_number.commit())
                     {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;

@@ -99,10 +99,6 @@ impl<
                         },
                         Either::Right(committee_message) => match committee_message {
                             CommitteeConsensusMessage::DAProposal(proposal) => {
-                                error!(
-                                    "Received da proposal for view {:?}",
-                                    proposal.clone().data.view_number
-                                );
                                 SequencingHotShotEvent::DAProposalRecv(proposal.clone(), sender)
                             }
                             CommitteeConsensusMessage::DAVote(vote) => {
