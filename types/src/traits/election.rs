@@ -455,12 +455,10 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             self.membership().get_committee_qc_stake_table(),
         ) {
             Either::Left(accumulator) => Either::Left(accumulator),
-            Either::Right(signatures) => {
-                Either::Right(Self::Certificate::create_certificate(
-                    signatures,
-                    vote.clone(),
-                ))
-            }
+            Either::Right(signatures) => Either::Right(Self::Certificate::create_certificate(
+                signatures,
+                vote.clone(),
+            )),
         }
     }
 

@@ -215,7 +215,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.maybe_do_genesis_init().await;
     }
 
-
     /// Provides a reference to the underlying storage for this [`SystemContext`], allowing access to
     /// historical data
     pub fn storage(&self) -> &I::Storage {
