@@ -7,6 +7,7 @@
 //! - [`Label`]: Stores the last string (example usage: current version, network online/offline)
 
 use std::fmt::Debug;
+use dyn_clone::DynClone;
 
 /// The metrics type.
 pub trait Metrics: Send + Sync {
@@ -78,12 +79,12 @@ impl Label for NoMetrics {
 }
 
 /// An ever-incrementing counter
-pub trait Counter: Send + Sync + Debug {
+pub trait Counter: Send + Sync + Debug + DynClone {
     /// Add a value to the counter
     fn add(&self, amount: usize);
 }
 /// A gauge that stores the latest value.
-pub trait Gauge: Send + Sync + Debug {
+pub trait Gauge: Send + Sync + Debug + DynClone {
     /// Set the gauge value
     fn set(&self, amount: usize);
 
@@ -92,16 +93,20 @@ pub trait Gauge: Send + Sync + Debug {
 }
 
 /// A histogram which will record a series of points.
-pub trait Histogram: Send + Sync + Debug {
+pub trait Histogram: Send + Sync + Debug + DynClone {
     /// Add a point to this histogram.
     fn add_point(&self, point: f64);
 }
 
 /// A label that stores the last string value.
-pub trait Label: Send + Sync {
+pub trait Label: Send + Sync + DynClone {
     /// Set the label value
     fn set(&self, value: String);
 }
+dyn_clone::clone_trait_object!(Gauge);
+dyn_clone::clone_trait_object!(Counter);
+dyn_clone::clone_trait_object!(Histogram);
+dyn_clone::clone_trait_object!(Label);
 
 #[cfg(test)]
 mod test {
@@ -111,7 +116,7 @@ mod test {
         sync::{Arc, Mutex},
     };
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     struct TestMetrics {
         prefix: String,
         values: Arc<Mutex<Inner>>,

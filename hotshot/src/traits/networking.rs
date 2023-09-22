@@ -14,10 +14,10 @@ pub use hotshot_types::traits::network::{
     ChannelSendSnafu, CouldNotDeliverSnafu, FailedToDeserializeSnafu, FailedToSerializeSnafu,
     NetworkError, NetworkReliability, NoSuchNodeSnafu, ShutDownSnafu,
 };
-
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics};
 
 /// Contains the metrics that we're interested in from the networking interfaces
+#[derive(Clone)]
 pub struct NetworkingMetrics {
     #[allow(dead_code)]
     /// A [`Gauge`] which tracks how many peers are connected
