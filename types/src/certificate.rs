@@ -91,10 +91,7 @@ impl<TYPES: NodeType>
 
     type VoteAccumulator = TimeoutVoteAccumulator<TYPES, Commitment<TYPES::Time>, Self::Vote>;
 
-    fn from_signatures_and_commitment(
-        signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote,
-    ) -> Self {
+    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         TimeoutCertificate {
             view_number: vote.get_view(),
             signatures,
@@ -189,10 +186,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     type Vote = QuorumVote<TYPES, LEAF>;
     type VoteAccumulator = QuorumVoteAccumulator<TYPES, Commitment<LEAF>, Self::Vote>;
 
-    fn from_signatures_and_commitment(
-        signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote,
-    ) -> Self {
+    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let leaf_commitment = match vote.clone() {
             QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
                 vote_internal.leaf_commitment
@@ -266,10 +260,7 @@ impl<TYPES: NodeType>
     type Vote = DAVote<TYPES>;
     type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
 
-    fn from_signatures_and_commitment(
-        signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote,
-    ) -> Self {
+    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         DACertificate {
             view_number: vote.get_view(),
             signatures,
@@ -349,10 +340,7 @@ impl<TYPES: NodeType>
     type VoteAccumulator =
         ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
-    fn from_signatures_and_commitment(
-        signatures: AssembledSignature<TYPES>,
-        vote: Self::Vote,
-    ) -> Self {
+    fn create_certificateure(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
             round: vote.get_view(),
             relay: vote.relay(),
