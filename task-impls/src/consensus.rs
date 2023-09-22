@@ -80,11 +80,11 @@ pub struct SequencingConsensusTaskState<
     pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
     /// View timeout from config.
     pub timeout: u64,
-    /// View number this view is executing in.
+    /// View number this view is executing in
     pub cur_view: TYPES::Time,
 
-    /// Current block submitted to DA, if any.
-    pub block: Option<TYPES::BlockType>,
+    /// Current block submitted to DA
+    pub block: TYPES::BlockType,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -1078,7 +1078,7 @@ where
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
-                self.block = Some(block);
+                self.block = block;
             }
             _ => {}
         }
@@ -1150,13 +1150,7 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = match &self.block {
-            Some(block) => block.commit(),
-            None => {
-                debug!("No block yet.");
-                return false;
-            }
-        };
+        let block_commitment = self.block.commit();
 
         let leaf = SequencingLeaf {
             view_number: view,

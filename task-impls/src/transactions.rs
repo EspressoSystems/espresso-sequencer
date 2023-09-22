@@ -18,12 +18,12 @@ use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::DACertificate,
     consensus::Consensus,
-    data::{SequencingLeaf, VidScheme, VidSchemeTrait},
-    message::{Message, SequencingMessage},
+    data::{SequencingLeaf, VidDisperse, VidScheme, VidSchemeTrait},
+    message::{Message, Proposal, SequencingMessage},
     traits::{
         block_contents::Transaction,
         consensus_api::SequencingConsensusApi,
-        election::ConsensusExchange,
+        election::{CommitteeExchangeType, ConsensusExchange},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         BlockPayload,
     },
@@ -239,7 +239,7 @@ where
                 let txns = self.wait_for_transactions(parent_leaf).await?;
 
                 debug!("Prepare VID shares");
-                if txns.len() > 0 {
+                if !txns.is_empty() {
                     /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
                     const NUM_STORAGE_NODES: usize = 10;
                     /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
@@ -254,31 +254,30 @@ where
                     for txn in &txns {
                         txns_flatten.extend(txn.bytes());
                     }
-                    tracing::error!("here txn task {:?}", txns);
                     let vid_disperse = vid.disperse(&txns_flatten).unwrap();
                     block = VIDBlockPayload::new(txns, vid_disperse.commit);
 
-                    // TODO Commenting out the following code since we need to update the proposal,
-                    // signature, and exchange for VID dispersal. They were copy-pasted from DA
-                    // code.
-                    // self.event_stream
-                    //     .publish(SequencingHotShotEvent::VidDisperseSend(
-                    //         Proposal {
-                    //             data: VidDisperse {
-                    //                 view_number: view + 1,
-                    //                 commitment: block.commit(),
-                    //                 shares: vid_disperse.shares,
-                    //                 common: vid_disperse.common,
-                    //             },
-                    //             signature: message.signature,
-                    //         },
-                    //         // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
-                    //         self.committee_exchange.public_key().clone(),
-                    //     ))
-                    //     .await;
+                    self.event_stream
+                        .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
+                        .await;
 
                     self.event_stream
-                        .publish(SequencingHotShotEvent::BlockReady(block, view + 1))
+                        .publish(SequencingHotShotEvent::VidDisperseSend(
+                            Proposal {
+                                data: VidDisperse {
+                                    view_number: view + 1,
+                                    commitment: block.commit(),
+                                    shares: vid_disperse.shares,
+                                    common: vid_disperse.common,
+                                },
+                                // TODO (Keyao) This is also signed in DA task.
+                                signature: self
+                                    .committee_exchange
+                                    .sign_da_proposal(&block.commit()),
+                            },
+                            // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
+                            self.committee_exchange.public_key().clone(),
+                        ))
                         .await;
                 }
                 return None;

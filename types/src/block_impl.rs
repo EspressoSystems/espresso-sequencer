@@ -113,7 +113,6 @@ impl TestableBlock for VIDBlockPayload {
         let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
 
         let txn = vec![0u8];
-        tracing::error!("here genesis");
         let vid_disperse = vid.disperse(&txn).unwrap();
         VIDBlockPayload::new(vec![VIDTransaction(txn)], vid_disperse.commit)
     }

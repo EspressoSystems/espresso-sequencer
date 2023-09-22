@@ -38,7 +38,7 @@ use hotshot_types::{
         node_implementation::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
         },
-        state::ConsensusTime,
+        state::{ConsensusTime, TestableBlock},
     },
     vote::{ViewSyncData, VoteType},
 };
@@ -251,7 +251,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType,
+    TYPES: NodeType<BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -289,7 +289,8 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: None,
+        // TODO (Keyao) Shouldn't use test function.
+        block: <VIDBlockPayload as TestableBlock>::genesis(),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),

@@ -44,7 +44,6 @@ async fn test_network_task() {
     let priv_key = api.private_key();
     let vid = vid_init();
     let txn = vec![0u8];
-    tracing::error!("here network task1");
     let vid_disperse = vid.disperse(&txn).unwrap();
     let block_commitment = vid_disperse.commit;
     let block = VIDBlockPayload::new(vec![VIDTransaction(txn)], block_commitment);
@@ -59,7 +58,6 @@ async fn test_network_task() {
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
     // TODO for now reuse the same block commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
-    tracing::error!("here network task2");
     let da_vid_disperse = Proposal {
         data: VidDisperse {
             view_number: da_proposal.data.view_number,

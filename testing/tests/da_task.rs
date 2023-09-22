@@ -41,7 +41,6 @@ async fn test_da_task() {
     let pub_key = *api.public_key();
     let vid = vid_init();
     let txn = vec![0u8];
-    tracing::error!("here da task");
     let vid_disperse = vid.disperse(&txn).unwrap();
     let block_commitment = vid_disperse.commit;
     let block = VIDBlockPayload::new(vec![VIDTransaction(txn)], block_commitment);
