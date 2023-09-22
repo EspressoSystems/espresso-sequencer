@@ -156,7 +156,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match state.committee_exchange.accumulate_vote_2(
+            match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
                 &vote.block_commitment,
@@ -198,7 +198,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match state.committee_exchange.accumulate_vote_2(
+            match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
                 &vote.block_commitment,
@@ -374,7 +374,7 @@ where
                     phantom: PhantomData,
                 };
 
-                let accumulator = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,
@@ -456,7 +456,7 @@ where
                     phantom: PhantomData,
                 };
 
-                let accumulator = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,

@@ -23,7 +23,7 @@ async fn test_view_sync_task() {
     use core::panic;
 
     use hotshot::tasks::add_view_sync_task;
-    use hotshot_task_impls::{harness::run_harness, view_sync::ViewSyncPhase};
+    use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
         traits::election::VoteData,

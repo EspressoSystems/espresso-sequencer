@@ -257,8 +257,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.inner
             .internal_event_stream
             .publish(SequencingHotShotEvent::QCFormed(either::Left(
-                QuorumCertificate::genesis())),
-            )
+                QuorumCertificate::genesis(),
+            )))
             .await;
     }
 
@@ -693,7 +693,6 @@ where
         let quorum_exchange = self.inner.exchanges.quorum_exchange().clone();
         let committee_exchange = self.inner.exchanges.committee_exchange().clone();
         let view_sync_exchange = self.inner.exchanges.view_sync_exchange().clone();
-        let timeout_exchange = self.inner.exchanges.timeout_exchange().clone();
 
         let handle = SystemContextHandle {
             registry,

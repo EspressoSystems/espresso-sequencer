@@ -11,7 +11,6 @@ use hotshot_task::{
 use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use snafu::Snafu;
 use std::{collections::HashMap, future::Future, sync::Arc};
-use tracing::error;
 
 /// The state for the test harness task. Keeps track of which events and how many we expect to get
 pub struct TestHarnessState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
@@ -106,7 +105,6 @@ pub fn handle_event<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     } else {
         *num_expected -= 1;
     }
-
 
     if state.expected_output.is_empty() {
         return (Some(HotShotTaskCompleted::ShutDown), state);

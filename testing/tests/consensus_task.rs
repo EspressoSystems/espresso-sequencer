@@ -146,7 +146,6 @@ async fn test_consensus_vote() {
 
     let handle = build_system_handle(2).await.0;
     let (private_key, public_key) = key_pair_for_id(1);
-    let (private_key_2, public_key_2) = key_pair_for_id(2);
 
     let mut input = Vec::new();
     let mut output = HashMap::new();

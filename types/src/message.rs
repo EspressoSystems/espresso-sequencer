@@ -13,7 +13,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, QuorumVote, TimeoutVote, TimeoutVote2, ViewSyncVote, VoteType},
+    vote::{DAVote, QuorumVote, TimeoutVote, ViewSyncVote, VoteType},
 };
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
@@ -201,8 +201,7 @@ where
             }
             GeneralConsensusMessage::ViewSyncVote(_)
             | GeneralConsensusMessage::ViewSyncCertificate(_) => todo!(),
-            | GeneralConsensusMessage::TimeoutVote(_) => todo!(),
-
+            GeneralConsensusMessage::TimeoutVote(_) => todo!(),
         }
     }
 }
@@ -325,7 +324,7 @@ where
     ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
 
     /// Message with a Timeout vote
-    TimeoutVote(TimeoutVote2<TYPES>),
+    TimeoutVote(TimeoutVote<TYPES>),
 
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
@@ -421,9 +420,7 @@ impl<
                     GeneralConsensusMessage::ViewSyncCertificate(message) => {
                         message.data.get_view_number()
                     }
-                    GeneralConsensusMessage::TimeoutVote(message) => {
-                        message.get_view()
-                    }
+                    GeneralConsensusMessage::TimeoutVote(message) => message.get_view(),
                 }
             }
             Right(committee_message) => {
@@ -451,11 +448,12 @@ impl<
         match &self.0 {
             Left(general_message) => match general_message {
                 GeneralConsensusMessage::Proposal(_) => MessagePurpose::Proposal,
-                GeneralConsensusMessage::Vote(_) => MessagePurpose::Vote,
+                GeneralConsensusMessage::Vote(_) | GeneralConsensusMessage::TimeoutVote(_) => {
+                    MessagePurpose::Vote
+                }
                 GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
                 GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
                 GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
-                GeneralConsensusMessage::TimeoutVote(_) => MessagePurpose::Vote,
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,

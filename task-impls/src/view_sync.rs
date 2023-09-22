@@ -1004,7 +1004,7 @@ where
                     *vote_internal.round, vote_internal.relay
                 );
 
-                let accumulator = self.exchange.accumulate_vote_2(
+                let accumulator = self.exchange.accumulate_vote(
                     self.accumulator.left().unwrap(),
                     &vote,
                     &view_sync_data,

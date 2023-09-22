@@ -7,13 +7,12 @@
 async fn test_timeout() {
     use std::time::Duration;
 
-    use hotshot_testing::node_types::SequencingLibp2pImpl;
     use hotshot_testing::node_types::SequencingWebImpl;
 
     use hotshot_testing::overall_safety_task::OverallSafetyPropertiesDescription;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::SequencingTestTypes,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
     };
@@ -47,7 +46,6 @@ async fn test_timeout() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(Duration::from_millis(500), dead_nodes)],
     };
-
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(

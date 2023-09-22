@@ -1,19 +1,16 @@
 //! Provides two types of cerrtificates and their accumulators.
 
-use crate::vote::AccumulatorPlaceholder;
 use crate::vote::DAVoteAccumulator;
 use crate::vote::QuorumVote;
 use crate::vote::QuorumVoteAccumulator;
-use crate::vote::TimeoutVote2;
+use crate::vote::TimeoutVote;
 use crate::vote::TimeoutVoteAccumulator;
 use crate::vote::ViewSyncVoteAccumulator;
 use crate::vote::VoteType;
 use crate::{
     data::{fake_commitment, serialize_signature, LeafType},
     traits::{
-        election::{SignedCertificate, VoteData, VoteToken},
-        node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
+        election::SignedCertificate, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
     },
     vote::{DAVote, ViewSyncData, ViewSyncVote},
@@ -90,7 +87,7 @@ impl<TYPES: NodeType>
     SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::Time>>
     for TimeoutCertificate<TYPES>
 {
-    type Vote = TimeoutVote2<TYPES>;
+    type Vote = TimeoutVote<TYPES>;
 
     type VoteAccumulator = TimeoutVoteAccumulator<TYPES, Commitment<TYPES::Time>, Self::Vote>;
 
@@ -98,11 +95,10 @@ impl<TYPES: NodeType>
         signatures: AssembledSignature<TYPES>,
         vote: Self::Vote,
     ) -> Self {
-        let qc = TimeoutCertificate {
+        TimeoutCertificate {
             view_number: vote.get_view(),
             signatures,
-        };
-        qc
+        }
     }
 
     fn view_number(&self) -> TYPES::Time {
@@ -117,8 +113,8 @@ impl<TYPES: NodeType>
         self.view_number.commit()
     }
 
-    fn set_leaf_commitment(&mut self, commitment: Commitment<TYPES::Time>) {
-        todo!()
+    fn set_leaf_commitment(&mut self, _commitment: Commitment<TYPES::Time>) {
+        unimplemented!()
     }
 
     fn is_genesis(&self) -> bool {
@@ -126,7 +122,7 @@ impl<TYPES: NodeType>
     }
 
     fn genesis() -> Self {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -174,7 +170,7 @@ pub enum AssembledSignature<TYPES: NodeType> {
     No(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for a 'DA' certificate
     DA(<TYPES::SignatureKey as SignatureKey>::QCType),
-
+    /// These signatures are for a `Timeout` certificate
     Timeout(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for genesis certificate
     Genesis(),
@@ -184,25 +180,6 @@ pub enum AssembledSignature<TYPES: NodeType> {
     ViewSyncCommit(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for ViewSyncFinalize
     ViewSyncFinalize(<TYPES::SignatureKey as SignatureKey>::QCType),
-}
-
-/// Data from a vote needed to accumulate into a `SignedCertificate`
-pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteToken, TIME> {
-    /// Voter's public key
-    pub encoded_key: EncodedPublicKey,
-    /// Votes signature
-    pub encoded_signature: EncodedSignature,
-    /// Commitment to what's voted on.  E.g. the leaf for a `QuorumCertificate`
-    pub commitment: Commitment<COMMITTABLE>,
-    /// Data of the vote, yes, no, timeout, or DA
-    pub data: VoteData<Commitment<COMMITTABLE>>,
-    /// The votes's token
-    pub vote_token: T,
-    /// View number for the vote
-    pub view_number: TIME,
-    /// The relay index for view sync
-    // TODO ED Make VoteMetaData more generic to avoid this variable that only ViewSync uses
-    pub relay: Option<u64>,
 }
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
@@ -220,7 +197,6 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
             QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
                 vote_internal.leaf_commitment
             }
-            QuorumVote::Timeout(_) => unimplemented!(),
         };
         let qc = QuorumCertificate {
             leaf_commitment,
