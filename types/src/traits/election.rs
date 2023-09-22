@@ -434,6 +434,9 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
         vote_token: &Checked<TYPES::VoteTokenType>,
     ) -> bool {
         let is_valid_signature = key.validate(encoded_signature, data.get_commit().as_ref());
+        if !is_valid_signature {
+            panic!()
+        }
         let valid_vote_token = self
             .membership()
             .validate_vote_token(key.clone(), vote_token.clone());
@@ -446,7 +449,11 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             Ok(Checked::Inval(_) | Checked::Unchecked(_)) => false,
         };
 
-        is_valid_signature && is_valid_vote_token
+        let result = is_valid_signature && is_valid_vote_token; 
+        if !result {
+            panic!()
+        }
+        result
     }
 
     #[doc(hidden)]

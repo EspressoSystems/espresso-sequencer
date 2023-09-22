@@ -435,7 +435,7 @@ impl<
         stake_table_entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
     ) -> Either<Self, AssembledSignature<TYPES>> {
         
-        let VoteData::Timeout(vote_commitment) = vote.get_data() else {
+        let VoteData::DA(vote_commitment) = vote.get_data() else {
             return Either::Left(self);
         };
 
