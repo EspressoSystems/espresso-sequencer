@@ -5,7 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -43,7 +43,12 @@ use hotshot_types::{
     vote::{ViewSyncData, VoteType},
 };
 use serde::Serialize;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -66,7 +71,7 @@ pub async fn add_network_message_task<
     >,
     COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -176,7 +181,7 @@ pub async fn add_network_event_task<
     >,
     COMMITTABLE: Committable + Serialize + Clone,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -441,6 +446,8 @@ where
         registry: registry.clone(),
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
+        transactions: Arc::default(),
+        seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
         committee_exchange: committee_exchange.into(),
         event_stream: event_stream.clone(),

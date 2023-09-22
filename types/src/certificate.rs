@@ -157,11 +157,11 @@ pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteTok
 }
 
 impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, LEAF>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<LEAF>>
     for QuorumCertificate<TYPES, LEAF>
 {
     type Vote = QuorumVote<TYPES, LEAF>;
-    type VoteAccumulator = QuorumVoteAccumulator<TYPES, LEAF, Self::Vote>;
+    type VoteAccumulator = QuorumVoteAccumulator<TYPES, Commitment<LEAF>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -234,11 +234,12 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
     }
 }
 
-impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::BlockType>
+impl<TYPES: NodeType>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = DAVoteAccumulator<TYPES, TYPES::BlockType, Self::Vote>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -323,11 +324,12 @@ impl<TYPES: NodeType> Committable for ViewSyncCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, ViewSyncData<TYPES>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<ViewSyncData<TYPES>>>
     for ViewSyncCertificate<TYPES>
 {
     type Vote = ViewSyncVote<TYPES>;
-    type VoteAccumulator = ViewSyncVoteAccumulator<TYPES, ViewSyncData<TYPES>, Self::Vote>;
+    type VoteAccumulator =
+        ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,

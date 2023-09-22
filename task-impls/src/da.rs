@@ -3,7 +3,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -103,7 +103,7 @@ pub struct DAVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            TYPES::BlockType,
+            Commitment<TYPES::BlockType>,
         >>::VoteAccumulator,
         DACertificate<TYPES>,
     >,
