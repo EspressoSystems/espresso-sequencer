@@ -25,7 +25,8 @@ type HotShotClient = surf_disco::Client<hotshot_query_service::Error>;
 #[derive(Clone, Debug)]
 pub struct ExecutorOptions {
     pub sequencer_url: Url,
-    pub l1_provider: Url,
+    pub l1_http_provider: Url,
+    pub l1_ws_provider: Url,
     pub rollup_account_index: u32,
     pub rollup_mnemonic: String,
     pub hotshot_address: Address,
@@ -40,7 +41,8 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
     let ExecutorOptions {
         rollup_account_index,
         sequencer_url,
-        l1_provider,
+        l1_http_provider,
+        l1_ws_provider,
         hotshot_address,
         rollup_address,
         rollup_mnemonic,
@@ -52,15 +54,18 @@ pub async fn run_executor(opt: &ExecutorOptions, state: Arc<RwLock<State>>) {
     hotshot.connect(None).await;
 
     // Connect to the layer one HotShot contract.
-    let l1 = connect_rpc(l1_provider, rollup_mnemonic, *rollup_account_index, None)
-        .await
-        .expect("unable to connect to L1, hotshot commitment task exiting");
+    let l1 = connect_rpc(
+        l1_http_provider,
+        rollup_mnemonic,
+        *rollup_account_index,
+        None,
+    )
+    .await
+    .expect("unable to connect to L1, hotshot commitment task exiting");
 
     // Create a socket connection to the L1 to subscribe to contract events
     // This assumes that the L1 node supports both HTTP and Websocket connections
-    let mut ws_url = l1_provider.clone();
-    ws_url.set_scheme("ws").unwrap();
-    let socket_provider = Provider::<Ws>::connect(ws_url)
+    let socket_provider = Provider::<Ws>::connect(l1_ws_provider)
         .await
         .expect("Unable to make websocket connection to L1");
 
@@ -454,7 +459,8 @@ mod test {
         let rollup_opt = ExecutorOptions {
             sequencer_url,
             rollup_account_index: test_l1.clients.funded[1].index,
-            l1_provider: anvil.url(),
+            l1_http_provider: anvil.url(),
+            l1_ws_provider: anvil.url(),
             rollup_mnemonic: TEST_MNEMONIC.to_string(),
             hotshot_address: test_l1.hotshot.address(),
             rollup_address: test_rollup.contract.address(),
@@ -548,7 +554,8 @@ mod test {
             let rollup_opt = ExecutorOptions {
                 sequencer_url: sequencer_url.clone(),
                 rollup_account_index: test_l1.clients.funded[1].index,
-                l1_provider: anvil.url(),
+                l1_http_provider: anvil.url(),
+                l1_ws_provider: anvil.url(),
                 rollup_mnemonic: TEST_MNEMONIC.to_string(),
                 hotshot_address: test_l1.hotshot.address(),
                 rollup_address: test_rollup.contract.address(),
@@ -619,7 +626,8 @@ mod test {
 
         let rollup_opt = ExecutorOptions {
             sequencer_url,
-            l1_provider: anvil.url(),
+            l1_http_provider: anvil.url(),
+            l1_ws_provider: anvil.url(),
             rollup_account_index: test_l1.clients.funded[1].index,
             rollup_mnemonic: TEST_MNEMONIC.to_string(),
             hotshot_address: test_l1.hotshot.address(),
