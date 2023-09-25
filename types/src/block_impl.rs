@@ -13,6 +13,13 @@ use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use snafu::Snafu;
 
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of storage nodes for VID initiation.
+pub const NUM_STORAGE_NODES: usize = 10;
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of chunks for VID initiation.
+pub const NUM_CHUNKS: usize = 5;
+
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDTransaction(pub Vec<u8>);
@@ -79,10 +86,6 @@ impl VIDBlockPayload {
     /// If the `VidScheme` construction fails.
     #[must_use]
     pub fn genesis() -> Self {
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        const NUM_STORAGE_NODES: usize = 10;
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        const NUM_CHUNKS: usize = 5;
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
         let srs = test_srs(NUM_STORAGE_NODES);
         let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();

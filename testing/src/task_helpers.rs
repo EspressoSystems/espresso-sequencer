@@ -13,7 +13,7 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
-    block_impl::VIDBlockPayload,
+    block_impl::{VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
@@ -165,8 +165,6 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
 }
 
 pub fn vid_init() -> VidScheme {
-    const NUM_STORAGE_NODES: usize = 10;
-    const NUM_CHUNKS: usize = 5;
     let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
     VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap()
 }

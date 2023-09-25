@@ -15,7 +15,7 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockPayload, VIDTransaction, NUM_CHUNKS, NUM_STORAGE_NODES},
     certificate::DACertificate,
     consensus::Consensus,
     data::{SequencingLeaf, VidDisperse, VidScheme, VidSchemeTrait},
@@ -239,10 +239,6 @@ where
 
                 debug!("Prepare VID shares");
                 if !txns.is_empty() {
-                    // TODO https://github.com/EspressoSystems/HotShot/issues/1693
-                    const NUM_STORAGE_NODES: usize = 10;
-                    // TODO https://github.com/EspressoSystems/HotShot/issues/1693
-                    const NUM_CHUNKS: usize = 5;
                     // TODO https://github.com/EspressoSystems/HotShot/issues/1686
                     let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
                     let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();

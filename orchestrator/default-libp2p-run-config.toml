@@ -51,6 +51,8 @@ mesh_outbound_min = 2
 mesh_n = 4
 next_view_timeout = 10
 propose_min_round_time = 0
+# TODO Update libp2p config to use consistent propose_max_round_time.
+# <https://github.com/EspressoSystems/HotShot/issues/1813>
 propose_max_round_time = 10
 online_time = 10
 num_txn_per_round = 10
@@ -75,5 +77,7 @@ secs = 0
 nanos = 0
 
 [config.propose_max_round_time]
+# TODO Update libp2p config to use consistent propose_max_round_time.
+# <https://github.com/EspressoSystems/HotShot/issues/1813>
 secs = 2
 nanos = 0
