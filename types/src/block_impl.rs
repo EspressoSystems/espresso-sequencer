@@ -73,6 +73,23 @@ impl VIDBlockPayload {
             commitment,
         }
     }
+
+    /// Create a genesis block payload with transaction bytes `vec![0]`.
+    /// # Panics
+    /// If the `VidScheme` construction fails.
+    #[must_use]
+    pub fn genesis() -> Self {
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        const NUM_STORAGE_NODES: usize = 10;
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        const NUM_CHUNKS: usize = 5;
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+        let srs = test_srs(NUM_STORAGE_NODES);
+        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+        let txn = vec![0];
+        let vid_disperse = vid.disperse(&txn).unwrap();
+        VIDBlockPayload::new(vec![VIDTransaction(txn)], vid_disperse.commit)
+    }
 }
 
 impl Committable for VIDBlockPayload {
@@ -94,19 +111,7 @@ impl Display for VIDBlockPayload {
 
 impl TestableBlock for VIDBlockPayload {
     fn genesis() -> Self {
-        /// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        const NUM_STORAGE_NODES: usize = 10;
-        /// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        const NUM_CHUNKS: usize = 5;
-
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-        let srs = test_srs(NUM_STORAGE_NODES);
-
-        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-
-        let txn = vec![0u8];
-        let vid_disperse = vid.disperse(&txn).unwrap();
-        VIDBlockPayload::new(vec![VIDTransaction(txn)], vid_disperse.commit)
+        Self::genesis()
     }
 
     fn txn_count(&self) -> u64 {

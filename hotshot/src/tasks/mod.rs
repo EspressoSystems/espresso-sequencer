@@ -38,7 +38,7 @@ use hotshot_types::{
         node_implementation::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
         },
-        state::{ConsensusTime, TestableBlock},
+        state::ConsensusTime,
     },
     vote::{ViewSyncData, VoteType},
 };
@@ -289,8 +289,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        // TODO (Keyao) Shouldn't use test function.
-        block: <VIDBlockPayload as TestableBlock>::genesis(),
+        block: VIDBlockPayload::genesis(),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),

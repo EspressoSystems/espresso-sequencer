@@ -7,7 +7,7 @@ use async_lock::RwLock;
 use bincode::config::Options;
 use commit::Commitment;
 use commit::Committable;
-use either::{Either, Left, Right};
+use either::{Left, Right};
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -239,14 +239,12 @@ where
 
                 debug!("Prepare VID shares");
                 if !txns.is_empty() {
-                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
+                    // TODO https://github.com/EspressoSystems/HotShot/issues/1693
                     const NUM_STORAGE_NODES: usize = 10;
-                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
+                    // TODO https://github.com/EspressoSystems/HotShot/issues/1693
                     const NUM_CHUNKS: usize = 5;
-
                     // TODO https://github.com/EspressoSystems/HotShot/issues/1686
                     let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-
                     let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
                     // TODO https://github.com/EspressoSystems/jellyfish/issues/375
                     let mut txns_flatten = Vec::new();
@@ -256,8 +254,6 @@ where
                     let vid_disperse = vid.disperse(&txns_flatten).unwrap();
                     let block = VIDBlockPayload::new(txns, vid_disperse.commit);
 
-                    // TODO (Keyao) Is the order of the following events and events in the original
-                    // DA task correct?
                     self.event_stream
                         .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
                         .await;
@@ -312,22 +308,25 @@ where
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
         &self,
-        parent_leaf: SequencingLeaf<TYPES>,
+        _parent_leaf: SequencingLeaf<TYPES>,
     ) -> Option<Vec<TYPES::Transaction>> {
         let task_start_time = Instant::now();
 
+        // TODO (Keyao) Investigate the use of transaction hash
+        // <https://github.com/EspressoSystems/HotShot/issues/1811>
         // let parent_leaf = self.parent_leaf().await?;
-        let previous_used_txns = match parent_leaf.deltas {
-            Either::Left(block) => block.contained_transactions(),
-            Either::Right(_commitment) => HashSet::new(),
-        };
+        // let previous_used_txns = match parent_leaf.deltas {
+        //     Either::Left(block) => block.contained_transactions(),
+        //     Either::Right(_commitment) => HashSet::new(),
+        // };
 
         let receiver = self.transactions.subscribe().await;
 
         loop {
             let all_txns = self.transactions.cloned().await;
             debug!("Size of transactions: {}", all_txns.len());
-            // TODO (Keyao) How to prevent duplicate txn now that we've removed the ID?
+            // TODO (Keyao) Investigate the use of transaction hash
+            // <https://github.com/EspressoSystems/HotShot/issues/1811>
             // let unclaimed_txns: Vec<_> = all_txns
             //     .iter()
             //     .filter(|(txn_hash, _txn)| !previous_used_txns.contains(txn_hash))
@@ -358,17 +357,19 @@ where
             break;
         }
         let all_txns = self.transactions.cloned().await;
-        let txns: Vec<TYPES::Transaction> = all_txns
-            .iter()
-            .filter_map(|(txn_hash, txn)| {
-                // TODO (Keyao) How to prevent duplicate txn now that we've removed the ID?
-                // if previous_used_txns.contains(txn_hash) {
-                //     None
-                // } else {
-                Some(txn.clone())
-                // }
-            })
-            .collect();
+        // TODO (Keyao) Investigate the use of transaction hash
+        // <https://github.com/EspressoSystems/HotShot/issues/1811>
+        let txns: Vec<TYPES::Transaction> = all_txns.values().cloned().collect();
+        // let txns: Vec<TYPES::Transaction> = all_txns
+        //     .iter()
+        //     .filter_map(|(txn_hash, txn)| {
+        //         if previous_used_txns.contains(txn_hash) {
+        //             None
+        //         } else {
+        //             Some(txn.clone())
+        //         }
+        //     })
+        //     .collect();
         Some(txns)
     }
 
