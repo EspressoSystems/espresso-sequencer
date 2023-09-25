@@ -15,6 +15,7 @@ use crate::{
     },
     vote::{DAVote, QuorumVote, ViewSyncVote, VoteType},
 };
+use commit::Commitment;
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
 use serde::{Deserialize, Serialize};
@@ -149,7 +150,7 @@ where
     /// Message with a quorum proposal.
     Proposal(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, I::Leaf>, TYPES::SignatureKey),
+    Vote(QuorumVote<TYPES, Commitment<I::Leaf>>, TYPES::SignatureKey),
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),
     /// Message with a view sync certificate.
@@ -314,7 +315,7 @@ where
     Proposal(Proposal<QuorumProposalType<TYPES, I>>),
 
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, I::Leaf>),
+    Vote(QuorumVote<TYPES, Commitment<I::Leaf>>),
 
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),

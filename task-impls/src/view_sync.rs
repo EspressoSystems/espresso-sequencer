@@ -75,7 +75,7 @@ pub struct ViewSyncTaskState<
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Registry to register sub tasks
@@ -124,7 +124,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
 }
@@ -152,7 +152,7 @@ pub struct ViewSyncReplicaTaskState<
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Timeout for view sync rounds
@@ -195,7 +195,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
 }
@@ -270,7 +270,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
@@ -620,7 +620,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Replica Task", level = "error")]
@@ -951,7 +951,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Handles incoming events for the view sync relay task

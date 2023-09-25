@@ -9,7 +9,6 @@ use crate::{
         ViewSyncCertificate,
     },
     traits::{
-        election::SignedCertificate,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},
@@ -132,7 +131,7 @@ where
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -215,7 +214,7 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
@@ -444,7 +443,7 @@ pub trait LeafType:
     /// Create a new leaf from its components.
     fn new(
         view_number: LeafTime<Self>,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: LeafBlock<Self>,
         state: LeafState<Self>,
     ) -> Self;
@@ -457,7 +456,7 @@ pub trait LeafType:
     /// Change the height of this leaf.
     fn set_height(&mut self, height: u64);
     /// The QC linking this leaf to its parent in the chain.
-    fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Self>;
+    fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Commitment<Self>>;
     /// Commitment to this leaf's parent.
     fn get_parent_commitment(&self) -> Commitment<Self>;
     /// The block contained in this leaf.
@@ -531,11 +530,11 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Self>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
-    pub parent_commitment: Commitment<ValidatingLeaf<TYPES>>,
+    pub parent_commitment: Commitment<Self>,
 
     /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
@@ -570,11 +569,11 @@ pub struct SequencingLeaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Self>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
 
     /// The hash of the parent `SequencingLeaf`
     /// So we can ask if it extends
-    pub parent_commitment: Commitment<SequencingLeaf<TYPES>>,
+    pub parent_commitment: Commitment<Self>,
 
     /// The block or block commitment to be applied
     pub deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
@@ -644,7 +643,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -673,7 +672,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Self> {
+    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
         self.justify_qc.clone()
     }
 
@@ -761,7 +760,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         _state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -789,7 +788,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Self> {
+    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
         self.justify_qc.clone()
     }
 
@@ -934,7 +933,7 @@ impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment(),
+                self.justify_qc.leaf_commitment,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
@@ -966,7 +965,7 @@ impl<TYPES: NodeType> Committable for SequencingLeaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment(),
+                self.justify_qc.leaf_commitment,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)

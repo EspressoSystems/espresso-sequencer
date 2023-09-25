@@ -64,14 +64,14 @@ pub struct SequencingConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     /// The global task registry
@@ -126,7 +126,7 @@ pub struct SequencingConsensusTaskState<
     pub id: u64,
 
     /// The most Recent QC we've formed from votes, if we've formed it.
-    pub qc: Option<QuorumCertificate<TYPES, I::Leaf>>,
+    pub qc: Option<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
@@ -138,8 +138,8 @@ pub struct VoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
     /// the quorum exchange
@@ -147,13 +147,13 @@ pub struct VoteCollectionTaskState<
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        <QuorumCertificate<TYPES, SequencingLeaf<TYPES>> as SignedCertificate<
+        <QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>> as SignedCertificate<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
             Commitment<SequencingLeaf<TYPES>>,
         >>::VoteAccumulator,
-        QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
+        QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
     >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
@@ -170,8 +170,8 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
 }
@@ -190,8 +190,8 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
     match event {
@@ -272,14 +272,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
@@ -1087,7 +1087,7 @@ where
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
         &self,
-        _qc: QuorumCertificate<TYPES, I::Leaf>,
+        _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
         view: TYPES::Time,
     ) -> bool {
         if !self.quorum_exchange.is_leader(view) {
@@ -1213,14 +1213,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
 }
@@ -1262,14 +1262,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     if let SequencingHotShotEvent::Shutdown = event {

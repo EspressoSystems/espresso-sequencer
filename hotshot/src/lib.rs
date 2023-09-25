@@ -47,7 +47,7 @@ use async_compatibility_layer::{
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use custom_debug::Debug;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
@@ -647,8 +647,8 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-            Commitment = SequencingLeaf<TYPES>,
+            Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+            Commitment = Commitment<SequencingLeaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -656,7 +656,7 @@ where
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
             Certificate = DACertificate<TYPES>,
-            Commitment = TYPES::BlockType,
+            Commitment = Commitment<TYPES::BlockType>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -664,7 +664,7 @@ where
             Message<TYPES, I>,
             Proposal = ViewSyncCertificate<TYPES>,
             Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = ViewSyncData<TYPES>,
+            Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
 {
@@ -1059,7 +1059,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
                 context: err.to_string(),
             })?;
         let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate::<TYPES, LEAF>::genesis();
+        let justify_qc = QuorumCertificate::<TYPES, Commitment<LEAF>>::genesis();
 
         Ok(Self {
             inner: LEAF::new(time, justify_qc, genesis_block, state),
