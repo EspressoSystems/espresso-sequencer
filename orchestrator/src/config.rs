@@ -8,7 +8,7 @@ use std::{
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
-    pub num_bootstrap_nodes: u64,
+    pub num_bootstrap_nodes: usize,
     pub public_ip: IpAddr,
     pub base_port: u16,
     pub node_index: u64,
@@ -22,15 +22,14 @@ pub struct Libp2pConfig {
     pub mesh_outbound_min: usize,
     pub mesh_n: usize,
     pub next_view_timeout: u64,
-    pub propose_min_round_time: u64,
-    pub propose_max_round_time: u64,
+    pub propose_min_round_time: Duration,
+    pub propose_max_round_time: Duration,
     pub online_time: u64,
-    pub num_txn_per_round: u64,
+    pub num_txn_per_round: usize,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfigFile {
-    pub num_bootstrap_nodes: u64,
     pub index_ports: bool,
     pub bootstrap_mesh_n_high: usize,
     pub bootstrap_mesh_n_low: usize,
@@ -40,11 +39,7 @@ pub struct Libp2pConfigFile {
     pub mesh_n_low: usize,
     pub mesh_outbound_min: usize,
     pub mesh_n: usize,
-    pub next_view_timeout: u64,
-    pub propose_min_round_time: u64,
-    pub propose_max_round_time: u64,
     pub online_time: u64,
-    pub num_txn_per_round: u64,
     pub base_port: u16,
 }
 
@@ -59,6 +54,10 @@ pub struct WebServerConfig {
 pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub rounds: usize,
     pub transactions_per_round: usize,
+    pub num_bootrap: usize,
+    pub next_view_timeout: u64,
+    pub propose_min_round_time: Duration,
+    pub propose_max_round_time: Duration,
     pub node_index: u64,
     pub seed: [u8; 32],
     pub padding: usize,
@@ -88,6 +87,10 @@ impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
             web_server_config: None,
             da_web_server_config: None,
             _key_type_phantom: PhantomData,
+            next_view_timeout: 10,
+            num_bootrap: 5,
+            propose_min_round_time: Duration::from_secs(0),
+            propose_max_round_time: Duration::from_secs(10),
         }
     }
 }
@@ -126,10 +129,14 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
             rounds: val.rounds,
             transactions_per_round: val.transactions_per_round,
             node_index: 0,
+            num_bootrap: val.config.num_bootstrap,
+            next_view_timeout: val.config.next_view_timeout,
+            propose_max_round_time: val.config.propose_max_round_time,
+            propose_min_round_time: val.config.propose_min_round_time,
             seed: val.seed,
             padding: val.padding,
             libp2p_config: val.libp2p_config.map(|libp2p_config| Libp2pConfig {
-                num_bootstrap_nodes: libp2p_config.num_bootstrap_nodes,
+                num_bootstrap_nodes: val.config.num_bootstrap,
                 index_ports: libp2p_config.index_ports,
                 bootstrap_nodes: Vec::new(),
                 public_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
@@ -143,11 +150,11 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
                 mesh_n_low: libp2p_config.mesh_n_low,
                 mesh_outbound_min: libp2p_config.mesh_outbound_min,
                 mesh_n: libp2p_config.mesh_n,
-                next_view_timeout: libp2p_config.next_view_timeout,
-                propose_min_round_time: libp2p_config.propose_min_round_time,
-                propose_max_round_time: libp2p_config.propose_max_round_time,
+                next_view_timeout: val.config.next_view_timeout,
+                propose_min_round_time: val.config.propose_min_round_time,
+                propose_max_round_time: val.config.propose_max_round_time,
                 online_time: libp2p_config.online_time,
-                num_txn_per_round: libp2p_config.num_txn_per_round,
+                num_txn_per_round: val.transactions_per_round,
             }),
             config: val.config.into(),
             key_type_name: std::any::type_name::<K>().to_string(),
