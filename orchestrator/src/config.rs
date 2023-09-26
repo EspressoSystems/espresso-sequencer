@@ -230,7 +230,7 @@ fn default_config() -> HotShotConfigFile {
         total_nodes: NonZeroUsize::new(10).unwrap(),
         committee_nodes: 5,
         max_transactions: NonZeroUsize::new(100).unwrap(),
-        min_transactions: 0,
+        min_transactions: 1,
         next_view_timeout: 10000,
         timeout_ratio: (11, 10),
         round_start_delay: 1,

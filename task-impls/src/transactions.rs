@@ -237,48 +237,46 @@ where
                 drop(consensus);
 
                 let txns = self.wait_for_transactions(parent_leaf).await?;
+                // TODO (Keyao) Determine whether to allow empty transaction when proposing a block.
+                // <https://github.com/EspressoSystems/HotShot/issues/1822>
 
                 debug!("Prepare VID shares");
-                if !txns.is_empty() {
-                    // TODO https://github.com/EspressoSystems/HotShot/issues/1686
-                    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-                    let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                    // TODO https://github.com/EspressoSystems/jellyfish/issues/375
-                    let mut txns_flatten = Vec::new();
-                    for txn in &txns {
-                        txns_flatten.extend(txn.0.clone());
-                    }
-                    let vid_disperse = vid.disperse(&txns_flatten).unwrap();
-                    let block = VIDBlockPayload {
-                        transactions: txns,
-                        commitment: vid_disperse.commit,
-                    };
-
-                    self.event_stream
-                        .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
-                        .await;
-
-                    // TODO (Keyao) Determine and update where to publish VidDisperseSend.
-                    // <https://github.com/EspressoSystems/HotShot/issues/1817>
-                    self.event_stream
-                        .publish(SequencingHotShotEvent::VidDisperseSend(
-                            Proposal {
-                                data: VidDisperse {
-                                    view_number: view + 1,
-                                    commitment: block.commit(),
-                                    shares: vid_disperse.shares,
-                                    common: vid_disperse.common,
-                                },
-                                // TODO (Keyao) This is also signed in DA task.
-                                signature: self
-                                    .committee_exchange
-                                    .sign_da_proposal(&block.commit()),
-                            },
-                            // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
-                            self.committee_exchange.public_key().clone(),
-                        ))
-                        .await;
+                // TODO https://github.com/EspressoSystems/HotShot/issues/1686
+                let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
+                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                // TODO https://github.com/EspressoSystems/jellyfish/issues/375
+                let mut txns_flatten = Vec::new();
+                for txn in &txns {
+                    txns_flatten.extend(txn.0.clone());
                 }
+                let vid_disperse = vid.disperse(&txns_flatten).unwrap();
+                let block = VIDBlockPayload {
+                    transactions: txns,
+                    commitment: vid_disperse.commit,
+                };
+
+                self.event_stream
+                    .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
+                    .await;
+
+                // TODO (Keyao) Determine and update where to publish VidDisperseSend.
+                // <https://github.com/EspressoSystems/HotShot/issues/1817>
+                self.event_stream
+                    .publish(SequencingHotShotEvent::VidDisperseSend(
+                        Proposal {
+                            data: VidDisperse {
+                                view_number: view + 1,
+                                commitment: block.commit(),
+                                shares: vid_disperse.shares,
+                                common: vid_disperse.common,
+                            },
+                            // TODO (Keyao) This is also signed in DA task.
+                            signature: self.committee_exchange.sign_da_proposal(&block.commit()),
+                        },
+                        // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
+                        self.committee_exchange.public_key().clone(),
+                    ))
+                    .await;
                 return None;
             }
             SequencingHotShotEvent::Shutdown => {
