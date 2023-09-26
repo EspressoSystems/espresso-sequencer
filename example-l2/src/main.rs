@@ -48,7 +48,7 @@ async fn main() {
     let initial_state = { state.read().await.commit() };
 
     tracing::info!("Deploying Rollup contracts");
-    let provider = create_provider(&opt.l1_provider);
+    let provider = create_provider(&opt.l1_http_provider);
     let test_system = TestL1System::new(provider, opt.hotshot_address)
         .await
         .unwrap();
@@ -56,7 +56,8 @@ async fn main() {
 
     let executor_options = ExecutorOptions {
         hotshot_address: opt.hotshot_address,
-        l1_provider: opt.l1_provider.clone(),
+        l1_http_provider: opt.l1_http_provider.clone(),
+        l1_ws_provider: opt.l1_ws_provider.clone(),
         rollup_address: rollup_contract.address(),
         rollup_account_index: opt.rollup_account_index,
         rollup_mnemonic: opt.rollup_mnemonic.clone(),
