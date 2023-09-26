@@ -116,9 +116,7 @@ where
         if self.config.libp2p_config.clone().is_some() {
             let libp2p_config_clone = self.config.libp2p_config.clone().unwrap();
             // Designate node as bootstrap node and store its identity information
-            if libp2p_config_clone.bootstrap_nodes.len()
-                < libp2p_config_clone.num_bootstrap_nodes.try_into().unwrap()
-            {
+            if libp2p_config_clone.bootstrap_nodes.len() < libp2p_config_clone.num_bootstrap_nodes {
                 let port_index = match libp2p_config_clone.index_ports {
                     true => node_index,
                     false => 0,
@@ -145,9 +143,7 @@ where
     ) -> Result<NetworkConfig<KEY, KEY::StakeTableEntry, ELECTION>, ServerError> {
         if self.config.libp2p_config.is_some() {
             let libp2p_config = self.config.clone().libp2p_config.unwrap();
-            if libp2p_config.bootstrap_nodes.len()
-                < libp2p_config.num_bootstrap_nodes.try_into().unwrap()
-            {
+            if libp2p_config.bootstrap_nodes.len() < libp2p_config.num_bootstrap_nodes {
                 return Err(ServerError {
                     status: tide_disco::StatusCode::BadRequest,
                     message: "Not enough bootstrap nodes have registered".to_string(),
