@@ -1,11 +1,11 @@
 default:
     just --list
 
-demo:
-    docker compose up
+demo *args:
+    docker compose up {{args}}
 
-down:
-    docker compose down
+down *args:
+    docker compose down {{args}}
 
 docker-cli *cmd:
     docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
