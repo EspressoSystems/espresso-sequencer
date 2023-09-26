@@ -43,7 +43,11 @@ async fn test_da_task() {
     let txn = vec![0u8];
     let vid_disperse = vid.disperse(&txn).unwrap();
     let block_commitment = vid_disperse.commit;
-    let block = VIDBlockPayload::new(vec![VIDTransaction(txn)], block_commitment);
+    let block = VIDBlockPayload {
+        transactions: vec![VIDTransaction(txn)],
+        commitment: block_commitment,
+    };
+
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
         deltas: block.clone(),

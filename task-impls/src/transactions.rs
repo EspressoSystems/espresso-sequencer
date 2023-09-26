@@ -21,7 +21,6 @@ use hotshot_types::{
     data::{SequencingLeaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::{Message, Proposal, SequencingMessage},
     traits::{
-        block_contents::Transaction,
         consensus_api::SequencingConsensusApi,
         election::{CommitteeExchangeType, ConsensusExchange},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
@@ -88,6 +87,9 @@ pub struct TransactionTaskState<
     pub id: u64,
 }
 
+// We have two `TransactionTaskState` implementations with different bounds. The implementation
+// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>`,
+// whereas it's just `TYPES: NodeType` in the second implementation.
 impl<
         TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
@@ -245,15 +247,20 @@ where
                     // TODO https://github.com/EspressoSystems/jellyfish/issues/375
                     let mut txns_flatten = Vec::new();
                     for txn in &txns {
-                        txns_flatten.extend(txn.bytes());
+                        txns_flatten.extend(txn.0.clone());
                     }
                     let vid_disperse = vid.disperse(&txns_flatten).unwrap();
-                    let block = VIDBlockPayload::new(txns, vid_disperse.commit);
+                    let block = VIDBlockPayload {
+                        transactions: txns,
+                        commitment: vid_disperse.commit,
+                    };
 
                     self.event_stream
                         .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
                         .await;
 
+                    // TODO (Keyao) Determine and update where to publish VidDisperseSend.
+                    // <https://github.com/EspressoSystems/HotShot/issues/1817>
                     self.event_stream
                         .publish(SequencingHotShotEvent::VidDisperseSend(
                             Proposal {
@@ -284,6 +291,9 @@ where
     }
 }
 
+// We have two `TransactionTaskState` implementations with different bounds. The implementation
+// above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>`,
+// whereas here it's just `TYPES: NodeType`.
 impl<
         TYPES: NodeType,
         I: NodeImplementation<

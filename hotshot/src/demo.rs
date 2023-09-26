@@ -101,9 +101,12 @@ impl TestableState for SDemoState {
     fn create_random_transaction(
         _state: Option<&Self>,
         _rng: &mut dyn rand::RngCore,
-        _padding: u64,
+        padding: u64,
     ) -> <Self::BlockType as BlockPayload>::Transaction {
-        VIDTransaction(vec![0])
+        if padding == 0 {
+            panic!("Padding should be nonzero for VID computation to work.");
+        }
+        VIDTransaction(vec![0; padding as usize])
     }
 }
 /// Implementation of [`NodeType`] for [`VDemoNode`]

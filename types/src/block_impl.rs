@@ -38,11 +38,7 @@ impl Committable for VIDTransaction {
     }
 }
 
-impl Transaction for VIDTransaction {
-    fn bytes(&self) -> Vec<u8> {
-        self.0.clone()
-    }
-}
+impl Transaction for VIDTransaction {}
 
 /// The error type for block payload.
 #[derive(Snafu, Debug)]
@@ -69,29 +65,24 @@ pub struct VIDBlockPayload {
 }
 
 impl VIDBlockPayload {
-    /// Constructor.
-    #[must_use]
-    pub fn new(
-        transactions: Vec<VIDTransaction>,
-        commitment: <VidScheme as VidSchemeTrait>::Commit,
-    ) -> Self {
-        Self {
-            transactions,
-            commitment,
-        }
-    }
-
-    /// Create a genesis block payload with transaction bytes `vec![0]`.
+    /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
+    /// consensus task initiation.
     /// # Panics
     /// If the `VidScheme` construction fails.
     #[must_use]
     pub fn genesis() -> Self {
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
         let srs = test_srs(NUM_STORAGE_NODES);
+        // TODO We are using constant numbers for now, but they will change as the quorum size
+        // changes.
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
         let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
         let txn = vec![0];
         let vid_disperse = vid.disperse(&txn).unwrap();
-        VIDBlockPayload::new(vec![VIDTransaction(txn)], vid_disperse.commit)
+        VIDBlockPayload {
+            transactions: vec![VIDTransaction(txn)],
+            commitment: vid_disperse.commit,
+        }
     }
 }
 

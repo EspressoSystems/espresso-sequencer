@@ -13,6 +13,8 @@ use std::{
     hash::Hash,
 };
 
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over the full contents of a block
 ///
 /// This trait encapsulates the behaviors that the transactions of a block must have in order to be
@@ -45,12 +47,12 @@ pub trait BlockPayload:
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
-    /// Get the transaction bytes.
-    fn bytes(&self) -> Vec<u8>;
 }
 
 /// Dummy implementation of `BlockPayload` for unit tests
@@ -64,6 +66,8 @@ pub mod dummy {
     pub use crate::traits::state::dummy::DummyState;
     use crate::traits::state::TestableBlock;
 
+    // TODO (Keyao) Investigate the use of DummyBlock.
+    // <https://github.com/EspressoSystems/HotShot/issues/1763>
     /// The dummy block
     #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
     pub struct DummyBlock {
@@ -100,11 +104,7 @@ pub mod dummy {
             "DUMMY_TXN".to_string()
         }
     }
-    impl super::Transaction for DummyTransaction {
-        fn bytes(&self) -> Vec<u8> {
-            Vec::new()
-        }
-    }
+    impl super::Transaction for DummyTransaction {}
 
     impl std::error::Error for DummyError {}
 
