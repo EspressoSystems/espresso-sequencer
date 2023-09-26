@@ -24,6 +24,11 @@ pub struct NetworkNodeConfig {
     #[builder(setter(into, strip_option), default = "DEFAULT_REPLICATION_FACTOR")]
     pub replication_factor: Option<NonZeroUsize>,
 
+    /// location of the dht cache
+    /// default is "dht.cache" in the current directory
+    #[builder(default = "Some(\"dht.cache\".to_string())")]
+    pub dht_cache_location: Option<String>,
+
     #[builder(default)]
     /// parameters for gossipsub mesh network
     pub mesh_params: Option<MeshParams>,

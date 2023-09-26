@@ -190,7 +190,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         if let Ok(anchor_leaf) = self.storage().get_anchored_view().await {
             if anchor_leaf.view_number == TYPES::Time::genesis() {
                 let leaf: I::Leaf = I::Leaf::from_stored_view(anchor_leaf);
-                let mut qc = QuorumCertificate::<TYPES, I::Leaf>::genesis();
+                let mut qc = QuorumCertificate::<TYPES, Commitment<I::Leaf>>::genesis();
                 qc.set_leaf_commitment(leaf.commit());
                 let event = Event {
                     view_number: TYPES::Time::genesis(),
@@ -226,7 +226,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     // ) -> Result<
     //     (
     //         Vec<<I as NodeImplementation<TYPES>>::Leaf>,
-    //         QuorumCertificate<TYPES, <I as NodeImplementation<TYPES>>::Leaf>,
+    //         QuorumCertificate<TYPES, Commitment<<I as NodeImplementation<TYPES>>::Leaf>>,
     //     ),
     //     HotShotError<TYPES>,
     // > {
@@ -333,7 +333,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     #[cfg(feature = "hotshot-testing")]
     pub fn create_yes_message(
         &self,
-        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, I::Leaf>>,
+        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
         leaf_commitment: Commitment<I::Leaf>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
@@ -342,7 +342,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         QuorumEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Certificate = QuorumCertificate<TYPES, I::Leaf>,
+            Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
         >,
     {
         let inner = self.hotshot.inner.clone();

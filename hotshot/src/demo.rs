@@ -176,7 +176,7 @@ where
 /// Provides a random [`QuorumCertificate`]
 pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>(
     rng: &mut dyn rand::RngCore,
-) -> QuorumCertificate<TYPES, LEAF> {
+) -> QuorumCertificate<TYPES, Commitment<LEAF>> {
     QuorumCertificate {
         // block_commitment: random_commitment(rng),
         leaf_commitment: random_commitment(rng),

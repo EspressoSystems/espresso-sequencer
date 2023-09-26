@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-
+use commit::Commitment;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 /// The API that [`HotStuff`] needs to talk to the system, implemented for both validating and
@@ -97,7 +97,7 @@ pub trait ConsensusSharedApi<
         &self,
         view_number: TYPES::Time,
         leaf_views: Vec<LEAF>,
-        decide_qc: QuorumCertificate<TYPES, LEAF>,
+        decide_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
     ) {
         self.send_event(Event {
             view_number,
