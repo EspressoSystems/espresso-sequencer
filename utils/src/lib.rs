@@ -97,6 +97,12 @@ impl Anvil {
         self.url.clone()
     }
 
+    pub fn ws_url(&self) -> Url {
+        let mut ws_url = self.url.clone();
+        ws_url.set_scheme("ws").unwrap();
+        ws_url
+    }
+
     pub fn provider(&self) -> Provider<Http> {
         Provider::try_from(self.url().to_string()).unwrap()
     }
