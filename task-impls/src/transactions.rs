@@ -307,7 +307,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
