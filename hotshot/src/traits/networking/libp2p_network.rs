@@ -77,6 +77,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Debug for Libp2pNetwork<M, K> {
 pub type PeerInfoVec = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
 
 /// The underlying state of the libp2p network
+#[derive(Debug)]
 struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// this node's public key
     pk: K,
@@ -410,7 +411,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let handle = self.inner.handle.clone();
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         let node_type = self.inner.handle.config().node_type;
-        let metrics_connected_peers = self.inner.metrics.connected_peers.clone();
+        let metrics_connected_peers = self.inner.clone();
         async_spawn({
             let is_ready = self.inner.is_ready.clone();
             async move {
@@ -440,7 +441,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     .unwrap();
 
                 let connected_num = handle.num_connected().await?;
-                metrics_connected_peers.set(connected_num);
+                metrics_connected_peers.metrics.connected_peers.set(connected_num);
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
                 }

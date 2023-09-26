@@ -87,6 +87,7 @@ enum Combo<T> {
 }
 
 /// Internal state for a `MemoryNetwork` instance
+#[derive(Debug)]
 struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
     /// Input for broadcast messages
     broadcast_input: RwLock<Option<Sender<Vec<u8>>>>,
