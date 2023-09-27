@@ -103,6 +103,7 @@ impl TestableState for SDemoState {
         _rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <Self::BlockType as BlockPayload>::Transaction {
+        /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
         VIDTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
     }
