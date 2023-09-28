@@ -17,6 +17,7 @@ pub mod implementations {
             memory_network::{DummyReliability, MasterMap, MemoryCommChannel, MemoryNetwork},
             web_server_libp2p_fallback::{CombinedNetworks, WebServerWithFallbackCommChannel},
             web_server_network::{WebCommChannel, WebServerNetwork},
+            NetworkingMetricsValue,
         },
         storage::memory_storage::MemoryStorage, // atomic_storage::AtomicStorage,
     };

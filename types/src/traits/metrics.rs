@@ -10,7 +10,7 @@ use dyn_clone::DynClone;
 use std::fmt::Debug;
 
 /// The metrics type.
-pub trait Metrics: Send + Sync {
+pub trait Metrics: Send + Sync + DynClone + Debug {
     /// Create a [`Counter`] with an optional `unit_label`.
     ///
     /// The `unit_label` can be used to indicate what the unit of the value is, e.g. "kb" or "seconds"
@@ -103,6 +103,7 @@ pub trait Label: Send + Sync + DynClone {
     /// Set the label value
     fn set(&self, value: String);
 }
+dyn_clone::clone_trait_object!(Metrics);
 dyn_clone::clone_trait_object!(Gauge);
 dyn_clone::clone_trait_object!(Counter);
 dyn_clone::clone_trait_object!(Histogram);

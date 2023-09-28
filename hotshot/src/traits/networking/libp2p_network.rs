@@ -1,7 +1,7 @@
 //! Libp2p based/production networking implementation
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
-use super::NetworkingMetrics;
+use super::NetworkingMetricsValue;
 use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::{async_block_on, async_sleep, async_spawn, async_timeout},
@@ -18,7 +18,6 @@ use hotshot_types::{
     message::{Message, MessageKind},
     traits::{
         election::Membership,
-        metrics::{Metrics, NoMetrics},
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
             NetworkError, NetworkMsg, TestableChannelImplementation,
@@ -107,7 +106,7 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// whether or not we've bootstrapped into the DHT yet
     is_bootstrapped: Arc<AtomicBool>,
     /// The networking metrics we're keeping track of
-    metrics: NetworkingMetrics,
+    metrics: NetworkingMetricsValue,
     /// topic map
     /// hash(hashset) -> topic
     /// btreemap ordered so is hashable
@@ -228,7 +227,7 @@ where
                 let da = da_keys.clone();
                 async_block_on(async move {
                     Libp2pNetwork::new(
-                        NoMetrics::boxed(),
+                        NetworkingMetricsValue::new(),
                         config,
                         pubkey,
                         bootstrap_addrs_ref,
@@ -275,7 +274,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     /// This will panic if there are less than 5 bootstrap nodes
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        metrics: Box<dyn Metrics>,
+        metrics: NetworkingMetricsValue,
         config: NetworkNodeConfig,
         pk: K,
         bootstrap_addrs: Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>,
@@ -333,7 +332,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 is_ready: Arc::new(AtomicBool::new(false)),
                 dht_timeout: Duration::from_secs(30),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
-                metrics: NetworkingMetrics::new(&*metrics),
+                metrics,
                 topic_map,
                 node_lookup_send,
                 cache_gc_shutdown_send,
@@ -445,6 +444,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     .metrics
                     .connected_peers
                     .set(connected_num);
+
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
                 }

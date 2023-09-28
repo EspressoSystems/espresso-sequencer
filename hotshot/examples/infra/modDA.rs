@@ -7,7 +7,8 @@ use futures::StreamExt;
 use hotshot::{
     traits::{
         implementations::{
-            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, WebCommChannel, WebServerNetwork,
+            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, NetworkingMetricsValue,
+            WebCommChannel, WebServerNetwork,
         },
         NodeImplementation,
     },
@@ -701,7 +702,7 @@ where
 
         let node_config = config_builder.build().unwrap();
         let underlying_quorum_network = Libp2pNetwork::new(
-            NoMetrics::boxed(),
+            NetworkingMetricsValue::new(),
             node_config,
             pubkey.clone(),
             Arc::new(RwLock::new(

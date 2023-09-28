@@ -3,7 +3,7 @@
 //! This module provides an in-memory only simulation of an actual network, useful for unit and
 //! integration tests.
 
-use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetrics};
+use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
 use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
@@ -19,7 +19,6 @@ use hotshot_types::{
     message::{Message, MessageKind},
     traits::{
         election::Membership,
-        metrics::{Metrics, NoMetrics},
         network::{
             CommunicationChannel, ConnectedNetwork, NetworkMsg, TestableChannelImplementation,
             TestableNetworkingImplementation, TransmitType, ViewMessage,
@@ -104,7 +103,7 @@ struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
     in_flight_message_count: AtomicUsize,
 
     /// The networking metrics we're keeping track of
-    metrics: NetworkingMetrics,
+    metrics: NetworkingMetricsValue,
 }
 
 /// In memory only network simulator.
@@ -133,7 +132,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
     #[instrument(skip(metrics))]
     pub fn new(
         pub_key: K,
-        metrics: Box<dyn Metrics>,
+        metrics: NetworkingMetricsValue,
         master_map: Arc<MasterMap<M, K>>,
         reliability_config: Option<Arc<dyn 'static + NetworkReliability>>,
     ) -> MemoryNetwork<M, K> {
@@ -249,7 +248,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                 direct_output: Mutex::new(direct_output),
                 master_map: master_map.clone(),
                 in_flight_message_count,
-                metrics: NetworkingMetrics::new(&*metrics),
+                metrics,
             }),
         };
         master_map.map.insert(pub_key, mn.clone());
@@ -302,7 +301,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         Box::new(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            MemoryNetwork::new(pubkey, NoMetrics::boxed(), master.clone(), None)
+            MemoryNetwork::new(pubkey, NetworkingMetricsValue::new(), master.clone(), None)
         })
     }
 
