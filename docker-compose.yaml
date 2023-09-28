@@ -6,14 +6,13 @@ networks:
 
 services:
   demo-l1-network:
-    image: ghcr.io/foundry-rs/foundry:latest
+    image: ghcr.io/espressosystems/geth-l1:main
     ports:
       - $ESPRESSO_SEQUENCER_L1_PORT:8545
-    # The way the foundry image handles arguments is strange, the double quotes
-    # make it work here.
-    command: "'anvil --host 0.0.0.0 --chain-id 1337 --block-time $L1_BLOCK_TIME_SEC --accounts 20'"
-    healthcheck:
-      test: ["CMD", "cast", "chain-id"]
+      - $ESPRESSO_SEQUENCER_L1_WS_PORT:8546
+    volumes:
+      - "./geth-config/genesis.json:/genesis.json"
+      - "./geth-config/test-jwt-secret.txt:/config/test-jwt-secret.txt"
 
   orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
@@ -70,6 +69,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -90,6 +90,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -110,6 +111,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -130,6 +132,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -150,6 +153,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -168,6 +172,7 @@ services:
       - ESPRESSO_COMMITMENT_TASK_PORT
       - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG
       - RUST_LOG
       - RUST_LOG_FORMAT
     depends_on:
@@ -181,8 +186,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/example-rollup:main
     environment:
       - ESPRESSO_SEQUENCER_URL
-      - ESPRESSO_DEMO_L1_PROVIDER
-      - ESPRESSO_DEMO_ROLLUP_ADDRESS
+      - ESPRESSO_DEMO_L1_HTTP_PROVIDER
+      - ESPRESSO_DEMO_L1_WS_PROVIDER
       - ESPRESSO_DEMO_HOTSHOT_ADDRESS
       - ESPRESSO_DEMO_ROLLUP_PORT
       - ESPRESSO_DEMO_ROLLUP_MNEMONIC

@@ -1,11 +1,11 @@
 default:
     just --list
 
-demo:
-    docker compose up
+demo *args:
+    docker compose up {{args}}
 
-down:
-    docker compose down
+down *args:
+    docker compose down {{args}}
 
 docker-cli *cmd:
     docker exec -it espresso-sequencer-example-rollup-1 bin/cli {{cmd}}
@@ -47,9 +47,9 @@ dev-sequencer:
 
 dev-demo:
      target/release/example-l2 --sequencer-url http://localhost:8083 \
-     --l1-provider http://localhost:8545 \
+     --l1-http-provider http://localhost:8545 \
+     --l1-ws-provider ws://localhost:8546 \
      --hotshot-address 0x5fbdb2315678afecb367f032d93f642f64180aa3 \
-     --rollup-address 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512 \
      --rollup-mnemonic "test test test test test test test test test test test junk"
 
 dev-commitment:
