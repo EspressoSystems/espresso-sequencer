@@ -188,6 +188,7 @@
                 solc
                 nodePackages.prettier
                 solhint
+		(python3.withPackages (ps: with ps; [ black ]))
 
               ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ];
               shellHook = ''
