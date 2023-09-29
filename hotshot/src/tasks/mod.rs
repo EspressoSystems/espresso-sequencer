@@ -250,7 +250,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType<BlockType = VIDBlockPayload>,
+    TYPES: NodeType<BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -274,7 +274,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     let consensus = handle.hotshot.get_consensus();
@@ -364,7 +364,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     // build the da task
@@ -416,7 +416,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -433,7 +433,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     // build the transactions task

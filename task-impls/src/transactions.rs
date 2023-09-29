@@ -56,7 +56,7 @@ pub struct TransactionTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// The state's api
@@ -87,10 +87,10 @@ pub struct TransactionTaskState<
 }
 
 // We have two `TransactionTaskState` implementations with different bounds. The implementation
-// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>`,
+// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
 // whereas it's just `TYPES: NodeType` in the second implementation.
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -103,7 +103,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// main task event handler
@@ -289,7 +289,7 @@ where
 }
 
 // We have two `TransactionTaskState` implementations with different bounds. The implementation
-// above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>`,
+// above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
 // whereas here it's just `TYPES: NodeType`.
 impl<
         TYPES: NodeType,
@@ -305,7 +305,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
@@ -403,7 +403,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }

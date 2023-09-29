@@ -66,11 +66,11 @@ impl Default for SDemoState {
 impl State for SDemoState {
     type Error = BlockPayloadError;
 
-    type BlockType = VIDBlockPayload;
+    type BlockPayload = VIDBlockPayload;
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block: &Self::BlockType, view_number: &Self::Time) -> bool {
+    fn validate_block(&self, _block: &Self::BlockPayload, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
         } else {
@@ -80,7 +80,7 @@ impl State for SDemoState {
 
     fn append(
         &self,
-        block: &Self::BlockType,
+        block: &Self::BlockPayload,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
         if !self.validate_block(block, view_number) {
@@ -102,7 +102,7 @@ impl TestableState for SDemoState {
         _state: Option<&Self>,
         _rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as BlockPayload>::Transaction {
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
         VIDTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
@@ -126,7 +126,7 @@ pub struct DemoTypes;
 
 impl NodeType for DemoTypes {
     type Time = ViewNumber;
-    type BlockType = VIDBlockPayload;
+    type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
@@ -187,7 +187,7 @@ pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPE
 
 /// Provides a random [`SequencingLeaf`]
 pub fn random_sequencing_leaf<TYPES: NodeType>(
-    deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
+    deltas: Either<TYPES::BlockPayload, Commitment<TYPES::BlockPayload>>,
     rng: &mut dyn rand::RngCore,
 ) -> SequencingLeaf<TYPES> {
     let justify_qc = random_quorum_certificate(rng);

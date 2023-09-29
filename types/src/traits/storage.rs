@@ -161,7 +161,7 @@ where
         state: LEAF::MaybeState,
         height: u64,
         parent_commitment: Commitment<LEAF>,
-        rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
+        rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
         proposer_id: EncodedPublicKey,
     ) -> Self {
         Self {

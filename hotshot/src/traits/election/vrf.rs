@@ -884,7 +884,7 @@ impl<VRF, VRFHASHER, VRFPARAMS> Clone for VRFStakeTable<VRF, VRFHASHER, VRFPARAM
 //         // TODO (da) can this be SequencingConsensus?
 //         type ConsensusType = ValidatingConsensus;
 //         type Time = ViewNumber;
-//         type BlockType = DummyBlock;
+//         type BlockPayload = DummyBlock;
 //         type SignatureKey = JfPubKey<BLSSignatureScheme>;
 //         type VoteTokenType = VRFVoteToken<
 //             BLSVerKey<ark_bls12_381::Parameters>,

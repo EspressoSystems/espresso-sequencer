@@ -634,7 +634,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -656,7 +656,7 @@ where
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
             Certificate = DACertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockType>,
+            Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -1052,7 +1052,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(genesis_block: TYPES::BlockType) -> Result<Self, HotShotError<TYPES>> {
+    pub fn from_genesis(genesis_block: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
         let state = TYPES::StateType::default()
             .append(&genesis_block, &TYPES::Time::new(0))
             .map_err(|err| HotShotError::Misc {

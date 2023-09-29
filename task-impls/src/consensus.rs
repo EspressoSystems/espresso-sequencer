@@ -71,7 +71,7 @@ pub struct SequencingConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// The global task registry
@@ -84,7 +84,7 @@ pub struct SequencingConsensusTaskState<
     pub cur_view: TYPES::Time,
 
     /// Current block submitted to DA
-    pub block: TYPES::BlockType,
+    pub block: TYPES::BlockPayload,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -279,7 +279,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
@@ -1217,7 +1217,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }
@@ -1266,7 +1266,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     if let SequencingHotShotEvent::Shutdown = event {

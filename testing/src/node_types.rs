@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 pub struct SequencingTestTypes;
 impl NodeType for SequencingTestTypes {
     type Time = ViewNumber;
-    type BlockType = VIDBlockPayload;
+    type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;

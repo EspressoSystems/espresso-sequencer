@@ -148,7 +148,7 @@ mod test {
 
     impl NodeType for DummyTypes {
         type Time = ViewNumber;
-        type BlockType = DummyBlock;
+        type BlockPayload = DummyBlock;
         type SignatureKey = BLSPubKey;
         type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
         type Transaction = <DummyBlock as BlockPayload>::Transaction;

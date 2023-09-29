@@ -40,7 +40,7 @@ pub struct DACertificate<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    pub block_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -237,11 +237,11 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockPayload>>
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockPayload>, Self::Vote>;
 
     fn from_signatures_and_commitment(
         signatures: AssembledSignature<TYPES>,
@@ -262,11 +262,11 @@ impl<TYPES: NodeType>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
+    fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
         self.block_commitment
     }
 
-    fn set_leaf_commitment(&mut self, _commitment: Commitment<TYPES::BlockType>) {
+    fn set_leaf_commitment(&mut self, _commitment: Commitment<TYPES::BlockPayload>) {
         // This function is only useful for QC. Will be removed after we have separated cert traits.
     }
 

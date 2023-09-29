@@ -534,7 +534,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
     /// Sign a DA proposal.
-    fn sign_da_proposal(&self, block_commitment: &Commitment<TYPES::BlockType>)
+    fn sign_da_proposal(&self, block_commitment: &Commitment<TYPES::BlockPayload>)
         -> EncodedSignature;
 
     /// Sign a vote on DA proposal.
@@ -543,13 +543,13 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     /// of information necessary for checking that this node voted on that block.
     fn sign_da_vote(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
     ) -> (EncodedPublicKey, EncodedSignature);
 
     /// Create a message with a vote on DA proposal.
     fn create_da_message(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
     ) -> DAVote<TYPES>;
@@ -559,7 +559,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     /// Create a message with a vote on VID disperse data.
     fn create_vid_message(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
     ) -> DAVote<TYPES>;
@@ -567,7 +567,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     /// Sign a vote on VID proposal.
     fn sign_vid_vote(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
     ) -> (EncodedPublicKey, EncodedSignature);
 }
 
@@ -605,7 +605,7 @@ impl<
     /// Sign a DA proposal.
     fn sign_da_proposal(
         &self,
-        block_commitment: &Commitment<TYPES::BlockType>,
+        block_commitment: &Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, block_commitment.as_ref());
         signature
@@ -616,7 +616,7 @@ impl<
     /// of information necessary for checking that this node voted on that block.
     fn sign_da_vote(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
     ) -> (EncodedPublicKey, EncodedSignature) {
         let signature = TYPES::SignatureKey::sign(
             &self.private_key,
@@ -627,7 +627,7 @@ impl<
     /// Create a message with a vote on DA proposal.
     fn create_da_message(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
     ) -> DAVote<TYPES> {
@@ -643,7 +643,7 @@ impl<
 
     fn create_vid_message(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
         current_view: <TYPES as NodeType>::Time,
         vote_token: <TYPES as NodeType>::VoteTokenType,
     ) -> DAVote<TYPES> {
@@ -659,7 +659,7 @@ impl<
 
     fn sign_vid_vote(
         &self,
-        block_commitment: Commitment<<TYPES as NodeType>::BlockType>,
+        block_commitment: Commitment<<TYPES as NodeType>::BlockPayload>,
     ) -> (EncodedPublicKey, EncodedSignature) {
         let signature = TYPES::SignatureKey::sign(
             &self.private_key,
@@ -681,7 +681,7 @@ impl<
     type Certificate = DACertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockType>;
+    type Commitment = Commitment<TYPES::BlockPayload>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,

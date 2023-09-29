@@ -1,7 +1,7 @@
 //! Abstraction over the contents of a block
 //!
-//! This module provides the [`BlockPayload`] and [`BlockHeader`] traits, which describe the
-//! behaviors that a block is expected to have.
+//! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
+//! describe the behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
@@ -12,6 +12,14 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
+/// Abstraction over any type of transaction. Used by [`BlockPayload`].
+pub trait Transaction:
+    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+{
+}
 
 // TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
 // <https://github.com/EspressoSystems/HotShot/issues/1815>
@@ -47,12 +55,23 @@ pub trait BlockPayload:
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
-/// Abstraction over any type of transaction. Used by [`BlockPayload`].
-pub trait Transaction:
-    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+pub trait BlockHeader:
+    Serialize
+    + Clone
+    + Debug
+    + Display
+    + Hash
+    + PartialEq
+    + Eq
+    + Send
+    + Sync
+    + Committable
+    + DeserializeOwned
 {
+    type Payload: BlockPayload;
+
+    /// Get the payload commitment.
+    fn commitment(&self) -> Commitment<Self::Payload>;
 }
 
 /// Dummy implementation of `BlockPayload` for unit tests

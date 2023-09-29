@@ -47,7 +47,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// Saved blocks
     ///
     /// Contains the full block for every leaf in `saved_leaves` if that block is available.
-    pub saved_blocks: BlockStore<TYPES::BlockType>,
+    pub saved_blocks: BlockStore<TYPES::BlockPayload>,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,

@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    data::{test_srs, VidScheme, VidSchemeTrait},
+    data::{test_srs, VidScheme, VidSchemeTrait, SequencingLeaf},
     traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
 };
 use commit::{Commitment, Committable};
@@ -124,4 +124,13 @@ impl BlockPayload for VIDBlockPayload {
             .map(commit::Committable::commit)
             .collect()
     }
+}
+
+/// A [`BlockHeader`] that commits to [`VIDBlockPayload`].
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
+pub struct VIDBlockHeader<TYPES: NodeType> {
+    /// Previous leaf.
+    pub previous_leaf: SequencingLeaf<TYPES>,
+    /// VID commitment.
+    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
 }

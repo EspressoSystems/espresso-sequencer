@@ -108,7 +108,7 @@ pub fn genesis_proposer_id() -> EncodedPublicKey {
 }
 
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
-pub type Transaction<STATE> = <<STATE as State>::BlockType as BlockPayload>::Transaction;
+pub type Transaction<STATE> = <<STATE as State>::BlockPayload as BlockPayload>::Transaction;
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
@@ -122,7 +122,7 @@ where
     LEAF: Committable,
 {
     ///  current view's block commitment
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    pub block_commitment: Commitment<TYPES::BlockPayload>,
 
     /// CurView from leader when proposing leaf
     pub view_number: TYPES::Time,
@@ -139,13 +139,13 @@ where
     pub parent_commitment: Commitment<LEAF>,
 
     /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockType,
+    pub deltas: TYPES::BlockPayload,
 
     /// What the state should be after applying `self.deltas`
     pub state_commitment: Commitment<TYPES::StateType>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,
@@ -155,7 +155,7 @@ where
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
     /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockType,
+    pub deltas: TYPES::BlockPayload,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
 }
@@ -172,7 +172,7 @@ pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::Time,
     /// Block commitment
-    pub commitment: Commitment<TYPES::BlockType>,
+    pub commitment: Commitment<TYPES::BlockPayload>,
     /// VID shares dispersed among storage nodes
     pub shares: Vec<<VidScheme as VidSchemeTrait>::Share>,
     /// VID common data sent to all storage nodes
@@ -203,7 +203,7 @@ pub fn test_srs(
 #[serde(bound(deserialize = ""))]
 pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// The commitment to append.
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    pub block_commitment: Commitment<TYPES::BlockPayload>,
 
     /// CurView from leader when proposing leaf
     pub view_number: TYPES::Time,
@@ -281,7 +281,7 @@ pub trait ProposalType:
 
 /// A state change encoded in a leaf.
 ///
-/// [`DeltasType`] represents a [block](NodeType::BlockType), but it may not contain the block in
+/// [`DeltasType`] represents a [block](NodeType::BlockPayload), but it may not contain the block in
 /// full. It is guaranteed to contain, at least, a cryptographic commitment to the block, and it
 /// provides an interface for resolving the commitment to a full block if the full block is
 /// available.
@@ -495,7 +495,7 @@ pub type LeafNode<LEAF> = <LEAF as LeafType>::NodeType;
 /// The [`StateType`] in a [`LeafType`].
 pub type LeafState<LEAF> = <LeafNode<LEAF> as NodeType>::StateType;
 /// The [`BlockPayload`] in a [`LeafType`].
-pub type LeafBlock<LEAF> = <LeafNode<LEAF> as NodeType>::BlockType;
+pub type LeafBlock<LEAF> = <LeafNode<LEAF> as NodeType>::BlockPayload;
 /// The [`Transaction`] in a [`LeafType`].
 pub type LeafTransaction<LEAF> = <LeafBlock<LEAF> as BlockPayload>::Transaction;
 /// The [`ConsensusTime`] used by a [`LeafType`].
@@ -511,7 +511,7 @@ pub trait TestableLeaf {
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction;
+    ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction;
 }
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
@@ -535,13 +535,13 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
     pub parent_commitment: Commitment<Self>,
 
     /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockType,
+    pub deltas: TYPES::BlockPayload,
 
     /// What the state should be AFTER applying `self.deltas`
     pub state: TYPES::StateType,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     #[derivative(PartialEq = "ignore")]
@@ -574,11 +574,12 @@ pub struct SequencingLeaf<TYPES: NodeType> {
     pub parent_commitment: Commitment<Self>,
 
     /// The block or block commitment to be applied
-    pub deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
+    pub deltas: Either<TYPES::BlockPayload, Commitment<TYPES::BlockPayload>>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
 
+    // TODO (Keyao) Remove.
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     pub timestamp: i128,
 
@@ -636,13 +637,13 @@ impl<TYPES: NodeType> Display for ValidatingLeaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
     type NodeType = TYPES;
-    type DeltasType = TYPES::BlockType;
+    type DeltasType = TYPES::BlockPayload;
     type MaybeState = TYPES::StateType;
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
         justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
-        deltas: <Self::NodeType as NodeType>::BlockType,
+        deltas: <Self::NodeType as NodeType>::BlockPayload,
         state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
         Self {
@@ -682,7 +683,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.deltas.clone()
     }
 
-    fn get_deltas_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockType> {
+    fn get_deltas_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockPayload> {
         self.deltas.block_commitment()
     }
 
@@ -694,7 +695,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.state.clone()
     }
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -724,7 +725,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
 impl<TYPES: NodeType> TestableLeaf for ValidatingLeaf<TYPES>
 where
     TYPES::StateType: TestableState,
-    TYPES::BlockType: TestableBlock,
+    TYPES::BlockPayload: TestableBlock,
 {
     type NodeType = TYPES;
 
@@ -732,7 +733,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction {
         <TYPES::StateType as TestableState>::create_random_transaction(
             Some(&self.state),
             rng,
@@ -753,13 +754,13 @@ impl<TYPES: NodeType> Display for SequencingLeaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
     type NodeType = TYPES;
-    type DeltasType = Either<TYPES::BlockType, Commitment<TYPES::BlockType>>;
+    type DeltasType = Either<TYPES::BlockPayload, Commitment<TYPES::BlockPayload>>;
     type MaybeState = ();
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
         justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
-        deltas: <Self::NodeType as NodeType>::BlockType,
+        deltas: <Self::NodeType as NodeType>::BlockPayload,
         _state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
         Self {
@@ -798,7 +799,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
         self.deltas.clone()
     }
 
-    fn get_deltas_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockType> {
+    fn get_deltas_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockPayload> {
         self.deltas.block_commitment()
     }
 
@@ -809,7 +810,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
     // The Sequencing Leaf doesn't have a state.
     fn get_state(&self) -> Self::MaybeState {}
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -838,7 +839,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
 impl<TYPES: NodeType> TestableLeaf for SequencingLeaf<TYPES>
 where
     TYPES::StateType: TestableState,
-    TYPES::BlockType: TestableBlock,
+    TYPES::BlockPayload: TestableBlock,
 {
     type NodeType = TYPES;
 
@@ -846,7 +847,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction {
         TYPES::StateType::create_random_transaction(None, rng, padding)
     }
 }

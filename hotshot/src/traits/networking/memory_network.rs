@@ -629,7 +629,7 @@ mod tests {
     //     // TODO (da) can this be SequencingConsensus?
     //     type ConsensusType = ValidatingConsensus;
     //     type Time = ViewNumber;
-    //     type BlockType = VDemoBlock;
+    //     type BlockPayload = VDemoBlock;
     //     type SignatureKey = Ed25519Pub;
     //     type VoteTokenType = StaticVoteToken<Ed25519Pub>;
     //     type Transaction = VDemoTransaction;
