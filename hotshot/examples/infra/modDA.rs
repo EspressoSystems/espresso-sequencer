@@ -23,8 +23,8 @@ use hotshot_orchestrator::{
 use hotshot_task::task::FilterEvent;
 use hotshot_types::HotShotConfig;
 use hotshot_types::{
-    consensus::ConsensusMetricsValue,
     certificate::ViewSyncCertificate,
+    consensus::ConsensusMetricsValue,
     data::{QuorumProposal, SequencingLeaf, TestableLeaf},
     event::{Event, EventType},
     message::{Message, SequencingMessage},

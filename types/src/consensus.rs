@@ -11,7 +11,7 @@ use crate::{
     data::LeafType,
     error::HotShotError,
     traits::{
-        metrics::{Counter, Gauge, Histogram, Metrics, Label},
+        metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
     },
 };
@@ -141,6 +141,7 @@ pub struct InnerConsensusMetrics {
 }
 
 impl ConsensusMetrics {
+    #[must_use]
     /// For the creation and naming of gauge, counter, histogram and label.
     pub fn sub(&self, name: String) -> Self {
         let prefix = if self.prefix.is_empty() {

@@ -13,6 +13,7 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
+    consensus::ConsensusMetricsValue,
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
@@ -21,7 +22,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
         state::ConsensusTime,
-    }, consensus::ConsensusMetricsValue,
+    },
 };
 
 pub async fn build_system_handle(
