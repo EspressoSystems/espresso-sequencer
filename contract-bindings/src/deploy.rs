@@ -35,13 +35,13 @@ pub struct TestClients {
 impl TestClients {
     pub fn new(provider: &Provider<Http>, chain_id: u64) -> Self {
         Self {
-            deployer: get_test_client(5, provider, chain_id),
+            deployer: get_test_client(11, provider, chain_id),
             funded: vec![
-                get_test_client(6, provider, chain_id),
-                get_test_client(7, provider, chain_id),
-                get_test_client(8, provider, chain_id),
+                get_test_client(12, provider, chain_id),
+                get_test_client(13, provider, chain_id),
+                get_test_client(14, provider, chain_id),
             ],
-            block_driver: get_test_client(9, provider, chain_id),
+            block_driver: get_test_client(15, provider, chain_id),
         }
     }
 }
