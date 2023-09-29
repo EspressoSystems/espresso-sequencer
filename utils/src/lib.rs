@@ -23,6 +23,7 @@ pub struct AnvilOptions {
     block_time: Option<Duration>,
     port: Option<u16>,
     load_state: Option<PathBuf>,
+    accounts: Option<usize>,
 }
 
 impl AnvilOptions {
@@ -38,6 +39,11 @@ impl AnvilOptions {
 
     pub fn load_state(mut self, path: PathBuf) -> Self {
         self.load_state = Some(path);
+        self
+    }
+
+    pub fn accounts(mut self, accounts: usize) -> Self {
+        self.accounts = Some(accounts);
         self
     }
 
@@ -72,6 +78,8 @@ impl Anvil {
             &port.to_string(),
             "--dump-state",
             &state_dir.display().to_string(),
+            "--accounts",
+            &opt.accounts.unwrap_or(20).to_string(),
         ]);
 
         if let Some(block_time) = opt.block_time {
