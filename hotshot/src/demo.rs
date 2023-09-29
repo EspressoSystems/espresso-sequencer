@@ -100,14 +100,12 @@ impl State for SDemoState {
 impl TestableState for SDemoState {
     fn create_random_transaction(
         _state: Option<&Self>,
-        rng: &mut dyn rand::RngCore,
+        _rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <Self::BlockType as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
-        let mut bytes = vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)];
-        rng.fill_bytes(&mut bytes);
-        VIDTransaction(bytes)
+        VIDTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
     }
 }
 /// Implementation of [`NodeType`] for [`VDemoNode`]
