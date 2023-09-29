@@ -23,6 +23,7 @@ use hotshot_orchestrator::{
 use hotshot_task::task::FilterEvent;
 use hotshot_types::HotShotConfig;
 use hotshot_types::{
+    consensus::ConsensusMetricsValue,
     certificate::ViewSyncCertificate,
     data::{QuorumProposal, SequencingLeaf, TestableLeaf},
     event::{Event, EventType},
@@ -31,7 +32,6 @@ use hotshot_types::{
         election::{
             CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
         },
-        metrics::NoMetrics,
         network::CommunicationChannel,
         node_implementation::{
             CommitteeEx, ExchangesType, NodeType, QuorumEx, SequencingExchanges,
@@ -235,7 +235,7 @@ pub trait RunDA<
             MemoryStorage::empty(),
             exchanges,
             initializer,
-            NoMetrics::boxed(),
+            ConsensusMetricsValue::new(),
         )
         .await
         .expect("Could not init hotshot")

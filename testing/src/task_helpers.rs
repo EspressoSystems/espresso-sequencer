@@ -18,11 +18,10 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership, SignedCertificate},
-        metrics::NoMetrics,
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
         state::ConsensusTime,
-    },
+    }, consensus::ConsensusMetricsValue,
 };
 
 pub async fn build_system_handle(
@@ -81,7 +80,7 @@ pub async fn build_system_handle(
         storage,
         exchanges,
         initializer,
-        NoMetrics::boxed(),
+        ConsensusMetricsValue::new(),
     )
     .await
     .expect("Could not init hotshot")

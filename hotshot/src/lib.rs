@@ -57,7 +57,7 @@ use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKin
 
 use hotshot_types::{
     certificate::{DACertificate, ViewSyncCertificate},
-    consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
+    consensus::{BlockStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
     error::StorageSnafu,
     message::{
@@ -67,7 +67,6 @@ use hotshot_types::{
     traits::{
         consensus_api::{ConsensusSharedApi, SequencingConsensusApi},
         election::{ConsensusExchange, Membership, SignedCertificate},
-        metrics::Metrics,
         network::{CommunicationChannel, NetworkError},
         node_implementation::{
             ChannelMaps, CommitteeEx, ExchangesType, NodeType, SendToTasks, SequencingQuorumEx,
@@ -129,8 +128,8 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Sender for [`Event`]s
     event_sender: RwLock<Option<BroadcastSender<Event<TYPES, I::Leaf>>>>,
 
-    /// a reference to the metrics that the implementor is using.
-    _metrics: Box<dyn Metrics>,
+    /// the metrics that the implementor is using.
+    _metrics: Arc<ConsensusMetricsValue>,
 
     /// Transactions
     /// (this is shared btwn hotshot and `Consensus`)
@@ -179,13 +178,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
 
-        let consensus_metrics = Arc::new(ConsensusMetrics::new(
-            &*metrics.subgroup("consensus".to_string()),
-        ));
+        let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
 
         // insert to storage
@@ -226,7 +223,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
             high_qc: anchored_leaf.get_justify_qc(),
-            metrics: consensus_metrics,
+            metrics: consensus_metrics.clone(),
             invalid_qc: 0,
         };
         let consensus = Arc::new(RwLock::new(consensus));
@@ -244,7 +241,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage,
             exchanges: Arc::new(exchanges),
             event_sender: RwLock::default(),
-            _metrics: metrics,
+            _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
             output_event_stream: ChannelStream::new(),
         });
@@ -403,7 +400,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,

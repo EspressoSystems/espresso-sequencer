@@ -11,7 +11,7 @@ use crate::{
     data::LeafType,
     error::HotShotError,
     traits::{
-        metrics::{Counter, Gauge, Histogram, Metrics},
+        metrics::{Counter, Gauge, Histogram, Metrics, Label},
         node_implementation::NodeType,
     },
 };
@@ -19,7 +19,7 @@ use commit::{Commitment, Committable};
 use derivative::Derivative;
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tracing::error;
 
@@ -65,16 +65,19 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
 
     /// A reference to the metrics trait
     #[debug(skip)]
-    pub metrics: Arc<ConsensusMetrics>,
+    pub metrics: Arc<ConsensusMetricsValue>,
 
     /// Amount of invalid QCs we've seen since the last commit
     /// Used for metrics.  This resets to 0 on every decide event.
     pub invalid_qc: usize,
 }
 
-/// The metrics being collected for the consensus algorithm
-#[derive(Debug)]
-pub struct ConsensusMetrics {
+/// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
+#[derive(Clone, Debug)]
+pub struct ConsensusMetricsValue {
+    #[allow(dead_code)]
+    /// The values that are being tracked
+    pub values: Arc<Mutex<InnerConsensusMetrics>>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
     /// The duration to collect votes in a view (only applies when this insance is the leader)
@@ -115,11 +118,130 @@ pub struct ConsensusMetrics {
     pub failed_to_send_messages: Box<dyn Counter>,
 }
 
+/// The wrapper with a string name for the networking metrics
+#[derive(Clone, Debug)]
+pub struct ConsensusMetrics {
+    /// a prefix which tracks the name of the metric
+    prefix: String,
+    /// a map of values
+    values: Arc<Mutex<InnerConsensusMetrics>>,
+}
+
+/// the set of counters and gauges for the networking metrics
+#[derive(Clone, Debug, Default)]
+pub struct InnerConsensusMetrics {
+    /// All the counters of the networking metrics
+    counters: HashMap<String, usize>,
+    /// All the gauges of the networking metrics
+    gauges: HashMap<String, usize>,
+    /// All the histograms of the networking metrics
+    histograms: HashMap<String, Vec<f64>>,
+    /// All the labels of the networking metrics
+    labels: HashMap<String, String>,
+}
+
 impl ConsensusMetrics {
-    /// Create a new instance of this [`ConsensusMetrics`] struct, setting all the counters and gauges
-    #[must_use]
-    pub fn new(metrics: &dyn Metrics) -> Self {
+    /// For the creation and naming of gauge, counter, histogram and label.
+    pub fn sub(&self, name: String) -> Self {
+        let prefix = if self.prefix.is_empty() {
+            name
+        } else {
+            format!("{}-{name}", self.prefix)
+        };
         Self {
+            prefix,
+            values: Arc::clone(&self.values),
+        }
+    }
+}
+
+impl Metrics for ConsensusMetrics {
+    fn create_counter(&self, label: String, _unit_label: Option<String>) -> Box<dyn Counter> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_gauge(&self, label: String, _unit_label: Option<String>) -> Box<dyn Gauge> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_histogram(&self, label: String, _unit_label: Option<String>) -> Box<dyn Histogram> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_label(&self, label: String) -> Box<dyn Label> {
+        Box::new(self.sub(label))
+    }
+
+    fn subgroup(&self, subgroup_name: String) -> Box<dyn Metrics> {
+        Box::new(self.sub(subgroup_name))
+    }
+}
+
+impl Counter for ConsensusMetrics {
+    fn add(&self, amount: usize) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .counters
+            .entry(self.prefix.clone())
+            .or_default() += amount;
+    }
+}
+
+impl Gauge for ConsensusMetrics {
+    fn set(&self, amount: usize) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .gauges
+            .entry(self.prefix.clone())
+            .or_default() = amount;
+    }
+    fn update(&self, delta: i64) {
+        let mut values = self.values.lock().unwrap();
+        let value = values.gauges.entry(self.prefix.clone()).or_default();
+        let signed_value = i64::try_from(*value).unwrap_or(i64::MAX);
+        *value = usize::try_from(signed_value + delta).unwrap_or(0);
+    }
+}
+
+impl Histogram for ConsensusMetrics {
+    fn add_point(&self, point: f64) {
+        self.values
+            .lock()
+            .unwrap()
+            .histograms
+            .entry(self.prefix.clone())
+            .or_default()
+            .push(point);
+    }
+}
+
+impl Label for ConsensusMetrics {
+    fn set(&self, value: String) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .labels
+            .entry(self.prefix.clone())
+            .or_default() = value;
+    }
+}
+
+impl ConsensusMetricsValue {
+    /// Create a new instance of this [`ConsensusMetricsValue`] struct, setting all the counters and gauges
+    #[must_use]
+    pub fn new() -> Self {
+        let values = Arc::default();
+        let metrics: Box<dyn Metrics> = Box::new(ConsensusMetrics {
+            prefix: String::new(),
+            values: Arc::clone(&values),
+        });
+        Self {
+            values,
             current_view: metrics.create_gauge(String::from("current_view"), None),
             vote_validate_duration: metrics.create_histogram(
                 String::from("vote_validate_duration"),
@@ -163,6 +285,12 @@ impl ConsensusMetrics {
             number_of_timeouts: metrics
                 .create_counter(String::from("number_of_views_timed_out"), None),
         }
+    }
+}
+
+impl Default for ConsensusMetricsValue {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
