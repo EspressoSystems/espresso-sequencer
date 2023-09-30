@@ -309,7 +309,12 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             .or_insert_with(|| vec![(*highest_index, vote)]);
         self.view_sync_vote_index
             .entry(view_number)
-            .and_modify(|index| *index += 1);
+            .and_modify(|index| {
+                // Update the index if it's not just added.
+                if *index > 0 {
+                    *index += 1
+                }
+            });
         Ok(())
     }
     /// Stores a received proposal in the `WebServerState`
@@ -337,7 +342,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     ) -> Result<(), Error> {
         // Only keep proposal history for MAX_VIEWS number of view
         if self.view_sync_proposals.len() >= MAX_VIEWS {
-            self.view_sync_proposals.remove(&self.oldest_view_sync_vote);
+            self.view_sync_proposals
+                .remove(&self.oldest_view_sync_proposal);
             while !self
                 .view_sync_proposals
                 .contains_key(&self.oldest_view_sync_proposal)
@@ -355,7 +361,12 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             .or_insert_with(|| vec![(*highest_index, proposal)]);
         self.view_sync_proposal_index
             .entry(view_number)
-            .and_modify(|index| *index += 1);
+            .and_modify(|index| {
+                // Update the index if it's not just added.
+                if *index > 0 {
+                    *index += 1
+                }
+            });
         Ok(())
     }
 
