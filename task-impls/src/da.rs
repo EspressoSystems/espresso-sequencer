@@ -501,7 +501,7 @@ where
                 drop(consensus);
 
                 // ED This is taking a really long time to return, since is based on application
-                // 
+                //
                 let mut block = <TYPES as NodeType>::StateType::next_block(None);
                 let txns = self.wait_for_transactions(parent_leaf).await?;
 

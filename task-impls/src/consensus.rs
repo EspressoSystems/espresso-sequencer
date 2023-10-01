@@ -1213,8 +1213,8 @@ where
                     self.quorum_exchange.public_key().clone(),
                 ))
                 .await;
-            self.block = None; 
-            return true
+            self.block = None;
+            return true;
         }
         false
     }
