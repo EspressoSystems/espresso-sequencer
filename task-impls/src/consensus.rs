@@ -1093,6 +1093,7 @@ where
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
+                // ED Should make this a map to view
                 self.block = block;
             }
             _ => {}
