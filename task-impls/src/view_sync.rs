@@ -277,7 +277,7 @@ where
                         (certificate_internal, ViewSyncPhase::Finalize)
                     }
                 };
-                debug!(
+                error!(
                     "Received view sync cert for phase {:?}",
                     last_seen_certificate
                 );
@@ -483,7 +483,10 @@ where
                 }
 
                 self.num_timeouts_tracked += 1;
-                error!("Num timeouts tracked is {}", self.num_timeouts_tracked);
+                error!(
+                    "Num timeouts tracked is {}. View {} timed out",
+                    self.num_timeouts_tracked, *view_number
+                );
 
                 if self.num_timeouts_tracked > 2 {
                     error!("Too many timeouts!  This shouldn't happen");
@@ -491,6 +494,10 @@ where
 
                 // TODO ED Make this a configurable variable
                 if self.num_timeouts_tracked == 2 {
+                    error!(
+                        "Starting view sync protocol; attempting to sync on view {}",
+                        *view_number + 1
+                    );
                     // Start polling for view sync certificates
                     self.exchange
                         .network()
@@ -637,7 +644,7 @@ where
 
                 // Ignore certificate if it is for an older round
                 if certificate_internal.round < self.next_view {
-                    debug!("We're already in a higher round");
+                    error!("We're already in a higher round");
 
                     return (None, self);
                 }
@@ -654,9 +661,9 @@ where
                 // If certificate is not valid, return current state
                 if !self
                     .exchange
-                    .is_valid_view_sync_cert(message.data, certificate_internal.round)
+                    .is_valid_view_sync_cert(message.data.clone(), certificate_internal.round)
                 {
-                    error!("Not valid view sync cert!");
+                    error!("Not valid view sync cert! {:?}", message.data);
 
                     return (None, self);
                 }
