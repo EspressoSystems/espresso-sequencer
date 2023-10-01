@@ -584,7 +584,7 @@ where
                         // TODO ED Insert TC logic here
 
                         // Construct the leaf.
-                        let justify_qc = proposal.data.justify_qc;
+                        let justify_qc = proposal.clone().data.justify_qc;
                         let parent = if justify_qc.is_genesis() {
                             self.genesis_leaf().await
                         } else {
@@ -969,7 +969,6 @@ where
 
                 let mut consensus = self.consensus.write().await;
                 consensus.high_qc = qc.clone();
-
                 drop(consensus);
 
                 // View may have already been updated by replica if they voted for this QC
@@ -1167,6 +1166,12 @@ where
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: self.api.public_key().to_bytes(),
         };
+
+        let consensus = self.consensus.read().await;
+        consensus
+            .metrics
+            .last_synced_block_height
+            .set(usize::try_from(leaf.height).unwrap_or(0));
 
         let signature = self
             .quorum_exchange

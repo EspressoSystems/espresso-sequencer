@@ -78,6 +78,8 @@ pub struct ConsensusMetricsValue {
     #[allow(dead_code)]
     /// The values that are being tracked
     pub values: Arc<Mutex<InnerConsensusMetrics>>,
+    /// The number of last synced synced block height
+    pub last_synced_block_height: Box<dyn Gauge>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
     /// The duration to collect votes in a view (only applies when this insance is the leader)
@@ -114,8 +116,8 @@ pub struct ConsensusMetricsValue {
     pub direct_messages_received: Box<dyn Counter>,
     /// Total broadcast messages received
     pub broadcast_messages_received: Box<dyn Counter>,
-    /// Total number of messages which couldn't be sent
-    pub failed_to_send_messages: Box<dyn Counter>,
+    // Total number of messages which couldn't be sent
+    // pub failed_to_send_messages: Box<dyn Counter>,
 }
 
 /// The wrapper with a string name for the networking metrics
@@ -243,6 +245,8 @@ impl ConsensusMetricsValue {
         });
         Self {
             values,
+            last_synced_block_height: metrics
+                .create_gauge(String::from("last_synced_block_height"), None),
             current_view: metrics.create_gauge(String::from("current_view"), None),
             vote_validate_duration: metrics.create_histogram(
                 String::from("vote_validate_duration"),
@@ -281,8 +285,6 @@ impl ConsensusMetricsValue {
                 .create_counter(String::from("direct_messages_received"), None),
             broadcast_messages_received: metrics
                 .create_counter(String::from("broadcast_messages_received"), None),
-            failed_to_send_messages: metrics
-                .create_counter(String::from("failed_to_send_messages"), None),
             number_of_timeouts: metrics
                 .create_counter(String::from("number_of_views_timed_out"), None),
         }

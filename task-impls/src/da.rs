@@ -646,12 +646,6 @@ where
                 self.event_stream
                     .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
                     .await;
-                // if let Err(e) = self.api.send_da_broadcast(message.clone()).await {
-                //     consensus.metrics.failed_to_send_messages.add(1);
-                //     warn!(?message, ?e, "Could not broadcast leader proposal");
-                // } else {
-                //     consensus.metrics.outgoing_broadcast_messages.add(1);
-                // }
                 self.event_stream
                     .publish(SequencingHotShotEvent::DAProposalSend(
                         message.clone(),
