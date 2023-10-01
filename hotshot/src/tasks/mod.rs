@@ -352,7 +352,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: TYPES::BlockType::new(),
+        block: Some(TYPES::BlockType::new()),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),

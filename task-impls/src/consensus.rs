@@ -86,7 +86,7 @@ pub struct SequencingConsensusTaskState<
     pub cur_view: TYPES::Time,
 
     /// Current block submitted to DA
-    pub block: TYPES::BlockType,
+    pub block: Option<TYPES::BlockType>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -1094,7 +1094,7 @@ where
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
                 // ED Should make this a map to view
-                self.block = block;
+                self.block = Some(block);
             }
             _ => {}
         }
@@ -1102,7 +1102,7 @@ where
 
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
-        &self,
+        &mut self,
         _qc: QuorumCertificate<TYPES, I::Leaf>,
         view: TYPES::Time,
     ) -> bool {
@@ -1167,52 +1167,56 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = self.block.commit();
-        if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("Block is generic block! {:?}", self.cur_view);
+        if let Some(block) = &self.block {
+            let block_commitment = block.commit();
+            if block_commitment == TYPES::BlockType::new().commit() {
+                debug!("Block is generic block! {:?}", self.cur_view);
+            }
+
+            let leaf = SequencingLeaf {
+                view_number: view,
+                height: parent_leaf.height + 1,
+                justify_qc: consensus.high_qc.clone(),
+                parent_commitment: parent_leaf.commit(),
+                // Use the block commitment rather than the block, so that the replica can construct
+                // the same leaf with the commitment.
+                deltas: Right(block_commitment),
+                rejected: vec![],
+                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                proposer_id: self.api.public_key().to_bytes(),
+            };
+
+            let signature = self
+                .quorum_exchange
+                .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
+            // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
+            let proposal = QuorumProposal {
+                block_commitment,
+                view_number: leaf.view_number,
+                height: leaf.height,
+                justify_qc: consensus.high_qc.clone(),
+                // TODO ED Update this to be the actual TC if there is one
+                timeout_certificate: None,
+                proposer_id: leaf.proposer_id,
+                dac: None,
+            };
+
+            let message = Proposal {
+                data: proposal,
+                signature,
+            };
+            debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
+
+            self.event_stream
+                .publish(SequencingHotShotEvent::QuorumProposalSend(
+                    message,
+                    self.quorum_exchange.public_key().clone(),
+                ))
+                .await;
+            self.block = None; 
+            return true
         }
-
-        let leaf = SequencingLeaf {
-            view_number: view,
-            height: parent_leaf.height + 1,
-            justify_qc: consensus.high_qc.clone(),
-            parent_commitment: parent_leaf.commit(),
-            // Use the block commitment rather than the block, so that the replica can construct
-            // the same leaf with the commitment.
-            deltas: Right(block_commitment),
-            rejected: vec![],
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: self.api.public_key().to_bytes(),
-        };
-
-        let signature = self
-            .quorum_exchange
-            .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
-        // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
-        let proposal = QuorumProposal {
-            block_commitment,
-            view_number: leaf.view_number,
-            height: leaf.height,
-            justify_qc: consensus.high_qc.clone(),
-            // TODO ED Update this to be the actual TC if there is one
-            timeout_certificate: None,
-            proposer_id: leaf.proposer_id,
-            dac: None,
-        };
-
-        let message = Proposal {
-            data: proposal,
-            signature,
-        };
-        debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
-
-        self.event_stream
-            .publish(SequencingHotShotEvent::QuorumProposalSend(
-                message,
-                self.quorum_exchange.public_key().clone(),
-            ))
-            .await;
-        true
+        false
     }
 }
 
