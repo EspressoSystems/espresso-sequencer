@@ -11,7 +11,7 @@ services:
       - $ESPRESSO_SEQUENCER_L1_PORT:8545
       - $ESPRESSO_SEQUENCER_L1_WS_PORT:8546
     volumes:
-      - "./geth-config/genesis.json:/genesis.json"
+      - "./geth-config/genesis-default.json:/genesis.json"
       - "./geth-config/test-jwt-secret.txt:/config/test-jwt-secret.txt"
 
   orchestrator:
