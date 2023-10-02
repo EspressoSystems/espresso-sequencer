@@ -3,10 +3,7 @@ use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::{create_signer, HotShot};
 use ethers::{prelude::*, providers::Provider};
-use sequencer::{
-    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
-    init_static,
-};
+use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use url::Url;
 
 /// Commitment Task Command
@@ -68,8 +65,6 @@ pub struct Options {
 async fn main() {
     setup_logging();
     setup_backtrace();
-
-    init_static();
 
     let opt = Options::parse();
     let hotshot_address;

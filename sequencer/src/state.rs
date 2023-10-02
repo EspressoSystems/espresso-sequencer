@@ -1,12 +1,12 @@
 use crate::{
-    block::{Block, L1BlockInfo},
+    block::Block,
     chain_variables::ChainVariables,
+    l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     Error, Transaction,
 };
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable};
-use ethers::prelude::{BlockNumber, Http, Middleware, Provider};
-use futures::future::join;
+use ethers::prelude::BlockNumber;
 use hotshot::traits::State as HotShotState;
 use hotshot_types::{data::ViewNumber, traits::state::TestableState};
 use lazy_static::lazy_static;
@@ -30,19 +30,19 @@ impl HotShotState for State {
 
     fn next_block(_prev_state: Option<Self>) -> Self::BlockType {
         // The HotShot APIs should be redesigned so that
-        // * they are async and fallible
+        // * they are async
         // * new blocks being created have access to the application state, which in our case could
-        //   contain an already connected ETH client.
-        // For now, as a workaround, we will create a new ETH client based on environment variables
+        //   contain an already connected L1 client.
+        // For now, as a workaround, we will create a new L1 client based on environment variables
         // and use `block_on` to query it.
-        let (finalized, head) = if let Some(l1_provider) = &*L1_PROVIDER {
-            block_on(join(
-                get_finalized_l1_block(l1_provider),
-                get_l1_head(l1_provider),
-            ))
+        let L1Snapshot { finalized, head } = if let Some(l1_client) = &*L1_CLIENT {
+            block_on(l1_client.snapshot())
         } else {
-            // For unit testing, we may disable the L1 provider and use mock L1 blocks instead.
-            (None, 0)
+            // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
+            L1Snapshot {
+                finalized: None,
+                head: 0,
+            }
         };
 
         Block::from_l1(finalized, head)
@@ -65,100 +65,52 @@ impl HotShotState for State {
 }
 
 lazy_static! {
-    pub(crate) static ref L1_PROVIDER: Option<Provider<Http>> = {
-        let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_PROVIDER") else {
+    pub(crate) static ref L1_CLIENT: Option<L1Client> = {
+        let Ok(url) = env::var("ESPRESSO_SEQUENCER_L1_WS_PROVIDER") else {
             #[cfg(any(test, feature = "testing"))]
             {
-                tracing::warn!("ESPRESSO_SEQUENCER_L1_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
+                tracing::warn!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER is not set. Using mock L1 block numbers. This is suitable for testing but not production.");
                 return None;
             }
             #[cfg(not(any(test, feature = "testing")))]
             {
-                panic!("ESPRESSO_SEQUENCER_L1_PROVIDER must be set.");
+                panic!("ESPRESSO_SEQUENCER_L1_WS_PROVIDER must be set.");
             }
         };
-        Some(
-            url.try_into()
-                .expect("invalid ESPRESSO_SEQUENCER_L1_PROVIDER URL"),
-        )
-    };
-    // For testing with a pre-merge geth node that does not support the
-    // finalized block tag we allow setting an environment variable to use the
-    // latest block instead. This feature is used in the OP devnet which uses
-    // the docker images built in this repo. Therefore it's not hidden behind
-    // the testing flag.
-    pub(crate) static ref L1_BLOCK_TAG: BlockNumber = {
-        match env::var("ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG") {
-            Ok(val) => match val.as_str() {
+
+        let mut opt = L1ClientOptions::with_url(url.parse().unwrap());
+        // For testing with a pre-merge geth node that does not support the finalized block tag we
+        // allow setting an environment variable to use the latest block instead. This feature is
+        // used in the OP devnet which uses the docker images built in this repo. Therefore it's not
+        // hidden behind the testing flag.
+        if let Ok(val) = env::var("ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG") {
+            match val.as_str() {
                "y" | "yes" | "t"|  "true" | "on" | "1"  => {
                     tracing::warn!(
                         "ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG is set. Using latest block tag\
                          instead of finalized block tag. This is suitable for testing but not production."
                     );
-                    BlockNumber::Latest
+                    opt = opt.with_latest_block_tag();
                 },
-                "n" | "no" | "f" | "false" | "off" | "0" => BlockNumber::Finalized,
+                "n" | "no" | "f" | "false" | "off" | "0" => {}
                 _ => panic!("invalid ESPRESSO_SEQUENCER_L1_USE_LATEST_BLOCK_TAG value: {}", val)
-            },
-            Err(_) => BlockNumber::Finalized,
+            }
         }
+
+        block_on(async move {
+            // Starting the client can fail due to transient errors in the L1 RPC. This could make
+            // it very annoying to start up the sequencer node, so retry until we succeed.
+            loop {
+                match opt.clone().start().await {
+                    Ok(client) => break Some(client),
+                    Err(err) => {
+                        tracing::error!("failed to start L1 client, retrying: {err}");
+                        sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        })
     };
-}
-
-async fn get_l1_head(l1_provider: &Provider<Http>) -> u64 {
-    // This cannot fail, retry until we succeed.
-    loop {
-        let retry_delay = Duration::from_millis(100);
-        let chain_tip_number = match l1_provider.get_block_number().await {
-            Ok(number) => number,
-            Err(err) => {
-                tracing::error!("failed to get block number from L1 provider, retrying ({err})");
-                sleep(retry_delay).await;
-                continue;
-            }
-        };
-        tracing::debug!("L1 chain tip at block {chain_tip_number}");
-        break chain_tip_number.as_u64();
-    }
-}
-
-async fn get_finalized_l1_block(l1_provider: &Provider<Http>) -> Option<L1BlockInfo> {
-    // This cannot fail, retry until we succeed.
-    loop {
-        let retry_delay = Duration::from_millis(100);
-        let block = match l1_provider.get_block(*L1_BLOCK_TAG).await {
-            Ok(Some(block)) => block,
-            Ok(None) => {
-                // This can happen in rare cases where the L1 chain is very young and has not
-                // finalized a block yet. This is more common in testing and demo environments. In
-                // any case, we proceed with a null L1 block rather than wait for the L1 to finalize
-                // a block, which can take a long time.
-                return None;
-            }
-            Err(err) => {
-                tracing::error!("failed to get finalized block from L1 provider, retrying ({err})");
-                sleep(retry_delay).await;
-                continue;
-            }
-        };
-
-        // The block number always exists unless the block is pending. The finalized block cannot be
-        // pending, unless there has been a catastrophic reorg of the finalized prefix of the L1
-        // chain, so it is OK to panic if this happens.
-        let number = block.number.expect("finalized block has no number");
-        // Same for the hash.
-        let hash = block.hash.expect("finalized block has no hash");
-
-        tracing::debug!(
-            "proposing with finalized L1 block {number} (timestamp {}, hash {hash})",
-            block.timestamp,
-        );
-        break Some(L1BlockInfo {
-            number: number.as_u64(),
-            timestamp: block.timestamp,
-            hash,
-        });
-    }
 }
 
 // Required for TestableState
