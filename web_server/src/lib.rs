@@ -280,11 +280,11 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vote += 1;
             }
         }
-        let highest_index = self.vote_index.entry(view_number).or_insert(0);
+        let next_index = self.vote_index.entry(view_number).or_insert(0);
         self.votes
             .entry(view_number)
-            .and_modify(|current_votes| current_votes.push((*highest_index, vote.clone())))
-            .or_insert_with(|| vec![(*highest_index, vote)]);
+            .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
+            .or_insert_with(|| vec![(*next_index, vote)]);
         self.vote_index
             .entry(view_number)
             .and_modify(|index| *index += 1);
@@ -302,19 +302,14 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_vote += 1;
             }
         }
-        let highest_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
+        let next_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
         self.view_sync_votes
             .entry(view_number)
-            .and_modify(|current_votes| current_votes.push((*highest_index, vote.clone())))
-            .or_insert_with(|| vec![(*highest_index, vote)]);
+            .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
+            .or_insert_with(|| vec![(*next_index, vote)]);
         self.view_sync_vote_index
             .entry(view_number)
-            .and_modify(|index| {
-                // Update the index if it's not just added.
-                if *index > 0 {
-                    *index += 1
-                }
-            });
+            .and_modify(|index| *index += 1);
         Ok(())
     }
     /// Stores a received proposal in the `WebServerState`
@@ -351,22 +346,17 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_proposal += 1;
             }
         }
-        let highest_index = self
+        let next_index = self
             .view_sync_proposal_index
             .entry(view_number)
             .or_insert(0);
         self.view_sync_proposals
             .entry(view_number)
-            .and_modify(|current_props| current_props.push((*highest_index, proposal.clone())))
-            .or_insert_with(|| vec![(*highest_index, proposal)]);
+            .and_modify(|current_props| current_props.push((*next_index, proposal.clone())))
+            .or_insert_with(|| vec![(*next_index, proposal)]);
         self.view_sync_proposal_index
             .entry(view_number)
-            .and_modify(|index| {
-                // Update the index if it's not just added.
-                if *index > 0 {
-                    *index += 1
-                }
-            });
+            .and_modify(|index| *index += 1);
         Ok(())
     }
 
