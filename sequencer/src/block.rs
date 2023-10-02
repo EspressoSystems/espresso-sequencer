@@ -1,7 +1,9 @@
-use crate::{Error, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH};
+use crate::{
+    Error, L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId,
+    MAX_NMT_DEPTH,
+};
 use ark_serialize::CanonicalSerialize;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::prelude::{H256, U256};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
 use hotshot_types::traits::state::TestableBlock;
@@ -116,33 +118,6 @@ impl Block {
                 root: self.transaction_nmt.commitment().digest(),
             },
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
-pub struct L1BlockInfo {
-    pub number: u64,
-    pub timestamp: U256,
-    pub hash: H256,
-}
-
-impl Committable for L1BlockInfo {
-    fn commit(&self) -> Commitment<Self> {
-        let mut timestamp = [0u8; 32];
-        self.timestamp.to_little_endian(&mut timestamp);
-
-        RawCommitmentBuilder::new(&Self::tag())
-            .u64_field("number", self.number)
-            // `RawCommitmentBuilder` doesn't have a `u256_field` method, so we simulate it:
-            .constant_str("timestamp")
-            .fixed_size_bytes(&timestamp)
-            .constant_str("hash")
-            .fixed_size_bytes(&self.hash.0)
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "L1BLOCK".into()
     }
 }
 
