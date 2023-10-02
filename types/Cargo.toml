@@ -31,7 +31,7 @@ displaydoc = { version = "0.2.3", default-features = false }
 either = { workspace = true, features = ["serde"] }
 espresso-systems-common = { workspace = true }
 futures = { workspace = true }
-generic-array = "0.14.7"
+generic-array = { workspace = true }
 hex_fmt = "0.3.0"
 hotshot-constants = { path = "../constants" }
 hotshot-utils = { path = "../utils" }
