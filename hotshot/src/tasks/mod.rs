@@ -162,7 +162,7 @@ where
                         .expect("Failed to receive broadcast messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
@@ -182,7 +182,7 @@ where
                         .expect("Failed to receive direct messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
