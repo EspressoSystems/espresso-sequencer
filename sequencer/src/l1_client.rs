@@ -254,7 +254,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let test_duration = Duration::from_secs(10);
+        let test_duration = Duration::from_secs(30);
         let test_interval = Duration::from_millis(500);
         let anvil = AnvilOptions::default()
             .block_time(Duration::from_secs(1))
@@ -265,6 +265,9 @@ mod test {
             .await
             .unwrap();
         let anvil_client = Provider::try_from(anvil.url().to_string()).unwrap();
+
+        let mut prev_head = 0;
+        let mut prev_finalized: Option<L1BlockInfo> = None;
 
         let start = Instant::now();
         while start.elapsed() < test_duration {
@@ -305,6 +308,19 @@ mod test {
                 tracing::info!("no finalized L1 block yet");
                 assert_eq!(snapshot.finalized, None);
             }
+
+            // Check invariants: monitonically increasing L1 blocks.
+            assert!(snapshot.head >= prev_head);
+            if let Some(finalized) = snapshot.finalized {
+                if let Some(prev_finalized) = prev_finalized {
+                    assert!(finalized.number >= prev_finalized.number);
+                }
+            } else {
+                assert_eq!(prev_finalized, None);
+            }
+
+            prev_head = snapshot.head;
+            prev_finalized = snapshot.finalized;
 
             sleep(test_interval).await;
         }
