@@ -45,7 +45,7 @@ use std::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, info};
 
 /// Error returned by the consensus task
 #[derive(Snafu, Debug)]
@@ -456,13 +456,13 @@ where
                     }
                 }
             }
-            debug!(
+            info!(
                 "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
         }
-        debug!(
+        info!(
             "Could not vote because we don't have a proposal yet for view {}",
             *self.cur_view
         );
