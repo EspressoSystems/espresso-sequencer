@@ -4,6 +4,7 @@ mod chain_variables;
 pub mod hotshot_commitment;
 pub mod options;
 use url::Url;
+mod l1_client;
 mod state;
 pub mod transaction;
 mod vm;
@@ -52,12 +53,13 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::{Block, Header, L1BlockInfo};
+pub use block::{Block, Header};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
     examples::{Sha3Digest, Sha3Node},
     namespaced_merkle_tree::NMT,
 };
+pub use l1_client::L1BlockInfo;
 pub use options::Options;
 pub use state::State;
 pub use transaction::Transaction;
@@ -71,12 +73,11 @@ pub const MAX_NMT_DEPTH: usize = 10;
 pub type TransactionNMT = NMT<Transaction, Sha3Digest, U2, VmId, Sha3Node>;
 pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::NamespaceProof;
 
-/// Initialize the static variables for the commitment task
+/// Initialize the static variables for the sequencer
 ///
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
-    lazy_static::initialize(&state::L1_PROVIDER);
-    lazy_static::initialize(&state::L1_BLOCK_TAG);
+    lazy_static::initialize(&state::L1_CLIENT);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
