@@ -55,7 +55,7 @@ surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.2" }
 toml = "0.7"
 tracing = "0.1"
-typenum = { version = "1.15.0", default-features = false, features = [
+typenum = { version = "1.17.0", default-features = false, features = [
     "no_std",
 ] }
 url = "2.3"
