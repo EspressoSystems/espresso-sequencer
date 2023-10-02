@@ -45,7 +45,7 @@ use std::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument, info};
+use tracing::{debug, error, info, instrument};
 
 /// Error returned by the consensus task
 #[derive(Snafu, Debug)]
