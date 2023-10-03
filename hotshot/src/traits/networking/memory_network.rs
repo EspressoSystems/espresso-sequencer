@@ -264,7 +264,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
             .fetch_add(1, Ordering::Relaxed);
         let input = self.inner.broadcast_input.read().await;
         if let Some(input) = &*input {
-            self.inner.metrics.outgoing_message_count.add(1);
+            self.inner.metrics.outgoing_broadcast_message_count.add(1);
             input.send(message).await
         } else {
             Err(SendError(message))
@@ -278,7 +278,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
             .fetch_add(1, Ordering::Relaxed);
         let input = self.inner.direct_input.read().await;
         if let Some(input) = &*input {
-            self.inner.metrics.outgoing_message_count.add(1);
+            self.inner.metrics.outgoing_direct_message_count.add(1);
             input.send(message).await
         } else {
             Err(SendError(message))
@@ -355,7 +355,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             let res = node.broadcast_input(vec.clone()).await;
             match res {
                 Ok(_) => {
-                    self.inner.metrics.outgoing_message_count.add(1);
+                    self.inner.metrics.outgoing_broadcast_message_count.add(1);
                     trace!(?key, "Delivered message to remote");
                 }
                 Err(e) => {
@@ -380,7 +380,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             let res = node.direct_input(vec).await;
             match res {
                 Ok(_) => {
-                    self.inner.metrics.outgoing_message_count.add(1);
+                    self.inner.metrics.outgoing_direct_message_count.add(1);
                     trace!(?recipient, "Delivered message to remote");
                     Ok(())
                 }
@@ -423,7 +423,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_message_count.add(ret.len());
+                    self.inner.metrics.incoming_direct_message_count.add(ret.len());
                     Ok(ret)
                 }
                 TransmitType::Broadcast => {
@@ -438,7 +438,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_message_count.add(ret.len());
+                    self.inner.metrics.incoming_broadcast_message_count.add(ret.len());
                     Ok(ret)
                 }
             }

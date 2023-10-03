@@ -627,7 +627,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
         match self.inner.handle.gossip(topic, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_broadcast_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -675,7 +675,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
         match self.inner.handle.direct_request(pid, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_direct_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -706,7 +706,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner.metrics.incoming_direct_message_count.add(result.len());
                         Ok(result)
                     }
                     TransmitType::Broadcast => {
@@ -716,7 +716,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner.metrics.incoming_direct_message_count.add(result.len());
                         Ok(result)
                     }
                 }

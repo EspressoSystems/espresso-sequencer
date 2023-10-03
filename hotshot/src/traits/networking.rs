@@ -29,10 +29,14 @@ pub struct NetworkingMetricsValue {
     pub values: Arc<Mutex<InnerNetworkingMetrics>>,
     /// A [`Gauge`] which tracks how many peers are connected
     pub connected_peers: Box<dyn Gauge>,
-    /// A [`Counter`] which tracks how many messages have been received
-    pub incoming_message_count: Box<dyn Counter>,
-    /// A [`Counter`] which tracks how many messages have been send
-    pub outgoing_message_count: Box<dyn Counter>,
+    /// A [`Counter`] which tracks how many messages have been received directly
+    pub incoming_direct_message_count: Box<dyn Counter>,
+    /// A [`Counter`] which tracks how many messages have been received by broadcast
+    pub incoming_broadcast_message_count: Box<dyn Counter>,
+    /// A [`Counter`] which tracks how many messages have been send directly
+    pub outgoing_direct_message_count: Box<dyn Counter>,
+    /// A [`Counter`] which tracks how many messages have been send by broadcast
+    pub outgoing_broadcast_message_count: Box<dyn Counter>,
     /// A [`Counter`] which tracks how many messages failed to send
     pub message_failed_to_send: Box<dyn Counter>,
     // A [`Gauge`] which tracks how many connected entries there are in the gossipsub mesh
@@ -168,10 +172,14 @@ impl NetworkingMetricsValue {
         Self {
             values,
             connected_peers: metrics.create_gauge(String::from("connected_peers"), None),
-            incoming_message_count: metrics
-                .create_counter(String::from("incoming_message_count"), None),
-            outgoing_message_count: metrics
-                .create_counter(String::from("outgoing_message_count"), None),
+            incoming_direct_message_count: metrics
+                .create_counter(String::from("incoming_direct_message_count"), None),
+            incoming_broadcast_message_count: metrics
+                .create_counter(String::from("incoming_broadcast_message_count"), None),
+            outgoing_direct_message_count: metrics
+                .create_counter(String::from("outgoing_direct_message_count"), None),
+            outgoing_broadcast_message_count: metrics
+                .create_counter(String::from("outgoing_broadcast_message_count"), None),
             message_failed_to_send: metrics
                 .create_counter(String::from("message_failed_to_send"), None),
         }

@@ -3,6 +3,7 @@
 pub use crate::traits::node_implementation::ViewQueue;
 pub use crate::utils::{View, ViewInner};
 use async_compatibility_layer::async_primitives::subscribable_rwlock::SubscribableRwLock;
+use displaydoc::Display;
 use std::collections::HashSet;
 
 use crate::utils::Terminator;
@@ -82,14 +83,14 @@ pub struct ConsensusMetricsValue {
     pub last_synced_block_height: Box<dyn Gauge>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
-    /// The duration to collect votes in a view (only applies when this insance is the leader)
-    pub vote_validate_duration: Box<dyn Histogram>,
-    /// The duration we waited for txns before building the proposal
-    pub proposal_wait_duration: Box<dyn Histogram>,
-    /// The duration to build the proposal
-    pub proposal_build_duration: Box<dyn Histogram>,
-    /// The duration of each view, in seconds
-    pub view_duration: Box<dyn Histogram>,
+    // The duration to collect votes in a view (only applies when this insance is the leader)
+    // pub vote_validate_duration: Box<dyn Histogram>,
+    // The duration we waited for txns before building the proposal
+    // pub proposal_wait_duration: Box<dyn Histogram>,
+    // The duration to build the proposal
+    // pub proposal_build_duration: Box<dyn Histogram>,
+    // The duration of each view, in seconds
+    // pub view_duration: Box<dyn Histogram>,
     /// Number of views that are in-flight since the last committed view
     pub number_of_views_since_last_commit: Box<dyn Gauge>,
     /// Number of views that are in-flight since the last anchor view
@@ -108,16 +109,6 @@ pub struct ConsensusMetricsValue {
     pub outstanding_transactions_memory_size: Box<dyn Gauge>,
     /// Number of views that timed out
     pub number_of_timeouts: Box<dyn Counter>,
-    /// Total direct messages this node sent out
-    pub outgoing_direct_messages: Box<dyn Counter>,
-    /// Total broadcasts sent
-    pub outgoing_broadcast_messages: Box<dyn Counter>,
-    /// Total messages received
-    pub direct_messages_received: Box<dyn Counter>,
-    /// Total broadcast messages received
-    pub broadcast_messages_received: Box<dyn Counter>,
-    // Total number of messages which couldn't be sent
-    // pub failed_to_send_messages: Box<dyn Counter>,
 }
 
 /// The wrapper with a string name for the networking metrics
@@ -130,7 +121,7 @@ pub struct ConsensusMetrics {
 }
 
 /// the set of counters and gauges for the networking metrics
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Display)]
 pub struct InnerConsensusMetrics {
     /// All the counters of the networking metrics
     counters: HashMap<String, usize>,
@@ -248,20 +239,6 @@ impl ConsensusMetricsValue {
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
             current_view: metrics.create_gauge(String::from("current_view"), None),
-            vote_validate_duration: metrics.create_histogram(
-                String::from("vote_validate_duration"),
-                Some(String::from("seconds")),
-            ),
-            proposal_build_duration: metrics.create_histogram(
-                String::from("proposal_build_duration"),
-                Some(String::from("seconds")),
-            ),
-            proposal_wait_duration: metrics.create_histogram(
-                String::from("proposal_wait_duration"),
-                Some(String::from("seconds")),
-            ),
-            view_duration: metrics
-                .create_histogram(String::from("view_duration"), Some(String::from("seconds"))),
             number_of_views_since_last_commit: metrics
                 .create_gauge(String::from("number_of_views_since_last_commit"), None),
             number_of_views_per_decide_event: metrics
@@ -277,14 +254,6 @@ impl ConsensusMetricsValue {
                 .create_gauge(String::from("outstanding_transactions"), None),
             outstanding_transactions_memory_size: metrics
                 .create_gauge(String::from("outstanding_transactions_memory_size"), None),
-            outgoing_direct_messages: metrics
-                .create_counter(String::from("outgoing_direct_messages"), None),
-            outgoing_broadcast_messages: metrics
-                .create_counter(String::from("outgoing_broadcast_messages"), None),
-            direct_messages_received: metrics
-                .create_counter(String::from("direct_messages_received"), None),
-            broadcast_messages_received: metrics
-                .create_counter(String::from("broadcast_messages_received"), None),
             number_of_timeouts: metrics
                 .create_counter(String::from("number_of_views_timed_out"), None),
         }

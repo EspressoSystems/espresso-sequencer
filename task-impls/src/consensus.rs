@@ -537,6 +537,8 @@ where
                         .await;
                 }
             });
+            let consensus = self.consensus.read().await;
+            consensus.metrics.current_view.set(*self.cur_view as usize);
 
             return true;
         }
@@ -740,6 +742,10 @@ where
                                 // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                                 if new_decide_reached {
                                     let mut leaf = leaf.clone();
+                                    consensus
+                                    .metrics
+                                    .last_synced_block_height
+                                    .set(usize::try_from(leaf.height).unwrap_or(0));
 
                                     // If the full block is available for this leaf, include it in the leaf
                                     // chain that we send to the client.
@@ -1045,6 +1051,7 @@ where
                     .await;
 
                 debug!("View changed to {}", *new_view);
+                
 
                 // ED Need to update the view here?  What does otherwise?
                 // self.update_view(qc.view_number + 1).await;
@@ -1061,7 +1068,7 @@ where
                         "Failed to publish proposal on view change.  View = {:?}",
                         self.cur_view
                     );
-                }
+                } 
             }
             SequencingHotShotEvent::Timeout(view) => {
                 // The view sync module will handle updating views in the case of timeout
@@ -1074,6 +1081,8 @@ where
                     "We received a timeout event in the consensus task for view {}!",
                     *view
                 );
+                let consensus = self.consensus.read().await;
+                consensus.metrics.number_of_timeouts.add(1);
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
@@ -1166,12 +1175,6 @@ where
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: self.api.public_key().to_bytes(),
         };
-
-        let consensus = self.consensus.read().await;
-        consensus
-            .metrics
-            .last_synced_block_height
-            .set(usize::try_from(leaf.height).unwrap_or(0));
 
         let signature = self
             .quorum_exchange

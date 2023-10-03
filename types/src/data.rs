@@ -64,6 +64,10 @@ impl ConsensusTime for ViewNumber {
     fn new(n: u64) -> Self {
         Self(n)
     }
+    /// Returen the u64 format
+    fn get_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Committable for ViewNumber {
