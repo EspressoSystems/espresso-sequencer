@@ -3,10 +3,10 @@
 ### For each found transaction, display the VM block containing that transaction, including inclusion proofs for transactions in the Espresso block.
 
 import argparse
+from datetime import datetime
 import urllib.request
 import json
 import time
-import datetime
 import sys
 
 parser = argparse.ArgumentParser(
@@ -24,8 +24,12 @@ url = f"{args.url}/availability/block/"
 # Keep track of transaction to avoid showing duplicates
 payloads = set()
 
+# Find the current block number.
+res = urllib.request.urlopen(f"{args.url}/status/latest_block_height")
+block_number = int(res.read())
+print(f"scanning from block {block_number}")
+
 # Scan block by block
-block_number = 0
 while True:
     try:
         page = urllib.request.urlopen(f"{url}{block_number}")
@@ -44,6 +48,7 @@ while True:
         # We are Ok Espresso block found in page
         # If block contains transactions, extract Rollup id and find block with inclusion proofs for the rollup
 
+        received = datetime.now()
         block = page.read()
         struct = json.loads(block)
 
@@ -66,7 +71,7 @@ while True:
                 seen_vms.add(vm)
 
                 print(
-                    f"### New transactions for vm {vm} found on Espresso Block {block_number} ###"
+                    f"### New transactions for vm {vm} found on Espresso Block {block_number} received at {received} ###"
                 )
                 namespace_block_url = f"{url}{block_number}/namespace/{vm}"
                 print("GET " + namespace_block_url)
@@ -112,7 +117,7 @@ while True:
 
                 # transform unix timespamp to date
                 timestamp = vm_block_struct["header"]["metadata"]["timestamp"]
-                date = datetime.datetime.fromtimestamp(timestamp)
+                date = datetime.fromtimestamp(timestamp)
                 vm_block_struct["header"]["metadata"]["timestamp"] = str(date)
 
                 # print trimmed block
