@@ -224,7 +224,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             locked_view: anchored_leaf.get_view_number(),
             high_qc: anchored_leaf.get_justify_qc(),
             metrics: consensus_metrics.clone(),
-            invalid_qc: 0,
         };
         let consensus = Arc::new(RwLock::new(consensus));
         let txns = consensus.read().await.get_transactions();

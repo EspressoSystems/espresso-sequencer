@@ -67,10 +67,6 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// A reference to the metrics trait
     #[debug(skip)]
     pub metrics: Arc<ConsensusMetricsValue>,
-
-    /// Amount of invalid QCs we've seen since the last commit
-    /// Used for metrics.  This resets to 0 on every decide event.
-    pub invalid_qc: usize,
 }
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
@@ -81,6 +77,8 @@ pub struct ConsensusMetricsValue {
     pub values: Arc<Mutex<InnerConsensusMetrics>>,
     /// The number of last synced synced block height
     pub last_synced_block_height: Box<dyn Gauge>,
+    /// The number of last decided view
+    pub last_decided_view: Box<dyn Gauge>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
     // The duration to collect votes in a view (only applies when this insance is the leader)
@@ -91,17 +89,17 @@ pub struct ConsensusMetricsValue {
     // pub proposal_build_duration: Box<dyn Histogram>,
     // The duration of each view, in seconds
     // pub view_duration: Box<dyn Histogram>,
-    /// Number of views that are in-flight since the last committed view
-    pub number_of_views_since_last_commit: Box<dyn Gauge>,
+    /// Number of views that are in-flight since the last decided view
+    pub number_of_views_since_last_decide: Box<dyn Gauge>,
     /// Number of views that are in-flight since the last anchor view
     pub number_of_views_per_decide_event: Box<dyn Histogram>,
-    /// Number of invalid QCs between anchors
-    pub invalid_qc_views: Box<dyn Histogram>,
-    /// Number of views that were discarded since from one achor to the next
-    pub discarded_views_per_decide_event: Box<dyn Histogram>,
-    /// Views where no proposal was seen from one anchor to the next
-    pub empty_views_per_decide_event: Box<dyn Histogram>,
-    /// Number of rejected transactions
+    /// Number of invalid QCs we've seen since the last commit.
+    pub invalid_qc: Box<dyn Gauge>,
+    // Number of views that were discarded since from one anchor to the next
+    // pub discarded_views_per_decide_event: Box<dyn Histogram>,
+    // Views where no proposal was seen from one anchor to the next
+    // pub empty_views_per_decide_event: Box<dyn Histogram>,
+    /// Number of rejected transactions, it's more like duplicated transactions in current implementation
     pub rejected_transactions: Box<dyn Counter>,
     /// Number of outstanding transactions
     pub outstanding_transactions: Box<dyn Gauge>,
@@ -124,13 +122,13 @@ pub struct ConsensusMetrics {
 #[derive(Clone, Debug, Default, Display)]
 pub struct InnerConsensusMetrics {
     /// All the counters of the networking metrics
-    counters: HashMap<String, usize>,
+    pub counters: HashMap<String, usize>,
     /// All the gauges of the networking metrics
-    gauges: HashMap<String, usize>,
+    pub gauges: HashMap<String, usize>,
     /// All the histograms of the networking metrics
-    histograms: HashMap<String, Vec<f64>>,
+    pub histograms: HashMap<String, Vec<f64>>,
     /// All the labels of the networking metrics
-    labels: HashMap<String, String>,
+    pub labels: HashMap<String, String>,
 }
 
 impl ConsensusMetrics {
@@ -238,16 +236,14 @@ impl ConsensusMetricsValue {
             values,
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
+            last_decided_view: metrics.create_gauge(String::from("last_decided_view"), None),
             current_view: metrics.create_gauge(String::from("current_view"), None),
-            number_of_views_since_last_commit: metrics
-                .create_gauge(String::from("number_of_views_since_last_commit"), None),
+            number_of_views_since_last_decide: metrics
+                .create_gauge(String::from("number_of_views_since_last_decide"), None),
             number_of_views_per_decide_event: metrics
                 .create_histogram(String::from("number_of_views_per_decide_event"), None),
-            invalid_qc_views: metrics.create_histogram(String::from("invalid_qc_views"), None),
-            discarded_views_per_decide_event: metrics
-                .create_histogram(String::from("discarded_views_per_decide_event"), None),
-            empty_views_per_decide_event: metrics
-                .create_histogram(String::from("empty_views_per_decide_event"), None),
+            invalid_qc: metrics.
+                create_gauge(String::from("invalid_qc"), None),
             rejected_transactions: metrics
                 .create_counter(String::from("rejected_transactions"), None),
             outstanding_transactions: metrics

@@ -116,6 +116,9 @@ where
                                         warn!("Conversion failed: {e}. Using the max value.");
                                         i64::MAX
                                     }));
+                            } else {
+                                // it's more like the calculation of duplicate transactions
+                                consensus.metrics.rejected_transactions.add(1);
                             }
                         }
                     })
