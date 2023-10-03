@@ -39,5 +39,4 @@ jobs:
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
       - name: Audit
-        # See https://github.com/libp2p/rust-libp2p/issues/4327 for RUSTSEC-2022-0093
-        run: cargo audit --ignore RUSTSEC-2022-0093 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2023-0053 --ignore RUSTSEC-2023-0063
+        run: cargo audit --ignore RUSTSEC-2023-0063 --ignore RUSTSEC-2023-0065
