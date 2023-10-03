@@ -538,8 +538,14 @@ where
                 }
             });
             let consensus = self.consensus.read().await;
-            consensus.metrics.current_view.set(*self.cur_view as usize);
-            consensus.metrics.number_of_views_since_last_decide.set((*self.cur_view as usize) - (consensus.last_decided_view.get_u64() as usize));
+            consensus
+                .metrics
+                .current_view
+                .set(usize::try_from(self.cur_view.get_u64()).unwrap());
+            consensus.metrics.number_of_views_since_last_decide.set(
+                usize::try_from(self.cur_view.get_u64()).unwrap()
+                    - usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
+            );
 
             return true;
         }
@@ -824,10 +830,15 @@ where
                                 .await;
                             consensus.last_decided_view = new_anchor_view;
                             consensus.metrics.invalid_qc.set(0);
-                            consensus.metrics.last_decided_view.set(consensus.last_decided_view.get_u64() as usize);
-                            let cur_number_of_views_per_decide_event = *self.cur_view - consensus.last_decided_view.get_u64();
-                            consensus.metrics.number_of_views_per_decide_event.add_point(cur_number_of_views_per_decide_event as f64);
-                            
+                            consensus.metrics.last_decided_view.set(
+                                usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
+                            );
+                            let cur_number_of_views_per_decide_event =
+                                *self.cur_view - consensus.last_decided_view.get_u64();
+                            consensus
+                                .metrics
+                                .number_of_views_per_decide_event
+                                .add_point(cur_number_of_views_per_decide_event as f64);
 
                             // We're only storing the last QC. We could store more but we're realistically only going to retrieve the last one.
                             if let Err(e) = self.api.store_leaf(old_anchor_view, leaf).await {
@@ -1056,7 +1067,6 @@ where
                     .await;
 
                 debug!("View changed to {}", *new_view);
-                
 
                 // ED Need to update the view here?  What does otherwise?
                 // self.update_view(qc.view_number + 1).await;
@@ -1073,7 +1083,7 @@ where
                         "Failed to publish proposal on view change.  View = {:?}",
                         self.cur_view
                     );
-                } 
+                }
             }
             SequencingHotShotEvent::Timeout(view) => {
                 // The view sync module will handle updating views in the case of timeout

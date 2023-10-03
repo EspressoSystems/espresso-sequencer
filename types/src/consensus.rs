@@ -242,8 +242,7 @@ impl ConsensusMetricsValue {
                 .create_gauge(String::from("number_of_views_since_last_decide"), None),
             number_of_views_per_decide_event: metrics
                 .create_histogram(String::from("number_of_views_per_decide_event"), None),
-            invalid_qc: metrics.
-                create_gauge(String::from("invalid_qc"), None),
+            invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
             rejected_transactions: metrics
                 .create_counter(String::from("rejected_transactions"), None),
             outstanding_transactions: metrics

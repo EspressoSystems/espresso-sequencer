@@ -423,7 +423,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_direct_message_count.add(ret.len());
+                    self.inner
+                        .metrics
+                        .incoming_direct_message_count
+                        .add(ret.len());
                     Ok(ret)
                 }
                 TransmitType::Broadcast => {
@@ -438,7 +441,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_broadcast_message_count.add(ret.len());
+                    self.inner
+                        .metrics
+                        .incoming_broadcast_message_count
+                        .add(ret.len());
                     Ok(ret)
                 }
             }

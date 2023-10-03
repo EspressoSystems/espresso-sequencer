@@ -706,7 +706,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_direct_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                     TransmitType::Broadcast => {
@@ -716,7 +719,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_direct_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                 }
