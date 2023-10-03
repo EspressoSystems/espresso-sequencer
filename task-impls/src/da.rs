@@ -3,7 +3,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -18,7 +18,7 @@ use hotshot_types::vote::VoteType;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
-    data::{DAProposal, ProposalType, SequencingLeaf, VidDisperse, VidScheme, VidSchemeTrait},
+    data::{DAProposal, ProposalType, SequencingLeaf},
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
@@ -55,7 +55,7 @@ pub struct DATaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     /// The state's api
@@ -91,7 +91,7 @@ pub struct DAVoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     /// the committee exchange
@@ -103,7 +103,7 @@ pub struct DAVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            TYPES::BlockType,
+            Commitment<TYPES::BlockType>,
         >>::VoteAccumulator,
         DACertificate<TYPES>,
     >,
@@ -122,7 +122,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
 }
@@ -140,7 +140,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     match event {
@@ -252,7 +252,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     /// main task event handler
@@ -652,39 +652,6 @@ where
                         self.committee_exchange.public_key().clone(),
                     ))
                     .await;
-
-                debug!("Prepare VID shares");
-                {
-                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
-                    const NUM_STORAGE_NODES: usize = 10;
-                    /// TODO https://github.com/EspressoSystems/HotShot/issues/1693
-                    const NUM_CHUNKS: usize = 5;
-
-                    // TODO https://github.com/EspressoSystems/HotShot/issues/1686
-                    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-
-                    let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                    let message_bytes = bincode::serialize(&message).unwrap();
-                    let vid_disperse = vid.disperse(&message_bytes).unwrap();
-                    // TODO for now reuse the same block commitment and signature as DA committee
-                    // https://github.com/EspressoSystems/jellyfish/issues/369
-
-                    self.event_stream
-                        .publish(SequencingHotShotEvent::VidDisperseSend(
-                            Proposal {
-                                data: VidDisperse {
-                                    view_number: view,
-                                    commitment: block.commit(), // TODO GG should be vid_disperse.commit but that's a big change
-                                    shares: vid_disperse.shares,
-                                    common: vid_disperse.common,
-                                },
-                                signature: message.signature,
-                            },
-                            // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
-                            self.committee_exchange.public_key().clone(),
-                        ))
-                        .await;
-                }
             }
 
             SequencingHotShotEvent::Timeout(view) => {
@@ -735,7 +702,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
 }

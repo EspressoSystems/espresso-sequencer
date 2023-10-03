@@ -13,6 +13,8 @@ use std::{
     hash::Hash,
 };
 
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over the full contents of a block
 ///
 /// This trait encapsulates the behaviors that the transactions of a block must have in order to be
@@ -20,8 +22,6 @@ use std::{
 ///   * Must have a predefined error type ([`BlockPayload::Error`])
 ///   * Must have a transaction type that can be compared for equality, serialized and serialized,
 ///     sent between threads, and can have a hash produced of it
-///   * Must be able to be produced incrementally by appending transactions
-///     ([`add_transaction_raw`](BlockPayload::add_transaction_raw))
 ///   * Must be hashable
 pub trait BlockPayload:
     Serialize
@@ -42,23 +42,13 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
-    /// Construct an empty or genesis block.
-    fn new() -> Self;
-
-    /// Attempts to add a transaction, returning an Error if it would result in a structurally
-    /// invalid block
-    ///
-    /// # Errors
-    ///
-    /// Should return an error if this transaction leads to an invalid block
-    fn add_transaction_raw(&self, tx: &Self::Transaction)
-        -> std::result::Result<Self, Self::Error>;
-
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
@@ -76,6 +66,8 @@ pub mod dummy {
     pub use crate::traits::state::dummy::DummyState;
     use crate::traits::state::TestableBlock;
 
+    // TODO (Keyao) Investigate the use of DummyBlock.
+    // <https://github.com/EspressoSystems/HotShot/issues/1763>
     /// The dummy block
     #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
     pub struct DummyBlock {
@@ -132,19 +124,6 @@ pub mod dummy {
         type Error = DummyError;
 
         type Transaction = DummyTransaction;
-
-        fn new() -> Self {
-            Self { nonce: 0 }
-        }
-
-        fn add_transaction_raw(
-            &self,
-            _tx: &Self::Transaction,
-        ) -> std::result::Result<Self, Self::Error> {
-            Ok(Self {
-                nonce: self.nonce + 1,
-            })
-        }
 
         fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()

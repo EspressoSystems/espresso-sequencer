@@ -5,7 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::Committable;
+use commit::{Commitment, CommitmentBounds};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -27,6 +27,7 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
@@ -38,12 +39,15 @@ use hotshot_types::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
         },
         state::ConsensusTime,
-        BlockPayload,
     },
     vote::{ViewSyncData, VoteType},
 };
-use serde::Serialize;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -64,9 +68,9 @@ pub async fn add_network_message_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    COMMITTABLE: Committable + Serialize + Clone,
+    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -174,9 +178,9 @@ pub async fn add_network_event_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    COMMITTABLE: Committable + Serialize + Clone,
+    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITTABLE>,
+    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -246,7 +250,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType,
+    TYPES: NodeType<BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -263,14 +267,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     let consensus = handle.hotshot.get_consensus();
@@ -284,7 +288,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: TYPES::BlockType::new(),
+        block: VIDBlockPayload::genesis(),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
@@ -360,7 +364,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     // build the da task
@@ -412,7 +416,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -429,7 +433,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     // build the transactions task
@@ -441,6 +445,8 @@ where
         registry: registry.clone(),
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
+        transactions: Arc::default(),
+        seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
         committee_exchange: committee_exchange.into(),
         event_stream: event_stream.clone(),
@@ -501,7 +507,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     let api = HotShotSequencingConsensusApi {

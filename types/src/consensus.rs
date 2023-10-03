@@ -42,12 +42,6 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// last view had a successful decide event
     pub last_decided_view: TYPES::Time,
 
-    /// A list of undecided transactions
-    pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
-
-    /// A list of transactions we've seen decided, but didn't receive
-    pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
-
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
@@ -62,7 +56,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate<TYPES, LEAF>,
+    pub high_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// A reference to the metrics trait
     #[debug(skip)]
@@ -358,12 +352,6 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
                 }
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
-    }
-
-    /// return a clone of the internal storage of unclaimed transactions
-    #[must_use]
-    pub fn get_transactions(&self) -> Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>> {
-        self.transactions.clone()
     }
 
     /// Gets the last decided state

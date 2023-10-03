@@ -5,15 +5,13 @@
 //!
 //! These implementations are useful in examples and integration testing, but are not suitable for
 //! production use.
-use crate::{
-    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
-    traits::election::static_committee::{StaticElectionConfig, StaticVoteToken},
-};
+use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use either::Either;
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
+    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
     certificate::{AssembledSignature, QuorumCertificate},
     data::{
         fake_commitment, genesis_proposer_id, random_commitment, LeafType, SequencingLeaf,
@@ -72,10 +70,6 @@ impl State for SDemoState {
 
     type Time = ViewNumber;
 
-    fn next_block(_state: Option<Self>) -> Self::BlockType {
-        VIDBlockPayload(Vec::new())
-    }
-
     fn validate_block(&self, _block: &Self::BlockType, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
@@ -109,7 +103,9 @@ impl TestableState for SDemoState {
         _rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <Self::BlockType as BlockPayload>::Transaction {
-        VIDTransaction(vec![0; padding as usize])
+        /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
+        const RANDOM_TX_BASE_SIZE: usize = 8;
+        VIDTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
     }
 }
 /// Implementation of [`NodeType`] for [`VDemoNode`]
@@ -179,7 +175,7 @@ where
 /// Provides a random [`QuorumCertificate`]
 pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>(
     rng: &mut dyn rand::RngCore,
-) -> QuorumCertificate<TYPES, LEAF> {
+) -> QuorumCertificate<TYPES, Commitment<LEAF>> {
     QuorumCertificate {
         // block_commitment: random_commitment(rng),
         leaf_commitment: random_commitment(rng),

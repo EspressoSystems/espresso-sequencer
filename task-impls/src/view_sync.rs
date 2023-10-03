@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 use crate::events::SequencingHotShotEvent;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-use commit::Committable;
+use commit::{Commitment, Committable};
 use either::Either::{self, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -75,7 +75,7 @@ pub struct ViewSyncTaskState<
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Registry to register sub tasks
@@ -124,7 +124,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
 }
@@ -152,7 +152,7 @@ pub struct ViewSyncReplicaTaskState<
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Timeout for view sync rounds
@@ -195,7 +195,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
 }
@@ -228,7 +228,7 @@ pub struct ViewSyncRelayTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            ViewSyncData<TYPES>,
+            Commitment<ViewSyncData<TYPES>>,
         >>::VoteAccumulator,
         ViewSyncCertificate<TYPES>,
     >,
@@ -270,7 +270,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
@@ -620,7 +620,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Replica Task", level = "error")]
@@ -951,7 +951,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     /// Handles incoming events for the view sync relay task
