@@ -2,9 +2,7 @@
 
 pub use crate::traits::node_implementation::ViewQueue;
 pub use crate::utils::{View, ViewInner};
-use async_compatibility_layer::async_primitives::subscribable_rwlock::SubscribableRwLock;
 use displaydoc::Display;
-use std::collections::HashSet;
 
 use crate::utils::Terminator;
 use crate::{

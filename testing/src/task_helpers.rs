@@ -13,8 +13,8 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
-    consensus::ConsensusMetricsValue,
     block_impl::{VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
+    consensus::ConsensusMetricsValue,
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
