@@ -781,6 +781,7 @@ where
                             let phase = self.phase.clone();
                             async move {
                                 async_sleep(self.view_sync_timeout).await;
+                                error!("Vote sending timed out in ViewSyncCertificateRecv");
                                 stream
                                     .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
@@ -842,6 +843,7 @@ where
                             let stream = self.event_stream.clone();
                             async move {
                                 async_sleep(self.view_sync_timeout).await;
+                                error!("Vote sending timed out in ViewSyncTrigger");
                                 stream
                                     .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
@@ -912,6 +914,7 @@ where
                                 let stream = self.event_stream.clone();
                                 async move {
                                     async_sleep(self.view_sync_timeout).await;
+                                    error!("Vote sending timed out in ViewSyncTimeout");
                                     stream
                                         .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                             TYPES::Time::new(*self.next_view),
