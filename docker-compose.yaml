@@ -182,23 +182,3 @@ services:
         condition: service_healthy
       demo-l1-network:
         condition: service_healthy
-
-  example-rollup:
-    image: ghcr.io/espressosystems/espresso-sequencer/example-rollup:main
-    environment:
-      - ESPRESSO_SEQUENCER_URL
-      - ESPRESSO_DEMO_L1_HTTP_PROVIDER
-      - ESPRESSO_DEMO_L1_WS_PROVIDER
-      - ESPRESSO_DEMO_HOTSHOT_ADDRESS
-      - ESPRESSO_DEMO_ROLLUP_PORT
-      - ESPRESSO_DEMO_ROLLUP_MNEMONIC
-      - ESPRESSO_DEMO_ROLLUP_ACCOUNT_INDEX
-      - RUST_LOG
-      - RUST_LOG_FORMAT
-    ports:
-      - "$ESPRESSO_DEMO_ROLLUP_PORT:$ESPRESSO_DEMO_ROLLUP_PORT"
-    depends_on:
-      sequencer0:
-        condition: service_healthy
-      commitment-task:
-        condition: service_healthy

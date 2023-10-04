@@ -27,7 +27,7 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "web-server" "sequencer" "example-l2" "cli" "commitment-task"; do
+  for binary in "orchestrator" "web-server" "sequencer" "cli" "commitment-task"; do
     cp -v target/${TARGET}/release/$binary ${WORKDIR}/target/$ARCH/release
   done
 done
@@ -36,5 +36,4 @@ export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
-docker build -t ghcr.io/espressosystems/espresso-sequencer/example-rollup:main -f docker/example-rollup.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
