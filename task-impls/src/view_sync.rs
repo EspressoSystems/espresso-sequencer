@@ -299,19 +299,20 @@ where
                 }
 
                 // We do not have a replica task already running, so start one
-                let mut replica_state = ViewSyncReplicaTaskState {
-                    current_view: certificate_internal.round,
-                    next_view: certificate_internal.round,
-                    relay: 0,
-                    finalized: false,
-                    sent_view_change_event: false,
-                    phase: ViewSyncPhase::None,
-                    exchange: self.exchange.clone(),
-                    api: self.api.clone(),
-                    event_stream: self.event_stream.clone(),
-                    view_sync_timeout: self.view_sync_timeout,
-                    id: self.id,
-                };
+                let mut replica_state: ViewSyncReplicaTaskState<TYPES, I, A> =
+                    ViewSyncReplicaTaskState {
+                        current_view: certificate_internal.round,
+                        next_view: certificate_internal.round,
+                        relay: 0,
+                        finalized: false,
+                        sent_view_change_event: false,
+                        phase: ViewSyncPhase::None,
+                        exchange: self.exchange.clone(),
+                        api: self.api.clone(),
+                        event_stream: self.event_stream.clone(),
+                        view_sync_timeout: self.view_sync_timeout,
+                        id: self.id,
+                    };
 
                 let result = replica_state.handle_event(event.clone()).await;
 
@@ -514,10 +515,29 @@ where
                         .await;
                     // panic!("Starting view sync!");
                     // Spawn replica task
+                    let next_view = *view_number + 1;
+                    // Subscribe to the next view just in case there is progress being made
+                    self.exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(next_view))
+                        .await;
+
+                    self.exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(next_view))
+                        .await;
+
+                    if self.exchange.is_leader(TYPES::Time::new(next_view + 1)) {
+                        debug!("Polling for quorum votes for view {}", next_view);
+                        self.exchange
+                            .network()
+                            .inject_consensus_info(ConsensusIntentEvent::PollForVotes(next_view))
+                            .await;
+                    }
 
                     let mut replica_state = ViewSyncReplicaTaskState {
                         current_view: self.current_view,
-                        next_view: TYPES::Time::new(*view_number + 1),
+                        next_view: TYPES::Time::new(next_view),
                         relay: 0,
                         finalized: false,
                         sent_view_change_event: false,
