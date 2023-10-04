@@ -543,7 +543,8 @@ where
 
                     let name = format!(
                         "View Sync Replica Task: Attempting to enter view {:?} from view {:?}",
-                        self.next_view, self.current_view
+                        *view_number + 1,
+                        *view_number
                     );
 
                     let replica_handle_event = HandleEvent(Arc::new(
