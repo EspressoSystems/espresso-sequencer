@@ -604,7 +604,7 @@ where
                 match result {
                     Err(_) => {
                         // Fall through below to updating new block
-                        error!(
+                        debug!(
                             "propose_max_round_time passed, sending transactions we have so far"
                         );
                     }
