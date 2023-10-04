@@ -2,7 +2,8 @@ FROM ubuntu:jammy
 
 ARG TARGETARCH
 
-RUN apt-get update && apt-get install -y curl libcurl4
+RUN apt-get update && apt-get install -y curl libcurl4 tini
+ENTRYPOINT ["tini", "--"]
 
 COPY target/$TARGETARCH/release/commitment-task /bin/commitment-task
 RUN chmod +x /bin/commitment-task
