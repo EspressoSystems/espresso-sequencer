@@ -130,7 +130,8 @@
               contract-bindings = {
                 enable = true;
                 description = "Generate contract bindings";
-                entry = "cargo run --bin gen-bindings";
+                entry =
+                  "forge bind --crate-name contract-bindings && rm -rf ./contract-bindings && mv ./contracts/out/bindings ./contract-bindings";
                 types_or = [ "solidity" ];
                 pass_filenames = false;
               };

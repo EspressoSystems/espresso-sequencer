@@ -12,7 +12,9 @@ contract ExampleRollup {
     // `numVerifiedBlocks + count`.
     error NotYetSequenced(uint256 numVerifiedBlocks, uint64 count, uint256 blockHeight);
     // Attempted to verify an invalid proof.
-    error InvalidProof(uint256 firstBlock, uint256 lastBlock, uint256 oldState, uint256 newState, BatchProof proof);
+    error InvalidProof(
+        uint256 firstBlock, uint256 lastBlock, uint256 oldState, uint256 newState, BatchProof proof
+    );
     // Attempted to verify an empty chain of blocks;
     error NoBlocks();
 
@@ -65,7 +67,9 @@ contract ExampleRollup {
         return oldState == proof.oldState && newState == proof.newState;
     }
 
-    function verifyBlocks(uint64 count, uint256 nextStateCommitment, BatchProof calldata proof) external {
+    function verifyBlocks(uint64 count, uint256 nextStateCommitment, BatchProof calldata proof)
+        external
+    {
         if (count == 0) {
             revert NoBlocks();
         }

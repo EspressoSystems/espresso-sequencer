@@ -5,8 +5,7 @@ use async_std::task::sleep;
 use commit::Committable;
 use contract_bindings::{
     example_rollup::{self, ExampleRollup},
-    hot_shot::NewBlocksFilter,
-    HotShot,
+    hot_shot::{HotShot, NewBlocksFilter},
 };
 use ethers::prelude::*;
 use hotshot_query_service::availability::BlockHeaderQueryData;

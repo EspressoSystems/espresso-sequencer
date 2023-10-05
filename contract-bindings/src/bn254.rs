@@ -7,7 +7,7 @@ pub use bn254::*;
     clippy::upper_case_acronyms,
     clippy::type_complexity,
     dead_code,
-    non_camel_case_types
+    non_camel_case_types,
 )]
 pub mod bn254 {
     #[allow(deprecated)]
@@ -17,35 +17,47 @@ pub mod bn254 {
             functions: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("P_MOD"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("P_MOD"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint256"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("P_MOD"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("R_MOD"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("R_MOD"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint256"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("R_MOD"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
                 ),
             ]),
             events: ::std::collections::BTreeMap::new(),
@@ -55,18 +67,21 @@ pub mod bn254 {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static BN254_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
-        ::ethers::contract::Lazy::new(__abi);
+    pub static BN254_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
+        __abi,
+    );
     #[rustfmt::skip]
     const __BYTECODE: &[u8] = b"`\xD6a\09`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14a\0,WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\x046\x10`=W`\x005`\xE0\x1C\x80c\x1Dq.'\x14`BW\x80c\xDFnl\xB4\x14`zW[`\0\x80\xFD[`h\x7F0dNr\xE11\xA0)\xB8PE\xB6\x81\x81X]\x97\x81j\x91hq\xCA\x8D< \x8C\x16\xD8|\xFDG\x81V[`@Q\x90\x81R` \x01`@Q\x80\x91\x03\x90\xF3[`h\x7F0dNr\xE11\xA0)\xB8PE\xB6\x81\x81X](3\xE8Hy\xB9p\x91C\xE1\xF5\x93\xF0\0\0\x01\x81V\xFE\xA2dipfsX\"\x12 h\xCD\x870\x92:)\xBB\xA1\xE0S]\x96\x87'\x90\xA9\x91\xC65\x16\xF3\x13\xA6[Y\xAAK\x0E\xE2\x1D\x06dsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
-    pub static BN254_BYTECODE: ::ethers::core::types::Bytes =
-        ::ethers::core::types::Bytes::from_static(__BYTECODE);
+    pub static BN254_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
+        __BYTECODE,
+    );
     #[rustfmt::skip]
     const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\x046\x10`=W`\x005`\xE0\x1C\x80c\x1Dq.'\x14`BW\x80c\xDFnl\xB4\x14`zW[`\0\x80\xFD[`h\x7F0dNr\xE11\xA0)\xB8PE\xB6\x81\x81X]\x97\x81j\x91hq\xCA\x8D< \x8C\x16\xD8|\xFDG\x81V[`@Q\x90\x81R` \x01`@Q\x80\x91\x03\x90\xF3[`h\x7F0dNr\xE11\xA0)\xB8PE\xB6\x81\x81X](3\xE8Hy\xB9p\x91C\xE1\xF5\x93\xF0\0\0\x01\x81V\xFE\xA2dipfsX\"\x12 h\xCD\x870\x92:)\xBB\xA1\xE0S]\x96\x87'\x90\xA9\x91\xC65\x16\xF3\x13\xA6[Y\xAAK\x0E\xE2\x1D\x06dsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
-    pub static BN254_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
-        ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
+    pub static BN254_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
+        __DEPLOYED_BYTECODE,
+    );
     pub struct BN254<M>(::ethers::contract::Contract<M>);
     impl<M> ::core::clone::Clone for BN254<M> {
         fn clone(&self) -> Self {
@@ -86,9 +101,7 @@ pub mod bn254 {
     }
     impl<M> ::core::fmt::Debug for BN254<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(BN254))
-                .field(&self.address())
-                .finish()
+            f.debug_tuple(::core::stringify!(BN254)).field(&self.address()).finish()
         }
     }
     impl<M: ::ethers::providers::Middleware> BN254<M> {
@@ -98,11 +111,13 @@ pub mod bn254 {
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            Self(::ethers::contract::Contract::new(
-                address.into(),
-                BN254_ABI.clone(),
-                client,
-            ))
+            Self(
+                ::ethers::contract::Contract::new(
+                    address.into(),
+                    BN254_ABI.clone(),
+                    client,
+                ),
+            )
         }
         /// Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it.
         /// Returns a new instance of a deployer that returns an instance of this contract after sending the transaction
@@ -160,7 +175,8 @@ pub mod bn254 {
                 .expect("method not found (this should never happen)")
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BN254<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+    for BN254<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -174,7 +190,7 @@ pub mod bn254 {
         Debug,
         PartialEq,
         Eq,
-        Hash,
+        Hash
     )]
     #[ethcall(name = "P_MOD", abi = "P_MOD()")]
     pub struct PModCall;
@@ -187,7 +203,7 @@ pub mod bn254 {
         Debug,
         PartialEq,
         Eq,
-        Hash,
+        Hash
     )]
     #[ethcall(name = "R_MOD", abi = "R_MOD()")]
     pub struct RModCall;
@@ -202,10 +218,12 @@ pub mod bn254 {
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
-            if let Ok(decoded) = <PModCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+            if let Ok(decoded)
+                = <PModCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::PMod(decoded));
             }
-            if let Ok(decoded) = <RModCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+            if let Ok(decoded)
+                = <RModCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::RMod(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
@@ -246,7 +264,7 @@ pub mod bn254 {
         Debug,
         PartialEq,
         Eq,
-        Hash,
+        Hash
     )]
     pub struct PModReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `R_MOD` function with signature `R_MOD()` and selector `0xdf6e6cb4`
@@ -258,7 +276,7 @@ pub mod bn254 {
         Debug,
         PartialEq,
         Eq,
-        Hash,
+        Hash
     )]
     pub struct RModReturn(pub ::ethers::core::types::U256);
 }

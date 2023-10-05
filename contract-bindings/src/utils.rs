@@ -1,4 +1,4 @@
-pub use bls_sig::*;
+pub use utils::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -7,75 +7,72 @@ pub use bls_sig::*;
     clippy::upper_case_acronyms,
     clippy::type_complexity,
     dead_code,
-    non_camel_case_types
+    non_camel_case_types,
 )]
-pub mod bls_sig {
+pub mod utils {
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
             constructor: ::core::option::Option::None,
             functions: ::std::collections::BTreeMap::new(),
             events: ::std::collections::BTreeMap::new(),
-            errors: ::core::convert::From::from([(
-                ::std::borrow::ToOwned::to_owned("BLSSigVerificationFailed"),
-                ::std::vec![::ethers::core::abi::ethabi::AbiError {
-                    name: ::std::borrow::ToOwned::to_owned("BLSSigVerificationFailed",),
-                    inputs: ::std::vec![],
-                },],
-            )]),
+            errors: ::std::collections::BTreeMap::new(),
             receive: false,
             fallback: false,
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static BLSSIG_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
-        ::ethers::contract::Lazy::new(__abi);
+    pub static UTILS_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
+        __abi,
+    );
     #[rustfmt::skip]
-    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 \xA6\xBF\xDA\xFE1\xB9\xCD\xBD\x99\xF5\xF71\x02Tn\x9C\xDF\x9Cj\xB3\xD4\xA9U<\xC0\xFB\x91\xFA%.w\xFCdsolcC\0\x08\x14\x003";
+    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 EB\x16\xD8\x0FI\x96\xAC\xEC\xC2yG#\xE8\xDF\xEA{\xA4\x1F\xA3\x19\xF2\0!=G7\xDA\xF6\xA0\xC7#dsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
-    pub static BLSSIG_BYTECODE: ::ethers::core::types::Bytes =
-        ::ethers::core::types::Bytes::from_static(__BYTECODE);
+    pub static UTILS_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
+        __BYTECODE,
+    );
     #[rustfmt::skip]
-    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 \xA6\xBF\xDA\xFE1\xB9\xCD\xBD\x99\xF5\xF71\x02Tn\x9C\xDF\x9Cj\xB3\xD4\xA9U<\xC0\xFB\x91\xFA%.w\xFCdsolcC\0\x08\x14\x003";
+    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 EB\x16\xD8\x0FI\x96\xAC\xEC\xC2yG#\xE8\xDF\xEA{\xA4\x1F\xA3\x19\xF2\0!=G7\xDA\xF6\xA0\xC7#dsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
-    pub static BLSSIG_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
-        ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
-    pub struct BLSSig<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for BLSSig<M> {
+    pub static UTILS_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
+        __DEPLOYED_BYTECODE,
+    );
+    pub struct Utils<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for Utils<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for BLSSig<M> {
+    impl<M> ::core::ops::Deref for Utils<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for BLSSig<M> {
+    impl<M> ::core::ops::DerefMut for Utils<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for BLSSig<M> {
+    impl<M> ::core::fmt::Debug for Utils<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(BLSSig))
-                .field(&self.address())
-                .finish()
+            f.debug_tuple(::core::stringify!(Utils)).field(&self.address()).finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> BLSSig<M> {
+    impl<M: ::ethers::providers::Middleware> Utils<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            Self(::ethers::contract::Contract::new(
-                address.into(),
-                BLSSIG_ABI.clone(),
-                client,
-            ))
+            Self(
+                ::ethers::contract::Contract::new(
+                    address.into(),
+                    UTILS_ABI.clone(),
+                    client,
+                ),
+            )
         }
         /// Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it.
         /// Returns a new instance of a deployer that returns an instance of this contract after sending the transaction
@@ -108,8 +105,8 @@ pub mod bls_sig {
             ::ethers::contract::ContractError<M>,
         > {
             let factory = ::ethers::contract::ContractFactory::new(
-                BLSSIG_ABI.clone(),
-                BLSSIG_BYTECODE.clone().into(),
+                UTILS_ABI.clone(),
+                UTILS_BYTECODE.clone().into(),
                 client,
             );
             let deployer = factory.deploy(constructor_args)?;
@@ -117,22 +114,10 @@ pub mod bls_sig {
             Ok(deployer)
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BLSSig<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+    for Utils<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
     }
-    ///Custom Error type `BLSSigVerificationFailed` with signature `BLSSigVerificationFailed()` and selector `0x0ced3e50`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[etherror(name = "BLSSigVerificationFailed", abi = "BLSSigVerificationFailed()")]
-    pub struct BLSSigVerificationFailed;
 }

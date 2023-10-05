@@ -1,7 +1,7 @@
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use clap::Parser;
-use contract_bindings::{hot_shot::Qc, HotShot};
+use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{future::try_join_all, stream::StreamExt};
 use hotshot_query_service::{

@@ -1,7 +1,7 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
-use contract_bindings::{create_signer, HotShot};
+use contract_bindings::{create_signer, hot_shot::HotShot};
 use ethers::{prelude::*, providers::Provider};
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use url::Url;

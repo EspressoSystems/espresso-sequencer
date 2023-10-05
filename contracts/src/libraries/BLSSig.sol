@@ -2,11 +2,12 @@
 
 pragma solidity ^0.8.0;
 
-import {BN254} from "bn254/BN254.sol";
-import {BytesLib} from "solidity-bytes-utils/BytesLib.sol";
+import { BN254 } from "bn254/BN254.sol";
+import { BytesLib } from "solidity-bytes-utils/BytesLib.sol";
 
 /// @dev test top
-/// This library implements the verification of the BLS signature scheme over the BN254 curve following
+/// This library implements the verification of the BLS signature scheme over the BN254 curve
+/// following
 /// the rust implementation at
 // solhint-disable-next-line
 /// https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs
@@ -22,7 +23,8 @@ library BLSSig {
         return r;
     }
 
-    /// @dev Takes a sequence of bytes and turn in into another sequence of bytes with fixed size. Equivalent of
+    /// @dev Takes a sequence of bytes and turn in into another sequence of bytes with fixed size.
+    /// Equivalent of
     // solhint-disable-next-line
     /// https://github.com/arkworks-rs/algebra/blob/1f7b3c6b215e98fa3130b39d2967f6b43df41e04/ff/src/fields/field_hashers/expander/mod.rs#L37
     /// @param message message to be "expanded"
@@ -107,7 +109,8 @@ library BLSSig {
         }
 
         // solhint-disable-next-line
-        // Following https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
+        // Following
+        // https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
 
         // Do the split
         uint256 numBytesDirectlyToConvert = 31; // Fixed for Fq
@@ -135,7 +138,8 @@ library BLSSig {
         return res;
     }
 
-    /// @dev Hash a sequence of bytes to a group element in BN254.G_1. We use the hash-and-pray algorithm for now.
+    /// @dev Hash a sequence of bytes to a group element in BN254.G_1. We use the hash-and-pray
+    /// algorithm for now.
     /// Rust implementation can be found at
     // solhint-disable-next-line
     /// https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs#L318
@@ -173,7 +177,10 @@ library BLSSig {
     /// @param message message to check the signature against
     /// @param sig signature represented as a point in BN254.G_1
     /// @param pk public key represented as a point in BN254.G_2
-    function verifyBlsSig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk) internal view {
+    function verifyBlsSig(bytes memory message, BN254.G1Point memory sig, BN254.G2Point memory pk)
+        internal
+        view
+    {
         // Check the signature is a valid G1 point
         // Note: checking pk belong to G2 is not possible in practice
         // https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
@@ -181,7 +188,8 @@ library BLSSig {
 
         // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_"
         // solhint-disable-next-line
-        // See https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
+        // See
+        // https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
         bytes memory csidSuffix = "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
 
         bytes memory input = bytes.concat(message, csidSuffix);

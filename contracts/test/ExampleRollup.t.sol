@@ -47,8 +47,12 @@ contract ExampleRollupTest is Test {
         uint256 invalidState = 523124;
 
         // Send an invalid state update to the rollup
-        ExampleRollup.BatchProof memory proof =
-            ExampleRollup.BatchProof({firstBlock: qcs[0].blockCommitment, lastBlock: 0, oldState: 0, newState: 523123});
+        ExampleRollup.BatchProof memory proof = ExampleRollup.BatchProof({
+            firstBlock: qcs[0].blockCommitment,
+            lastBlock: 0,
+            oldState: 0,
+            newState: 523123
+        });
         vm.expectRevert(
             abi.encodeWithSelector(
                 ExampleRollup.InvalidProof.selector,

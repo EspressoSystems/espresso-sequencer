@@ -21,3 +21,8 @@ sepolia = "${SEPOLIA_RPC_URL}"
 
 [etherscan]
 sepolia = { key = "${ETHERSCAN_API_KEY}" }
+
+[fmt]
+line_length=100
+bracket_spacing=true
+wrap_comments=true
