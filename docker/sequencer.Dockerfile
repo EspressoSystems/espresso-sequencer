@@ -3,8 +3,9 @@ FROM ubuntu:jammy
 ARG TARGETARCH
 
 RUN apt-get update \
-    &&  apt-get install -y curl wait-for-it \
+    &&  apt-get install -y curl wait-for-it tini \
     &&  rm -rf /var/lib/apt/lists/*
+ENTRYPOINT ["tini", "--"]
 
 COPY target/$TARGETARCH/release/sequencer /bin/sequencer
 RUN chmod +x /bin/sequencer
