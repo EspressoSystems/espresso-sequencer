@@ -592,7 +592,7 @@ where
                         let leaf;
 
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                        if let Some(parent) = parent {
+                        if let Some(parent) = parent.clone() {
                             let message;
                             leaf = SequencingLeaf {
                                 view_number: view,
@@ -736,12 +736,13 @@ where
                         let mut new_decide_qc = None;
                         let mut leaf_views = Vec::new();
                         let mut included_txns = HashSet::new();
-                        let old_anchor_view = consensus.last_decided_view;
-                        let parent_view = leaf.justify_qc.view_number;
-                        let mut current_chain_length = 0usize;
-                        if parent_view + 1 == view {
-                            current_chain_length += 1;
-                            if let Err(e) = consensus.visit_leaf_ancestors(
+                        if parent.is_some() {
+                            let old_anchor_view = consensus.last_decided_view;
+                            let parent_view = leaf.justify_qc.view_number;
+                            let mut current_chain_length = 0usize;
+                            if parent_view + 1 == view {
+                                current_chain_length += 1;
+                                if let Err(e) = consensus.visit_leaf_ancestors(
                                     parent_view,
                                     Terminator::Exclusive(old_anchor_view),
                                     true,
@@ -800,6 +801,7 @@ where
                                         event: EventType::Error { error: e.into() },
                                     }).await;
                                 }
+                            }
                         }
 
                         let included_txns_set: HashSet<_> = if new_decide_reached {
@@ -904,7 +906,7 @@ where
                         drop(consensus);
                         if should_propose {
                             debug!(
-                                "Attempting to publish proposal after voting; now in view: {}",
+                                "Attempting to publish proposal before voting; now in view: {}",
                                 *new_view
                             );
                             self.publish_proposal_if_able(qc.clone(), qc.view_number + 1)
