@@ -342,17 +342,12 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// The contents of a vote on `commit`.
     fn vote_data(&self, commit: Commitment<Self::Commitment>) -> VoteData<Self::Commitment>;
 
-    /// Validate a QC.
-    fn is_valid_cert(&self, qc: &Self::Certificate, commit: Commitment<Self::Commitment>) -> bool {
+    /// Validate a certificate.
+    fn is_valid_cert(&self, qc: &Self::Certificate) -> bool {
         if qc.is_genesis() && qc.view_number() == TYPES::Time::genesis() {
             return true;
         }
         let leaf_commitment = qc.leaf_commitment();
-
-        if leaf_commitment != commit {
-            error!("Leaf commitment does not equal parent commitment");
-            return false;
-        }
 
         match qc.signatures() {
             AssembledSignature::DA(qc) => {
