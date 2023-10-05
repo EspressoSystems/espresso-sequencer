@@ -339,8 +339,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -408,8 +409,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -706,12 +708,14 @@ where
                             // Allow missing parent so we can update the state, but we won't
                             // vote in this case.
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.data.view_number,
                             );
 
                             if invalid {
                                 error!("Invalid justify_qc in proposal {:?}", justify_qc.clone());
+                                return;
                             }
                             leaf = SequencingLeaf {
                                 view_number: view,
@@ -723,6 +727,28 @@ where
                                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                                 proposer_id: sender.to_bytes(),
                             };
+                            if !view_leader_key
+                                .validate(&proposal.signature, leaf.commit().as_ref())
+                            {
+                                error!(?proposal.signature, "Could not verify proposal.");
+                                return;
+                            }
+
+                            let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                            consensus.state_map.insert(
+                                view,
+                                View {
+                                    view_inner: ViewInner::Leaf {
+                                        leaf: leaf.commit(),
+                                    },
+                                },
+                            );
+                            consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                            drop(consensus);
+                            // The valid QC and signature on the proposal is evidence we can go to the next view
+                            // even though we can't vote in this round because we missed the last proposal.
+                            self.update_view(TYPES::Time::new(*view + 1)).await;
+                            return;
                         }
 
                         // TODO (Keyao) Update consensus state only if all verifications pass.

@@ -516,24 +516,24 @@ where
                     // panic!("Starting view sync!");
                     // Spawn replica task
                     let next_view = *view_number + 1;
+                    // Subscribe to the view after we are leader since we know we won't propose in the next view if we are leader.
+                    let subscribe_view = if self.exchange.is_leader(TYPES::Time::new(next_view)) {
+                        next_view + 1
+                    } else {
+                        next_view
+                    };
                     // Subscribe to the next view just in case there is progress being made
                     self.exchange
                         .network()
-                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(next_view))
+                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
+                            subscribe_view,
+                        ))
                         .await;
 
                     self.exchange
                         .network()
-                        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(next_view))
+                        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
                         .await;
-
-                    if self.exchange.is_leader(TYPES::Time::new(next_view + 1)) {
-                        debug!("Polling for quorum votes for view {}", next_view);
-                        self.exchange
-                            .network()
-                            .inject_consensus_info(ConsensusIntentEvent::PollForVotes(next_view))
-                            .await;
-                    }
 
                     let mut replica_state = ViewSyncReplicaTaskState {
                         current_view: self.current_view,
