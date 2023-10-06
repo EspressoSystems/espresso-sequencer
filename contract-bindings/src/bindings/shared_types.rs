@@ -30,18 +30,3 @@ pub struct G2Point {
     pub y_0: ::ethers::core::types::U256,
     pub y_1: ::ethers::core::types::U256,
 }
-///`FuzzSelector(address,bytes4[])`
-#[derive(
-    Clone,
-    ::ethers::contract::EthAbiType,
-    ::ethers::contract::EthAbiCodec,
-    Default,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-)]
-pub struct FuzzSelector {
-    pub addr: ::ethers::core::types::Address,
-    pub selectors: ::std::vec::Vec<[u8; 4]>,
-}
