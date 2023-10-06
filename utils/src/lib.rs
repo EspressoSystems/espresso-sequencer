@@ -24,6 +24,7 @@ pub struct AnvilOptions {
     port: Option<u16>,
     load_state: Option<PathBuf>,
     accounts: Option<usize>,
+    chain_id: Option<u64>,
 }
 
 impl AnvilOptions {
@@ -44,6 +45,11 @@ impl AnvilOptions {
 
     pub fn accounts(mut self, accounts: usize) -> Self {
         self.accounts = Some(accounts);
+        self
+    }
+
+    pub fn chain_id(mut self, id: u64) -> Self {
+        self.chain_id = Some(id);
         self
     }
 
@@ -91,6 +97,9 @@ impl Anvil {
         if let Some(load_state) = &opt.load_state {
             command.args(["--load-state", &load_state.display().to_string()]);
         }
+        if let Some(chain_id) = opt.chain_id {
+            command.args(["--chain-id", &chain_id.to_string()]);
+        }
 
         tracing::info!("Starting Anvil: {:?}", &command);
 
@@ -135,6 +144,10 @@ impl Anvil {
         // If `opt` does not explicitly override the URL, use the current one.
         if opt.port.is_none() {
             opt.port = self.url.port();
+        }
+        // If `opt` does not explicitly override the chain ID, use the current one.
+        if opt.chain_id.is_none() {
+            opt.chain_id = self.opt.chain_id;
         }
 
         // Load state from the file where we just dumped state.
