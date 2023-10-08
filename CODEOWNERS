@@ -2,8 +2,8 @@
 # later match takes precedence, they will be requested for review when someone
 # opens a pull request.
 
-*       @nomaxg @philippecamacho @sveitser @jbearer
+*       @nomaxg @philippecamacho @ImJeremyHe @sveitser @jbearer
 
 #  Dependabot PRs
-*.toml  @nomaxg @philippecamacho @sveitser
-*.lock  @nomaxg @philippecamacho @sveitser
+*.toml  @nomaxg @philippecamacho @ImJeremyHe @sveitser
+*.lock  @nomaxg @philippecamacho @ImJeremyHe @sveitser
