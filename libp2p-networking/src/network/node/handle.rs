@@ -112,7 +112,6 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
 
         let kill_switch = Mutex::new(Some(kill_switch));
         let recv_kill = Mutex::new(Some(recv_kill));
-
         Ok(NetworkNodeHandle {
             network_config: config,
             state: std::sync::Arc::default(),
@@ -281,6 +280,23 @@ impl<S> NetworkNodeHandle<S> {
         let req = ClientRequest::LookupPeer(peer_id, s);
         self.send_request(req).await?;
         r.await.map_err(|_| NetworkNodeHandleError::RecvError)
+    }
+
+    /// Looks up a node's `PeerId` and attempts to validate routing
+    /// # Errors
+    /// if the peer was unable to be looked up (did not provide a response, DNE)
+    pub async fn lookup_node<V: for<'a> Deserialize<'a> + Serialize>(
+        &self,
+        key: V,
+        dht_timeout: Duration,
+    ) -> Result<PeerId, NetworkNodeHandleError> {
+        // get record (from DHT)
+        let pid = self.get_record_timeout::<PeerId>(&key, dht_timeout).await?;
+
+        // pid lookup for routing
+        self.lookup_pid(pid).await?;
+
+        Ok(pid)
     }
 
     /// Insert a record into the kademlia DHT

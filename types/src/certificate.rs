@@ -1,22 +1,29 @@
 //! Provides two types of cerrtificates and their accumulators.
 
+use crate::vote::DAVoteAccumulator;
+use crate::vote::QuorumVote;
+use crate::vote::QuorumVoteAccumulator;
+use crate::vote::ViewSyncVoteAccumulator;
+use crate::vote::VoteType;
 use crate::{
-    data::{fake_commitment, serialize_signature, LeafType},
+    data::serialize_signature,
     traits::{
         election::{SignedCertificate, VoteData, VoteToken},
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
         state::ConsensusTime,
     },
-    vote::ViewSyncData,
+    vote::{DAVote, ViewSyncData, ViewSyncVote},
 };
 use bincode::Options;
-use commit::{Commitment, Committable};
+use commit::{Commitment, CommitmentBounds, Committable};
+
 use espresso_systems_common::hotshot::tag;
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
     ops::Deref,
 };
 use tracing::debug;
@@ -43,12 +50,12 @@ pub struct DACertificate<TYPES: NodeType> {
 ///
 /// A Quorum Certificate is a threshold signature of the `Leaf` being proposed, as well as some
 /// metadata, such as the `Stage` of consensus the quorum certificate was generated during.
-#[derive(custom_debug::Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Hash)]
+#[derive(custom_debug::Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = ""))]
-pub struct QuorumCertificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct QuorumCertificate<TYPES: NodeType, COMMITMENT: CommitmentBounds> {
     /// commitment to previous leaf
     #[debug(skip)]
-    pub leaf_commitment: Commitment<LEAF>,
+    pub leaf_commitment: COMMITMENT,
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
@@ -57,7 +64,9 @@ pub struct QuorumCertificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> 
     pub is_genesis: bool,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Display for QuorumCertificate<TYPES, LEAF> {
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Display
+    for QuorumCertificate<TYPES, COMMITMENT>
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -132,15 +141,15 @@ pub enum AssembledSignature<TYPES: NodeType> {
 }
 
 /// Data from a vote needed to accumulate into a `SignedCertificate`
-pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteToken, TIME> {
+pub struct VoteMetaData<COMMITMENT: CommitmentBounds, T: VoteToken, TIME> {
     /// Voter's public key
     pub encoded_key: EncodedPublicKey,
     /// Votes signature
     pub encoded_signature: EncodedSignature,
     /// Commitment to what's voted on.  E.g. the leaf for a `QuorumCertificate`
-    pub commitment: Commitment<COMMITTABLE>,
+    pub commitment: COMMITMENT,
     /// Data of the vote, yes, no, timeout, or DA
-    pub data: VoteData<COMMITTABLE>,
+    pub data: VoteData<COMMITMENT>,
     /// The votes's token
     pub vote_token: T,
     /// View number for the vote
@@ -150,19 +159,26 @@ pub struct VoteMetaData<COMMITTABLE: Committable + Serialize + Clone, T: VoteTok
     pub relay: Option<u64>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, LEAF>
-    for QuorumCertificate<TYPES, LEAF>
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, COMMITMENT>
+    for QuorumCertificate<TYPES, COMMITMENT>
 {
+    type Vote = QuorumVote<TYPES, COMMITMENT>;
+    type VoteAccumulator = QuorumVoteAccumulator<TYPES, COMMITMENT, Self::Vote>;
+
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<LEAF>,
-        _relay: Option<u64>,
+        vote: Self::Vote,
     ) -> Self {
+        let leaf_commitment = match vote.clone() {
+            QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
+                vote_internal.leaf_commitment
+            }
+            QuorumVote::Timeout(_) => unimplemented!(),
+        };
         let qc = QuorumCertificate {
-            leaf_commitment: commit,
-            view_number,
+            leaf_commitment,
+            view_number: vote.get_view(),
             signatures,
             is_genesis: false,
         };
@@ -178,11 +194,11 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<LEAF> {
+    fn leaf_commitment(&self) -> COMMITMENT {
         self.leaf_commitment
     }
 
-    fn set_leaf_commitment(&mut self, commitment: Commitment<LEAF>) {
+    fn set_leaf_commitment(&mut self, commitment: COMMITMENT) {
         self.leaf_commitment = commitment;
     }
 
@@ -191,8 +207,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     }
 
     fn genesis() -> Self {
+        // TODO GG need a new way to get fake commit now that we don't have Committable
         Self {
-            leaf_commitment: fake_commitment::<LEAF>(),
+            leaf_commitment: COMMITMENT::default_commitment_no_preimage(),
             view_number: <TYPES::Time as ConsensusTime>::genesis(),
             signatures: AssembledSignature::Genesis(),
             is_genesis: true,
@@ -200,16 +217,14 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Eq for QuorumCertificate<TYPES, LEAF> {}
-
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
-    for QuorumCertificate<TYPES, LEAF>
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
+    for QuorumCertificate<TYPES, COMMITMENT>
 {
     fn commit(&self) -> Commitment<Self> {
         let signatures_bytes = serialize_signature(&self.signatures);
 
         commit::RawCommitmentBuilder::new("Quorum Certificate Commitment")
-            .field("leaf commitment", self.leaf_commitment)
+            .var_size_field("leaf commitment", self.leaf_commitment.as_ref())
             .u64_field("view number", *self.view_number.deref())
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
@@ -221,19 +236,21 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
     }
 }
 
-impl<TYPES: NodeType> SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, TYPES::BlockType>
+impl<TYPES: NodeType>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
     for DACertificate<TYPES>
 {
+    type Vote = DAVote<TYPES>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        commit: Commitment<TYPES::BlockType>,
-        _relay: Option<u64>,
+        vote: Self::Vote,
     ) -> Self {
         DACertificate {
-            view_number,
+            view_number: vote.get_view(),
             signatures,
-            block_commitment: commit,
+            block_commitment: vote.block_commitment,
         }
     }
 
@@ -309,19 +326,20 @@ impl<TYPES: NodeType> Committable for ViewSyncCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, ViewSyncData<TYPES>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<ViewSyncData<TYPES>>>
     for ViewSyncCertificate<TYPES>
 {
+    type Vote = ViewSyncVote<TYPES>;
+    type VoteAccumulator =
+        ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
     /// Build a QC from the threshold signature and commitment
     fn from_signatures_and_commitment(
-        view_number: TYPES::Time,
         signatures: AssembledSignature<TYPES>,
-        _commit: Commitment<ViewSyncData<TYPES>>,
-        relay: Option<u64>,
+        vote: Self::Vote,
     ) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {
-            round: view_number,
-            relay: relay.unwrap(),
+            round: vote.get_view(),
+            relay: vote.relay(),
             signatures: signatures.clone(),
         };
         match signatures {

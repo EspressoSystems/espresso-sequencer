@@ -117,16 +117,15 @@ mod test {
     use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 
     use super::*;
-    use hotshot_signature_key::bn254::BN254Pub;
+    use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
         certificate::{AssembledSignature, QuorumCertificate},
-        constants::genesis_proposer_id,
-        data::{fake_commitment, ValidatingLeaf, ViewNumber},
+        data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
         traits::{
             block_contents::dummy::{DummyBlock, DummyState},
             node_implementation::NodeType,
             state::ConsensusTime,
-            Block,
+            BlockPayload,
         },
     };
     use std::{fmt::Debug, hash::Hash};
@@ -150,9 +149,9 @@ mod test {
     impl NodeType for DummyTypes {
         type Time = ViewNumber;
         type BlockType = DummyBlock;
-        type SignatureKey = BN254Pub;
+        type SignatureKey = BLSPubKey;
         type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
-        type Transaction = <DummyBlock as Block>::Transaction;
+        type Transaction = <DummyBlock as BlockPayload>::Transaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
     }

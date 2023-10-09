@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_compatibility_layer::{art::async_spawn, channel::oneshot};
 use clap::Parser;
-use hotshot::demos::sdemo::SDemoTypes;
+use hotshot::demo::DemoTypes;
 use tracing::error;
 
 #[derive(Parser, Debug)]
@@ -27,7 +27,7 @@ async fn main() {
 
     let cdn_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <SDemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(Some(server_shutdown_cdn), args.cdn_port)
         .await
         {
@@ -37,7 +37,7 @@ async fn main() {
     });
     let da_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <SDemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(Some(server_shutdown_da), args.da_port)
         .await
         {
@@ -47,7 +47,7 @@ async fn main() {
     });
     let vs_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <SDemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(Some(server_shutdown_view_sync), args.view_sync_port)
         .await
         {

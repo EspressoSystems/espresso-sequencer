@@ -17,6 +17,9 @@ pub mod consensus;
 /// The task which implements the main parts of data availability.
 pub mod da;
 
+/// The task which implements all transaction handling
+pub mod transactions;
+
 /// Defines the events passed between tasks
 pub mod events;
 

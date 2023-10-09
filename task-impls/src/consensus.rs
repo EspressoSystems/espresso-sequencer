@@ -1,23 +1,21 @@
 use crate::events::SequencingHotShotEvent;
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    async_primitives::subscribable_rwlock::ReadView,
-};
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use bincode::Options;
 use bitvec::prelude::*;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use core::time::Duration;
 use either::{Either, Left, Right};
 use futures::FutureExt;
+use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::vote::QuorumVoteAccumulator;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
     consensus::{Consensus, View},
@@ -31,12 +29,12 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, SequencingQuorumEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        Block,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{QuorumVote, VoteAccumulator, VoteType},
+    vote::{QuorumVote, VoteType},
 };
-use hotshot_utils::bincode::bincode_opts;
+
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
@@ -66,14 +64,14 @@ pub struct SequencingConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     /// The global task registry
@@ -128,7 +126,7 @@ pub struct SequencingConsensusTaskState<
     pub id: u64,
 
     /// The most Recent QC we've formed from votes, if we've formed it.
-    pub qc: Option<QuorumCertificate<TYPES, I::Leaf>>,
+    pub qc: Option<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
@@ -140,16 +138,23 @@ pub struct VoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
-    pub accumulator:
-        Either<VoteAccumulator<TYPES::VoteTokenType, I::Leaf>, QuorumCertificate<TYPES, I::Leaf>>,
+    pub accumulator: Either<
+        <QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>> as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Commitment<SequencingLeaf<TYPES>>,
+        >>::VoteAccumulator,
+        QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+    >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
     /// The event stream shared by all tasks
@@ -165,8 +170,8 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
 }
@@ -185,37 +190,32 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
 {
-    // TODO ED Emit a view change event upon new proposal?
     match event {
-        SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote {
-            QuorumVote::Yes(vote) => {
+        SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
+            QuorumVote::Yes(vote_internal) => {
                 // For the case where we receive votes after we've made a certificate
                 if state.accumulator.is_right() {
                     return (None, state);
                 }
 
-                if vote.current_view != state.cur_view {
+                if vote_internal.current_view != state.cur_view {
                     error!(
                         "Vote view does not match! vote view is {} current view is {}",
-                        *vote.current_view, *state.cur_view
+                        *vote_internal.current_view, *state.cur_view
                     );
                     return (None, state);
                 }
 
                 let accumulator = state.accumulator.left().unwrap();
-                match state.quorum_exchange.accumulate_vote(
-                    &vote.signature.0,
-                    &vote.signature.1,
-                    vote.leaf_commitment,
-                    vote.vote_data,
-                    vote.vote_token.clone(),
-                    state.cur_view,
+
+                match state.quorum_exchange.accumulate_vote_2(
                     accumulator,
-                    None,
+                    &vote,
+                    &vote_internal.leaf_commitment,
                 ) {
                     Either::Left(acc) => {
                         state.accumulator = Either::Left(acc);
@@ -272,14 +272,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
@@ -367,10 +367,7 @@ where
                             );
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.current_view()
-                            );
+                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -449,12 +446,8 @@ where
 
                         };
 
-                        // TODO ED Only publish event in vote if able
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.current_view()
-                            );
+                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
                             self.event_stream
                                 .publish(SequencingHotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -494,6 +487,25 @@ where
             // }
             self.cur_view = new_view;
             self.current_proposal = None;
+
+            if new_view == TYPES::Time::new(1) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+                    .await;
+            }
+
+            // Poll the future leader for lookahead
+            let lookahead_view = new_view + LOOK_AHEAD;
+            if !self.quorum_exchange.is_leader(lookahead_view) {
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
+                        *lookahead_view,
+                        self.quorum_exchange.get_leader(lookahead_view),
+                    ))
+                    .await;
+            }
 
             // Start polling for proposals for the new view
             self.quorum_exchange
@@ -550,7 +562,7 @@ where
 
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
-                    error!("view too high {:?}", proposal.data.clone());
+                    debug!("Proposal is from an older view {:?}", proposal.data.clone());
                     return;
                 }
 
@@ -855,46 +867,10 @@ where
                         }
                         #[allow(clippy::cast_precision_loss)]
                         if new_decide_reached {
-                            let mut included_txn_size = 0;
-                            let mut included_txn_count = 0;
-                            let txns = consensus.transactions.cloned().await;
-                            // store transactions in this block we never added to our transactions.
-                            let _ = included_txns_set.iter().map(|hash| {
-                                if !txns.contains_key(hash) {
-                                    consensus.seen_transactions.insert(*hash);
-                                }
-                            });
-                            drop(txns);
-                            consensus
-                                .transactions
-                                .modify(|txns| {
-                                    *txns = txns
-                                        .drain()
-                                        .filter(|(txn_hash, txn)| {
-                                            if included_txns_set.contains(txn_hash) {
-                                                included_txn_count += 1;
-                                                included_txn_size += bincode_opts()
-                                                    .serialized_size(txn)
-                                                    .unwrap_or_default();
-                                                false
-                                            } else {
-                                                true
-                                            }
-                                        })
-                                        .collect();
-                                })
-                                .await;
-
-                            consensus
-                                .metrics
-                                .outstanding_transactions
-                                .update(-included_txn_count);
-                            consensus
-                                .metrics
-                                .outstanding_transactions_memory_size
-                                .update(-(i64::try_from(included_txn_size).unwrap_or(i64::MAX)));
-
                             debug!("about to publish decide");
+                            self.event_stream
+                                .publish(SequencingHotShotEvent::LeafDecided(leaf_views.clone()))
+                                .await;
                             let decide_sent = self.output_event_stream.publish(Event {
                                 view_number: consensus.last_decided_view,
                                 event: EventType::Decide {
@@ -955,26 +931,26 @@ where
                 }
             }
             SequencingHotShotEvent::QuorumVoteRecv(vote) => {
-                debug!("Received quroum vote: {:?}", vote.current_view());
+                debug!("Received quroum vote: {:?}", vote.get_view());
 
-                if !self.quorum_exchange.is_leader(vote.current_view() + 1) {
+                if !self.quorum_exchange.is_leader(vote.get_view() + 1) {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
-                        *vote.current_view() + 1,
-                        self.quorum_exchange.is_leader(vote.current_view() + 2)
+                        *vote.get_view() + 1,
+                        self.quorum_exchange.is_leader(vote.get_view() + 2)
                     );
                     return;
                 }
 
-                match vote {
-                    QuorumVote::Yes(vote) => {
+                match vote.clone() {
+                    QuorumVote::Yes(vote_internal) => {
                         let handle_event = HandleEvent(Arc::new(move |event, state| {
                             async move { vote_handle(state, event).await }.boxed()
                         }));
                         let collection_view = if let Some((collection_view, collection_task, _)) =
                             &self.vote_collector
                         {
-                            if vote.current_view > *collection_view {
+                            if vote_internal.current_view > *collection_view {
                                 // ED I think we'd want to let that task timeout to avoid a griefing vector
                                 self.registry.shutdown_task(*collection_task).await;
                             }
@@ -983,37 +959,31 @@ where
                             TYPES::Time::new(0)
                         };
 
-                        let acc = VoteAccumulator {
+                        // Todo check if we are the leader
+                        let new_accumulator = QuorumVoteAccumulator {
                             total_vote_outcomes: HashMap::new(),
-                            da_vote_outcomes: HashMap::new(),
                             yes_vote_outcomes: HashMap::new(),
                             no_vote_outcomes: HashMap::new(),
-                            viewsync_precommit_vote_outcomes: HashMap::new(),
-                            viewsync_commit_vote_outcomes: HashMap::new(),
-                            viewsync_finalize_vote_outcomes: HashMap::new(),
+
                             success_threshold: self.quorum_exchange.success_threshold(),
                             failure_threshold: self.quorum_exchange.failure_threshold(),
+
                             sig_lists: Vec::new(),
                             signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                            phantom: PhantomData,
                         };
 
-                        // Todo check if we are the leader
-                        let accumulator = self.quorum_exchange.accumulate_vote(
-                            &vote.clone().signature.0,
-                            &vote.clone().signature.1,
-                            vote.clone().leaf_commitment,
-                            vote.clone().vote_data.clone(),
-                            vote.clone().vote_token.clone(),
-                            vote.clone().current_view,
-                            acc,
-                            None,
+                        let accumulator = self.quorum_exchange.accumulate_vote_2(
+                            new_accumulator,
+                            &vote,
+                            &vote_internal.clone().leaf_commitment,
                         );
 
-                        if vote.current_view > collection_view {
+                        if vote_internal.current_view > collection_view {
                             let state = VoteCollectionTaskState {
                                 quorum_exchange: self.quorum_exchange.clone(),
                                 accumulator,
-                                cur_view: vote.current_view,
+                                cur_view: vote_internal.current_view,
                                 event_stream: self.event_stream.clone(),
                                 id: self.id,
                             };
@@ -1033,17 +1003,22 @@ where
                             let id = builder.get_task_id().unwrap();
                             let stream_id = builder.get_stream_id().unwrap();
 
-                            self.vote_collector = Some((vote.current_view, id, stream_id));
+                            self.vote_collector = Some((vote_internal.current_view, id, stream_id));
 
                             let _task = async_spawn(async move {
                                 VoteCollectionTypes::build(builder).launch().await;
                             });
-                            debug!("Starting vote handle for view {:?}", vote.current_view);
+                            debug!(
+                                "Starting vote handle for view {:?}",
+                                vote_internal.current_view
+                            );
                         } else if let Some((_, _, stream_id)) = self.vote_collector {
                             self.event_stream
                                 .direct_message(
                                     stream_id,
-                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(vote)),
+                                    SequencingHotShotEvent::QuorumVoteRecv(QuorumVote::Yes(
+                                        vote_internal,
+                                    )),
                                 )
                                 .await;
                         }
@@ -1102,7 +1077,17 @@ where
                     self.update_view(view + 1).await;
                 }
             }
+            SequencingHotShotEvent::VidCertRecv(cert) => {
+                debug!("VID cert received for view ! {}", *cert.view_number);
 
+                let view = cert.view_number;
+                self.certs.insert(view, cert); // TODO new cert type for VID https://github.com/EspressoSystems/HotShot/issues/1701
+
+                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
+                if self.vote_if_able().await {
+                    self.update_view(view + 1).await;
+                }
+            }
             SequencingHotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1167,10 +1152,9 @@ where
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate<TYPES, I::Leaf>,
+        _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
         view: TYPES::Time,
     ) -> bool {
-        // TODO ED This should not be qc view number + 1
         if !self.quorum_exchange.is_leader(view) {
             error!(
                 "Somehow we formed a QC but are not the leader for the next view {:?}",
@@ -1231,11 +1215,9 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
+        // let block_commitment = Some(self.block.commit());
         if let Some(block) = &self.block {
             let block_commitment = block.commit();
-            if block_commitment == TYPES::BlockType::new().commit() {
-                debug!("Block is generic block! {:?}", self.cur_view);
-            }
 
             let leaf = SequencingLeaf {
                 view_number: view,
@@ -1298,14 +1280,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
 }
@@ -1347,14 +1329,14 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     if let SequencingHotShotEvent::Shutdown = event {
@@ -1375,6 +1357,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::QuorumVoteRecv(_)
             | SequencingHotShotEvent::QCFormed(_)
             | SequencingHotShotEvent::DACRecv(_)
+            | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
             | SequencingHotShotEvent::SendDABlockData(_)
             | SequencingHotShotEvent::Timeout(_)

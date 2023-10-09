@@ -41,8 +41,6 @@ where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
         Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote,
         <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
     >,
 {
@@ -59,8 +57,6 @@ where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
         Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote,
         <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
     >,
 {
@@ -202,8 +198,8 @@ where
         >,
     {
         let mut results = vec![];
-        for _i in 0..total {
-            tracing::error!("running node{}", _i);
+        for i in 0..total {
+            tracing::debug!("launch node {}", i);
             let node_id = self.next_node_id;
             let storage = (self.launcher.resource_generator.storage)(node_id);
             let config = self.launcher.resource_generator.config.clone();
@@ -234,7 +230,6 @@ where
         storage: I::Storage,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
         config: HotShotConfig<
-            TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
             TYPES::ElectionConfigType,
         >,
@@ -250,7 +245,6 @@ where
         let node_id = self.next_node_id;
         self.next_node_id += 1;
 
-        let known_nodes = config.known_nodes.clone();
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
         // Generate key pair for certificate aggregation
         let private_key = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
@@ -265,7 +259,6 @@ where
         let committee_election_config = I::committee_election_config_generator();
         let exchanges = I::Exchanges::create(
             known_nodes_with_stake.clone(),
-            known_nodes.clone(),
             (
                 quorum_election_config,
                 committee_election_config(config.da_committee_size as u64),

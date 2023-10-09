@@ -124,7 +124,7 @@ impl TestMetadata {
         }
     }
 
-    /// Default setting with 20 nodes and 10 views of successful views.
+    /// Default setting with 20 nodes and 8 views of successful views.
     pub fn default_more_nodes_less_success() -> TestMetadata {
         TestMetadata {
             total_nodes: 20,
@@ -139,11 +139,11 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(40, 0),
+                    duration: Duration::new(200, 0),
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 10,
+                num_successful_views: 8,
                 ..Default::default()
             },
             ..TestMetadata::default()
@@ -219,7 +219,6 @@ impl TestMetadata {
             num_bootstrap: num_bootstrap_nodes,
             min_transactions,
             max_transactions: NonZeroUsize::new(99999).unwrap(),
-            known_nodes,
             known_nodes_with_stake,
             da_committee_size,
             next_view_timeout: 500,
@@ -247,7 +246,7 @@ impl TestMetadata {
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
-            |a: &mut HotShotConfig<TYPES::SignatureKey, <TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
+            |a: &mut HotShotConfig<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
                 a.next_view_timeout = next_view_timeout;
                 a.timeout_ratio = timeout_ratio;
                 a.round_start_delay = round_start_delay;

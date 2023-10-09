@@ -6,13 +6,23 @@
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_success() {
     use hotshot_testing::{
+        completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         node_types::{SequencingMemoryImpl, SequencingTestTypes},
         test_builder::TestMetadata,
     };
+    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata::default();
+    let metadata = TestMetadata {
+        // allow more time to pass in CI
+        completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+            TimeBasedCompletionTaskDescription {
+                duration: Duration::from_millis(1_200_000),
+            },
+        ),
+        ..TestMetadata::default()
+    };
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
         .launch()

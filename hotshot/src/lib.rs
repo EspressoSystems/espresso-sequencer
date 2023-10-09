@@ -19,12 +19,10 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Data availability support
-// pub mod da;
 /// Contains structures and functions for committee election
 pub mod certificate;
 #[cfg(feature = "demo")]
-pub mod demos;
+pub mod demo;
 /// Contains traits consumed by [`HotShot`]
 pub mod traits;
 /// Contains types used by the crate
@@ -36,17 +34,17 @@ use crate::{
     certificate::QuorumCertificate,
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
-        add_view_sync_task,
+        add_transaction_task, add_view_sync_task,
     },
     traits::{NodeImplementation, Storage},
     types::{Event, SystemContextHandle},
 };
 use async_compatibility_layer::{
     art::{async_spawn, async_spawn_local},
-    async_primitives::{broadcast::BroadcastSender, subscribable_rwlock::SubscribableRwLock},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
+    async_primitives::broadcast::BroadcastSender,
+    channel::UnboundedSender,
 };
-use async_lock::{Mutex, RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
+use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use custom_debug::Debug;
@@ -57,9 +55,10 @@ use hotshot_task::{
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
-    data::{DAProposal, DeltasType, LeafType, ProposalType, QuorumProposal, SequencingLeaf},
+    data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -79,12 +78,12 @@ use hotshot_types::{
         storage::StoredView,
         State,
     },
-    vote::{ViewSyncData, VoteType},
+    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     marker::PhantomData,
     num::NonZeroUsize,
     sync::Arc,
@@ -114,7 +113,6 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Configuration items for this hotshot instance
     config: HotShotConfig<
-        TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         TYPES::ElectionConfigType,
     >,
@@ -134,20 +132,12 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// a reference to the metrics that the implementor is using.
     _metrics: Box<dyn Metrics>,
 
-    /// Transactions
-    /// (this is shared btwn hotshot and `Consensus`)
-    transactions:
-        Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>,
-
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
 
     /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
     /// latter of which is only applicable for sequencing consensus.
     channel_maps: (ChannelMaps<TYPES, I>, Option<ChannelMaps<TYPES, I>>),
-
-    /// for receiving messages in the network lookup task
-    recv_network_lookup: Arc<Mutex<UnboundedReceiver<Option<TYPES::Time>>>>,
 
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
@@ -178,7 +168,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<
-            TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
             TYPES::ElectionConfigType,
         >,
@@ -224,8 +213,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             state_map,
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
-            transactions: Arc::default(),
-            seen_transactions: HashSet::new(),
             saved_leaves,
             saved_blocks,
             // TODO this is incorrect
@@ -236,19 +223,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             invalid_qc: 0,
         };
         let consensus = Arc::new(RwLock::new(consensus));
-        let txns = consensus.read().await.get_transactions();
 
-        let (_send_network_lookup, recv_network_lookup) = unbounded();
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
-            recv_network_lookup: Arc::new(Mutex::new(recv_network_lookup)),
             id: nonce,
             channel_maps: I::new_channel_maps(start_view),
             consensus,
-            transactions: txns,
             public_key,
             private_key,
             config,
-            // networking,
             storage,
             exchanges: Arc::new(exchanges),
             event_sender: RwLock::default(),
@@ -405,7 +387,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
         config: HotShotConfig<
-            TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
             TYPES::ElectionConfigType,
         >,
@@ -554,11 +535,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 /// [`HotShot`] implementations that depend on [`TYPES::ConsensusType`].
 #[async_trait]
 pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Get the [`transactions`] field of [`HotShot`].
-    fn transactions(
-        &self,
-    ) -> &Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>>;
-
     /// Get the [`hotstuff`] field of [`HotShot`].
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>>;
 
@@ -658,7 +634,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -671,8 +647,8 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-            Commitment = SequencingLeaf<TYPES>,
+            Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+            Commitment = Commitment<SequencingLeaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -680,7 +656,7 @@ where
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
             Certificate = DACertificate<TYPES>,
-            Commitment = TYPES::BlockType,
+            Commitment = Commitment<TYPES::BlockType>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -688,16 +664,10 @@ where
             Message<TYPES, I>,
             Proposal = ViewSyncCertificate<TYPES>,
             Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = ViewSyncData<TYPES>,
+            Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
 {
-    fn transactions(
-        &self,
-    ) -> &Arc<SubscribableRwLock<HashMap<Commitment<TYPES::Transaction>, TYPES::Transaction>>> {
-        &self.inner.transactions
-    }
-
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
         &self.inner.consensus
     }
@@ -769,6 +739,13 @@ where
         )
         .await;
         let task_runner = add_da_task(
+            task_runner,
+            internal_event_stream.clone(),
+            committee_exchange.clone(),
+            handle.clone(),
+        )
+        .await;
+        let task_runner = add_transaction_task(
             task_runner,
             internal_event_stream.clone(),
             committee_exchange.clone(),
@@ -936,10 +913,7 @@ impl<
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
     > SequencingConsensusApi<TYPES, I::Leaf, I> for HotShotSequencingConsensusApi<TYPES, I>
 {
-    async fn send_direct_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
@@ -964,10 +938,7 @@ impl<
         Ok(())
     }
 
-    async fn send_direct_da_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
         message: SequencingMessage<TYPES, I>,
@@ -994,10 +965,7 @@ impl<
 
     // TODO (DA) Refactor ConsensusApi and HotShot to use SystemContextInner directly.
     // <https://github.com/EspressoSystems/HotShot/issues/1194>
-    async fn send_broadcast_message<
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-    >(
+    async fn send_broadcast_message(
         &self,
         message: SequencingMessage<TYPES, I>,
     ) -> std::result::Result<(), NetworkError> {
@@ -1091,7 +1059,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
                 context: err.to_string(),
             })?;
         let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate::<TYPES, LEAF>::genesis();
+        let justify_qc = QuorumCertificate::<TYPES, Commitment<LEAF>>::genesis();
 
         Ok(Self {
             inner: LEAF::new(time, justify_qc, genesis_block, state),

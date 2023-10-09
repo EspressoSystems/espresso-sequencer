@@ -1,14 +1,14 @@
+use crate::view_sync::ViewSyncPhase;
+use commit::Commitment;
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
-    data::DAProposal,
+    data::{DAProposal, VidDisperse},
     message::Proposal,
     traits::node_implementation::{
         NodeImplementation, NodeType, QuorumProposalType, ViewSyncProposalType,
     },
     vote::{DAVote, QuorumVote, ViewSyncVote},
 };
-
-use crate::view_sync::ViewSyncPhase;
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
@@ -18,7 +18,7 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// A quorum proposal has been received from the network; handled by the consensus task
     QuorumProposalRecv(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// A quorum vote has been received from the network; handled by the consensus task
-    QuorumVoteRecv(QuorumVote<TYPES, I::Leaf>),
+    QuorumVoteRecv(QuorumVote<TYPES, Commitment<I::Leaf>>),
     /// A DA proposal has been received from the network; handled by the DA task
     DAProposalRecv(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
@@ -28,13 +28,13 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Send a quorum proposal to the network; emitted by the leader in the consensus task
     QuorumProposalSend(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
-    QuorumVoteSend(QuorumVote<TYPES, I::Leaf>),
+    QuorumVoteSend(QuorumVote<TYPES, Commitment<I::Leaf>>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DAProposalSend(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
     DAVoteSend(DAVote<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
-    QCFormed(QuorumCertificate<TYPES, I::Leaf>),
+    QCFormed(QuorumCertificate<TYPES, Commitment<I::Leaf>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DACSend(DACertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -62,4 +62,32 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     TransactionSend(TYPES::Transaction, TYPES::SignatureKey),
     /// Event to send DA block data from DA leader to next quorum leader (which should always be the same node); internal event only
     SendDABlockData(TYPES::BlockType),
+    /// Event when the transactions task has a block formed
+    BlockReady(TYPES::BlockType, TYPES::Time),
+    /// Event when consensus decided on a leaf
+    LeafDecided(Vec<I::Leaf>),
+    /// Send VID shares to VID storage nodes; emitted by the DA leader
+    ///
+    /// Like [`DAProposalSend`].
+    VidDisperseSend(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Vid disperse data has been received from the network; handled by the DA task
+    ///
+    /// Like [`DAProposalRecv`].
+    VidDisperseRecv(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
+    ///
+    /// Like [`DAVoteSend`]
+    VidVoteSend(DAVote<TYPES>),
+    /// A VID vote has been received by the network; handled by the DA task
+    ///
+    /// Like [`DAVoteRecv`]
+    VidVoteRecv(DAVote<TYPES>),
+    /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
+    ///
+    /// Like [`DACSend`]
+    VidCertSend(DACertificate<TYPES>, TYPES::SignatureKey),
+    /// A VID cert has been recieved by the network; handled by the consensus task
+    ///
+    /// Like [`DACRecv`]
+    VidCertRecv(DACertificate<TYPES>),
 }

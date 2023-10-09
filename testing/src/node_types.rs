@@ -2,7 +2,7 @@ use hotshot::traits::implementations::CombinedNetworks;
 use std::{marker::PhantomData, sync::Arc};
 
 use hotshot::{
-    demos::sdemo::{SDemoBlock, SDemoState, SDemoTransaction},
+    demo::SDemoState,
     traits::{
         election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
         implementations::{
@@ -11,18 +11,18 @@ use hotshot::{
         },
         NodeImplementation,
     },
-    types::bn254::BN254Pub,
+    types::bn254::BLSPubKey,
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
+    data::{QuorumProposal, SequencingLeaf, ViewNumber},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
         network::{TestableChannelImplementation, TestableNetworkingImplementation},
         node_implementation::{ChannelMaps, NodeType, SequencingExchanges, TestableExchange},
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,10 +42,10 @@ use serde::{Deserialize, Serialize};
 pub struct SequencingTestTypes;
 impl NodeType for SequencingTestTypes {
     type Time = ViewNumber;
-    type BlockType = SDemoBlock;
-    type SignatureKey = BN254Pub;
+    type BlockType = VIDBlockPayload;
+    type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
-    type Transaction = SDemoTransaction;
+    type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = SDemoState;
 }
@@ -65,80 +65,33 @@ pub struct StaticFallbackImpl;
 pub type StaticMembership =
     StaticCommittee<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>;
 
-pub type StaticMemoryDAComm = MemoryCommChannel<
-    SequencingTestTypes,
-    SequencingMemoryImpl,
-    DAProposal<SequencingTestTypes>,
-    DAVote<SequencingTestTypes>,
-    StaticMembership,
->;
+pub type StaticMemoryDAComm =
+    MemoryCommChannel<SequencingTestTypes, SequencingMemoryImpl, StaticMembership>;
 
-type StaticLibp2pDAComm = Libp2pCommChannel<
-    SequencingTestTypes,
-    SequencingLibp2pImpl,
-    DAProposal<SequencingTestTypes>,
-    DAVote<SequencingTestTypes>,
-    StaticMembership,
->;
+type StaticLibp2pDAComm =
+    Libp2pCommChannel<SequencingTestTypes, SequencingLibp2pImpl, StaticMembership>;
 
-type StaticWebDAComm = WebCommChannel<
-    SequencingTestTypes,
-    SequencingWebImpl,
-    DAProposal<SequencingTestTypes>,
-    DAVote<SequencingTestTypes>,
-    StaticMembership,
->;
+type StaticWebDAComm = WebCommChannel<SequencingTestTypes, SequencingWebImpl, StaticMembership>;
 
 type StaticFallbackComm =
     WebServerWithFallbackCommChannel<SequencingTestTypes, StaticFallbackImpl, StaticMembership>;
 
-pub type StaticMemoryQuorumComm = MemoryCommChannel<
-    SequencingTestTypes,
-    SequencingMemoryImpl,
-    QuorumProposal<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    QuorumVote<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    StaticMembership,
->;
+pub type StaticMemoryQuorumComm =
+    MemoryCommChannel<SequencingTestTypes, SequencingMemoryImpl, StaticMembership>;
 
-type StaticLibp2pQuorumComm = Libp2pCommChannel<
-    SequencingTestTypes,
-    SequencingLibp2pImpl,
-    QuorumProposal<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    QuorumVote<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    StaticMembership,
->;
+type StaticLibp2pQuorumComm =
+    Libp2pCommChannel<SequencingTestTypes, SequencingLibp2pImpl, StaticMembership>;
 
-type StaticWebQuorumComm = WebCommChannel<
-    SequencingTestTypes,
-    SequencingWebImpl,
-    QuorumProposal<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    QuorumVote<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    StaticMembership,
->;
+type StaticWebQuorumComm = WebCommChannel<SequencingTestTypes, SequencingWebImpl, StaticMembership>;
 
-pub type StaticMemoryViewSyncComm = MemoryCommChannel<
-    SequencingTestTypes,
-    SequencingMemoryImpl,
-    ViewSyncCertificate<SequencingTestTypes>,
-    ViewSyncVote<SequencingTestTypes>,
-    StaticMembership,
->;
+pub type StaticMemoryViewSyncComm =
+    MemoryCommChannel<SequencingTestTypes, SequencingMemoryImpl, StaticMembership>;
 
-type StaticLibp2pViewSyncComm = Libp2pCommChannel<
-    SequencingTestTypes,
-    SequencingLibp2pImpl,
-    ViewSyncCertificate<SequencingTestTypes>,
-    ViewSyncVote<SequencingTestTypes>,
-    StaticMembership,
->;
+type StaticLibp2pViewSyncComm =
+    Libp2pCommChannel<SequencingTestTypes, SequencingLibp2pImpl, StaticMembership>;
 
-type StaticWebViewSyncComm = WebCommChannel<
-    SequencingTestTypes,
-    SequencingWebImpl,
-    ViewSyncCertificate<SequencingTestTypes>,
-    ViewSyncVote<SequencingTestTypes>,
-    StaticMembership,
->;
+type StaticWebViewSyncComm =
+    WebCommChannel<SequencingTestTypes, SequencingWebImpl, StaticMembership>;
 
 pub type SequencingLibp2pExchange = SequencingExchanges<
     SequencingTestTypes,
@@ -231,9 +184,24 @@ impl
 
         Box::new(move |id| {
             let network = Arc::new(network_generator(id));
-            let quorum_chan = <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingLibp2pImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
-            let committee_chan = <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingLibp2pImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
-            let view_sync_chan = <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingLibp2pImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network);
+            let quorum_chan =
+                <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingLibp2pImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network.clone());
+            let committee_chan =
+                <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingLibp2pImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network.clone());
+            let view_sync_chan =
+                <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingLibp2pImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network);
 
             (quorum_chan, committee_chan, view_sync_chan)
         })
@@ -325,9 +293,24 @@ impl
         Box::new(move |id| {
             let network = Arc::new(network_generator(id));
             let network_da = Arc::new(network_da_generator(id));
-            let quorum_chan = <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingMemoryImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
-            let committee_chan = <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingMemoryImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network_da);
-            let view_sync_chan = <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingMemoryImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network);
+            let quorum_chan =
+                <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingMemoryImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network.clone());
+            let committee_chan =
+                <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingMemoryImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network_da);
+            let view_sync_chan =
+                <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingMemoryImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network);
 
             (quorum_chan, committee_chan, view_sync_chan)
         })
@@ -445,9 +428,24 @@ impl
         Box::new(move |id| {
             let network = Arc::new(network_generator(id));
             let network_da = Arc::new(network_da_generator(id));
-            let quorum_chan = <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingWebImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
-            let committee_chan = <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingWebImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network_da);
-            let view_sync_chan = <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<SequencingTestTypes, Message<SequencingTestTypes, SequencingWebImpl>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network);
+            let quorum_chan =
+                <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingWebImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network.clone());
+            let committee_chan =
+                <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingWebImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network_da);
+            let view_sync_chan =
+                <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
+                    SequencingTestTypes,
+                    Message<SequencingTestTypes, SequencingWebImpl>,
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network);
 
             (quorum_chan, committee_chan, view_sync_chan)
         })
@@ -584,44 +582,20 @@ impl
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     SequencingTestTypes,
                     Message<SequencingTestTypes, StaticFallbackImpl>,
-                >>::Networking as TestableChannelImplementation<
-                    _,
-                    _,
-                    QuorumProposal<
-                        SequencingTestTypes,
-                        <StaticFallbackImpl as NodeImplementation<SequencingTestTypes>>::Leaf,
-                    >,
-                    QuorumVote<
-                        SequencingTestTypes,
-                        <StaticFallbackImpl as NodeImplementation<SequencingTestTypes>>::Leaf,
-                    >,
-                    _,
-                    _,
-                >>::generate_network()(network.clone());
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network.clone());
             let committee_chan =
                 <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     SequencingTestTypes,
                     Message<SequencingTestTypes, StaticFallbackImpl>,
-                >>::Networking as TestableChannelImplementation<
-                    _,
-                    _,
-                    DAProposal<SequencingTestTypes>,
-                    DAVote<SequencingTestTypes>,
-                    _,
-                    _,
-                >>::generate_network()(network_da);
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network_da);
             let view_sync_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     SequencingTestTypes,
                     Message<SequencingTestTypes, StaticFallbackImpl>,
-                >>::Networking as TestableChannelImplementation<
-                    _,
-                    _,
-                    ViewSyncCertificate<SequencingTestTypes>,
-                    ViewSyncVote<SequencingTestTypes>,
-                    _,
-                    _,
-                >>::generate_network()(network);
+                >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
+                )(network);
             (quorum_chan, committee_chan, view_sync_chan)
         })
     }

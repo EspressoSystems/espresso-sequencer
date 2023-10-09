@@ -16,7 +16,7 @@ bitvec = { workspace = true }
 digest = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { workspace = true }
-generic-array = "0.14.7"
+generic-array = { workspace = true }
 hotshot-types = { path = "../types" }
 jf-primitives = { workspace = true }
 jf-relation = { workspace = true }

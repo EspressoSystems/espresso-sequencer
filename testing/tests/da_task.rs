@@ -1,9 +1,13 @@
 use commit::Committable;
 use hotshot::HotShotSequencingConsensusApi;
 use hotshot_task_impls::events::SequencingHotShotEvent;
-use hotshot_testing::node_types::{SequencingMemoryImpl, SequencingTestTypes};
+use hotshot_testing::{
+    node_types::{SequencingMemoryImpl, SequencingTestTypes},
+    task_helpers::vid_init,
+};
 use hotshot_types::{
-    data::{DAProposal, ViewNumber},
+    block_impl::VIDTransaction,
+    data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
     traits::{
         consensus_api::ConsensusSharedApi, election::ConsensusExchange,
         node_implementation::ExchangesType, state::ConsensusTime,
@@ -17,15 +21,11 @@ use std::collections::HashMap;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_da_task() {
-    use hotshot::{
-        demos::sdemo::{SDemoBlock, SDemoNormalBlock},
-        tasks::add_da_task,
-    };
+    use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
-        message::{CommitteeConsensusMessage, Proposal},
-        traits::election::CommitteeExchangeType,
+        block_impl::VIDBlockPayload, message::Proposal, traits::election::CommitteeExchangeType,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -39,12 +39,16 @@ async fn test_da_task() {
         };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let block = SDemoBlock::Normal(SDemoNormalBlock {
-        previous_state: (),
-        transactions: Vec::new(),
-    });
-    let block_commitment = block.commit();
-    let signature = committee_exchange.sign_da_proposal(&block_commitment);
+    let vid = vid_init();
+    let txn = vec![0u8];
+    let vid_disperse = vid.disperse(&txn).unwrap();
+    let block_commitment = vid_disperse.commit;
+    let block = VIDBlockPayload {
+        transactions: vec![VIDTransaction(txn)],
+        commitment: block_commitment,
+    };
+
+    let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
         deltas: block.clone(),
         view_number: ViewNumber::new(2),
@@ -53,6 +57,17 @@ async fn test_da_task() {
         data: proposal,
         signature,
     };
+    let vid_proposal = Proposal {
+        data: VidDisperse {
+            view_number: message.data.view_number,
+            commitment: block.commit(),
+            shares: vid_disperse.shares,
+            common: vid_disperse.common,
+        },
+        signature: message.signature.clone(),
+    };
+    // TODO for now reuse the same block commitment and signature as DA committee
+    // https://github.com/EspressoSystems/jellyfish/issues/369
 
     // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
@@ -61,26 +76,51 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
+    input.push(SequencingHotShotEvent::BlockReady(
+        block.clone(),
+        ViewNumber::new(2),
+    ));
     input.push(SequencingHotShotEvent::DAProposalRecv(
         message.clone(),
+        pub_key,
+    ));
+    input.push(SequencingHotShotEvent::VidDisperseRecv(
+        vid_proposal.clone(),
         pub_key,
     ));
     input.push(SequencingHotShotEvent::Shutdown);
 
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
-    output.insert(SequencingHotShotEvent::SendDABlockData(block), 1);
+    output.insert(
+        SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        1,
+    );
+    output.insert(SequencingHotShotEvent::SendDABlockData(block.clone()), 1);
     output.insert(
         SequencingHotShotEvent::DAProposalSend(message.clone(), pub_key),
         1,
     );
-    if let Ok(Some(vote_token)) = committee_exchange.make_vote_token(ViewNumber::new(2)) {
-        let da_message =
-            committee_exchange.create_da_message(block_commitment, ViewNumber::new(2), vote_token);
-        if let CommitteeConsensusMessage::DAVote(vote) = da_message {
-            output.insert(SequencingHotShotEvent::DAVoteSend(vote), 1);
-        }
-    }
+    let vote_token = committee_exchange
+        .make_vote_token(ViewNumber::new(2))
+        .unwrap()
+        .unwrap();
+    let da_vote =
+        committee_exchange.create_da_message(block.commit(), ViewNumber::new(2), vote_token);
+    output.insert(SequencingHotShotEvent::DAVoteSend(da_vote), 1);
+
+    let vote_token = committee_exchange
+        .make_vote_token(ViewNumber::new(2))
+        .unwrap()
+        .unwrap();
+    let vid_vote =
+        committee_exchange.create_vid_message(block.commit(), ViewNumber::new(2), vote_token);
+    output.insert(SequencingHotShotEvent::VidVoteSend(vid_vote), 1);
+
     output.insert(SequencingHotShotEvent::DAProposalRecv(message, pub_key), 1);
+    output.insert(
+        SequencingHotShotEvent::VidDisperseRecv(vid_proposal, pub_key),
+        1,
+    );
     output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(SequencingHotShotEvent::Shutdown, 1);
 

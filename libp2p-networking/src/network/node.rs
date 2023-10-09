@@ -31,6 +31,7 @@ use async_compatibility_layer::{
 };
 use either::Either;
 use futures::{select, FutureExt, StreamExt};
+use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::Boxed},
     gossipsub::{
@@ -239,7 +240,7 @@ impl NetworkNode {
             // 8 hours by default
             let record_republication_interval = config
                 .republication_interval
-                .unwrap_or(Duration::from_secs(28800));
+                .unwrap_or(Duration::from_secs(KAD_DEFAULT_REPUB_INTERVAL_SEC));
             let ttl = Some(config.ttl.unwrap_or(16 * record_republication_interval));
             kconfig
                 .set_parallelism(NonZeroUsize::new(1).unwrap())
@@ -268,7 +269,9 @@ impl NetworkNode {
                     config
                         .replication_factor
                         .unwrap_or_else(|| NonZeroUsize::new(4).unwrap()),
-                ),
+                    config.dht_cache_location.clone(),
+                )
+                .await,
                 identify,
                 DMBehaviour::new(request_response),
             );

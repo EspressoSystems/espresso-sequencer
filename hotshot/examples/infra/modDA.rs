@@ -1,11 +1,14 @@
 use crate::infra::{load_config_from_file, OrchestratorArgs};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot::{
     traits::{
-        implementations::{MemoryStorage, WebCommChannel, WebServerNetwork},
+        implementations::{
+            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, WebCommChannel, WebServerNetwork,
+        },
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
@@ -18,8 +21,9 @@ use hotshot_orchestrator::{
 };
 use hotshot_task::task::FilterEvent;
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf, TestableLeaf},
+    data::{QuorumProposal, SequencingLeaf, TestableLeaf},
     event::{Event, EventType},
     message::{Message, SequencingMessage},
     traits::{
@@ -33,9 +37,20 @@ use hotshot_types::{
         },
         state::{ConsensusTime, TestableBlock, TestableState},
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
     HotShotConfig,
 };
+use libp2p_identity::{
+    ed25519::{self, SecretKey},
+    Keypair,
+};
+use libp2p_networking::{
+    network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType},
+    reexport::Multiaddr,
+};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use std::{collections::BTreeSet, sync::Arc};
+use std::{num::NonZeroUsize, str::FromStr};
 // use libp2p::{
 //     identity::{
 //         ed25519::{Keypair as EdKeypair, SecretKey},
@@ -44,11 +59,11 @@ use hotshot_types::{
 //     multiaddr::{self, Protocol},
 //     Multiaddr,
 // };
-// use libp2p_identity::PeerId;
+use libp2p_identity::PeerId;
 // use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
+use std::{fmt::Debug, net::Ipv4Addr};
 use std::{
     //collections::{BTreeSet, VecDeque},
-    collections::VecDeque,
     //fs,
     mem,
     net::IpAddr,
@@ -58,7 +73,6 @@ use std::{
     //time::{Duration, Instant},
     time::Instant,
 };
-use std::{fmt::Debug, net::Ipv4Addr};
 //use surf_disco::error::ClientError;
 //use surf_disco::Client;
 use tracing::{debug, error, info, warn};
@@ -67,27 +81,9 @@ use tracing::{debug, error, info, warn};
 pub async fn run_orchestrator_da<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES> + Debug,
-    DANETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            DAProposal<TYPES>,
-            DAVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
-    QUORUMNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-            MEMBERSHIP,
-        > + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            ViewSyncCertificate<TYPES>,
-            ViewSyncVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
+    DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -130,32 +126,27 @@ pub async fn run_orchestrator_da<
     .await;
 }
 
+/// Helper function to calculate the nuymber of transactions to send per node per round
+fn calculate_num_tx_per_round(
+    node_index: u64,
+    total_num_nodes: usize,
+    transactions_per_round: usize,
+) -> usize {
+    if node_index == 0 {
+        transactions_per_round / total_num_nodes + transactions_per_round % total_num_nodes
+    } else {
+        transactions_per_round / total_num_nodes
+    }
+}
+
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
 pub trait RunDA<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES> + Debug,
-    DANETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            DAProposal<TYPES>,
-            DAVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
-    QUORUMNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-            MEMBERSHIP,
-        > + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            ViewSyncCertificate<TYPES>,
-            ViewSyncVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
+    DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -215,7 +206,6 @@ pub trait RunDA<
         // Get KeyPair for certificate Aggregation
         let (pk, sk) =
             TYPES::SignatureKey::generated_from_seed_indexed(config.seed, config.node_index);
-        let known_nodes = config.config.known_nodes.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let entry = pk.get_stake_table_entry(1u64);
 
@@ -240,7 +230,6 @@ pub trait RunDA<
 
         let exchanges = NODE::Exchanges::create(
             known_nodes_with_stake.clone(),
-            known_nodes.clone(),
             (quorum_election_config, committee_election_config),
             (
                 quorum_network.clone(),
@@ -279,37 +268,22 @@ pub trait RunDA<
         } = self.get_config();
 
         let size = mem::size_of::<TYPES::Transaction>();
-        let adjusted_padding = if padding < size { 0 } else { padding - size };
-        let mut txns: VecDeque<TYPES::Transaction> = VecDeque::new();
+        let padding = padding.saturating_sub(size);
+        let mut txn_rng = StdRng::seed_from_u64(node_index);
 
-        // TODO ED: In the future we should have each node generate transactions every round to simulate a more realistic network
-        let tx_to_gen = transactions_per_round * rounds * 3;
-        {
-            let mut txn_rng = rand::thread_rng();
-            for _ in 0..tx_to_gen {
-                let txn =
-                    <<TYPES as NodeType>::StateType as TestableState>::create_random_transaction(
-                        None,
-                        &mut txn_rng,
-                        padding as u64,
-                    );
-                txns.push_back(txn);
-            }
-        }
-        debug!("Generated {} transactions", tx_to_gen);
+        debug!("Adjusted padding size is {:?} bytes", padding);
 
-        debug!("Adjusted padding size is {:?} bytes", adjusted_padding);
-        let mut round = 0;
-        let mut total_transactions = 0;
-
-        let start = Instant::now();
+        let mut total_transactions_committed = 0;
+        let mut total_transactions_sent = 0;
+        let transactions_to_send_per_round =
+            calculate_num_tx_per_round(node_index, total_nodes.get(), transactions_per_round);
 
         info!("Starting hotshot!");
+        let start = Instant::now();
+
         let (mut event_stream, _streamid) = context.get_event_stream(FilterEvent::default()).await;
         let mut anchor_view: TYPES::Time = <TYPES::Time as ConsensusTime>::genesis();
         let mut num_successful_commits = 0;
-
-        let total_nodes_u64 = total_nodes.get() as u64;
 
         context.hotshot.start_consensus().await;
 
@@ -339,8 +313,20 @@ pub trait RunDA<
                                 }
                             }
 
+                            // send transactions
+                            for _ in 0..transactions_to_send_per_round {
+                                let txn =
+                                <<TYPES as NodeType>::StateType as TestableState>::create_random_transaction(
+                                    None,
+                                    &mut txn_rng,
+                                    padding as u64,
+                                );
+                                _ = context.submit_transaction(txn).await.unwrap();
+                                total_transactions_sent += 1;
+                            }
+
                             if let Some(size) = block_size {
-                                total_transactions += size;
+                                total_transactions_committed += size;
                             }
 
                             num_successful_commits += leaf_chain.len();
@@ -359,39 +345,16 @@ pub trait RunDA<
                         EventType::NextLeaderViewTimeout { view_number } => {
                             warn!("Timed out as the next leader in view {:?}", view_number);
                         }
-                        EventType::ViewFinished { view_number } => {
-                            if *view_number > round {
-                                round = *view_number;
-                                info!("view finished: {:?}", view_number);
-                                for _ in 0..transactions_per_round {
-                                    if node_index >= total_nodes_u64 - 10 {
-                                        let txn = txns.pop_front().unwrap();
-
-                                        debug!("Submitting txn on round {}", round);
-
-                                        let result = context.submit_transaction(txn).await;
-
-                                        if result.is_err() {
-                                            error! (
-                                            "Could not send transaction to web server on round {}",
-                                            round
-                                        )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        EventType::ViewFinished { view_number: _ } => {}
                         _ => unimplemented!(),
                     }
                 }
             }
-
-            round += 1;
         }
 
         // Output run results
         let total_time_elapsed = start.elapsed();
-        error!("{rounds} rounds completed in {total_time_elapsed:?} - Total transactions committed: {total_transactions} - Total commitments: {num_successful_commits}");
+        error!("[{node_index}]: {rounds} rounds completed in {total_time_elapsed:?} - Total transactions sent: {total_transactions_sent} - Total transactions committed: {total_transactions_committed} - Total commitments: {num_successful_commits}");
     }
 
     /// Returns the da network for this run
@@ -415,23 +378,6 @@ pub trait RunDA<
 
 // WEB SERVER
 
-/// Alias for the [`WebCommChannel`] for sequencing consensus.
-type StaticDAComm<TYPES, I, MEMBERSHIP> =
-    WebCommChannel<TYPES, I, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>;
-
-/// Alias for the ['WebCommChannel'] for validating consensus
-type StaticQuorumComm<TYPES, I, MEMBERSHIP> = WebCommChannel<
-    TYPES,
-    I,
-    QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-    QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-    MEMBERSHIP,
->;
-
-/// Alias for the ['WebCommChannel'] for view sync consensus
-type StaticViewSyncComm<TYPES, I, MEMBERSHIP> =
-    WebCommChannel<TYPES, I, ViewSyncCertificate<TYPES>, ViewSyncVote<TYPES>, MEMBERSHIP>;
-
 /// Represents a web server-based run
 pub struct WebServerDARun<
     TYPES: NodeType,
@@ -443,14 +389,14 @@ pub struct WebServerDARun<
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         TYPES::ElectionConfigType,
     >,
-    quorum_network: StaticQuorumComm<TYPES, I, MEMBERSHIP>,
-    da_network: StaticDAComm<TYPES, I, MEMBERSHIP>,
-    view_sync_network: StaticViewSyncComm<TYPES, I, MEMBERSHIP>,
+    quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    da_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    view_sync_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
 }
 
 #[async_trait]
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
@@ -463,32 +409,20 @@ impl<
                     SequencingLeaf<TYPES>,
                     QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
                     MEMBERSHIP,
-                    WebCommChannel<
-                        TYPES,
-                        NODE,
-                        QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-                        QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-                        MEMBERSHIP,
-                    >,
+                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
                 >,
                 CommitteeExchange<
                     TYPES,
                     MEMBERSHIP,
-                    WebCommChannel<TYPES, NODE, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP>,
+                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
                 >,
                 ViewSyncExchange<
                     TYPES,
                     ViewSyncCertificate<TYPES>,
                     MEMBERSHIP,
-                    WebCommChannel<
-                        TYPES,
-                        NODE,
-                        ViewSyncCertificate<TYPES>,
-                        ViewSyncVote<TYPES>,
-                        MEMBERSHIP,
-                    >,
+                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
                 >,
             >,
@@ -499,9 +433,9 @@ impl<
     RunDA<
         TYPES,
         MEMBERSHIP,
-        StaticDAComm<TYPES, NODE, MEMBERSHIP>,
-        StaticQuorumComm<TYPES, NODE, MEMBERSHIP>,
-        StaticViewSyncComm<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
         NODE,
     > for WebServerDARun<TYPES, NODE, MEMBERSHIP>
 where
@@ -540,21 +474,11 @@ where
         );
 
         // Create the network
-        let quorum_network: WebCommChannel<
-            TYPES,
-            NODE,
-            QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-            MEMBERSHIP,
-        > = WebCommChannel::new(underlying_quorum_network.clone().into());
+        let quorum_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> =
+            WebCommChannel::new(underlying_quorum_network.clone().into());
 
-        let view_sync_network: WebCommChannel<
-            TYPES,
-            NODE,
-            ViewSyncCertificate<TYPES>,
-            ViewSyncVote<TYPES>,
-            MEMBERSHIP,
-        > = WebCommChannel::new(underlying_quorum_network.into());
+        let view_sync_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> =
+            WebCommChannel::new(underlying_quorum_network.into());
 
         let WebServerConfig {
             host,
@@ -563,17 +487,10 @@ where
         }: WebServerConfig = config.clone().da_web_server_config.unwrap();
 
         // Each node runs the DA network so that leaders have access to transactions and DA votes
-        let da_network: WebCommChannel<TYPES, NODE, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP> =
-            WebCommChannel::new(
-                WebServerNetwork::create(
-                    &host.to_string(),
-                    port,
-                    wait_between_polls,
-                    pub_key,
-                    true,
-                )
+        let da_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
+            WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true)
                 .into(),
-            );
+        );
 
         WebServerDARun {
             config,
@@ -583,28 +500,244 @@ where
         }
     }
 
-    fn get_da_network(
-        &self,
-    ) -> WebCommChannel<TYPES, NODE, DAProposal<TYPES>, DAVote<TYPES>, MEMBERSHIP> {
+    fn get_da_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.da_network.clone()
     }
 
-    fn get_quorum_network(
-        &self,
-    ) -> WebCommChannel<
-        TYPES,
-        NODE,
-        QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-        MEMBERSHIP,
-    > {
+    fn get_quorum_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.quorum_network.clone()
     }
 
-    fn get_view_sync_network(
+    fn get_view_sync_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.view_sync_network.clone()
+    }
+
+    fn get_config(
         &self,
-    ) -> WebCommChannel<TYPES, NODE, ViewSyncCertificate<TYPES>, ViewSyncVote<TYPES>, MEMBERSHIP>
-    {
+    ) -> NetworkConfig<
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        TYPES::ElectionConfigType,
+    > {
+        self.config.clone()
+    }
+}
+
+// Libp2p
+
+/// Represents a libp2p-based run
+pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+{
+    config: NetworkConfig<
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        TYPES::ElectionConfigType,
+    >,
+    quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    da_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    view_sync_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+}
+
+#[async_trait]
+impl<
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+        MEMBERSHIP: Membership<TYPES> + Debug,
+        NODE: NodeImplementation<
+            TYPES,
+            Leaf = SequencingLeaf<TYPES>,
+            Exchanges = SequencingExchanges<
+                TYPES,
+                Message<TYPES, NODE>,
+                QuorumExchange<
+                    TYPES,
+                    SequencingLeaf<TYPES>,
+                    QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+                CommitteeExchange<
+                    TYPES,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+                ViewSyncExchange<
+                    TYPES,
+                    ViewSyncCertificate<TYPES>,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
+            >,
+            Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+            ConsensusMessage = SequencingMessage<TYPES, NODE>,
+        >,
+    >
+    RunDA<
+        TYPES,
+        MEMBERSHIP,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        NODE,
+    > for Libp2pDARun<TYPES, NODE, MEMBERSHIP>
+where
+    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::BlockType: TestableBlock,
+    SequencingLeaf<TYPES>: TestableLeaf,
+    Self: Sync,
+{
+    async fn initialize_networking(
+        config: NetworkConfig<
+            TYPES::SignatureKey,
+            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            TYPES::ElectionConfigType,
+        >,
+    ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
+        let (pubkey, _privkey) =
+            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+                config.seed,
+                config.node_index,
+            );
+        let mut config = config;
+        let libp2p_config = config
+            .libp2p_config
+            .take()
+            .expect("Configuration is not for a Libp2p network");
+        let bs_len = libp2p_config.bootstrap_nodes.len();
+        let bootstrap_nodes: Vec<(PeerId, Multiaddr)> = libp2p_config
+            .bootstrap_nodes
+            .iter()
+            .map(|(addr, pair)| {
+                let kp = Keypair::from_protobuf_encoding(pair).unwrap();
+                let peer_id = PeerId::from_public_key(&kp.public());
+                let multiaddr =
+                    Multiaddr::from_str(&format!("/ip4/{}/udp/{}/quic-v1", addr.ip(), addr.port()))
+                        .unwrap();
+                (peer_id, multiaddr)
+            })
+            .collect();
+        let identity = libp2p_generate_indexed_identity(config.seed, config.node_index);
+        let node_type = if (config.node_index as usize) < bs_len {
+            NetworkNodeType::Bootstrap
+        } else {
+            NetworkNodeType::Regular
+        };
+        let node_index = config.node_index;
+        let port_index = match libp2p_config.index_ports {
+            true => node_index,
+            false => 0,
+        };
+        let bound_addr: Multiaddr = format!(
+            "/{}/{}/udp/{}/quic-v1",
+            if libp2p_config.public_ip.is_ipv4() {
+                "ip4"
+            } else {
+                "ip6"
+            },
+            libp2p_config.public_ip,
+            libp2p_config.base_port as u64 + port_index
+        )
+        .parse()
+        .unwrap();
+
+        // generate network
+        let mut config_builder = NetworkNodeConfigBuilder::default();
+        assert!(config.config.total_nodes.get() > 2);
+        let replicated_nodes = NonZeroUsize::new(config.config.total_nodes.get() - 2).unwrap();
+        config_builder.replication_factor(replicated_nodes);
+        config_builder.identity(identity.clone());
+
+        config_builder.bound_addr(Some(bound_addr.clone()));
+
+        let to_connect_addrs = bootstrap_nodes
+            .iter()
+            .map(|(peer_id, multiaddr)| (Some(*peer_id), multiaddr.clone()))
+            .collect();
+
+        config_builder.to_connect_addrs(to_connect_addrs);
+
+        let mesh_params =
+        // NOTE I'm arbitrarily choosing these.
+        match node_type {
+            NetworkNodeType::Bootstrap => MeshParams {
+                mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
+                mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
+                mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
+                mesh_n: libp2p_config.bootstrap_mesh_n,
+            },
+            NetworkNodeType::Regular => MeshParams {
+                mesh_n_high: libp2p_config.mesh_n_high,
+                mesh_n_low: libp2p_config.mesh_n_low,
+                mesh_outbound_min: libp2p_config.mesh_outbound_min,
+                mesh_n: libp2p_config.mesh_n,
+            },
+            NetworkNodeType::Conductor => unreachable!(),
+        };
+        config_builder.mesh_params(Some(mesh_params));
+
+        let mut all_keys = BTreeSet::new();
+        let mut da_keys = BTreeSet::new();
+        for i in 0..config.config.total_nodes.get() as u64 {
+            let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
+            let pubkey = TYPES::SignatureKey::from_private(&privkey);
+            if i < config.config.da_committee_size as u64 {
+                da_keys.insert(pubkey.clone());
+            }
+            all_keys.insert(pubkey);
+        }
+
+        let node_config = config_builder.build().unwrap();
+        let underlying_quorum_network = Libp2pNetwork::new(
+            NoMetrics::boxed(),
+            node_config,
+            pubkey.clone(),
+            Arc::new(RwLock::new(
+                bootstrap_nodes
+                    .iter()
+                    .map(|(peer_id, addr)| (Some(*peer_id), addr.clone()))
+                    .collect(),
+            )),
+            bs_len,
+            config.node_index as usize,
+            // NOTE: this introduces an invariant that the keys are assigned using this indexed
+            // function
+            all_keys,
+            da_keys,
+        )
+        .await
+        .unwrap();
+
+        underlying_quorum_network.wait_for_ready().await;
+
+        // Create the network
+        let quorum_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        let view_sync_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        let da_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
+        Libp2pDARun {
+            config,
+            quorum_network,
+            da_network,
+            view_sync_network,
+        }
+    }
+
+    fn get_da_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.da_network.clone()
+    }
+
+    fn get_quorum_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.quorum_network.clone()
+    }
+
+    fn get_view_sync_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.view_sync_network.clone()
     }
 
@@ -621,29 +754,11 @@ where
 
 /// Main entry point for validators
 pub async fn main_entry_point<
-    TYPES: NodeType,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
     MEMBERSHIP: Membership<TYPES> + Debug,
-    DANETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            DAProposal<TYPES>,
-            DAVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
-    QUORUMNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            QuorumVote<TYPES, SequencingLeaf<TYPES>>,
-            MEMBERSHIP,
-        > + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<
-            TYPES,
-            Message<TYPES, NODE>,
-            ViewSyncCertificate<TYPES>,
-            ViewSyncVote<TYPES>,
-            MEMBERSHIP,
-        > + Debug,
+    DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -719,4 +834,13 @@ pub async fn main_entry_point<
 
     info!("All nodes are ready!  Starting HotShot");
     run.run_hotshot(hotshot).await;
+}
+
+pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&seed);
+    hasher.update(&index.to_le_bytes());
+    let new_seed = *hasher.finalize().as_bytes();
+    let sk_bytes = SecretKey::try_from_bytes(new_seed).unwrap();
+    <ed25519::Keypair as From<SecretKey>>::from(sk_bytes).into()
 }

@@ -25,16 +25,21 @@ docs = []
 doc-images = []
 hotshot-testing = []
 
-# [[example]]
-# name = "libp2p-validator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/validator.rs"
-#
-# [[example]]
-# name = "libp2p-orchestrator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/libp2p/orchestrator.rs"
-#
+[[example]]
+name = "libp2p-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/validator.rs"
+
+[[example]]
+name = "libp2p-multi-validator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/multi-validator.rs"
+
+[[example]]
+name = "libp2p-orchestrator"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/orchestrator.rs"
+
 # [[example]]
 # name = "web-server-orchestrator"
 # required-features = ["demo", "libp2p/rsa"]
@@ -80,6 +85,7 @@ bincode = { workspace = true }
 bitvec = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"], optional = true }
 commit = { workspace = true }
+hotshot-constants = { path = "../constants" }
 custom_debug = { workspace = true }
 dashmap = "5.5.1"
 derivative = { version = "2.2.0", optional = true }
@@ -95,10 +101,10 @@ hotshot-types = { path = "../types", version = "0.1.0", default-features = false
 hotshot-utils = { path = "../utils" }
 hotshot-task = { path = "../task", version = "0.1.0", default-features = false }
 hotshot-task-impls = { path = "../task-impls", version = "0.1.0", default-features = false }
+jf-primitives = { workspace = true }
 libp2p = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
-nll = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
@@ -116,6 +122,6 @@ async-std = { workspace = true }
 [dev-dependencies]
 blake3 = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
-serde_json = "1.0.106"
+serde_json = "1.0.107"
 toml = { workspace = true }
 

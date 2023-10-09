@@ -1,4 +1,5 @@
 use hotshot_types::{ExecutionType, HotShotConfig};
+use std::marker::PhantomData;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
@@ -7,7 +8,7 @@ use std::{
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
-    pub num_bootstrap_nodes: u64,
+    pub num_bootstrap_nodes: usize,
     pub public_ip: IpAddr,
     pub base_port: u16,
     pub node_index: u64,
@@ -21,15 +22,14 @@ pub struct Libp2pConfig {
     pub mesh_outbound_min: usize,
     pub mesh_n: usize,
     pub next_view_timeout: u64,
-    pub propose_min_round_time: u64,
-    pub propose_max_round_time: u64,
+    pub propose_min_round_time: Duration,
+    pub propose_max_round_time: Duration,
     pub online_time: u64,
-    pub num_txn_per_round: u64,
+    pub num_txn_per_round: usize,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfigFile {
-    pub num_bootstrap_nodes: u64,
     pub index_ports: bool,
     pub bootstrap_mesh_n_high: usize,
     pub bootstrap_mesh_n_low: usize,
@@ -39,11 +39,7 @@ pub struct Libp2pConfigFile {
     pub mesh_n_low: usize,
     pub mesh_outbound_min: usize,
     pub mesh_n: usize,
-    pub next_view_timeout: u64,
-    pub propose_min_round_time: u64,
-    pub propose_max_round_time: u64,
     pub online_time: u64,
-    pub num_txn_per_round: u64,
     pub base_port: u16,
 }
 
@@ -58,6 +54,10 @@ pub struct WebServerConfig {
 pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub rounds: usize,
     pub transactions_per_round: usize,
+    pub num_bootrap: usize,
+    pub next_view_timeout: u64,
+    pub propose_min_round_time: Duration,
+    pub propose_max_round_time: Duration,
     pub node_index: u64,
     pub seed: [u8; 32],
     pub padding: usize,
@@ -65,9 +65,10 @@ pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<KEY, ENTRY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<ENTRY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
+    _key_type_phantom: PhantomData<KEY>,
 }
 
 impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
@@ -85,6 +86,11 @@ impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
             election_config_type_name: std::any::type_name::<E>().to_string(),
             web_server_config: None,
             da_web_server_config: None,
+            _key_type_phantom: PhantomData,
+            next_view_timeout: 10,
+            num_bootrap: 5,
+            propose_min_round_time: Duration::from_secs(0),
+            propose_max_round_time: Duration::from_secs(10),
         }
     }
 }
@@ -123,10 +129,14 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
             rounds: val.rounds,
             transactions_per_round: val.transactions_per_round,
             node_index: 0,
+            num_bootrap: val.config.num_bootstrap,
+            next_view_timeout: val.config.next_view_timeout,
+            propose_max_round_time: val.config.propose_max_round_time,
+            propose_min_round_time: val.config.propose_min_round_time,
             seed: val.seed,
             padding: val.padding,
             libp2p_config: val.libp2p_config.map(|libp2p_config| Libp2pConfig {
-                num_bootstrap_nodes: libp2p_config.num_bootstrap_nodes,
+                num_bootstrap_nodes: val.config.num_bootstrap,
                 index_ports: libp2p_config.index_ports,
                 bootstrap_nodes: Vec::new(),
                 public_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
@@ -140,11 +150,11 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
                 mesh_n_low: libp2p_config.mesh_n_low,
                 mesh_outbound_min: libp2p_config.mesh_outbound_min,
                 mesh_n: libp2p_config.mesh_n,
-                next_view_timeout: libp2p_config.next_view_timeout,
-                propose_min_round_time: libp2p_config.propose_min_round_time,
-                propose_max_round_time: libp2p_config.propose_max_round_time,
+                next_view_timeout: val.config.next_view_timeout,
+                propose_min_round_time: val.config.propose_min_round_time,
+                propose_max_round_time: val.config.propose_max_round_time,
                 online_time: libp2p_config.online_time,
-                num_txn_per_round: libp2p_config.num_txn_per_round,
+                num_txn_per_round: val.transactions_per_round,
             }),
             config: val.config.into(),
             key_type_name: std::any::type_name::<K>().to_string(),
@@ -152,6 +162,7 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
             start_delay_seconds: val.start_delay_seconds,
             web_server_config: val.web_server_config,
             da_web_server_config: val.da_web_server_config,
+            _key_type_phantom: PhantomData,
         }
     }
 }
@@ -183,14 +194,13 @@ pub struct HotShotConfigFile {
     pub propose_max_round_time: Duration,
 }
 
-impl<K, ENTRY, E> From<HotShotConfigFile> for HotShotConfig<K, ENTRY, E> {
+impl<ENTRY, E> From<HotShotConfigFile> for HotShotConfig<ENTRY, E> {
     fn from(val: HotShotConfigFile) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: val.total_nodes,
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
-            known_nodes: Vec::new(),
             known_nodes_with_stake: Vec::new(),
             da_committee_size: val.committee_nodes,
             next_view_timeout: val.next_view_timeout,
@@ -220,7 +230,7 @@ fn default_config() -> HotShotConfigFile {
         total_nodes: NonZeroUsize::new(10).unwrap(),
         committee_nodes: 5,
         max_transactions: NonZeroUsize::new(100).unwrap(),
-        min_transactions: 0,
+        min_transactions: 1,
         next_view_timeout: 10000,
         timeout_ratio: (11, 10),
         round_start_delay: 1,

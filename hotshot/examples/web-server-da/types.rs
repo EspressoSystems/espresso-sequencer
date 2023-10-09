@@ -1,6 +1,6 @@
 use crate::infra_da::WebServerDARun;
 use hotshot::{
-    demos::sdemo::SDemoTypes,
+    demo::DemoTypes,
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{MemoryStorage, WebCommChannel},
@@ -22,57 +22,54 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = SequencingLeaf<SDemoTypes>;
+pub type ThisLeaf = SequencingLeaf<DemoTypes>;
 pub type ThisMembership =
-    GeneralStaticCommittee<SDemoTypes, ThisLeaf, <SDemoTypes as NodeType>::SignatureKey>;
-pub type DANetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisDAProposal, ThisDAVote, ThisMembership>;
-pub type QuorumNetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisQuorumProposal, ThisQuorumVote, ThisMembership>;
-pub type ViewSyncNetwork =
-    WebCommChannel<SDemoTypes, NodeImpl, ThisViewSyncProposal, ThisViewSyncVote, ThisMembership>;
+    GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
+pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
+pub type QuorumNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
+pub type ViewSyncNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 
-pub type ThisDAProposal = DAProposal<SDemoTypes>;
-pub type ThisDAVote = DAVote<SDemoTypes>;
+pub type ThisDAProposal = DAProposal<DemoTypes>;
+pub type ThisDAVote = DAVote<DemoTypes>;
 
-pub type ThisQuorumProposal = QuorumProposal<SDemoTypes, ThisLeaf>;
-pub type ThisQuorumVote = QuorumVote<SDemoTypes, ThisLeaf>;
+pub type ThisQuorumProposal = QuorumProposal<DemoTypes, ThisLeaf>;
+pub type ThisQuorumVote = QuorumVote<DemoTypes, ThisLeaf>;
 
-pub type ThisViewSyncProposal = ViewSyncCertificate<SDemoTypes>;
-pub type ThisViewSyncVote = ViewSyncVote<SDemoTypes>;
+pub type ThisViewSyncProposal = ViewSyncCertificate<DemoTypes>;
+pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
-impl NodeImplementation<SDemoTypes> for NodeImpl {
-    type Storage = MemoryStorage<SDemoTypes, Self::Leaf>;
-    type Leaf = SequencingLeaf<SDemoTypes>;
+impl NodeImplementation<DemoTypes> for NodeImpl {
+    type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
+    type Leaf = SequencingLeaf<DemoTypes>;
     type Exchanges = SequencingExchanges<
-        SDemoTypes,
-        Message<SDemoTypes, Self>,
+        DemoTypes,
+        Message<DemoTypes, Self>,
         QuorumExchange<
-            SDemoTypes,
+            DemoTypes,
             Self::Leaf,
             ThisQuorumProposal,
             ThisMembership,
             QuorumNetwork,
-            Message<SDemoTypes, Self>,
+            Message<DemoTypes, Self>,
         >,
-        CommitteeExchange<SDemoTypes, ThisMembership, DANetwork, Message<SDemoTypes, Self>>,
+        CommitteeExchange<DemoTypes, ThisMembership, DANetwork, Message<DemoTypes, Self>>,
         ViewSyncExchange<
-            SDemoTypes,
+            DemoTypes,
             ThisViewSyncProposal,
             ThisMembership,
             ViewSyncNetwork,
-            Message<SDemoTypes, Self>,
+            Message<DemoTypes, Self>,
         >,
     >;
-    type ConsensusMessage = SequencingMessage<SDemoTypes, Self>;
+    type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 
     fn new_channel_maps(
-        start_view: <SDemoTypes as NodeType>::Time,
+        start_view: <DemoTypes as NodeType>::Time,
     ) -> (
-        ChannelMaps<SDemoTypes, Self>,
-        Option<ChannelMaps<SDemoTypes, Self>>,
+        ChannelMaps<DemoTypes, Self>,
+        Option<ChannelMaps<DemoTypes, Self>>,
     ) {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = WebServerDARun<SDemoTypes, NodeImpl, ThisMembership>;
+pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl, ThisMembership>;

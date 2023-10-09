@@ -8,23 +8,24 @@ use crate::{
         AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate,
         ViewSyncCertificate,
     },
-    constants::genesis_proposer_id,
     traits::{
-        election::SignedCertificate,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
-        Block, State,
+        BlockPayload, State,
     },
 };
+use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use either::Either;
 use espresso_systems_common::hotshot::tag;
+use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
+use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
@@ -100,8 +101,14 @@ impl std::ops::Sub<u64> for ViewNumber {
     }
 }
 
+/// Generate the genesis block proposer ID from the defined constant
+#[must_use]
+pub fn genesis_proposer_id() -> EncodedPublicKey {
+    EncodedPublicKey(GENESIS_PROPOSER_ID.to_vec())
+}
+
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
-pub type Transaction<STATE> = <<STATE as State>::BlockType as Block>::Transaction;
+pub type Transaction<STATE> = <<STATE as State>::BlockType as BlockPayload>::Transaction;
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
@@ -124,21 +131,21 @@ where
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
     #[debug(skip)]
     pub parent_commitment: Commitment<LEAF>,
 
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
 
     /// What the state should be after applying `self.deltas`
     pub state_commitment: Commitment<TYPES::StateType>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,
@@ -147,10 +154,48 @@ where
 /// A proposal to start providing data availability for a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
+}
+
+/// The VID scheme type used in `HotShot`.
+pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
+pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
+
+/// VID dispersal data
+///
+/// Like [`DAProposal`].
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub struct VidDisperse<TYPES: NodeType> {
+    /// The view number for which this VID data is intended
+    pub view_number: TYPES::Time,
+    /// Block commitment
+    pub commitment: Commitment<TYPES::BlockType>,
+    /// VID shares dispersed among storage nodes
+    pub shares: Vec<<VidScheme as VidSchemeTrait>::Share>,
+    /// VID common data sent to all storage nodes
+    pub common: <VidScheme as VidSchemeTrait>::Common,
+}
+
+/// Trusted KZG setup for VID.
+///
+/// TESTING ONLY: don't use this in production
+/// TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+///
+/// # Panics
+/// ...because this is only for tests. This comment exists to pacify clippy.
+#[must_use]
+pub fn test_srs(
+    num_storage_nodes: usize,
+) -> <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::SRS {
+    let mut rng = jf_utils::test_rng();
+    UnivariateKzgPCS::<ark_bls12_381::Bls12_381>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(num_storage_nodes).unwrap(),
+    )
+    .unwrap()
 }
 
 /// Proposal to append a block.
@@ -167,7 +212,7 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
@@ -190,6 +235,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ProposalType
 }
 
 impl<TYPES: NodeType> ProposalType for DAProposal<TYPES> {
+    type NodeType = TYPES;
+    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+        self.view_number
+    }
+}
+
+impl<TYPES: NodeType> ProposalType for VidDisperse<TYPES> {
     type NodeType = TYPES;
     fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
         self.view_number
@@ -233,14 +285,14 @@ pub trait ProposalType:
 /// full. It is guaranteed to contain, at least, a cryptographic commitment to the block, and it
 /// provides an interface for resolving the commitment to a full block if the full block is
 /// available.
-pub trait DeltasType<Block: Committable>:
+pub trait DeltasType<BlockPayload: Committable>:
     Clone + Debug + for<'a> Deserialize<'a> + PartialEq + Eq + std::hash::Hash + Send + Serialize + Sync
 {
     /// Errors reported by this type.
     type Error: std::error::Error;
 
     /// Get a cryptographic commitment to the block represented by this delta.
-    fn block_commitment(&self) -> Commitment<Block>;
+    fn block_commitment(&self) -> Commitment<BlockPayload>;
 
     /// Get the full block if it is available, otherwise return this object unchanged.
     ///
@@ -248,7 +300,7 @@ pub trait DeltasType<Block: Committable>:
     ///
     /// Returns the original [`DeltasType`], unchanged, in an [`Err`] variant in the case where the
     /// full block is not currently available.
-    fn try_resolve(self) -> Result<Block, Self>;
+    fn try_resolve(self) -> Result<BlockPayload, Self>;
 
     /// Fill this [`DeltasType`] by providing a complete block.
     ///
@@ -259,7 +311,7 @@ pub trait DeltasType<Block: Committable>:
     ///
     /// Fails if `block` does not match `self.block_commitment()`, or if the block is not able to be
     /// stored for some implementation-defined reason.
-    fn fill(&mut self, block: Block) -> Result<(), Self::Error>;
+    fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
 }
 
 /// Error which occurs when [`DeltasType::fill`] is called with a block that does not match the
@@ -389,7 +441,7 @@ pub trait LeafType:
     /// Create a new leaf from its components.
     fn new(
         view_number: LeafTime<Self>,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: LeafBlock<Self>,
         state: LeafState<Self>,
     ) -> Self;
@@ -402,7 +454,7 @@ pub trait LeafType:
     /// Change the height of this leaf.
     fn set_height(&mut self, height: u64);
     /// The QC linking this leaf to its parent in the chain.
-    fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Self>;
+    fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Commitment<Self>>;
     /// Commitment to this leaf's parent.
     fn get_parent_commitment(&self) -> Commitment<Self>;
     /// The block contained in this leaf.
@@ -442,10 +494,10 @@ pub type LeafDeltasError<LEAF> = <LeafDeltas<LEAF> as DeltasType<LeafBlock<LEAF>
 pub type LeafNode<LEAF> = <LEAF as LeafType>::NodeType;
 /// The [`StateType`] in a [`LeafType`].
 pub type LeafState<LEAF> = <LeafNode<LEAF> as NodeType>::StateType;
-/// The [`Block`] in a [`LeafType`].
+/// The [`BlockPayload`] in a [`LeafType`].
 pub type LeafBlock<LEAF> = <LeafNode<LEAF> as NodeType>::BlockType;
 /// The [`Transaction`] in a [`LeafType`].
-pub type LeafTransaction<LEAF> = <LeafBlock<LEAF> as Block>::Transaction;
+pub type LeafTransaction<LEAF> = <LeafBlock<LEAF> as BlockPayload>::Transaction;
 /// The [`ConsensusTime`] used by a [`LeafType`].
 pub type LeafTime<LEAF> = <LeafNode<LEAF> as NodeType>::Time;
 
@@ -459,12 +511,12 @@ pub trait TestableLeaf {
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction;
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction;
 }
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
-/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::Block`
+/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative)]
 #[serde(bound(deserialize = ""))]
 #[derivative(Hash, PartialEq, Eq)]
@@ -476,20 +528,20 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Self>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
-    pub parent_commitment: Commitment<ValidatingLeaf<TYPES>>,
+    pub parent_commitment: Commitment<Self>,
 
-    /// Block leaf wants to apply
+    /// BlockPayload leaf wants to apply
     pub deltas: TYPES::BlockType,
 
     /// What the state should be AFTER applying `self.deltas`
     pub state: TYPES::StateType,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     #[derivative(PartialEq = "ignore")]
@@ -504,7 +556,7 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
-/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::Block`
+/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct SequencingLeaf<TYPES: NodeType> {
@@ -515,17 +567,17 @@ pub struct SequencingLeaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Self>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
 
     /// The hash of the parent `SequencingLeaf`
     /// So we can ask if it extends
-    pub parent_commitment: Commitment<SequencingLeaf<TYPES>>,
+    pub parent_commitment: Commitment<Self>,
 
     /// The block or block commitment to be applied
     pub deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
 
     /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as Block>::Transaction>,
+    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
 
     /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
     pub timestamp: i128,
@@ -589,7 +641,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -618,7 +670,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Self> {
+    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
         self.justify_qc.clone()
     }
 
@@ -642,7 +694,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.state.clone()
     }
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as Block>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -680,7 +732,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
         <TYPES::StateType as TestableState>::create_random_transaction(
             Some(&self.state),
             rng,
@@ -706,7 +758,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Self>,
+        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         _state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -734,7 +786,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Self> {
+    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
         self.justify_qc.clone()
     }
 
@@ -757,7 +809,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
     // The Sequencing Leaf doesn't have a state.
     fn get_state(&self) -> Self::MaybeState {}
 
-    fn get_rejected(&self) -> Vec<<TYPES::BlockType as Block>::Transaction> {
+    fn get_rejected(&self) -> Vec<<TYPES::BlockType as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
 
@@ -794,7 +846,7 @@ where
         &self,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockType as Block>::Transaction {
+    ) -> <<Self::NodeType as NodeType>::BlockType as BlockPayload>::Transaction {
         TYPES::StateType::create_random_transaction(None, rng, padding)
     }
 }
@@ -879,7 +931,7 @@ impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment(),
+                self.justify_qc.leaf_commitment,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
@@ -911,7 +963,7 @@ impl<TYPES: NodeType> Committable for SequencingLeaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment(),
+                self.justify_qc.leaf_commitment,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)

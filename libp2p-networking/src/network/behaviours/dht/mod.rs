@@ -5,6 +5,9 @@ use std::{
     time::Duration,
 };
 
+mod cache;
+
+use async_compatibility_layer::art::async_block_on;
 use futures::channel::oneshot::Sender;
 use libp2p::{
     kad::{
@@ -20,6 +23,8 @@ use tracing::{error, info, warn};
 
 pub(crate) const NUM_REPLICATED_TO_TRUST: usize = 2;
 const MAX_DHT_QUERY_SIZE: usize = 5;
+
+use self::cache::Cache;
 
 use super::exponential_backoff::ExponentialBackoff;
 
@@ -56,6 +61,8 @@ pub struct DHTBehaviour {
     pub peer_id: PeerId,
     /// replication factor
     pub replication_factor: NonZeroUsize,
+    /// kademlia cache
+    cache: Cache,
 }
 
 /// State of bootstrapping
@@ -106,10 +113,11 @@ impl DHTBehaviour {
 
     /// Create a new DHT behaviour
     #[must_use]
-    pub fn new(
+    pub async fn new(
         mut kadem: Kademlia<MemoryStore>,
         pid: PeerId,
         replication_factor: NonZeroUsize,
+        cache_location: Option<String>,
     ) -> Self {
         // needed because otherwise we stay in client mode when testing locally
         // and don't publish keys stuff
@@ -138,6 +146,13 @@ impl DHTBehaviour {
             },
             in_progress_get_closest_peers: HashMap::default(),
             replication_factor,
+            cache: Cache::new(
+                cache::ConfigBuilder::default()
+                    .filename(cache_location)
+                    .build()
+                    .unwrap_or_default(),
+            )
+            .await,
         }
     }
 
@@ -223,17 +238,26 @@ impl DHTBehaviour {
             return;
         }
 
-        let qid = self.kadem.get_record(key.clone().into());
-        let query = KadGetQuery {
-            backoff,
-            progress: DHTProgress::InProgress(qid),
-            notify: chan,
-            num_replicas: factor,
-            key,
-            retry_count: retry_count - 1,
-            records: HashMap::default(),
-        };
-        self.in_progress_get_record_queries.insert(qid, query);
+        // check cache before making the request
+        if let Some(entry) = async_block_on(self.cache.get(&key)) {
+            // exists in cache
+            if chan.send(entry.value().clone()).is_err() {
+                warn!("Get DHT: channel closed before get record request result could be sent");
+            }
+        } else {
+            // doesn't exist in cache, actually propagate request
+            let qid = self.kadem.get_record(key.clone().into());
+            let query = KadGetQuery {
+                backoff,
+                progress: DHTProgress::InProgress(qid),
+                notify: chan,
+                num_replicas: factor,
+                key,
+                retry_count: retry_count - 1,
+                records: HashMap::default(),
+            };
+            self.in_progress_get_record_queries.insert(qid, query);
+        }
     }
 
     /// update state based on recv-ed get query
@@ -279,6 +303,10 @@ impl DHTBehaviour {
                     .into_iter()
                     .find(|(_, v)| *v >= NUM_REPLICATED_TO_TRUST)
                 {
+                    // insert into cache
+                    async_block_on(self.cache.insert(key, r.clone()));
+
+                    // return value
                     if notify.send(r).is_err() {
                         warn!("Get DHT: channel closed before get record request result could be sent");
                     }

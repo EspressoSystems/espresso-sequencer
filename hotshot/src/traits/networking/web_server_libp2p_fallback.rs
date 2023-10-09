@@ -10,9 +10,10 @@ use async_trait::async_trait;
 
 use futures::join;
 
+use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
+    data::ViewNumber,
     message::Message,
     traits::{
         election::Membership,
@@ -23,7 +24,6 @@ use hotshot_types::{
         },
         node_implementation::NodeType,
     },
-    vote::VoteType,
 };
 use std::{marker::PhantomData, sync::Arc};
 use tracing::error;
@@ -155,13 +155,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
     for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>
 {
     type NETWORK = CombinedNetworks<TYPES, I, MEMBERSHIP>;
@@ -263,51 +258,38 @@ impl<
         boxed_sync(closure)
     }
 
-    async fn lookup_node(&self, pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        match join!(
-            self.network().lookup_node(pk.clone()),
-            self.fallback().lookup_node(pk)
-        ) {
-            (Err(e1), Err(e2)) => {
-                error!(
-                    "Both network lookups failed primary error: {}, fallback error: {}",
-                    e1, e2
-                );
-                Err(e1)
-            }
-            (Err(e), _) => {
-                error!("Failed primary lookup with error: {}", e);
-                Ok(())
-            }
-            (_, Err(e)) => {
-                error!("Failed backup lookup with error: {}", e);
-                Ok(())
-            }
-            _ => Ok(()),
-        }
+    async fn queue_node_lookup(
+        &self,
+        view_number: ViewNumber,
+        pk: TYPES::SignatureKey,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        self.network()
+            .queue_node_lookup(view_number, pk.clone())
+            .await?;
+        self.fallback().queue_node_lookup(view_number, pk).await?;
+
+        Ok(())
     }
 
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         <WebServerNetwork<_, _, _> as ConnectedNetwork<
             Message<TYPES, I>,
             TYPES::SignatureKey,
-        >>::inject_consensus_info(self.network(), event)
+        >>::inject_consensus_info(self.network(), event.clone())
         .await;
+
+        <Libp2pNetwork<_, _> as ConnectedNetwork<
+        Message<TYPES, I>,
+        TYPES::SignatureKey,
+        >>::inject_consensus_info(self.fallback(), event)
+    .await;
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
         Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
         MEMBERSHIP,
         CombinedNetworks<TYPES, I, MEMBERSHIP>,
     > for WebServerWithFallbackCommChannel<TYPES, I, MEMBERSHIP>
