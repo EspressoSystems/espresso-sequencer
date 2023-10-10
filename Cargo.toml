@@ -5,7 +5,6 @@ resolver = "2"
 members = [
   "contract-bindings",
   "contracts/rust",
-  "example-l2",
   "gen-bindings",
   "sequencer",
   "utils",

@@ -45,13 +45,6 @@ dev-sequencer:
     --consensus-server-url http://localhost:8082 \
     -- http --port 8083  -- query --storage-path storage
 
-dev-demo:
-     target/release/example-l2 --sequencer-url http://localhost:8083 \
-     --l1-http-provider http://localhost:8545 \
-     --l1-ws-provider ws://localhost:8546 \
-     --hotshot-address 0x5fbdb2315678afecb367f032d93f642f64180aa3 \
-     --rollup-mnemonic "test test test test test test test test test test test junk"
-
 dev-commitment:
      target/release/commitment-task --sequencer-url http://localhost:50000 \
      --l1-provider http://localhost:8545 \
