@@ -16,7 +16,10 @@ use std::time::Duration;
 use tempfile::TempDir;
 use url::Url;
 
+pub mod test_utils;
+
 pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
+pub type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 #[derive(Clone, Debug, Default)]
 pub struct AnvilOptions {

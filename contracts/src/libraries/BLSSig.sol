@@ -109,7 +109,6 @@ library BLSSig {
         }
 
         // solhint-disable-next-line
-        // Following
         // https://github.com/arkworks-rs/algebra/blob/bc991d44c5e579025b7ed56df3d30267a7b9acac/ff/src/fields/prime.rs#L72
 
         // Do the split
@@ -188,7 +187,6 @@ library BLSSig {
 
         // Hardcoded suffix "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_"
         // solhint-disable-next-line
-        // See
         // https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/constants.rs#L30
         bytes memory csidSuffix = "BLS_SIG_BN254G1_XMD:KECCAK_NCTH_NUL_";
 

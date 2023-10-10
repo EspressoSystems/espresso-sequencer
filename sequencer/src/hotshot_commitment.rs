@@ -218,10 +218,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
-    use contract_bindings::{
-        hot_shot::{NewBlocksCall, NewBlocksFilter},
-        TestL1System,
-    };
+    use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::{
@@ -229,6 +226,7 @@ mod test {
         data::{LeafType, ViewNumber},
         traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
     };
+    use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::AnvilOptions;
     use surf_disco::{Error, StatusCode};
 

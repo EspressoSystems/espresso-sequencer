@@ -6,9 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0"
 ark-serialize = { version = "0.3.0", features = ["derive"] }
 async-std = { version = "1.12.0", features = ["attributes"] }
 commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+contract-bindings = { path = "../contract-bindings" }
 ethers = "2.0.4"
 portpicker = "0.1.1"
 surf = "2.3.2"

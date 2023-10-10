@@ -1,9 +1,10 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
-use contract_bindings::{create_signer, hot_shot::HotShot};
-use ethers::{prelude::*, providers::Provider};
+use contract_bindings::hot_shot::HotShot;
+use ethers::{prelude::*, providers::Provider, signers::coins_bip39::English};
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use std::sync::Arc;
 use url::Url;
 
 /// Commitment Task Command
@@ -85,12 +86,16 @@ async fn main() {
             .expect("Error fetching L1 chain id")
             .as_u64();
 
-        let signer = create_signer(
-            opt.hotshot_account_index,
+        let signer = Arc::new(SignerMiddleware::new(
             &provider,
-            chain_id,
-            &opt.eth_mnemonic,
-        );
+            MnemonicBuilder::<English>::default()
+                .phrase(&*opt.eth_mnemonic)
+                .index(opt.hotshot_account_index)
+                .unwrap()
+                .build()
+                .unwrap()
+                .with_chain_id(chain_id),
+        ));
         let hotshot = HotShot::deploy(signer, ())
             .expect("Error constructing deployer instance")
             .send()

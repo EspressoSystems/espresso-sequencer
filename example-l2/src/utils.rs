@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use crate::state::State;
 use commit::Commitment;
-use contract_bindings::{example_rollup::ExampleRollup, EthMiddleware, TestL1System};
+use contract_bindings::example_rollup::ExampleRollup;
 use ethers::{prelude::*, providers::Provider};
-use sequencer_utils::commitment_to_u256;
+use sequencer_utils::{commitment_to_u256, test_utils::TestL1System, EthMiddleware};
 use surf_disco::Url;
 pub type ExampleRollupContract = ExampleRollup<EthMiddleware>;
 

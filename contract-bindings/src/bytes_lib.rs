@@ -7,7 +7,7 @@ pub use bytes_lib::*;
     clippy::upper_case_acronyms,
     clippy::type_complexity,
     dead_code,
-    non_camel_case_types,
+    non_camel_case_types
 )]
 pub mod bytes_lib {
     #[allow(deprecated)]
@@ -22,21 +22,18 @@ pub mod bytes_lib {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static BYTESLIB_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
-        __abi,
-    );
+    pub static BYTESLIB_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+        ::ethers::contract::Lazy::new(__abi);
     #[rustfmt::skip]
     const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 L\xBB#K\xE0cG\x1F\xF2\n\xDD<q\x155\xD8\x87\x9F\xABS\xAD\xEDC\x89\xE5_%\xD4D\xEA%\x8CdsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
-    pub static BYTESLIB_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
-        __BYTECODE,
-    );
+    pub static BYTESLIB_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
     const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 L\xBB#K\xE0cG\x1F\xF2\n\xDD<q\x155\xD8\x87\x9F\xABS\xAD\xEDC\x89\xE5_%\xD4D\xEA%\x8CdsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
-    pub static BYTESLIB_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
-        __DEPLOYED_BYTECODE,
-    );
+    pub static BYTESLIB_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
     pub struct BytesLib<M>(::ethers::contract::Contract<M>);
     impl<M> ::core::clone::Clone for BytesLib<M> {
         fn clone(&self) -> Self {
@@ -56,7 +53,9 @@ pub mod bytes_lib {
     }
     impl<M> ::core::fmt::Debug for BytesLib<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(BytesLib)).field(&self.address()).finish()
+            f.debug_tuple(::core::stringify!(BytesLib))
+                .field(&self.address())
+                .finish()
         }
     }
     impl<M: ::ethers::providers::Middleware> BytesLib<M> {
@@ -66,13 +65,11 @@ pub mod bytes_lib {
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            Self(
-                ::ethers::contract::Contract::new(
-                    address.into(),
-                    BYTESLIB_ABI.clone(),
-                    client,
-                ),
-            )
+            Self(::ethers::contract::Contract::new(
+                address.into(),
+                BYTESLIB_ABI.clone(),
+                client,
+            ))
         }
         /// Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it.
         /// Returns a new instance of a deployer that returns an instance of this contract after sending the transaction
@@ -114,8 +111,7 @@ pub mod bytes_lib {
             Ok(deployer)
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
-    for BytesLib<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BytesLib<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }

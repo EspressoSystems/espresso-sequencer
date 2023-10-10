@@ -196,7 +196,7 @@ mod test {
         logging::{setup_backtrace, setup_logging},
     };
     use async_std::task::spawn;
-    use contract_bindings::{example_rollup::StateUpdateFilter, TestL1System};
+    use contract_bindings::example_rollup::StateUpdateFilter;
     use derivative::Derivative;
     use ethers::prelude::k256::ecdsa::SigningKey;
     use ethers::providers::{Middleware, Provider};
@@ -216,6 +216,7 @@ mod test {
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
         Node, Vm, VmId,
     };
+    use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::{commitment_to_u256, AnvilOptions};
     use std::path::PathBuf;
     use std::time::Duration;

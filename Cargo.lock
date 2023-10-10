@@ -7049,9 +7049,11 @@ dependencies = [
 name = "sequencer-utils"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ark-serialize 0.3.0",
  "async-std",
  "commit",
+ "contract-bindings",
  "ethers",
  "portpicker",
  "surf",

@@ -7,7 +7,7 @@ pub use bn256g2::*;
     clippy::upper_case_acronyms,
     clippy::type_complexity,
     dead_code,
-    non_camel_case_types,
+    non_camel_case_types
 )]
 pub mod bn256g2 {
     #[allow(deprecated)]
@@ -22,21 +22,18 @@ pub mod bn256g2 {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static BN256G2_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
-        __abi,
-    );
+    pub static BN256G2_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+        ::ethers::contract::Lazy::new(__abi);
     #[rustfmt::skip]
     const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 x\xC1y\x8B\xC3\xC7\x1D\x04\xD1\xB6\x88\x8F\xB0\xF3b\xB6N\x0C\x86\xE4;\x85\xE4Iq\xDE\xB2\x11\x02\xC9X\x02dsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
-    pub static BN256G2_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
-        __BYTECODE,
-    );
+    pub static BN256G2_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
     const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 x\xC1y\x8B\xC3\xC7\x1D\x04\xD1\xB6\x88\x8F\xB0\xF3b\xB6N\x0C\x86\xE4;\x85\xE4Iq\xDE\xB2\x11\x02\xC9X\x02dsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
-    pub static BN256G2_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes = ::ethers::core::types::Bytes::from_static(
-        __DEPLOYED_BYTECODE,
-    );
+    pub static BN256G2_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
+        ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
     pub struct BN256G2<M>(::ethers::contract::Contract<M>);
     impl<M> ::core::clone::Clone for BN256G2<M> {
         fn clone(&self) -> Self {
@@ -56,7 +53,9 @@ pub mod bn256g2 {
     }
     impl<M> ::core::fmt::Debug for BN256G2<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(BN256G2)).field(&self.address()).finish()
+            f.debug_tuple(::core::stringify!(BN256G2))
+                .field(&self.address())
+                .finish()
         }
     }
     impl<M: ::ethers::providers::Middleware> BN256G2<M> {
@@ -66,13 +65,11 @@ pub mod bn256g2 {
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            Self(
-                ::ethers::contract::Contract::new(
-                    address.into(),
-                    BN256G2_ABI.clone(),
-                    client,
-                ),
-            )
+            Self(::ethers::contract::Contract::new(
+                address.into(),
+                BN256G2_ABI.clone(),
+                client,
+            ))
         }
         /// Constructs the general purpose `Deployer` instance based on the provided constructor arguments and sends it.
         /// Returns a new instance of a deployer that returns an instance of this contract after sending the transaction
@@ -114,8 +111,7 @@ pub mod bn256g2 {
             Ok(deployer)
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
-    for BN256G2<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for BN256G2<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
