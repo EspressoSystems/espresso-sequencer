@@ -22,15 +22,13 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
 /// Incoming message
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative)]
+#[derive(Serialize, Deserialize, Clone, Debug, Derivative, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
-#[derivative(PartialEq)]
 pub struct Message<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The sender of this message
     pub sender: TYPES::SignatureKey,
 
     /// The message kind
-    #[derivative(PartialEq = "ignore")]
     pub kind: MessageKind<TYPES, I>,
 
     /// Phantom data.
@@ -83,7 +81,7 @@ pub enum MessagePurpose {
 // TODO (da) make it more customized to the consensus layer, maybe separating the specific message
 // data from the kind enum.
 /// Enum representation of any message type
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub enum MessageKind<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Messages related to the consensus protocol
@@ -132,7 +130,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewMessage<TYPES> for Messa
 }
 
 /// Internal triggers sent by consensus messages.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub enum InternalTrigger<TYPES: NodeType> {
     // May add other triggers if necessary.
@@ -304,7 +302,7 @@ impl<
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to both validating and sequencing consensus.
 pub enum GeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
@@ -328,7 +326,7 @@ where
     InternalTrigger(InternalTrigger<TYPES>),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to the sequencing consensus protocol for the DA committee.
 pub enum CommitteeConsensusMessage<TYPES: NodeType> {
@@ -383,7 +381,7 @@ pub trait SequencingMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>>:
 }
 
 /// Messages for sequencing consensus.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct SequencingMessage<
     TYPES: NodeType,
@@ -455,7 +453,7 @@ impl<
                 CommitteeConsensusMessage::VidVote(_) => MessagePurpose::VidVote,
                 CommitteeConsensusMessage::DACertificate(_) => MessagePurpose::DAC,
                 CommitteeConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
-                CommitteeConsensusMessage::VidCertificate(_) => todo!(),
+                CommitteeConsensusMessage::VidCertificate(_) => MessagePurpose::VidCert,
             },
         }
     }
