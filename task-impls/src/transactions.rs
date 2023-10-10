@@ -14,15 +14,15 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction, NUM_CHUNKS, NUM_STORAGE_NODES},
-    certificate::DACertificate,
+    block_impl::{VIDBlockPayload, VIDTransaction},
+    certificate::QuorumCertificate,
     consensus::Consensus,
     data::{SequencingLeaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
-        election::{CommitteeExchangeType, ConsensusExchange},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType},
+        election::{ConsensusExchange, Membership, QuorumExchangeType},
+        node_implementation::{NodeImplementation, NodeType, QuorumEx},
         BlockPayload,
     },
 };
@@ -52,11 +52,10 @@ pub struct TransactionTaskState<
     >,
     A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
 > where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
     /// The state's api
@@ -77,7 +76,7 @@ pub struct TransactionTaskState<
     pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
 
     /// the committee exchange
-    pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
+    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
@@ -99,11 +98,10 @@ impl<
         A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
     /// main task event handler
@@ -203,7 +201,7 @@ where
                 self.cur_view = view;
 
                 // If we are not the next leader (DA leader for this view) immediately exit
-                if !self.committee_exchange.is_leader(self.cur_view + 1) {
+                if !self.quorum_exchange.is_leader(self.cur_view + 1) {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
@@ -236,25 +234,40 @@ where
 
                 drop(consensus);
 
-                let txns = self.wait_for_transactions(parent_leaf).await?;
-                // TODO (Keyao) Determine whether to allow empty transaction when proposing a block.
+                // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
+                let txns = self.wait_for_transactions(parent_leaf).await?;
 
-                debug!("Prepare VID shares");
-                // TODO https://github.com/EspressoSystems/HotShot/issues/1686
-                let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                // TODO https://github.com/EspressoSystems/jellyfish/issues/375
+                // TODO move all VID stuff to a new VID task
+                // details here: https://github.com/EspressoSystems/HotShot/issues/1817#issuecomment-1747143528
+                let num_storage_nodes = self.quorum_exchange.membership().total_nodes();
+                debug!("Prepare VID shares for {} storage nodes", num_storage_nodes);
+
+                // TODO Secure SRS for VID
+                // https://github.com/EspressoSystems/HotShot/issues/1686
+                let srs = hotshot_types::data::test_srs(num_storage_nodes);
+
+                // TODO proper source for VID erasure code rate
+                // https://github.com/EspressoSystems/HotShot/issues/1734
+                let num_chunks = num_storage_nodes / 2;
+
+                let vid = VidScheme::new(num_chunks, num_storage_nodes, &srs).unwrap();
+
+                // TODO Wasteful flattening of tx bytes to accommodate VID API
+                // https://github.com/EspressoSystems/jellyfish/issues/375
                 let mut txns_flatten = Vec::new();
                 for txn in &txns {
                     txns_flatten.extend(txn.0.clone());
                 }
+
                 let vid_disperse = vid.disperse(&txns_flatten).unwrap();
                 let block = VIDBlockPayload {
                     transactions: txns,
                     commitment: vid_disperse.commit,
                 };
 
+                // TODO never clone a block
+                // https://github.com/EspressoSystems/HotShot/issues/1858
                 self.event_stream
                     .publish(SequencingHotShotEvent::BlockReady(block.clone(), view + 1))
                     .await;
@@ -271,10 +284,9 @@ where
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self.committee_exchange.sign_da_proposal(&block.commit()),
+                            signature: self.quorum_exchange.sign_block_commitment(block.commit()),
                         },
-                        // TODO don't send to committee, send to quorum (consensus.rs) https://github.com/EspressoSystems/HotShot/issues/1696
-                        self.committee_exchange.public_key().clone(),
+                        self.quorum_exchange.public_key().clone(),
                     ))
                     .await;
                 return None;
@@ -301,11 +313,10 @@ impl<
         A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
@@ -399,11 +410,10 @@ impl<
         A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
     > TS for TransactionTaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
 }
