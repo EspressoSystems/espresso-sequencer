@@ -64,7 +64,6 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
 #[derive(Clone, Debug)]
 pub struct ConsensusMetricsValue {
-    #[allow(dead_code)]
     /// The values that are being tracked
     pub values: Arc<Mutex<InnerConsensusMetrics>>,
     /// The number of last synced synced block height
@@ -73,26 +72,12 @@ pub struct ConsensusMetricsValue {
     pub last_decided_view: Box<dyn Gauge>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
-    // The duration to collect votes in a view (only applies when this insance is the leader)
-    // pub vote_validate_duration: Box<dyn Histogram>,
-    // The duration we waited for txns before building the proposal
-    // pub proposal_wait_duration: Box<dyn Histogram>,
-    // The duration to build the proposal
-    // pub proposal_build_duration: Box<dyn Histogram>,
-    // The duration of each view, in seconds
-    // pub view_duration: Box<dyn Histogram>,
     /// Number of views that are in-flight since the last decided view
     pub number_of_views_since_last_decide: Box<dyn Gauge>,
     /// Number of views that are in-flight since the last anchor view
     pub number_of_views_per_decide_event: Box<dyn Histogram>,
     /// Number of invalid QCs we've seen since the last commit.
     pub invalid_qc: Box<dyn Gauge>,
-    // Number of views that were discarded since from one anchor to the next
-    // pub discarded_views_per_decide_event: Box<dyn Histogram>,
-    // Views where no proposal was seen from one anchor to the next
-    // pub empty_views_per_decide_event: Box<dyn Histogram>,
-    /// Number of rejected transactions, it's more like duplicated transactions in current implementation
-    pub rejected_transactions: Box<dyn Counter>,
     /// Number of outstanding transactions
     pub outstanding_transactions: Box<dyn Gauge>,
     /// Memory size in bytes of the serialized transactions still outstanding
@@ -235,14 +220,12 @@ impl ConsensusMetricsValue {
             number_of_views_per_decide_event: metrics
                 .create_histogram(String::from("number_of_views_per_decide_event"), None),
             invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
-            rejected_transactions: metrics
-                .create_counter(String::from("rejected_transactions"), None),
             outstanding_transactions: metrics
                 .create_gauge(String::from("outstanding_transactions"), None),
             outstanding_transactions_memory_size: metrics
                 .create_gauge(String::from("outstanding_transactions_memory_size"), None),
             number_of_timeouts: metrics
-                .create_counter(String::from("number_of_views_timed_out"), None),
+                .create_counter(String::from("number_of_timeouts"), None),
         }
     }
 }
