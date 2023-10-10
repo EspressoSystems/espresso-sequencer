@@ -11,8 +11,8 @@ and robust infrastructure.
 
 # Running the demo
 
-Refer to [example-l2/README.md](example-l2/README.md) for instructions on how to run a dockerized Espresso Sequencer
-network with an example Layer 2 rollup application.
+Refer to [sequencer-example-l2](https://github.com/EspressoSystems/sequencer-example-l2) for instructions on how to run
+a dockerized Espresso Sequencer network with an example Layer 2 rollup application.
 
 # Development
 
