@@ -6,7 +6,7 @@
 use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
 use crate::NodeImplementation;
 use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
+    art::async_spawn,
     channel::{bounded, Receiver, SendError, Sender},
 };
 use async_lock::{Mutex, RwLock};
@@ -40,18 +40,6 @@ use std::{
     },
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
-
-#[derive(Debug, Clone, Copy)]
-/// dummy implementation of network reliability
-pub struct DummyReliability {}
-impl NetworkReliability for DummyReliability {
-    fn sample_keep(&self) -> bool {
-        true
-    }
-    fn sample_delay(&self) -> std::time::Duration {
-        std::time::Duration::ZERO
-    }
-}
 
 /// Shared state for in-memory mock networking.
 ///
@@ -104,6 +92,9 @@ struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
 
     /// The networking metrics we're keeping track of
     metrics: NetworkingMetricsValue,
+  
+    /// config to introduce unreliability to the network
+    reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
 }
 
 /// In memory only network simulator.
@@ -134,7 +125,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
         pub_key: K,
         metrics: NetworkingMetricsValue,
         master_map: Arc<MasterMap<M, K>>,
-        reliability_config: Option<Arc<dyn 'static + NetworkReliability>>,
+        reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
     ) -> MemoryNetwork<M, K> {
         info!("Attaching new MemoryNetwork");
         let (broadcast_input, broadcast_task_recv) = bounded(128);
@@ -165,30 +156,11 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                             match x {
                                 Ok(x) => {
                                     let dts = direct_task_send.clone();
-                                    if let Some(r) = reliability_config.clone() {
-                                        async_spawn(async move {
-                                            if r.sample_keep() {
-                                                let delay = r.sample_delay();
-                                                if delay > std::time::Duration::ZERO {
-                                                    async_sleep(delay).await;
-                                                }
-                                                let res = dts.send(x).await;
-                                                if res.is_ok() {
-                                                    trace!("Passed message to output queue");
-                                                } else {
-                                                    error!("Output queue receivers are shutdown");
-                                                }
-                                            } else {
-                                                warn!("dropping packet!");
-                                            }
-                                        });
+                                    let res = dts.send(x).await;
+                                    if res.is_ok() {
+                                        trace!("Passed message to output queue");
                                     } else {
-                                        let res = dts.send(x).await;
-                                        if res.is_ok() {
-                                            trace!("Passed message to output queue");
-                                        } else {
-                                            error!("Output queue receivers are shutdown");
-                                        }
+                                        error!("Output queue receivers are shutdown");
                                     }
                                 }
                                 Err(e) => {
@@ -203,28 +175,11 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                             match x {
                                 Ok(x) => {
                                     let bts = broadcast_task_send.clone();
-                                    if let Some(r) = reliability_config.clone() {
-                                        async_spawn(async move {
-                                            if r.sample_keep() {
-                                                let delay = r.sample_delay();
-                                                if delay > std::time::Duration::ZERO {
-                                                    async_sleep(delay).await;
-                                                }
-                                                let res = bts.send(x).await;
-                                                if res.is_ok() {
-                                                    trace!("Passed message to output queue");
-                                                } else {
-                                                    warn!("dropping packet!");
-                                                }
-                                            }
-                                        });
+                                    let res = bts.send(x).await;
+                                    if res.is_ok() {
+                                        trace!("Passed message to output queue");
                                     } else {
-                                        let res = bts.send(x).await;
-                                        if res.is_ok() {
-                                            trace!("Passed message to output queue");
-                                        } else {
-                                            warn!("dropping packet!");
-                                        }
+                                        warn!("dropping packet!");
                                     }
                                 }
                                 Err(e) => {
@@ -249,6 +204,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                 master_map: master_map.clone(),
                 in_flight_message_count,
                 metrics,
+                reliability_config,
             }),
         };
         master_map.map.insert(pub_key, mn.clone());
@@ -347,20 +303,40 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             .context(FailedToSerializeSnafu)?;
         trace!("Message bincoded, sending");
         for node in &self.inner.master_map.map {
+            // TODO delay/drop etc here
             let (key, node) = node.pair();
             if !recipients.contains(key) {
                 continue;
             }
             trace!(?key, "Sending message to node");
-            let res = node.broadcast_input(vec.clone()).await;
-            match res {
-                Ok(_) => {
-                    self.inner.metrics.outgoing_broadcast_message_count.add(1);
-                    trace!(?key, "Delivered message to remote");
+            if let Some(r) = &self.inner.reliability_config {
+                let config = r.read().await;
+                {
+                    let node2 = node.clone();
+                    let fut = config.chaos_send_msg(
+                        vec.clone(),
+                        Arc::new(move |msg: Vec<u8>| {
+                            let node3 = (node2).clone();
+                            boxed_sync(async move {
+                                let _res = node3.broadcast_input(msg).await;
+                                // NOTE we're dropping metrics here but this is only for testing
+                                // purposes. I think that should be okay
+                            })
+                        }),
+                    );
+                    async_spawn(fut);
                 }
-                Err(e) => {
-                    self.inner.metrics.message_failed_to_send.add(1);
-                    warn!(?e, ?key, "Error sending broadcast message to node");
+            } else {
+                let res = node.broadcast_input(vec.clone()).await;
+                match res {
+                    Ok(_) => {
+                        self.inner.metrics.outgoing_message_count.add(1);
+                        trace!(?key, "Delivered message to remote");
+                    }
+                    Err(e) => {
+                        self.inner.metrics.message_failed_to_send.add(1);
+                        warn!(?e, ?key, "Error sending broadcast message to node");
+                    }
                 }
             }
         }
@@ -376,18 +352,37 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             .context(FailedToSerializeSnafu)?;
         trace!("Message bincoded, finding recipient");
         if let Some(node) = self.inner.master_map.map.get(&recipient) {
-            let node = node.value();
-            let res = node.direct_input(vec).await;
-            match res {
-                Ok(_) => {
-                    self.inner.metrics.outgoing_direct_message_count.add(1);
-                    trace!(?recipient, "Delivered message to remote");
-                    Ok(())
+            let node = node.value().clone();
+            if let Some(r) = &self.inner.reliability_config {
+                let config = r.read().await;
+                {
+                    let fut = config.chaos_send_msg(
+                        vec.clone(),
+                        Arc::new(move |msg: Vec<u8>| {
+                            let node2 = node.clone();
+                            boxed_sync(async move {
+                                let _res = node2.broadcast_input(msg).await;
+                                // NOTE we're dropping metrics here but this is only for testing
+                                // purposes. I think that should be okay
+                            })
+                        }),
+                    );
+                    async_spawn(fut);
                 }
-                Err(e) => {
-                    self.inner.metrics.message_failed_to_send.add(1);
-                    warn!(?e, ?recipient, "Error delivering direct message");
-                    Err(NetworkError::CouldNotDeliver)
+                Ok(())
+            } else {
+                let res = node.direct_input(vec).await;
+                match res {
+                    Ok(_) => {
+                        self.inner.metrics.outgoing_message_count.add(1);
+                        trace!(?recipient, "Delivered message to remote");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        self.inner.metrics.message_failed_to_send.add(1);
+                        warn!(?e, ?recipient, "Error delivering direct message");
+                        Err(NetworkError::CouldNotDeliver)
+                    }
                 }
             }
         } else {

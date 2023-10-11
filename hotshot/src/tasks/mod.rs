@@ -36,7 +36,7 @@ use hotshot_types::{
         election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, ViewSyncEx,
         },
         state::ConsensusTime,
     },
@@ -100,7 +100,7 @@ where
                         .expect("Failed to receive broadcast messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
@@ -120,7 +120,7 @@ where
                         .expect("Failed to receive direct messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
@@ -288,7 +288,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: VIDBlockPayload::genesis(),
+        block: Some(VIDBlockPayload::genesis()),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
@@ -425,15 +425,14 @@ pub async fn add_transaction_task<
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
-    committee_exchange: CommitteeEx<TYPES, I>,
+    quorum_exchange: QuorumEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
     // build the transactions task
@@ -448,7 +447,7 @@ where
         transactions: Arc::default(),
         seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
-        committee_exchange: committee_exchange.into(),
+        quorum_exchange: quorum_exchange.into(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };

@@ -289,7 +289,7 @@ where
                         (certificate_internal, ViewSyncPhase::Finalize)
                     }
                 };
-                debug!(
+                error!(
                     "Received view sync cert for phase {:?}",
                     last_seen_certificate
                 );
@@ -311,19 +311,20 @@ where
                 }
 
                 // We do not have a replica task already running, so start one
-                let mut replica_state = ViewSyncReplicaTaskState {
-                    current_view: certificate_internal.round,
-                    next_view: certificate_internal.round,
-                    relay: 0,
-                    finalized: false,
-                    sent_view_change_event: false,
-                    phase: ViewSyncPhase::None,
-                    exchange: self.exchange.clone(),
-                    api: self.api.clone(),
-                    event_stream: self.event_stream.clone(),
-                    view_sync_timeout: self.view_sync_timeout,
-                    id: self.id,
-                };
+                let mut replica_state: ViewSyncReplicaTaskState<TYPES, I, A> =
+                    ViewSyncReplicaTaskState {
+                        current_view: certificate_internal.round,
+                        next_view: certificate_internal.round,
+                        relay: 0,
+                        finalized: false,
+                        sent_view_change_event: false,
+                        phase: ViewSyncPhase::None,
+                        exchange: self.exchange.clone(),
+                        api: self.api.clone(),
+                        event_stream: self.event_stream.clone(),
+                        view_sync_timeout: self.view_sync_timeout,
+                        id: self.id,
+                    };
 
                 let result = replica_state.handle_event(event.clone()).await;
 
@@ -494,7 +495,10 @@ where
                 }
 
                 self.num_timeouts_tracked += 1;
-                error!("Num timeouts tracked is {}", self.num_timeouts_tracked);
+                error!(
+                    "Num timeouts tracked is {}. View {} timed out",
+                    self.num_timeouts_tracked, *view_number
+                );
 
                 if self.num_timeouts_tracked > 2 {
                     error!("Too many timeouts!  This shouldn't happen");
@@ -502,6 +506,10 @@ where
 
                 // TODO ED Make this a configurable variable
                 if self.num_timeouts_tracked == 2 {
+                    error!(
+                        "Starting view sync protocol; attempting to sync on view {}",
+                        *view_number + 1
+                    );
                     // Start polling for view sync certificates
                     self.exchange
                         .network()
@@ -518,10 +526,29 @@ where
                         .await;
                     // panic!("Starting view sync!");
                     // Spawn replica task
+                    let next_view = *view_number + 1;
+                    // Subscribe to the view after we are leader since we know we won't propose in the next view if we are leader.
+                    let subscribe_view = if self.exchange.is_leader(TYPES::Time::new(next_view)) {
+                        next_view + 1
+                    } else {
+                        next_view
+                    };
+                    // Subscribe to the next view just in case there is progress being made
+                    self.exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
+                            subscribe_view,
+                        ))
+                        .await;
+
+                    self.exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
+                        .await;
 
                     let mut replica_state = ViewSyncReplicaTaskState {
                         current_view: self.current_view,
-                        next_view: TYPES::Time::new(*view_number + 1),
+                        next_view: TYPES::Time::new(next_view),
                         relay: 0,
                         finalized: false,
                         sent_view_change_event: false,
@@ -547,7 +574,8 @@ where
 
                     let name = format!(
                         "View Sync Replica Task: Attempting to enter view {:?} from view {:?}",
-                        self.next_view, self.current_view
+                        *view_number + 1,
+                        *view_number
                     );
 
                     let replica_handle_event = HandleEvent(Arc::new(
@@ -648,7 +676,7 @@ where
 
                 // Ignore certificate if it is for an older round
                 if certificate_internal.round < self.next_view {
-                    debug!("We're already in a higher round");
+                    error!("We're already in a higher round");
 
                     return (None, self);
                 }
@@ -665,9 +693,9 @@ where
                 // If certificate is not valid, return current state
                 if !self
                     .exchange
-                    .is_valid_view_sync_cert(message.data, certificate_internal.round)
+                    .is_valid_view_sync_cert(message.data.clone(), certificate_internal.round)
                 {
-                    error!("Not valid view sync cert!");
+                    error!("Not valid view sync cert! {:?}", message.data);
 
                     return (None, self);
                 }
@@ -785,6 +813,7 @@ where
                             let phase = self.phase.clone();
                             async move {
                                 async_sleep(self.view_sync_timeout).await;
+                                error!("Vote sending timed out in ViewSyncCertificateRecv");
                                 stream
                                     .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
@@ -846,6 +875,7 @@ where
                             let stream = self.event_stream.clone();
                             async move {
                                 async_sleep(self.view_sync_timeout).await;
+                                error!("Vote sending timed out in ViewSyncTrigger");
                                 stream
                                     .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
@@ -916,6 +946,7 @@ where
                                 let stream = self.event_stream.clone();
                                 async move {
                                     async_sleep(self.view_sync_timeout).await;
+                                    error!("Vote sending timed out in ViewSyncTimeout");
                                     stream
                                         .publish(SequencingHotShotEvent::ViewSyncTimeout(
                                             TYPES::Time::new(*self.next_view),

@@ -709,7 +709,7 @@ where
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            quorum_exchange,
+            quorum_exchange.clone(),
             NetworkTaskKind::Quorum,
         )
         .await;
@@ -744,7 +744,7 @@ where
         let task_runner = add_transaction_task(
             task_runner,
             internal_event_stream.clone(),
-            committee_exchange.clone(),
+            quorum_exchange,
             handle.clone(),
         )
         .await;

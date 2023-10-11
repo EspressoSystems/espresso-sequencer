@@ -8,6 +8,7 @@ use crate::{
     data::{test_srs, VidScheme, VidSchemeTrait},
     traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
 };
+use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
@@ -88,8 +89,8 @@ impl VIDBlockPayload {
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        let builder = commit::RawCommitmentBuilder::new("BlockPayload Comm");
-        builder.generic_byte_array(&self.commitment).finalize()
+        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.commitment)
+            .expect("conversion from VidScheme::Commit to Commitment should succeed")
     }
 
     fn tag() -> String {

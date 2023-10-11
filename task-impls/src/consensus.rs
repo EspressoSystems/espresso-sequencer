@@ -43,7 +43,7 @@ use std::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 
 /// Error returned by the consensus task
 #[derive(Snafu, Debug)]
@@ -84,7 +84,7 @@ pub struct SequencingConsensusTaskState<
     pub cur_view: TYPES::Time,
 
     /// Current block submitted to DA
-    pub block: TYPES::BlockType,
+    pub block: Option<TYPES::BlockType>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -339,8 +339,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -405,8 +406,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -426,8 +428,13 @@ where
                         // Validate the DAC.
                         if self
                             .committee_exchange
-                            .is_valid_cert(cert, proposal.block_commitment)
+                            .is_valid_cert(cert)
                         {
+                            // Validate the block commitment for non-genesis DAC.
+                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_commitment {
+                                error!("Block commitment does not equal parent commitment");
+                                return false;
+                            }
                             self.quorum_exchange.create_yes_message(
                                 proposal.justify_qc.commit(),
                                 leaf.commit(),
@@ -449,13 +456,13 @@ where
                     }
                 }
             }
-            debug!(
+            info!(
                 "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
         }
-        debug!(
+        info!(
             "Could not vote because we don't have a proposal yet for view {}",
             *self.cur_view
         );
@@ -588,7 +595,6 @@ where
                     Ok(Some(vote_token)) => {
                         debug!("We were chosen for consensus committee on {:?}", view);
                         let consensus = self.consensus.upgradable_read().await;
-                        let message;
 
                         // TODO ED Insert TC logic here
 
@@ -603,111 +609,171 @@ where
                                 .cloned()
                         };
 
-                        // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                        let Some(parent) = parent else {
-                            error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
-                            );
-                            return;
-                        };
-                        let parent_commitment = parent.commit();
-                        let leaf: SequencingLeaf<_> = SequencingLeaf {
-                            view_number: view,
-                            height: proposal.data.height,
-                            justify_qc: justify_qc.clone(),
-                            parent_commitment,
-                            deltas: Right(proposal.data.block_commitment),
-                            rejected: Vec::new(),
-                            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                            proposer_id: sender.to_bytes(),
-                        };
-                        let justify_qc_commitment = justify_qc.commit();
-                        let leaf_commitment = leaf.commit();
-
                         // Validate the `justify_qc`.
-                        if !self
-                            .quorum_exchange
-                            .is_valid_cert(&justify_qc, parent_commitment)
-                        {
-                            error!("Invalid justify_qc in proposal!. parent commitment is {:?} justify qc is {:?}", parent_commitment, justify_qc.clone());
-                            consensus.metrics.invalid_qc.update(1);
-                            message = self.quorum_exchange.create_no_message::<I>(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
-                        }
-                        // Validate the `height`.
-                        else if leaf.height != parent.height + 1 {
-                            error!(
-                                "Incorrect height in proposal (expected {}, got {})",
-                                parent.height + 1,
-                                leaf.height
-                            );
-                            message = self.quorum_exchange.create_no_message(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
-                        }
-                        // Validate the signature.
-                        else if !view_leader_key
-                            .validate(&proposal.signature, leaf_commitment.as_ref())
-                        {
-                            error!(?proposal.signature, "Could not verify proposal.");
-                            message = self.quorum_exchange.create_no_message(
-                                justify_qc_commitment,
-                                leaf_commitment,
-                                view,
-                                vote_token,
-                            );
-                        }
-                        // Create a positive vote if either liveness or safety check
-                        // passes.
-                        else {
-                            // Liveness check.
-                            let liveness_check = justify_qc.view_number > consensus.locked_view;
+                        let justify_qc_commitment = justify_qc.commit();
+                        let invalid = !self.quorum_exchange.is_valid_cert(&justify_qc);
+                        let leaf;
 
-                            // Safety check.
-                            // Check if proposal extends from the locked leaf.
-                            let outcome = consensus.visit_leaf_ancestors(
-                                justify_qc.view_number,
-                                Terminator::Inclusive(consensus.locked_view),
-                                false,
-                                |leaf| {
-                                    // if leaf view no == locked view no then we're done, report success by
-                                    // returning true
-                                    leaf.view_number != consensus.locked_view
-                                },
-                            );
-                            let safety_check = outcome.is_ok();
-                            if let Err(e) = outcome {
-                                self.api.send_view_error(view, Arc::new(e)).await;
+                        // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
+                        if let Some(parent) = parent.clone() {
+                            let message;
+                            leaf = SequencingLeaf {
+                                view_number: view,
+                                height: proposal.data.height,
+                                justify_qc: justify_qc.clone(),
+                                parent_commitment: parent.commit(),
+                                deltas: Right(proposal.data.block_commitment),
+                                rejected: Vec::new(),
+                                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                                proposer_id: sender.to_bytes(),
+                            };
+                            let parent_commitment = parent.commit();
+                            let leaf_commitment = leaf.commit();
+
+                            if invalid {
+                                error!("Invalid justify_qc in proposal! parent commitment is {:?} justify qc is {:?}", parent_commitment, justify_qc.clone());
+                                consensus.metrics.invalid_qc.update(1);
+                                message = self.quorum_exchange.create_no_message::<I>(
+                                    justify_qc_commitment,
+                                    leaf_commitment,
+                                    view,
+                                    vote_token,
+                                );
                             }
-
-                            // Skip if both saftey and liveness checks fail.
-                            if !safety_check && !liveness_check {
-                                error!("Failed safety check and liveness check");
+                            // Validate the leaf commitment for non-genesis QC.
+                            else if !justify_qc.is_genesis()
+                                && justify_qc.leaf_commitment() != parent_commitment
+                            {
+                                error!("Leaf commitment does not equal parent commitment");
+                                message = self.quorum_exchange.create_no_message::<I>(
+                                    justify_qc_commitment,
+                                    leaf_commitment,
+                                    view,
+                                    vote_token,
+                                );
+                            }
+                            // Validate the `height`.
+                            else if leaf.height != parent.height + 1 {
+                                error!(
+                                    "Incorrect height in proposal (expected {}, got {})",
+                                    parent.height + 1,
+                                    leaf.height
+                                );
                                 message = self.quorum_exchange.create_no_message(
                                     justify_qc_commitment,
                                     leaf_commitment,
                                     view,
                                     vote_token,
                                 );
-                            } else {
-                                // Generate a message with yes vote.
-                                message = self.quorum_exchange.create_yes_message(
+                            }
+                            // Validate the signature.
+                            else if !view_leader_key
+                                .validate(&proposal.signature, leaf_commitment.as_ref())
+                            {
+                                error!(?proposal.signature, "Could not verify proposal.");
+                                message = self.quorum_exchange.create_no_message(
                                     justify_qc_commitment,
                                     leaf_commitment,
                                     view,
                                     vote_token,
                                 );
                             }
+                            // Create a positive vote if either liveness or safety check
+                            // passes.
+                            // Liveness check.
+                            else {
+                                let liveness_check = justify_qc.view_number > consensus.locked_view;
+
+                                // Safety check.
+                                // Check if proposal extends from the locked leaf.
+                                let outcome = consensus.visit_leaf_ancestors(
+                                    justify_qc.view_number,
+                                    Terminator::Inclusive(consensus.locked_view),
+                                    false,
+                                    |leaf| {
+                                        // if leaf view no == locked view no then we're done, report success by
+                                        // returning true
+                                        leaf.view_number != consensus.locked_view
+                                    },
+                                );
+                                let safety_check = outcome.is_ok();
+                                if let Err(e) = outcome {
+                                    self.api.send_view_error(view, Arc::new(e)).await;
+                                }
+
+                                // Skip if both saftey and liveness checks fail.
+                                if !safety_check && !liveness_check {
+                                    error!("Failed safety check and liveness check");
+                                    message = self.quorum_exchange.create_no_message(
+                                        justify_qc_commitment,
+                                        leaf_commitment,
+                                        view,
+                                        vote_token,
+                                    );
+                                }
+                                // Generate a message with yes vote.
+                                else {
+                                    message = self.quorum_exchange.create_yes_message(
+                                        justify_qc_commitment,
+                                        leaf_commitment,
+                                        view,
+                                        vote_token,
+                                    );
+                                }
+                            }
+
+                            if let GeneralConsensusMessage::Vote(vote) = message {
+                                debug!("Sending vote to next leader {:?}", vote);
+                            };
+                        } else {
+                            // Allow missing parent so we can update the state, but we won't
+                            // vote in this case.
+                            error!(
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.data.view_number,
+                            );
+
+                            if invalid {
+                                error!("Invalid justify_qc in proposal {:?}", justify_qc.clone());
+                                return;
+                            }
+                            leaf = SequencingLeaf {
+                                view_number: view,
+                                height: proposal.data.height,
+                                justify_qc: justify_qc.clone(),
+                                parent_commitment: justify_qc.leaf_commitment(),
+                                deltas: Right(proposal.data.block_commitment),
+                                rejected: Vec::new(),
+                                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                                proposer_id: sender.to_bytes(),
+                            };
+                            if !view_leader_key
+                                .validate(&proposal.signature, leaf.commit().as_ref())
+                            {
+                                error!(?proposal.signature, "Could not verify proposal.");
+                                return;
+                            }
+
+                            let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                            consensus.state_map.insert(
+                                view,
+                                View {
+                                    view_inner: ViewInner::Leaf {
+                                        leaf: leaf.commit(),
+                                    },
+                                },
+                            );
+                            consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                            drop(consensus);
+                            // The valid QC and signature on the proposal is evidence we can go to the next view
+                            // even though we can't vote in this round because we missed the last proposal.
+                            self.update_view(TYPES::Time::new(*view + 1)).await;
+                            return;
                         }
 
+                        // TODO (Keyao) Update consensus state only if all verifications pass.
+                        // <https://github.com/EspressoSystems/HotShot/issues/1865>
                         let high_qc = leaf.justify_qc.clone();
                         let mut new_anchor_view = consensus.last_decided_view;
                         let mut new_locked_view = consensus.locked_view;
@@ -717,74 +783,77 @@ where
                         let mut new_decide_qc = None;
                         let mut leaf_views = Vec::new();
                         let mut included_txns = HashSet::new();
-                        let old_anchor_view = consensus.last_decided_view;
-                        let parent_view = leaf.justify_qc.view_number;
-                        let mut current_chain_length = 0usize;
-                        if parent_view + 1 == view {
-                            current_chain_length += 1;
-                            if let Err(e) = consensus.visit_leaf_ancestors(
-                            parent_view,
-                            Terminator::Exclusive(old_anchor_view),
-                            true,
-                            |leaf| {
-                                if !new_decide_reached {
-                                    if last_view_number_visited == leaf.view_number + 1 {
-                                        last_view_number_visited = leaf.view_number;
-                                        current_chain_length += 1;
-                                        if current_chain_length == 2 {
-                                            new_locked_view = leaf.view_number;
-                                            new_commit_reached = true;
-                                            // The next leaf in the chain, if there is one, is decided, so this
-                                            // leaf's justify_qc would become the QC for the decided chain.
-                                            new_decide_qc = Some(leaf.justify_qc.clone());
-                                        } else if current_chain_length == 3 {
-                                            new_anchor_view = leaf.view_number;
-                                            new_decide_reached = true;
-                                        }
-                                    } else {
-                                        // nothing more to do here... we don't have a new chain extension
-                                        return false;
-                                    }
-                                }
-                                // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
-                                if new_decide_reached {
-                                    let mut leaf = leaf.clone();
-                                    consensus
-                                    .metrics
-                                    .last_synced_block_height
-                                    .set(usize::try_from(leaf.height).unwrap_or(0));
-
-                                    // If the full block is available for this leaf, include it in the leaf
-                                    // chain that we send to the client.
-                                    if let Some(block) =
-                                        consensus.saved_blocks.get(leaf.get_deltas_commitment())
-                                    {
-                                        if let Err(err) = leaf.fill_deltas(block.clone()) {
-                                            error!("unable to fill leaf {} with block {}, block will not be available: {}",
-                                                leaf.commit(), block.commit(), err);
-                                        }
-                                    }
-
-                                    leaf_views.push(leaf.clone());
-                                    match &leaf.deltas {
-                                        Left(block) => {
-                                            let txns = block.contained_transactions();
-                                            for txn in txns {
-                                                included_txns.insert(txn);
+                        if parent.is_some() {
+                            let old_anchor_view = consensus.last_decided_view;
+                            let parent_view = leaf.justify_qc.view_number;
+                            let mut current_chain_length = 0usize;
+                            if parent_view + 1 == view {
+                                current_chain_length += 1;
+                                if let Err(e) = consensus.visit_leaf_ancestors(
+                                    parent_view,
+                                    Terminator::Exclusive(old_anchor_view),
+                                    true,
+                                    |leaf| {
+                                        if !new_decide_reached {
+                                            if last_view_number_visited == leaf.view_number + 1 {
+                                                last_view_number_visited = leaf.view_number;
+                                                current_chain_length += 1;
+                                                if current_chain_length == 2 {
+                                                    new_locked_view = leaf.view_number;
+                                                    new_commit_reached = true;
+                                                    // The next leaf in the chain, if there is one, is decided, so this
+                                                    // leaf's justify_qc would become the QC for the decided chain.
+                                                    new_decide_qc = Some(leaf.justify_qc.clone());
+                                                } else if current_chain_length == 3 {
+                                                    new_anchor_view = leaf.view_number;
+                                                    new_decide_reached = true;
+                                                }
+                                            } else {
+                                                // nothing more to do here... we don't have a new chain extension
+                                                return false;
                                             }
                                         }
-                                        Right(_) => {}
+                                        // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
+                                        if new_decide_reached {
+                                            let mut leaf = leaf.clone();
+
+                                            consensus
+                                            .metrics
+                                            .last_synced_block_height
+                                            .set(usize::try_from(leaf.height).unwrap_or(0));
+                                          
+                                            // If the full block is available for this leaf, include it in the leaf
+                                            // chain that we send to the client.
+                                            if let Some(block) =
+                                                consensus.saved_blocks.get(leaf.get_deltas_commitment())
+                                            {
+                                                if let Err(err) = leaf.fill_deltas(block.clone()) {
+                                                    error!("unable to fill leaf {} with block {}, block will not be available: {}",
+                                                        leaf.commit(), block.commit(), err);
+                                                }
+                                            }
+
+                                            leaf_views.push(leaf.clone());
+                                            match &leaf.deltas {
+                                                Left(block) => {
+                                                    let txns = block.contained_transactions();
+                                                    for txn in txns {
+                                                        included_txns.insert(txn);
+                                                    }
+                                                }
+                                                Right(_) => {}
+                                            }
+                                        }
+                                        true
+                                    },
+                                ) {
+                                    error!("publishing view error");
+                                    self.output_event_stream.publish(Event {
+                                        view_number: view,
+                                        event: EventType::Error { error: e.into() },
+                                    }).await;
                                 }
                             }
-                                true
-                            },
-                        ) {
-                            error!("publishing view error");
-                            self.output_event_stream.publish(Event {
-                                view_number: view,
-                                event: EventType::Error { error: e.into() },
-                            }).await;
-                        }
                         }
 
                         let included_txns_set: HashSet<_> = if new_decide_reached {
@@ -862,7 +931,7 @@ where
                         drop(consensus);
                         if should_propose {
                             debug!(
-                                "Attempting to publish proposal after voting; now in view: {}",
+                                "Attempting to publish proposal before voting; now in view: {}",
                                 *new_view
                             );
                             self.publish_proposal_if_able(qc.clone(), qc.view_number + 1)
@@ -881,10 +950,6 @@ where
 
                         // Update current view and publish a view change event so other tasks also update
                         self.update_view(new_view).await;
-
-                        if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!("Sending vote to next leader {:?}", vote);
-                        };
                     }
                 }
             }
@@ -1101,7 +1166,8 @@ where
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 // ED TODO Should make sure this is actually the most recent block
-                self.block = block;
+                // ED Should make this a map to view
+                self.block = Some(block);
             }
             _ => {}
         }
@@ -1109,7 +1175,7 @@ where
 
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
-        &self,
+        &mut self,
         _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
         view: TYPES::Time,
     ) -> bool {
@@ -1173,49 +1239,54 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = self.block.commit();
+        // let block_commitment = Some(self.block.commit());
+        if let Some(block) = &self.block {
+            let block_commitment = block.commit();
 
-        let leaf = SequencingLeaf {
-            view_number: view,
-            height: parent_leaf.height + 1,
-            justify_qc: consensus.high_qc.clone(),
-            parent_commitment: parent_leaf.commit(),
-            // Use the block commitment rather than the block, so that the replica can construct
-            // the same leaf with the commitment.
-            deltas: Right(block_commitment),
-            rejected: vec![],
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: self.api.public_key().to_bytes(),
-        };
+            let leaf = SequencingLeaf {
+                view_number: view,
+                height: parent_leaf.height + 1,
+                justify_qc: consensus.high_qc.clone(),
+                parent_commitment: parent_leaf.commit(),
+                // Use the block commitment rather than the block, so that the replica can construct
+                // the same leaf with the commitment.
+                deltas: Right(block_commitment),
+                rejected: vec![],
+                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                proposer_id: self.api.public_key().to_bytes(),
+            };
 
-        let signature = self
-            .quorum_exchange
-            .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
-        // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
-        let proposal = QuorumProposal {
-            block_commitment,
-            view_number: leaf.view_number,
-            height: leaf.height,
-            justify_qc: consensus.high_qc.clone(),
-            // TODO ED Update this to be the actual TC if there is one
-            timeout_certificate: None,
-            proposer_id: leaf.proposer_id,
-            dac: None,
-        };
+            let signature = self
+                .quorum_exchange
+                .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
+            // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
+            let proposal = QuorumProposal {
+                block_commitment,
+                view_number: leaf.view_number,
+                height: leaf.height,
+                justify_qc: consensus.high_qc.clone(),
+                // TODO ED Update this to be the actual TC if there is one
+                timeout_certificate: None,
+                proposer_id: leaf.proposer_id,
+                dac: None,
+            };
 
-        let message = Proposal {
-            data: proposal,
-            signature,
-        };
-        debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
+            let message = Proposal {
+                data: proposal,
+                signature,
+            };
+            debug!("Sending proposal for view {:?} \n {:?}", self.cur_view, "");
 
-        self.event_stream
-            .publish(SequencingHotShotEvent::QuorumProposalSend(
-                message,
-                self.quorum_exchange.public_key().clone(),
-            ))
-            .await;
-        true
+            self.event_stream
+                .publish(SequencingHotShotEvent::QuorumProposalSend(
+                    message,
+                    self.quorum_exchange.public_key().clone(),
+                ))
+                .await;
+            self.block = None;
+            return true;
+        }
+        false
     }
 }
 

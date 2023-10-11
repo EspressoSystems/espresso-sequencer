@@ -384,9 +384,12 @@ async fn memory_network_test_in_flight_message_count() {
         network1.recv_msgs(TransmitType::Broadcast).await.unwrap();
     }
 
+    while network2.in_flight_message_count().unwrap() > messages.len() {
+        network2.recv_msgs(TransmitType::Direct).await.unwrap();
+    }
+
     while network2.in_flight_message_count().unwrap() > 0 {
         network2.recv_msgs(TransmitType::Broadcast).await.unwrap();
-        network2.recv_msgs(TransmitType::Direct).await.unwrap();
     }
 
     assert_eq!(network1.in_flight_message_count(), Some(0));

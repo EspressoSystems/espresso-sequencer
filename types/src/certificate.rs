@@ -207,7 +207,6 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds>
     }
 
     fn genesis() -> Self {
-        // TODO GG need a new way to get fake commit now that we don't have Committable
         Self {
             leaf_commitment: COMMITMENT::default_commitment_no_preimage(),
             view_number: <TYPES::Time as ConsensusTime>::genesis(),
