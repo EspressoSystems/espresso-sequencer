@@ -92,7 +92,7 @@ struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
 
     /// The networking metrics we're keeping track of
     metrics: NetworkingMetricsValue,
-  
+
     /// config to introduce unreliability to the network
     reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
 }
@@ -330,7 +330,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                 let res = node.broadcast_input(vec.clone()).await;
                 match res {
                     Ok(_) => {
-                        self.inner.metrics.outgoing_message_count.add(1);
+                        self.inner.metrics.outgoing_broadcast_message_count.add(1);
                         trace!(?key, "Delivered message to remote");
                     }
                     Err(e) => {
@@ -374,7 +374,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                 let res = node.direct_input(vec).await;
                 match res {
                     Ok(_) => {
-                        self.inner.metrics.outgoing_message_count.add(1);
+                        self.inner.metrics.outgoing_direct_message_count.add(1);
                         trace!(?recipient, "Delivered message to remote");
                         Ok(())
                     }

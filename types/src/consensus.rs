@@ -224,8 +224,7 @@ impl ConsensusMetricsValue {
                 .create_gauge(String::from("outstanding_transactions"), None),
             outstanding_transactions_memory_size: metrics
                 .create_gauge(String::from("outstanding_transactions_memory_size"), None),
-            number_of_timeouts: metrics
-                .create_counter(String::from("number_of_timeouts"), None),
+            number_of_timeouts: metrics.create_counter(String::from("number_of_timeouts"), None),
         }
     }
 }

@@ -816,12 +816,10 @@ where
                                         // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                                         if new_decide_reached {
                                             let mut leaf = leaf.clone();
-
                                             consensus
-                                            .metrics
-                                            .last_synced_block_height
-                                            .set(usize::try_from(leaf.height).unwrap_or(0));
-                                          
+                                                .metrics
+                                                .last_synced_block_height
+                                                .set(usize::try_from(leaf.height).unwrap_or(0));
                                             // If the full block is available for this leaf, include it in the leaf
                                             // chain that we send to the client.
                                             if let Some(block) =
