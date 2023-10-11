@@ -19,7 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-pub mod block_impl;
 /// Contains structures and functions for committee election
 pub mod certificate;
 #[cfg(feature = "demo")]
@@ -47,7 +46,7 @@ use async_compatibility_layer::{
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
-use commit::Committable;
+use commit::{Commitment, Committable};
 use custom_debug::Debug;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
@@ -59,6 +58,7 @@ use hotshot_types::{
 };
 
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
@@ -629,7 +629,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -642,8 +642,8 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-            Commitment = SequencingLeaf<TYPES>,
+            Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+            Commitment = Commitment<SequencingLeaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -651,7 +651,7 @@ where
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
             Certificate = DACertificate<TYPES>,
-            Commitment = TYPES::BlockType,
+            Commitment = Commitment<TYPES::BlockType>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -659,7 +659,7 @@ where
             Message<TYPES, I>,
             Proposal = ViewSyncCertificate<TYPES>,
             Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = ViewSyncData<TYPES>,
+            Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
@@ -667,7 +667,7 @@ where
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
             Certificate = TimeoutCertificate<TYPES>,
-            Commitment = TYPES::Time,
+            Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
         > + 'static,
 {
@@ -716,7 +716,7 @@ where
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            quorum_exchange,
+            quorum_exchange.clone(),
             NetworkTaskKind::Quorum,
         )
         .await;
@@ -751,7 +751,7 @@ where
         let task_runner = add_transaction_task(
             task_runner,
             internal_event_stream.clone(),
-            committee_exchange.clone(),
+            quorum_exchange,
             handle.clone(),
         )
         .await;
@@ -1062,7 +1062,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
                 context: err.to_string(),
             })?;
         let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate::<TYPES, LEAF>::genesis();
+        let justify_qc = QuorumCertificate::<TYPES, Commitment<LEAF>>::genesis();
 
         Ok(Self {
             inner: LEAF::new(time, justify_qc, genesis_block, state),

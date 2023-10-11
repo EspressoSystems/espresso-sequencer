@@ -46,7 +46,7 @@ use std::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 
 /// Error returned by the consensus task
 #[derive(Snafu, Debug)]
@@ -67,22 +67,23 @@ pub struct SequencingConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
+
 {
     /// The global task registry
     pub registry: GlobalRegistry,
@@ -94,7 +95,7 @@ pub struct SequencingConsensusTaskState<
     pub cur_view: TYPES::Time,
 
     /// Current block submitted to DA
-    pub block: TYPES::BlockType,
+    pub block: Option<TYPES::BlockType>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -139,7 +140,7 @@ pub struct SequencingConsensusTaskState<
     pub id: u64,
 
     /// The most Recent QC we've formed from votes, if we've formed it.
-    pub qc: Option<QuorumCertificate<TYPES, I::Leaf>>,
+    pub qc: Option<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
@@ -151,15 +152,15 @@ pub struct VoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
 {
     /// the quorum exchange
@@ -170,14 +171,14 @@ pub struct VoteCollectionTaskState<
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        <QuorumCertificate<TYPES, SequencingLeaf<TYPES>> as SignedCertificate<
+        <QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>> as SignedCertificate<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
             Commitment<SequencingLeaf<TYPES>>,
         >>::VoteAccumulator,
-        QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-    >,
+        QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+    >, 
 
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
@@ -205,16 +206,17 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
+
 {
 }
 
@@ -232,16 +234,17 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
+
 {
     match event {
         SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
@@ -368,21 +371,21 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
@@ -442,8 +445,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -511,8 +515,9 @@ where
                         // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                         let Some(parent) = parent else {
                             error!(
-                                "Proposal's parent missing from storage with commitment: {:?}",
-                                justify_qc.leaf_commitment()
+                                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+                                justify_qc.leaf_commitment(),
+                                proposal.view_number,
                             );
                             return false;
                         };
@@ -532,8 +537,13 @@ where
                         // Validate the DAC.
                         if self
                             .committee_exchange
-                            .is_valid_cert(cert, proposal.block_commitment)
+                            .is_valid_cert(cert)
                         {
+                            // Validate the block commitment for non-genesis DAC.
+                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_commitment {
+                                error!("Block commitment does not equal parent commitment");
+                                return false;
+                            }
                             self.quorum_exchange.create_yes_message(
                                 proposal.justify_qc.commit(),
                                 leaf.commit(),
@@ -555,13 +565,13 @@ where
                     }
                 }
             }
-            debug!(
+            info!(
                 "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
         }
-        debug!(
+        info!(
             "Could not vote because we don't have a proposal yet for view {}",
             *self.cur_view
         );
@@ -678,9 +688,10 @@ where
                         return;
                     }
 
+                    // TODO ED Do we need to check that the commit in the cert is in fact a commit to the correct view?  I think we do. 
                     if !self
                         .timeout_exchange
-                        .is_valid_cert(&timeout_cert.clone(), timeout_cert.view_number.commit())
+                        .is_valid_cert(&timeout_cert.clone())
                     {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;
@@ -691,7 +702,7 @@ where
 
                 if !self
                     .quorum_exchange
-                    .is_valid_cert(&justify_qc, justify_qc.leaf_commitment)
+                    .is_valid_cert(&justify_qc)
                 {
                     error!("Invalid justify_qc in proposal for view {}", *view);
                     return;
@@ -821,16 +832,16 @@ where
                                 if new_decide_reached {
                                     let mut leaf = leaf.clone();
 
-                                    // If the full block is available for this leaf, include it in the leaf
-                                    // chain that we send to the client.
-                                    if let Some(block) =
-                                        consensus.saved_blocks.get(leaf.get_deltas_commitment())
-                                    {
-                                        if let Err(err) = leaf.fill_deltas(block.clone()) {
-                                            error!("unable to fill leaf {} with block {}, block will not be available: {}",
-                                                leaf.commit(), block.commit(), err);
-                                        }
-                                    }
+                                            // If the full block is available for this leaf, include it in the leaf
+                                            // chain that we send to the client.
+                                            if let Some(block) =
+                                                consensus.saved_blocks.get(leaf.get_deltas_commitment())
+                                            {
+                                                if let Err(err) = leaf.fill_deltas(block.clone()) {
+                                                    error!("unable to fill leaf {} with block {}, block will not be available: {}",
+                                                        leaf.commit(), block.commit(), err);
+                                                }
+                                            }
 
                                     leaf_views.push(leaf.clone());
                                     match &leaf.deltas {
@@ -1159,9 +1170,11 @@ where
 
                     let view = qc.view_number + 1;
 
+                    let high_qc = self.consensus.read().await.high_qc.clone();
+
                     if self
                         .publish_proposal_if_able(
-                            self.consensus.read().await.high_qc.clone(),
+                            high_qc,
                             view,
                             Some(qc.clone()),
                         )
@@ -1264,7 +1277,7 @@ where
                 );
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
-                self.block = block;
+                self.block = Some(block);
             }
             _ => {}
         }
@@ -1272,8 +1285,8 @@ where
 
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
-        &self,
-        _qc: QuorumCertificate<TYPES, I::Leaf>,
+        &mut self,
+        _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
         view: TYPES::Time,
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
@@ -1337,23 +1350,22 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = self.block.commit();
-        if block_commitment == TYPES::BlockType::new().commit() {
-            debug!("BlockPayload is generic block! {:?}", self.cur_view);
-        }
+        // let block_commitment = Some(self.block.commit());
+        if let Some(block) = &self.block {
+            let block_commitment = block.commit();
 
-        let leaf = SequencingLeaf {
-            view_number: view,
-            height: parent_leaf.height + 1,
-            justify_qc: consensus.high_qc.clone(),
-            parent_commitment: parent_leaf.commit(),
-            // Use the block commitment rather than the block, so that the replica can construct
-            // the same leaf with the commitment.
-            deltas: Right(block_commitment),
-            rejected: vec![],
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: self.api.public_key().to_bytes(),
-        };
+            let leaf = SequencingLeaf {
+                view_number: view,
+                height: parent_leaf.height + 1,
+                justify_qc: consensus.high_qc.clone(),
+                parent_commitment: parent_leaf.commit(),
+                // Use the block commitment rather than the block, so that the replica can construct
+                // the same leaf with the commitment.
+                deltas: Right(block_commitment),
+                rejected: vec![],
+                timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                proposer_id: self.api.public_key().to_bytes(),
+            };
 
         let signature = self
             .quorum_exchange
@@ -1378,13 +1390,16 @@ where
             leaf.view_number, ""
         );
 
-        self.event_stream
-            .publish(SequencingHotShotEvent::QuorumProposalSend(
-                message,
-                self.quorum_exchange.public_key().clone(),
-            ))
-            .await;
-        true
+            self.event_stream
+                .publish(SequencingHotShotEvent::QuorumProposalSend(
+                    message,
+                    self.quorum_exchange.public_key().clone(),
+                ))
+                .await;
+            self.block = None;
+            return true;
+        }
+        false
     }
 }
 
@@ -1402,22 +1417,23 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
+
 {
 }
 
@@ -1458,22 +1474,23 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
+
 {
     if let SequencingHotShotEvent::Shutdown = event {
         (Some(HotShotTaskCompleted::ShutDown), state)

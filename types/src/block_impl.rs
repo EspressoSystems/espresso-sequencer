@@ -4,11 +4,22 @@ use std::{
     fmt::{Debug, Display},
 };
 
+use crate::{
+    data::{test_srs, VidScheme, VidSchemeTrait},
+    traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
+};
+use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
-use hotshot_types::traits::{block_contents::Transaction, state::TestableBlock, BlockPayload};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use snafu::Snafu;
+
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of storage nodes for VID initiation.
+pub const NUM_STORAGE_NODES: usize = 10;
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of chunks for VID initiation.
+pub const NUM_CHUNKS: usize = 5;
 
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -30,14 +41,6 @@ impl Committable for VIDTransaction {
 
 impl Transaction for VIDTransaction {}
 
-impl VIDTransaction {
-    /// create a new transaction
-    #[must_use]
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-}
-
 /// The error type for block payload.
 #[derive(Snafu, Debug)]
 pub enum BlockPayloadError {
@@ -55,14 +58,39 @@ pub enum BlockPayloadError {
 
 /// A [`BlockPayload`] that contains a list of `VIDTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct VIDBlockPayload(pub Vec<VIDTransaction>);
+pub struct VIDBlockPayload {
+    /// List of transactions.
+    pub transactions: Vec<VIDTransaction>,
+    /// VID commitment.
+    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
+}
+
+impl VIDBlockPayload {
+    /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
+    /// consensus task initiation.
+    /// # Panics
+    /// If the `VidScheme` construction fails.
+    #[must_use]
+    pub fn genesis() -> Self {
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+        let srs = test_srs(NUM_STORAGE_NODES);
+        // TODO We are using constant numbers for now, but they will change as the quorum size
+        // changes.
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+        let txn = vec![0];
+        let vid_disperse = vid.disperse(&txn).unwrap();
+        VIDBlockPayload {
+            transactions: vec![VIDTransaction(txn)],
+            commitment: vid_disperse.commit,
+        }
+    }
+}
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        // TODO: Use use VID block commitment.
-        // <https://github.com/EspressoSystems/HotShot/issues/1730>
-        let builder = commit::RawCommitmentBuilder::new("BlockPayload Comm");
-        builder.finalize()
+        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.commitment)
+            .expect("conversion from VidScheme::Commit to Commitment should succeed")
     }
 
     fn tag() -> String {
@@ -72,17 +100,17 @@ impl Committable for VIDBlockPayload {
 
 impl Display for VIDBlockPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BlockPayload #txns={}", self.0.len())
+        write!(f, "BlockPayload #txns={}", self.transactions.len())
     }
 }
 
 impl TestableBlock for VIDBlockPayload {
     fn genesis() -> Self {
-        VIDBlockPayload(Vec::new())
+        Self::genesis()
     }
 
     fn txn_count(&self) -> u64 {
-        self.0.len() as u64
+        self.transactions.len() as u64
     }
 }
 
@@ -91,20 +119,10 @@ impl BlockPayload for VIDBlockPayload {
 
     type Transaction = VIDTransaction;
 
-    fn new() -> Self {
-        <Self as TestableBlock>::genesis()
-    }
-
-    fn add_transaction_raw(
-        &self,
-        tx: &Self::Transaction,
-    ) -> std::result::Result<Self, Self::Error> {
-        let mut new = self.0.clone();
-        new.push(tx.clone());
-        Ok(VIDBlockPayload(new))
-    }
-
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-        self.0.iter().map(commit::Committable::commit).collect()
+        self.transactions
+            .iter()
+            .map(commit::Committable::commit)
+            .collect()
     }
 }

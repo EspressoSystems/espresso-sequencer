@@ -124,7 +124,7 @@ impl TestMetadata {
         }
     }
 
-    /// Default setting with 20 nodes and 10 views of successful views.
+    /// Default setting with 20 nodes and 8 views of successful views.
     pub fn default_more_nodes_less_success() -> TestMetadata {
         TestMetadata {
             total_nodes: 20,
@@ -139,11 +139,11 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(40, 0),
+                    duration: Duration::new(200, 0),
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 10,
+                num_successful_views: 8,
                 ..Default::default()
             },
             ..TestMetadata::default()

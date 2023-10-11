@@ -21,11 +21,13 @@ use std::collections::HashMap;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_network_task() {
-    use hotshot::block_impl::VIDBlockPayload;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
-        data::VidDisperse, message::Proposal, traits::election::CommitteeExchangeType,
+        block_impl::{VIDBlockPayload, VIDTransaction},
+        data::VidDisperse,
+        message::Proposal,
+        traits::election::CommitteeExchangeType,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -40,9 +42,15 @@ async fn test_network_task() {
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
-    let block = VIDBlockPayload(Vec::new());
-    let block_commitment = block.commit();
-    let signature = committee_exchange.sign_da_proposal(&block_commitment);
+    let vid = vid_init();
+    let txn = vec![0u8];
+    let vid_disperse = vid.disperse(&txn).unwrap();
+    let block_commitment = vid_disperse.commit;
+    let block = VIDBlockPayload {
+        transactions: vec![VIDTransaction(txn)],
+        commitment: block_commitment,
+    };
+    let signature = committee_exchange.sign_da_proposal(&block.commit());
     let da_proposal = Proposal {
         data: DAProposal {
             deltas: block.clone(),
@@ -51,15 +59,12 @@ async fn test_network_task() {
         signature,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
-    let vid = vid_init();
-    let da_proposal_bytes = bincode::serialize(&da_proposal).unwrap();
-    let vid_disperse = vid.disperse(&da_proposal_bytes).unwrap();
     // TODO for now reuse the same block commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
         data: VidDisperse {
             view_number: da_proposal.data.view_number,
-            commitment: block_commitment,
+            commitment: block.commit(),
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },

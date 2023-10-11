@@ -55,7 +55,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate<TYPES, LEAF>,
+    pub high_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// A reference to the metrics trait
     #[debug(skip)]

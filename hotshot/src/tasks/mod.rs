@@ -5,7 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, Committable};
+use commit::{Commitment, CommitmentBounds};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -27,6 +27,7 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{TimeoutCertificate, ViewSyncCertificate},
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
@@ -35,15 +36,13 @@ use hotshot_types::{
         election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, SequencingTimeoutEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, SequencingTimeoutEx,
             ViewSyncEx,
         },
         state::ConsensusTime,
-        BlockPayload,
     },
     vote::{ViewSyncData, VoteType},
 };
-use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
@@ -70,9 +69,9 @@ pub async fn add_network_message_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    COMMITTABLE: Committable + Serialize + Clone,
+    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -102,7 +101,7 @@ where
                         .expect("Failed to receive broadcast messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
@@ -122,7 +121,7 @@ where
                         .expect("Failed to receive direct messages"),
                 );
                 if msgs.0.is_empty() {
-                    async_sleep(Duration::new(0, 500)).await;
+                    async_sleep(Duration::from_millis(100)).await;
                 } else {
                     break msgs;
                 }
@@ -180,9 +179,9 @@ pub async fn add_network_event_task<
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
-    COMMITTABLE: Committable + Serialize + Clone,
+    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, Commitment<COMMITTABLE>>,
+    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
     EXCHANGE: ConsensusExchange<
             TYPES,
@@ -252,7 +251,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType,
+    TYPES: NodeType<BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -269,21 +268,21 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, SequencingLeaf<TYPES>>,
-        Commitment = SequencingLeaf<TYPES>,
+        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
+        Commitment = Commitment<SequencingLeaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
-        Commitment = TYPES::Time,
+        Commitment = Commitment<TYPES::Time>,
     >,
 {
     let consensus = handle.hotshot.get_consensus();
@@ -297,7 +296,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: TYPES::BlockType::new(),
+        block: Some(VIDBlockPayload::genesis()),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
@@ -384,7 +383,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Commitment = Commitment<TYPES::BlockType>,
     >,
 {
     // build the da task
@@ -436,7 +435,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -445,15 +444,14 @@ pub async fn add_transaction_task<
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
-    committee_exchange: CommitteeEx<TYPES, I>,
+    quorum_exchange: QuorumEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = TYPES::BlockType,
+        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
     >,
 {
     // build the transactions task
@@ -468,7 +466,7 @@ where
         transactions: Arc::default(),
         seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
-        committee_exchange: committee_exchange.into(),
+        quorum_exchange: quorum_exchange.into(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };
@@ -527,7 +525,7 @@ where
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = ViewSyncData<TYPES>,
+        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     let api = HotShotSequencingConsensusApi {

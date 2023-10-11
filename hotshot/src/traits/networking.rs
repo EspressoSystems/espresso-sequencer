@@ -5,9 +5,9 @@
 //! - [`MemoryNetwork`](memory_network::MemoryNetwork), an in memory testing-only implementation
 //! - [`Libp2pNetwork`](libp2p_network::Libp2pNetwork), a production-ready networking impelmentation built on top of libp2p-rs.
 
+pub mod combined_network;
 pub mod libp2p_network;
 pub mod memory_network;
-pub mod web_server_libp2p_fallback;
 pub mod web_server_network;
 
 pub use hotshot_types::traits::network::{

@@ -1,7 +1,7 @@
 //! Provides two types of cerrtificates and their accumulators.
 
 use crate::{
-    data::{fake_commitment, serialize_signature, LeafType},
+    data::serialize_signature,
     traits::{
         election::SignedCertificate, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -12,13 +12,14 @@ use crate::{
     },
 };
 use bincode::Options;
-use commit::{Commitment, Committable};
+use commit::{Commitment, CommitmentBounds, Committable};
 
 use espresso_systems_common::hotshot::tag;
 use hotshot_utils::bincode::bincode_opts;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
     ops::Deref,
 };
 use tracing::debug;
@@ -45,12 +46,12 @@ pub struct DACertificate<TYPES: NodeType> {
 ///
 /// A Quorum Certificate is a threshold signature of the `Leaf` being proposed, as well as some
 /// metadata, such as the `Stage` of consensus the quorum certificate was generated during.
-#[derive(custom_debug::Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Hash)]
+#[derive(custom_debug::Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = ""))]
-pub struct QuorumCertificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct QuorumCertificate<TYPES: NodeType, COMMITMENT: CommitmentBounds> {
     /// commitment to previous leaf
     #[debug(skip)]
-    pub leaf_commitment: Commitment<LEAF>,
+    pub leaf_commitment: COMMITMENT,
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
@@ -59,7 +60,9 @@ pub struct QuorumCertificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> 
     pub is_genesis: bool,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Display for QuorumCertificate<TYPES, LEAF> {
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Display
+    for QuorumCertificate<TYPES, COMMITMENT>
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -171,12 +174,12 @@ pub enum AssembledSignature<TYPES: NodeType> {
     ViewSyncFinalize(<TYPES::SignatureKey as SignatureKey>::QCType),
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<LEAF>>
-    for QuorumCertificate<TYPES, LEAF>
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, COMMITMENT>
+    for QuorumCertificate<TYPES, COMMITMENT>
 {
-    type Vote = QuorumVote<TYPES, LEAF>;
-    type VoteAccumulator = QuorumVoteAccumulator<TYPES, Commitment<LEAF>, Self::Vote>;
+    type Vote = QuorumVote<TYPES, COMMITMENT>;
+    type VoteAccumulator = QuorumVoteAccumulator<TYPES, COMMITMENT, Self::Vote>;
 
     fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let leaf_commitment = match vote.clone() {
@@ -202,9 +205,10 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<LEAF> {
+    fn leaf_commitment(&self) -> COMMITMENT {
         self.leaf_commitment
     }
+
 
     fn is_genesis(&self) -> bool {
         self.is_genesis
@@ -212,7 +216,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
 
     fn genesis() -> Self {
         Self {
-            leaf_commitment: fake_commitment::<LEAF>(),
+            leaf_commitment: COMMITMENT::default_commitment_no_preimage(),
             view_number: <TYPES::Time as ConsensusTime>::genesis(),
             signatures: AssembledSignature::Genesis(),
             is_genesis: true,
@@ -220,16 +224,14 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Eq for QuorumCertificate<TYPES, LEAF> {}
-
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Committable
-    for QuorumCertificate<TYPES, LEAF>
+impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
+    for QuorumCertificate<TYPES, COMMITMENT>
 {
     fn commit(&self) -> Commitment<Self> {
         let signatures_bytes = serialize_signature(&self.signatures);
 
         commit::RawCommitmentBuilder::new("Quorum Certificate Commitment")
-            .field("leaf commitment", self.leaf_commitment)
+            .var_size_field("leaf commitment", self.leaf_commitment.as_ref())
             .u64_field("view number", *self.view_number.deref())
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)

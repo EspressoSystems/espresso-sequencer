@@ -132,7 +132,7 @@ pub struct StoredView<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// The parent of this view
     pub parent: Commitment<LEAF>,
     /// The justify QC of this view. See the hotstuff paper for more information on this.
-    pub justify_qc: QuorumCertificate<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
     /// The state of this view
     pub state: LEAF::MaybeState,
     /// The deltas of this view
@@ -156,7 +156,7 @@ where
     ///
     /// Note that this will set the `parent` to `LeafHash::default()`, so this will not have a parent.
     pub fn from_qc_block_and_state(
-        qc: QuorumCertificate<TYPES, LEAF>,
+        qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
         deltas: LEAF::DeltasType,
         state: LEAF::MaybeState,
         height: u64,

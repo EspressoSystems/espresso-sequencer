@@ -1,5 +1,5 @@
 rounds = 10
-transactions_per_round = 10
+transactions_per_round = 12
 node_index = 0
 seed = [
     0,
@@ -39,7 +39,6 @@ padding = 10
 start_delay_seconds = 60
 
 [libp2p_config]
-num_bootstrap_nodes = 5
 index_ports = true
 bootstrap_mesh_n_high = 4
 bootstrap_mesh_n_low = 4
@@ -49,11 +48,7 @@ mesh_n_high = 4
 mesh_n_low = 4
 mesh_outbound_min = 2
 mesh_n = 4
-next_view_timeout = 10
-propose_min_round_time = 0
-propose_max_round_time = 10
 online_time = 10
-num_txn_per_round = 10
 base_port = 9000
 
 [config]
@@ -68,12 +63,14 @@ timeout_ratio = [
 ]
 round_start_delay = 1
 start_delay = 1
-num_bootstrap = 4
+num_bootstrap = 5
 
 [config.propose_min_round_time]
 secs = 0
 nanos = 0
 
+# TODO (Keyao) Clean up configuration parameters.
+# <https://github.com/EspressoSystems/HotShot/issues/1823>
 [config.propose_max_round_time]
-secs = 1
+secs = 2
 nanos = 0

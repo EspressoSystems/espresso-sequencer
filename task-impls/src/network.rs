@@ -22,6 +22,7 @@ use hotshot_types::{
 use snafu::Snafu;
 use std::{marker::PhantomData, sync::Arc};
 use tracing::error;
+use tracing::instrument;
 
 /// the type of network task
 #[derive(Clone, Copy, Debug)]
@@ -192,6 +193,8 @@ impl<
     /// # Panics
     /// Panic sif a direct message event is received with no recipient
     #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
+    #[instrument(skip_all, fields(view = *self.view), name = "Newtork Task", level = "error")]
+
     pub async fn handle_event(
         &mut self,
         event: SequencingHotShotEvent<TYPES, I>,
