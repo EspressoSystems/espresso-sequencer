@@ -723,6 +723,7 @@ where
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.leaf_commitment()
                     );
+                    // TODO ED Remove this return 
                     return;
                 };
                 let parent_commitment = parent.commit();

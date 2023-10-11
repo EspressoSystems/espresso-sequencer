@@ -32,7 +32,7 @@ use hotshot_types::{
 
 use snafu::Snafu;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -273,10 +273,11 @@ where
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
-                // if view < self.cur_view - 1 {
-                //     warn!("Throwing away DA proposal that is more than one view older");
-                //     return None;
-                // }
+
+                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
+                    warn!("Throwing away DA proposal that is more than one view older");
+                    return None;
+                }
 
                 debug!(
                     "Got a DA block with {} transactions!",
@@ -509,10 +510,11 @@ where
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO ED Revisit this
-                // if view < self.cur_view - 1 {
-                //     warn!("Throwing away VID disperse data that is more than one view older");
-                //     return None;
-                // }
+
+                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
+                    warn!("Throwing away VID disperse data that is more than one view older");
+                    return None;
+                }
 
                 debug!("VID disperse data is fresh.");
                 let block_commitment = disperse.data.commitment;
