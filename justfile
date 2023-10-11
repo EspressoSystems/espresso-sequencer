@@ -60,3 +60,9 @@ dev-commitment:
 
 build-docker-images:
     scripts/build-docker-images
+
+# generate rust bindings for contracts
+gen-bindings:
+    forge bind --crate-name contract-bindings
+    rm -rf ./contract-bindings
+    mv ./contracts/out/bindings ./contract-bindings
