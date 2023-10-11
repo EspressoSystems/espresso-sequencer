@@ -27,6 +27,7 @@ pub struct AnvilOptions {
     port: Option<u16>,
     load_state: Option<PathBuf>,
     accounts: Option<usize>,
+    chain_id: Option<u64>,
 }
 
 impl AnvilOptions {
@@ -50,13 +51,19 @@ impl AnvilOptions {
         self
     }
 
+    pub fn chain_id(mut self, id: u64) -> Self {
+        self.chain_id = Some(id);
+        self
+    }
+
     pub async fn spawn(self) -> Anvil {
         let state_dir = TempDir::new().unwrap();
-        let (child, url) = Anvil::spawn_server(self, state_dir.path()).await;
+        let (child, url) = Anvil::spawn_server(&self, Some(state_dir.path())).await;
         Anvil {
             child,
             url,
             state_dir,
+            opt: self,
         }
     }
 }
@@ -66,10 +73,11 @@ pub struct Anvil {
     child: Child,
     url: Url,
     state_dir: TempDir,
+    opt: AnvilOptions,
 }
 
 impl Anvil {
-    async fn spawn_server(opt: AnvilOptions, state_dir: &Path) -> (Child, Url) {
+    async fn spawn_server(opt: &AnvilOptions, state_dir: Option<&Path>) -> (Child, Url) {
         let port = opt
             .port
             .unwrap_or_else(|| portpicker::pick_unused_port().unwrap());
@@ -79,17 +87,21 @@ impl Anvil {
             "--silent",
             "--port",
             &port.to_string(),
-            "--dump-state",
-            &state_dir.display().to_string(),
             "--accounts",
             &opt.accounts.unwrap_or(20).to_string(),
         ]);
 
+        if let Some(state_dir) = state_dir {
+            command.args(["--dump-state", &state_dir.display().to_string()]);
+        }
         if let Some(block_time) = opt.block_time {
             command.args(["-b", &block_time.as_secs().to_string()]);
         }
-        if let Some(load_state) = opt.load_state {
+        if let Some(load_state) = &opt.load_state {
             command.args(["--load-state", &load_state.display().to_string()]);
+        }
+        if let Some(chain_id) = opt.chain_id {
+            command.args(["--chain-id", &chain_id.to_string()]);
         }
 
         tracing::info!("Starting Anvil: {:?}", &command);
@@ -136,14 +148,74 @@ impl Anvil {
         if opt.port.is_none() {
             opt.port = self.url.port();
         }
+        // If `opt` does not explicitly override the chain ID, use the current one.
+        if opt.chain_id.is_none() {
+            opt.chain_id = self.opt.chain_id;
+        }
 
         // Load state from the file where we just dumped state.
         opt = opt.load_state(self.state_dir.path().join("state.json"));
 
         // Restart the server with the new options, loading state from disk.
-        let (child, url) = Self::spawn_server(opt, self.state_dir.path()).await;
+        let (child, url) = Self::spawn_server(&opt, Some(self.state_dir.path())).await;
         self.child = child;
         self.url = url;
+        self.opt = opt;
+    }
+
+    /// Force a reorg in the L1.
+    ///
+    /// This function will block until the reorg has completed; that is, a block has been added to
+    /// the chain at the same height as a different, earlier block.
+    ///
+    /// Due to limitations in Anvil, the common ancestor of the reorg will always be the L1 genesis.
+    /// However, after the reorg, the genesis state of the EVM will be the same as the state when
+    /// this function was originally called. The recommended way to use this for testing reorg
+    /// handling, then, is to perform intialization (like deploying contracts) and then start some
+    /// service in the background and immediately call this function. This function will let the L1
+    /// chain run until it reaches block height at least `min_depth` and then reset it to block
+    /// height 0. Then it will let the L1 chain run again until it reaches block height `min_depth`.
+    ///
+    /// From the perspective of the service under test, this looks like an L1 chain with some
+    /// initial state (e.g. contracts deployed) and a block height which happens to be 0 but, as far
+    /// as the service cares, could be arbitrary. The block height grows somewhat before getting
+    /// reorged back to an earlier height (0) and then growing again.
+    ///
+    /// The L1 node will restart several times during this process.
+    pub async fn reorg(&mut self, min_depth: u64) {
+        // Stop the server and wait for it to dump its state, to obtain a snapshot of the current,
+        // pre-reorg state.
+        self.shutdown_gracefully();
+
+        // Ensure we restart on the same port and load the state snapshot.
+        let opt = self
+            .opt
+            .clone()
+            .port(self.url.port().unwrap())
+            .load_state(self.state_dir.path().into());
+
+        // Restart the server, loading state from disk but not dumping it on the next exit.
+        let (child, url) = Self::spawn_server(&opt, None).await;
+        self.child = child;
+        self.url = url;
+
+        // Wait for enough blocks to be produced.
+        let client = Provider::try_from(self.url.to_string()).unwrap();
+        while client.get_block_number().await.unwrap().as_u64() < min_depth {
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Restart again, loading from the previous state checkpoint.
+        self.shutdown_gracefully();
+        let (child, url) = Self::spawn_server(&opt, Some(self.state_dir.path())).await;
+        self.child = child;
+        self.url = url;
+
+        // Wait for the chain to reach its former height again.
+        let client = Provider::try_from(self.url.to_string()).unwrap();
+        while client.get_block_number().await.unwrap().as_u64() < min_depth {
+            sleep(Duration::from_secs(1)).await;
+        }
     }
 }
 

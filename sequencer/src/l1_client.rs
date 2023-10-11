@@ -99,7 +99,7 @@ impl L1ClientOptions {
     }
 
     pub async fn start(self) -> Result<L1Client, ProviderError> {
-        let rpc = Provider::connect(self.url).await?;
+        let rpc = Provider::connect(self.url.clone()).await?;
 
         // Fetch the initial L1 snapshot now, blocking, so that we will have a reasonable baseline
         // at least until the background task starts updating the snapshot.
@@ -116,7 +116,7 @@ impl L1ClientOptions {
         // Spawn a background task to update the in-memory snapshot whenever a new L1 block is
         // produced.
         spawn(update_loop(
-            rpc,
+            self.url,
             self.finalized_block_tag,
             self.retry_delay,
             client.latest_snapshot.clone(),
@@ -138,20 +138,27 @@ impl L1Client {
 }
 
 async fn update_loop(
-    rpc: Provider<Ws>,
+    url: Url,
     finalized_tag: BlockNumber,
     retry_delay: Duration,
     snapshot: Arc<RwLock<L1Snapshot>>,
 ) {
     loop {
         // Subscribe to new blocks. This task cannot fail; retry until we succeed.
-        let mut block_stream = loop {
-            match rpc.subscribe_blocks().await {
-                Ok(stream) => break stream,
-                Err(err) => {
-                    tracing::error!("error subscribing to L1 blocks: {err}");
-                    sleep(retry_delay).await;
-                }
+        let rpc = match Provider::connect(url.clone()).await {
+            Ok(rpc) => rpc,
+            Err(err) => {
+                tracing::error!("error connecting to RPC {url}: {err}");
+                sleep(retry_delay).await;
+                continue;
+            }
+        };
+        let mut block_stream = match rpc.subscribe_blocks().await {
+            Ok(stream) => stream,
+            Err(err) => {
+                tracing::error!("error subscribing to L1 blocks: {err}");
+                sleep(retry_delay).await;
+                continue;
             }
         };
 
@@ -246,6 +253,7 @@ async fn get_finalized_block<P: JsonRpcClient>(
 mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use futures::channel::oneshot;
     use sequencer_utils::AnvilOptions;
     use std::time::Instant;
 
@@ -324,5 +332,59 @@ mod test {
 
             sleep(test_interval).await;
         }
+    }
+
+    #[async_std::test]
+    async fn test_reorg_increasing_block() {
+        setup_logging();
+        setup_backtrace();
+
+        let mut anvil = AnvilOptions::default()
+            .block_time(Duration::from_secs(1))
+            .spawn()
+            .await;
+        let l1_client = L1ClientOptions::with_url(anvil.ws_url())
+            .start()
+            .await
+            .unwrap();
+
+        // Spawn a task to check that updates to the snapshotted state are always increasing.
+        let (kill_safety_task, mut killed) = oneshot::channel();
+        let l1_client_clone = l1_client.clone();
+        let safety_task = spawn(async move {
+            let l1_client = l1_client_clone;
+            let mut prev_head = l1_client.snapshot().await.head;
+            loop {
+                if !matches!(killed.try_recv(), Ok(None)) {
+                    // The task was killed or the other end of the channel was dropped.
+                    return Ok(());
+                }
+
+                // Ensure the snapshot has not decreased.
+                let head = l1_client.snapshot().await.head;
+                if head < prev_head {
+                    return Err(format!("head decreased from {prev_head} to {head}"));
+                }
+                prev_head = head;
+                sleep(Duration::from_millis(500)).await;
+            }
+        });
+
+        // Force an L1 reorg. Make it several blocks deep to be sure the L1 client task doesn't miss
+        // it while reconnecting.
+        anvil.reorg(5).await;
+
+        // Let the safety task run for a few more seconds to ensure we recover from the reorg and
+        // continue to make progress.
+        let snapshot = l1_client.snapshot().await.head;
+        sleep(Duration::from_secs(5)).await;
+
+        // Join the safety task and check success.
+        kill_safety_task.send(()).unwrap();
+        safety_task.await.unwrap();
+        assert!(
+            l1_client.snapshot().await.head > snapshot,
+            "L1 client is not making progress"
+        );
     }
 }

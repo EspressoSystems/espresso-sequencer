@@ -9,7 +9,6 @@ pub mod bn254;
 pub mod bn256g2;
 pub mod bytes_lib;
 pub mod deploy_hot_shot;
-pub mod example_rollup;
 pub mod hot_shot;
 pub mod shared_types;
 pub mod std_invariant;

@@ -74,7 +74,6 @@ jobs:
             target/${{ env.TARGET }}/release/orchestrator
             target/${{ env.TARGET }}/release/web-server
             target/${{ env.TARGET }}/release/sequencer
-            target/${{ env.TARGET }}/release/example-l2
             target/${{ env.TARGET }}/release/cli
             target/${{ env.TARGET }}/release/commitment-task
 
@@ -167,16 +166,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
-
-      - name: Build and push example-rollup docker
-        uses: docker/build-push-action@v4
-        with:
-          context: ./
-          file: ./docker/example-rollup.Dockerfile
-          platforms: linux/amd64,arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.example-rollup.outputs.tags }}
-          labels: ${{ steps.example-rollup.outputs.labels }}
 
       - name: Build and push commitment-task docker
         uses: docker/build-push-action@v4
