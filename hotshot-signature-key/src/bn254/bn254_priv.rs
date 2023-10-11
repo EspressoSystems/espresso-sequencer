@@ -54,6 +54,7 @@ impl BLSPrivKey {
     }
 }
 
+#[allow(clippy::incorrect_partial_ord_impl_on_ord_type)]
 impl PartialOrd for BLSPrivKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_bytes = &self.priv_key.to_string();

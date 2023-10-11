@@ -188,7 +188,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
                     }
                 }
             }
-        }).map(|_| ())
+        }).map(|()| ())
     }
 
     /// Wait until at least `num_peers` have connected, or until `timeout` time has passed.

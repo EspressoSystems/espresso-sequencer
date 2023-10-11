@@ -32,7 +32,7 @@ use hotshot_types::{
 
 use snafu::Snafu;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, instrument};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks

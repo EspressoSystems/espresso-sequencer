@@ -1,5 +1,5 @@
-use commit::Committable;
 use commit::Commitment;
+use commit::Committable;
 use either::Right;
 use hotshot::{
     tasks::add_consensus_task,
@@ -102,8 +102,10 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc =
-        QuorumCertificate::<SequencingTestTypes, Commitment<SequencingLeaf<SequencingTestTypes>>>::genesis();
+    let qc = QuorumCertificate::<
+        SequencingTestTypes,
+        Commitment<SequencingLeaf<SequencingTestTypes>>,
+    >::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(SequencingHotShotEvent::QCFormed(either::Left(qc.clone())));

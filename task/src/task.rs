@@ -381,7 +381,7 @@ impl<'pin, HSTT: HotShotTaskTypes> ProjectedHST<'pin, HSTT> {
         cx: &mut Context<'_>,
     ) -> Poll<HotShotTaskCompleted> {
         match fut.as_mut().poll(cx) {
-            Poll::Ready(_) => Poll::Ready(
+            Poll::Ready(()) => Poll::Ready(
                 self.r_val
                     .take()
                     .unwrap_or_else(|| HotShotTaskCompleted::LostReturnValue),

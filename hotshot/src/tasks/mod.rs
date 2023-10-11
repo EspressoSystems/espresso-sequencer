@@ -36,8 +36,8 @@ use hotshot_types::{
         election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, SequencingTimeoutEx,
-            ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx,
+            SequencingTimeoutEx, ViewSyncEx,
         },
         state::ConsensusTime,
     },

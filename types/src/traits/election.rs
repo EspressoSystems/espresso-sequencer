@@ -128,7 +128,7 @@ where
         use VoteData::*;
         match self {
             DA(c) | Yes(c) | No(c) | Timeout(c) | ViewSyncPreCommit(c) | ViewSyncCommit(c)
-            | ViewSyncFinalize(c) => c.clone(),
+            | ViewSyncFinalize(c) => *c,
         }
     }
 
@@ -354,11 +354,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                     self.membership().get_committee_qc_stake_table(),
                     U256::from(self.membership().success_threshold().get()),
                 );
-                <TYPES::SignatureKey as SignatureKey>::check(
-                    &real_qc_pp,
-                    real_commit.as_ref(),
-                    &qc,
-                )
+                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
             }
             AssembledSignature::Yes(qc) => {
                 let real_commit = VoteData::Yes(leaf_commitment).commit();

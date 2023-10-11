@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
-    ops::Deref,
 };
 use tracing::debug;
 
@@ -209,7 +208,6 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds>
         self.leaf_commitment
     }
 
-
     fn is_genesis(&self) -> bool {
         self.is_genesis
     }
@@ -232,7 +230,7 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
 
         commit::RawCommitmentBuilder::new("Quorum Certificate Commitment")
             .var_size_field("leaf commitment", self.leaf_commitment.as_ref())
-            .u64_field("view number", *self.view_number.deref())
+            .u64_field("view number", *self.view_number)
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
             .finalize()
