@@ -83,7 +83,6 @@ pub struct SequencingConsensusTaskState<
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
-
 {
     /// The global task registry
     pub registry: GlobalRegistry,
@@ -178,7 +177,7 @@ pub struct VoteCollectionTaskState<
             Commitment<SequencingLeaf<TYPES>>,
         >>::VoteAccumulator,
         QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
-    >, 
+    >,
 
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
@@ -216,7 +215,6 @@ where
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
-
 {
 }
 
@@ -244,7 +242,6 @@ where
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
-
 {
     match event {
         SequencingHotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
@@ -302,6 +299,7 @@ where
         // during exchange refactor
         // https://github.com/EspressoSystems/HotShot/issues/1799
         SequencingHotShotEvent::TimeoutVoteRecv(vote) => {
+            debug!("Received timeout vote for view {}", *vote.get_view());
             if state.timeout_accumulator.is_right() {
                 return (None, state);
             }
@@ -688,11 +686,8 @@ where
                         return;
                     }
 
-                    // TODO ED Do we need to check that the commit in the cert is in fact a commit to the correct view?  I think we do. 
-                    if !self
-                        .timeout_exchange
-                        .is_valid_cert(&timeout_cert.clone())
-                    {
+                    // TODO ED Do we need to check that the commit in the cert is in fact a commit to the correct view?  I think we do.
+                    if !self.timeout_exchange.is_valid_cert(&timeout_cert.clone()) {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;
                     }
@@ -700,10 +695,7 @@ where
 
                 let justify_qc = proposal.data.justify_qc.clone();
 
-                if !self
-                    .quorum_exchange
-                    .is_valid_cert(&justify_qc)
-                {
+                if !self.quorum_exchange.is_valid_cert(&justify_qc) {
                     error!("Invalid justify_qc in proposal for view {}", *view);
                     return;
                 }
@@ -1173,11 +1165,7 @@ where
                     let high_qc = self.consensus.read().await.high_qc.clone();
 
                     if self
-                        .publish_proposal_if_able(
-                            high_qc,
-                            view,
-                            Some(qc.clone()),
-                        )
+                        .publish_proposal_if_able(high_qc, view, Some(qc.clone()))
                         .await
                     {
                     } else {
@@ -1194,7 +1182,7 @@ where
                         *qc.view_number
                     );
 
-                    if self
+                    if !self
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
@@ -1246,7 +1234,7 @@ where
             }
             SequencingHotShotEvent::Timeout(view) => {
                 // NOTE: We may optionally have the timeout task listen for view change events
-                if self.cur_view > view {
+                if self.cur_view >= view {
                     return;
                 }
                 let vote_token = self.timeout_exchange.make_vote_token(view);
@@ -1317,6 +1305,7 @@ where
             return false;
         };
         if leaf_commitment != consensus.high_qc.leaf_commitment() {
+            // TODO ED This happens on the genesis block
             debug!(
                 "They don't equal: {:?}   {:?}",
                 leaf_commitment,
@@ -1367,28 +1356,28 @@ where
                 proposer_id: self.api.public_key().to_bytes(),
             };
 
-        let signature = self
-            .quorum_exchange
-            .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
-        // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
-        let proposal = QuorumProposal {
-            block_commitment,
-            view_number: leaf.view_number,
-            height: leaf.height,
-            justify_qc: consensus.high_qc.clone(),
-            timeout_certificate: timeout_certificate.or_else(|| None),
-            proposer_id: leaf.proposer_id,
-            dac: None,
-        };
+            let signature = self
+                .quorum_exchange
+                .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
+            // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
+            let proposal = QuorumProposal {
+                block_commitment,
+                view_number: leaf.view_number,
+                height: leaf.height,
+                justify_qc: consensus.high_qc.clone(),
+                timeout_certificate: timeout_certificate.or_else(|| None),
+                proposer_id: leaf.proposer_id,
+                dac: None,
+            };
 
-        let message = Proposal {
-            data: proposal,
-            signature,
-        };
-        debug!(
-            "Sending proposal for view {:?} \n {:?}",
-            leaf.view_number, ""
-        );
+            let message = Proposal {
+                data: proposal,
+                signature,
+            };
+            debug!(
+                "Sending proposal for view {:?} \n {:?}",
+                leaf.view_number, ""
+            );
 
             self.event_stream
                 .publish(SequencingHotShotEvent::QuorumProposalSend(
@@ -1399,6 +1388,7 @@ where
             self.block = None;
             return true;
         }
+        debug!("Self block was None");
         false
     }
 }
@@ -1433,7 +1423,6 @@ where
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
-
 {
 }
 
@@ -1490,7 +1479,6 @@ where
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
-
 {
     if let SequencingHotShotEvent::Shutdown = event {
         (Some(HotShotTaskCompleted::ShutDown), state)

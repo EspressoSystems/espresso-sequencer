@@ -490,7 +490,7 @@ where
             }
             &SequencingHotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
-                if view_number < TYPES::Time::new(*self.current_view) {
+                if view_number <= TYPES::Time::new(*self.current_view) {
                     return;
                 }
 

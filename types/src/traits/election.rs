@@ -377,7 +377,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                 <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
             }
             AssembledSignature::Timeout(qc) => {
-                let real_commit = VoteData::Timeout(leaf_commitment).get_commit();
+                let real_commit = VoteData::Timeout(leaf_commitment).commit();
                 let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
                     self.membership().get_committee_qc_stake_table(),
                     U256::from(self.membership().success_threshold().get()),
@@ -453,6 +453,8 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             &vote.get_data(),
             &Checked::Unchecked(vote.get_vote_token()),
         ) {
+            error!("Vote data is {:?}", vote.get_data());
+
             error!("Invalid vote!");
             return Either::Left(accumulator);
         }
@@ -1310,7 +1312,7 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
         let signature = TYPES::SignatureKey::sign(
             self.private_key(),
             VoteData::<Commitment<TYPES::Time>>::Timeout(view.commit())
-                .get_commit()
+                .commit()
                 .as_ref(),
         );
 

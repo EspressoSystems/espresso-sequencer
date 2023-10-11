@@ -7,7 +7,7 @@
 async fn test_timeout() {
     use std::time::Duration;
 
-    use hotshot_testing::node_types::SequencingWebImpl;
+    use hotshot_testing::node_types::SequencingLibp2pImpl;
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
@@ -57,7 +57,7 @@ async fn test_timeout() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
         .launch()
         .run_test()
         .await;
