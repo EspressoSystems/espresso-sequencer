@@ -14,10 +14,10 @@ use hotshot_task::{
     event_stream::ChannelStream, global_registry::GlobalRegistry, task_launcher::TaskRunner,
 };
 use hotshot_types::{
+    consensus::ConsensusMetricsValue,
     message::Message,
     traits::{
         election::{ConsensusExchange, Membership},
-        metrics::NoMetrics,
         network::CommunicationChannel,
         node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumEx},
         signature_key::SignatureKey,
@@ -277,7 +277,7 @@ where
             storage,
             exchanges,
             initializer,
-            NoMetrics::boxed(),
+            ConsensusMetricsValue::new(),
         )
         .await
         .expect("Could not init hotshot")

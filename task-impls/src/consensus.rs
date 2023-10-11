@@ -644,6 +644,15 @@ where
                         .await;
                 }
             });
+            let consensus = self.consensus.read().await;
+            consensus
+                .metrics
+                .current_view
+                .set(usize::try_from(self.cur_view.get_u64()).unwrap());
+            consensus.metrics.number_of_views_since_last_decide.set(
+                usize::try_from(self.cur_view.get_u64()).unwrap()
+                    - usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
+            );
 
             return true;
         }
@@ -738,6 +747,9 @@ where
                     proposer_id: sender.to_bytes(),
                 };
                 let leaf_commitment = leaf.commit();
+
+                // consensus.metrics.invalid_qc.update(1);
+
 
                 // Validate the `height`
                 // TODO Remove height from proposal validation; view number is sufficient
@@ -900,7 +912,10 @@ where
                         .collect_garbage(old_anchor_view, new_anchor_view)
                         .await;
                     consensus.last_decided_view = new_anchor_view;
-                    consensus.invalid_qc = 0;
+                    consensus.metrics.invalid_qc.set(0);
+                    consensus.metrics.last_decided_view.set(
+                        usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
+                    );
 
                     // We're only storing the last QC. We could store more but we're realistically only going to retrieve the last one.
                     if let Err(e) = self.api.store_leaf(old_anchor_view, leaf).await {
@@ -1264,6 +1279,8 @@ where
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
+                let consensus = self.consensus.read().await;
+                consensus.metrics.number_of_timeouts.add(1);
             }
             SequencingHotShotEvent::SendDABlockData(block) => {
                 self.block = Some(block);

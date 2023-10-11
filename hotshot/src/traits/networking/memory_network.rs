@@ -3,7 +3,7 @@
 //! This module provides an in-memory only simulation of an actual network, useful for unit and
 //! integration tests.
 
-use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetrics};
+use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
 use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::async_spawn,
@@ -19,7 +19,6 @@ use hotshot_types::{
     message::{Message, MessageKind},
     traits::{
         election::Membership,
-        metrics::{Metrics, NoMetrics},
         network::{
             CommunicationChannel, ConnectedNetwork, NetworkMsg, TestableChannelImplementation,
             TestableNetworkingImplementation, TransmitType, ViewMessage,
@@ -75,6 +74,7 @@ enum Combo<T> {
 }
 
 /// Internal state for a `MemoryNetwork` instance
+#[derive(Debug)]
 struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
     /// Input for broadcast messages
     broadcast_input: RwLock<Option<Sender<Vec<u8>>>>,
@@ -91,7 +91,7 @@ struct MemoryNetworkInner<M: NetworkMsg, K: SignatureKey> {
     in_flight_message_count: AtomicUsize,
 
     /// The networking metrics we're keeping track of
-    metrics: NetworkingMetrics,
+    metrics: NetworkingMetricsValue,
 
     /// config to introduce unreliability to the network
     reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
@@ -123,7 +123,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
     #[instrument(skip(metrics))]
     pub fn new(
         pub_key: K,
-        metrics: Box<dyn Metrics>,
+        metrics: NetworkingMetricsValue,
         master_map: Arc<MasterMap<M, K>>,
         reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
     ) -> MemoryNetwork<M, K> {
@@ -203,7 +203,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                 direct_output: Mutex::new(direct_output),
                 master_map: master_map.clone(),
                 in_flight_message_count,
-                metrics: NetworkingMetrics::new(&*metrics),
+                metrics,
                 reliability_config,
             }),
         };
@@ -220,7 +220,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
             .fetch_add(1, Ordering::Relaxed);
         let input = self.inner.broadcast_input.read().await;
         if let Some(input) = &*input {
-            self.inner.metrics.outgoing_message_count.add(1);
+            self.inner.metrics.outgoing_broadcast_message_count.add(1);
             input.send(message).await
         } else {
             Err(SendError(message))
@@ -234,7 +234,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
             .fetch_add(1, Ordering::Relaxed);
         let input = self.inner.direct_input.read().await;
         if let Some(input) = &*input {
-            self.inner.metrics.outgoing_message_count.add(1);
+            self.inner.metrics.outgoing_direct_message_count.add(1);
             input.send(message).await
         } else {
             Err(SendError(message))
@@ -257,7 +257,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         Box::new(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            MemoryNetwork::new(pubkey, NoMetrics::boxed(), master.clone(), None)
+            MemoryNetwork::new(pubkey, NetworkingMetricsValue::new(), master.clone(), None)
         })
     }
 
@@ -329,8 +329,8 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             } else {
                 let res = node.broadcast_input(vec.clone()).await;
                 match res {
-                    Ok(()) => {
-                        self.inner.metrics.outgoing_message_count.add(1);
+                    Ok(_) => {
+                        self.inner.metrics.outgoing_broadcast_message_count.add(1);
                         trace!(?key, "Delivered message to remote");
                     }
                     Err(e) => {
@@ -373,8 +373,8 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             } else {
                 let res = node.direct_input(vec).await;
                 match res {
-                    Ok(()) => {
-                        self.inner.metrics.outgoing_message_count.add(1);
+                    Ok(_) => {
+                        self.inner.metrics.outgoing_direct_message_count.add(1);
                         trace!(?recipient, "Delivered message to remote");
                         Ok(())
                     }
@@ -418,7 +418,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_message_count.add(ret.len());
+                    self.inner
+                        .metrics
+                        .incoming_direct_message_count
+                        .add(ret.len());
                     Ok(ret)
                 }
                 TransmitType::Broadcast => {
@@ -433,7 +436,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                     self.inner
                         .in_flight_message_count
                         .fetch_sub(ret.len(), Ordering::Relaxed);
-                    self.inner.metrics.incoming_message_count.add(ret.len());
+                    self.inner
+                        .metrics
+                        .incoming_broadcast_message_count
+                        .add(ret.len());
                     Ok(ret)
                 }
             }
