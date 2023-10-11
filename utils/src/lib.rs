@@ -375,7 +375,7 @@ async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256)
                 );
             }
             Ok(Some(tx)) if tx.block_number.is_none() => {
-                tracing::info!("contract call {hash:?} (retry {i}/{retries}): pending");
+                tracing::error!("contract call {hash:?} (retry {i}/{retries}): pending");
             }
             Ok(Some(_)) => return true,
         }
