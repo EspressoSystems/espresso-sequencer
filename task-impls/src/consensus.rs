@@ -726,13 +726,37 @@ where
                         .cloned()
                 };
 
+                // 
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
+                    // If no parent then just update our state map and return.  We will not vote.  
                     error!(
                         "Proposal's parent missing from storage with commitment: {:?}",
                         justify_qc.leaf_commitment()
                     );
-                    // TODO ED Remove this return 
+                    let leaf = SequencingLeaf {
+                        view_number: view,
+                        height: proposal.data.height,
+                        justify_qc: justify_qc.clone(),
+                        parent_commitment: justify_qc.leaf_commitment(),
+                        deltas: Right(proposal.data.block_commitment),
+                        rejected: Vec::new(),
+                        timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                        proposer_id: sender.to_bytes(),
+                    };
+
+                    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+                    consensus.state_map.insert(
+                        view,
+                        View {
+                            view_inner: ViewInner::Leaf {
+                                leaf: leaf.commit(),
+                            },
+                        },
+                    );
+                    consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
+                   
+
                     return;
                 };
                 let parent_commitment = parent.commit();
@@ -749,7 +773,6 @@ where
                 let leaf_commitment = leaf.commit();
 
                 // consensus.metrics.invalid_qc.update(1);
-
 
                 // Validate the `height`
                 // TODO Remove height from proposal validation; view number is sufficient
@@ -913,9 +936,10 @@ where
                         .await;
                     consensus.last_decided_view = new_anchor_view;
                     consensus.metrics.invalid_qc.set(0);
-                    consensus.metrics.last_decided_view.set(
-                        usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
-                    );
+                    consensus
+                        .metrics
+                        .last_decided_view
+                        .set(usize::try_from(consensus.last_decided_view.get_u64()).unwrap());
 
                     // We're only storing the last QC. We could store more but we're realistically only going to retrieve the last one.
                     if let Err(e) = self.api.store_leaf(old_anchor_view, leaf).await {
