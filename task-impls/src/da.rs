@@ -272,10 +272,11 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if view < self.cur_view - 1 {
-                    warn!("Throwing away DA proposal that is more than one view older");
-                    return None;
-                }
+                // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
+                // if view < self.cur_view - 1 {
+                //     warn!("Throwing away DA proposal that is more than one view older");
+                //     return None;
+                // }
 
                 debug!(
                     "Got a DA block with {} transactions!",
@@ -507,10 +508,11 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if view < self.cur_view - 1 {
-                    warn!("Throwing away VID disperse data that is more than one view older");
-                    return None;
-                }
+                // TODO ED Revisit this
+                // if view < self.cur_view - 1 {
+                //     warn!("Throwing away VID disperse data that is more than one view older");
+                //     return None;
+                // }
 
                 debug!("VID disperse data is fresh.");
                 let block_commitment = disperse.data.commitment;

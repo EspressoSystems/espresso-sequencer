@@ -354,7 +354,11 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                     self.membership().get_committee_qc_stake_table(),
                     U256::from(self.membership().success_threshold().get()),
                 );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
+                <TYPES::SignatureKey as SignatureKey>::check(
+                    &real_qc_pp,
+                    real_commit.as_ref(),
+                    &qc,
+                )
             }
             AssembledSignature::Yes(qc) => {
                 let real_commit = VoteData::Yes(leaf_commitment).commit();
@@ -366,14 +370,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             }
             AssembledSignature::No(qc) => {
                 let real_commit = VoteData::No(leaf_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            AssembledSignature::Timeout(qc) => {
-                let real_commit = VoteData::Timeout(leaf_commitment).get_commit();
                 let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
                     self.membership().get_committee_qc_stake_table(),
                     U256::from(self.membership().success_threshold().get()),

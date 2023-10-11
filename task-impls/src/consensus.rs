@@ -550,7 +550,7 @@ where
                                 cert.view_number,
                                 vote_token)
                         } else {
-                            error!("Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}", cert.view_number, self.cur_view );
+                            error!("Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}", cert, self.cur_view );
                             return false;
 
                         };

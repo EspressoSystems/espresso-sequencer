@@ -421,7 +421,7 @@ impl<
 
             self.da_vote_outcomes.remove(&vote_commitment);
 
-            return Either::Right(AssembledSignature::Timeout(real_qc_sig));
+            return Either::Right(AssembledSignature::DA(real_qc_sig));
         }
         Either::Left(self)
     }
