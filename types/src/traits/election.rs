@@ -121,17 +121,6 @@ impl<COMMITMENT> VoteData<COMMITMENT>
 where
     COMMITMENT: CommitmentBounds,
 {
-    /// Return the underlying commitment.
-    #[must_use]
-    pub fn get_commit(&self) -> COMMITMENT {
-        #[allow(clippy::enum_glob_use)]
-        use VoteData::*;
-        match self {
-            DA(c) | Yes(c) | No(c) | Timeout(c) | ViewSyncPreCommit(c) | ViewSyncCommit(c)
-            | ViewSyncFinalize(c) => *c,
-        }
-    }
-
     #[must_use]
     /// Convert vote data into bytes.
     ///
