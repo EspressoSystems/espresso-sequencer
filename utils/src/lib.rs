@@ -364,8 +364,7 @@ pub async fn contract_send<T: Detokenize>(
 async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256) -> bool {
     let interval = provider.get_interval();
     let retries = 10;
-    let mut i = 0;
-    loop {
+    for i in 0..retries {
         match provider.get_transaction(hash).await {
             Err(err) => {
                 tracing::error!("contract call {hash:?} (retry {i}/{retries}): error getting transaction status: {err}");
@@ -376,23 +375,14 @@ async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256)
                 );
             }
             Ok(Some(tx)) if tx.block_number.is_none() => {
-                // The transaction is in the mempool, but hasn't been mined yet. In this case we can
-                // loop indefinitely, we don't need to count this as a retry, because as long as the
-                // transaction is in the mempool, it will eventually be mined (when we hit the case
-                // below) or dropped (when we hit the case above and increment `retries`).
                 tracing::info!("contract call {hash:?} (retry {i}/{retries}): pending");
-                sleep(interval).await;
-                continue;
             }
             Ok(Some(_)) => return true,
         }
 
-        i += 1;
-        if i >= retries {
-            return false;
-        }
         sleep(interval).await;
     }
+    false
 }
 
 #[cfg(test)]
