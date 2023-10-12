@@ -695,8 +695,10 @@ where
                         return;
                     }
 
-                    // TODO ED Do we need to check that the commit in the cert is in fact a commit to the correct view?  I think we do.
-                    if !self.timeout_exchange.is_valid_cert(&timeout_cert.clone()) {
+                    if !self
+                        .timeout_exchange
+                        .is_valid_timeout_cert(&timeout_cert.clone(), view - 1)
+                    {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;
                     }
@@ -1356,7 +1358,7 @@ where
             return false;
         };
         if leaf_commitment != consensus.high_qc.leaf_commitment() {
-            // TODO ED This happens on the genesis block
+            // NOTE: This happens on the genesis block
             debug!(
                 "They don't equal: {:?}   {:?}",
                 leaf_commitment,
