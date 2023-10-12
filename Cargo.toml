@@ -10,4 +10,4 @@ members = [
 ]
 
 [patch."https://github.com/EspressoSystems/hotshot-query-service"]
-hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", rev = "271a0c2d8bca7e6bd39998534c72e20ce3d74b1b" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", rev = "6427bc77f17bfa80fd9112b663cd36f49a76f66b" }
