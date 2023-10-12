@@ -12,10 +12,8 @@ ark-ec = { version = "0.4.2" }
 ark-ff = "0.4.2"
 ark-serialize = "0.4.2"
 ark-std = { version = "0.4.0", default-features = false }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.3.0", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
-    "async-std-executor",
-    "channel-async-std",
 ] }
 async-std = "1.12.0"
 contract-bindings = { path = "../../contract-bindings" }
