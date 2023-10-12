@@ -51,7 +51,7 @@ pub async fn build_system_handle(
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key =
         <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
-    let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
+    let public_key = <BLSPubKey as SignatureKey>::get_public_key(config.known_nodes_with_stake.get(node_id as usize).unwrap());
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
         <QuorumEx<SequencingTestTypes, SequencingMemoryImpl> as ConsensusExchange<
             SequencingTestTypes,
