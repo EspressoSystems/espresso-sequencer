@@ -3,9 +3,8 @@
 mod test {
     use crate::helpers::{MyG1Point, MyG2Point};
     use ark_ec::CurveGroup;
-    use contract_bindings::bls_test::G2Point;
-    use contract_bindings::hot_shot::{NewBlocksCall, Qc};
-    use contract_bindings::{HotShot, TestL1System};
+    use contract_bindings::hot_shot::{HotShot, NewBlocksCall, Qc};
+    use contract_bindings::shared_types::G2Point;
     use ethers::middleware::SignerMiddleware;
     use ethers::signers::Wallet;
     use ethers::types::Bytes;
@@ -16,6 +15,7 @@ mod test {
     };
     use jf_primitives::signatures::{AggregateableSignatureSchemes, SignatureScheme};
     use jf_utils::test_rng;
+    use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::AnvilOptions;
 
     enum ResultExpected {

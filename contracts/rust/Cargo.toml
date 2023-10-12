@@ -34,4 +34,3 @@ jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "483fb97324d42724720f9155f200973a3b83a7b4" }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.8", default-features = false }
-tokio = "1.32.0"

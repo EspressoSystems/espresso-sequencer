@@ -3,22 +3,22 @@
 use ark_bn254::{Fq, G1Affine};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInt, PrimeField};
-pub use contract_bindings::bls_test::{G1Point, G2Point};
+pub use contract_bindings::shared_types::{G1Point, G2Point};
 use ethers::types::U256;
 
 pub(crate) mod hotshot_contract {
     use anyhow::Result;
-    use contract_bindings::bls_test::BLSTest;
-    use contract_bindings::TestClients;
+    use contract_bindings::bls_helper::BLSHelper;
     use ethers::middleware::SignerMiddleware;
     use ethers::providers::{Http, Middleware, Provider};
     use ethers::signers::LocalWallet;
+    use sequencer_utils::test_utils::TestClients;
 
     type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
 
     pub struct TestBLSSystem {
         pub clients: TestClients,
-        pub bls: BLSTest<EthMiddleware>,
+        pub bls: BLSHelper<EthMiddleware>,
         pub provider: Provider<Http>,
     }
 
@@ -26,7 +26,7 @@ pub(crate) mod hotshot_contract {
         pub async fn deploy(provider: Provider<Http>) -> Result<Self> {
             let chain_id = provider.get_chainid().await?.as_u64();
             let clients = TestClients::new(&provider, chain_id);
-            let bls = BLSTest::deploy(clients.deployer.provider.clone(), ())?
+            let bls = BLSHelper::deploy(clients.deployer.provider.clone(), ())?
                 .send()
                 .await?;
             Ok(Self {

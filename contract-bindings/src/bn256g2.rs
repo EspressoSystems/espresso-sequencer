@@ -25,12 +25,12 @@ pub mod bn256g2 {
     pub static BN256G2_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
     #[rustfmt::skip]
-    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 \xF5\xC5\xBF\xBB\xF9`\xBC\x88|^j\xC1\x8AJ\xB4R\xEC\xD4%\xFB:O\x95\x97\xA0\xF4\xA3/Q\xB6\x8EJdsolcC\0\x08\x14\x003";
+    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 x\xC1y\x8B\xC3\xC7\x1D\x04\xD1\xB6\x88\x8F\xB0\xF3b\xB6N\x0C\x86\xE4;\x85\xE4Iq\xDE\xB2\x11\x02\xC9X\x02dsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
     pub static BN256G2_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
-    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 \xF5\xC5\xBF\xBB\xF9`\xBC\x88|^j\xC1\x8AJ\xB4R\xEC\xD4%\xFB:O\x95\x97\xA0\xF4\xA3/Q\xB6\x8EJdsolcC\0\x08\x14\x003";
+    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 x\xC1y\x8B\xC3\xC7\x1D\x04\xD1\xB6\x88\x8F\xB0\xF3b\xB6N\x0C\x86\xE4;\x85\xE4Iq\xDE\xB2\x11\x02\xC9X\x02dsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
     pub static BN256G2_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);

@@ -130,7 +130,7 @@
               contract-bindings = {
                 enable = true;
                 description = "Generate contract bindings";
-                entry = "cargo run --bin gen-bindings";
+                entry = "just gen-bindings";
                 types_or = [ "solidity" ];
                 pass_filenames = false;
               };

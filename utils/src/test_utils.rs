@@ -1,24 +1,34 @@
-use crate::HotShot;
+use crate::EthMiddleware;
 use anyhow::Result;
+use contract_bindings::hot_shot::HotShot;
 use ethers::{
-    abi::Tokenize,
     prelude::{Address, SignerMiddleware},
     providers::{Http, Middleware, Provider},
-    signers::{coins_bip39::English, LocalWallet, MnemonicBuilder, Signer},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
 };
 use std::sync::Arc;
-
-pub type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
-
-#[async_trait::async_trait]
-pub trait Deploy<M: Middleware> {
-    async fn deploy_contract<T: Tokenize + Send>(client: &Arc<M>, args: T) -> Self;
-}
 
 #[derive(Debug, Clone)]
 pub struct TestClient {
     pub index: u32,
     pub provider: Arc<EthMiddleware>,
+}
+
+impl TestClient {
+    pub fn new(provider: &Provider<Http>, index: u32, chain_id: u64) -> Self {
+        let test_mnemonic = "test test test test test test test test test test test junk";
+        let provider = Arc::new(SignerMiddleware::new(
+            provider.clone(),
+            MnemonicBuilder::<English>::default()
+                .phrase(test_mnemonic)
+                .index(index)
+                .unwrap()
+                .build()
+                .unwrap()
+                .with_chain_id(chain_id),
+        ));
+        Self { index, provider }
+    }
 }
 
 // We may want to use different names once we deploy a customized system without
@@ -35,39 +45,15 @@ pub struct TestClients {
 impl TestClients {
     pub fn new(provider: &Provider<Http>, chain_id: u64) -> Self {
         Self {
-            deployer: get_test_client(11, provider, chain_id),
+            deployer: TestClient::new(provider, 11, chain_id),
             funded: vec![
-                get_test_client(12, provider, chain_id),
-                get_test_client(13, provider, chain_id),
-                get_test_client(14, provider, chain_id),
+                TestClient::new(provider, 12, chain_id),
+                TestClient::new(provider, 13, chain_id),
+                TestClient::new(provider, 14, chain_id),
             ],
-            block_driver: get_test_client(15, provider, chain_id),
+            block_driver: TestClient::new(provider, 15, chain_id),
         }
     }
-}
-
-pub fn create_signer(
-    index: u32,
-    provider: &Provider<Http>,
-    chain_id: u64,
-    mnemonic_str: &str,
-) -> Arc<EthMiddleware> {
-    let mnemonic = MnemonicBuilder::<English>::default().phrase(mnemonic_str);
-    Arc::new(SignerMiddleware::new(
-        provider.clone(),
-        mnemonic
-            .index(index)
-            .unwrap()
-            .build()
-            .unwrap()
-            .with_chain_id(chain_id),
-    ))
-}
-
-pub fn get_test_client(index: u32, provider: &Provider<Http>, chain_id: u64) -> TestClient {
-    let test_mnemonic = "test test test test test test test test test test test junk";
-    let provider = create_signer(index, provider, chain_id, test_mnemonic);
-    TestClient { provider, index }
 }
 
 #[derive(Debug, Clone)]

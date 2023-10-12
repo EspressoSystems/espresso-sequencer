@@ -1,9 +1,9 @@
 pragma solidity ^0.8.0;
 
-import {BN254} from "bn254/BN254.sol";
-import {BLSSig} from "./libraries/BLSSig.sol";
+import { BN254 } from "bn254/BN254.sol";
+import { BLSSig } from "./libraries/BLSSig.sol";
 
-import {BN256G2} from "./libraries//BN256G2.sol";
+import { BN256G2 } from "./libraries//BN256G2.sol";
 
 contract HotShot {
     event NewStakingKey(BN254.G2Point stakingKey, uint256 amount, uint256 index);
