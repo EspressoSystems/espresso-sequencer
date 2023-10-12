@@ -706,6 +706,8 @@ where
 
                 if !self.quorum_exchange.is_valid_cert(&justify_qc) {
                     error!("Invalid justify_qc in proposal for view {}", *view);
+                    let consensus = self.consensus.write().await;
+                    consensus.metrics.invalid_qc.update(1);
                     return;
                 }
 
@@ -770,8 +772,6 @@ where
                     proposer_id: sender.to_bytes(),
                 };
                 let leaf_commitment = leaf.commit();
-
-                // consensus.metrics.invalid_qc.update(1);
 
                 // Validate the `height`
                 // TODO Remove height from proposal validation; view number is sufficient
