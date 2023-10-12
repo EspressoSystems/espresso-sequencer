@@ -337,7 +337,7 @@ where
         );
         self.index_by_proposer_id
             .entry(leaf.proposer())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(leaf.height());
         Ok(())
     }
