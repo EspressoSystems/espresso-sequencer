@@ -9,10 +9,5 @@ members = [
   "utils",
 ]
 
-[patch."https://github.com/EspressoSystems/hotshot"]
-hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
-hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
-hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems//hotshot", branch = "ed/timeout-hotfix" }
+[patch."https://github.com/EspressoSystems/hotshot-query-service"]
+hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", rev = "271a0c2d8bca7e6bd39998534c72e20ce3d74b1b" }

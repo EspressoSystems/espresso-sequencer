@@ -3485,7 +3485,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-lock",
@@ -3508,7 +3508,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "hotshot-web-server",
  "libp2p",
  "libp2p-identity",
@@ -3528,7 +3528,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-lock",
@@ -3539,7 +3539,7 @@ dependencies = [
  "clap",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "libp2p",
  "libp2p-core",
  "libp2p-networking",
@@ -3557,7 +3557,7 @@ dependencies = [
 [[package]]
 name = "hotshot-qc"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381 0.4.0",
@@ -3583,7 +3583,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.0.7"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service#1e5633a0df180a24d9ffe77b9df41ebf0168fa94"
+source = "git+https://github.com/EspressoSystems//hotshot-query-service?rev=271a0c2d8bca7e6bd39998534c72e20ce3d74b1b#271a0c2d8bca7e6bd39998534c72e20ce3d74b1b"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer)",
  "async-std",
@@ -3598,7 +3598,7 @@ dependencies = [
  "hotshot",
  "hotshot-signature-key",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems/hotshot?tag=0.4.14)",
+ "hotshot-utils",
  "itertools 0.11.0",
  "prometheus",
  "serde",
@@ -3613,7 +3613,7 @@ dependencies = [
 [[package]]
 name = "hotshot-signature-key"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "bincode",
  "bitvec",
@@ -3622,7 +3622,7 @@ dependencies = [
  "ethereum-types",
  "hotshot-qc",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "jf-primitives",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -3634,7 +3634,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-lock",
@@ -3654,7 +3654,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-lock",
@@ -3669,7 +3669,7 @@ dependencies = [
  "futures",
  "hotshot-task",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "jf-primitives",
  "nll",
  "pin-project",
@@ -3684,7 +3684,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "ark-bls12-381 0.4.0",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
@@ -3700,7 +3700,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "jf-primitives",
  "nll",
  "rand 0.8.5",
@@ -3714,7 +3714,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
@@ -3740,7 +3740,7 @@ dependencies = [
  "generic-array",
  "hex_fmt",
  "hotshot-task",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "jf-primitives",
  "libp2p-networking",
  "nll",
@@ -3758,15 +3758,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.4.14#f92e68aaade1794f8ba99dc67c7fc8869948d328"
-dependencies = [
- "bincode",
-]
-
-[[package]]
-name = "hotshot-utils"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "bincode",
 ]
@@ -3774,7 +3766,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "ark-bls12-381 0.4.0",
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
@@ -3785,7 +3777,7 @@ dependencies = [
  "clap",
  "futures",
  "hotshot-types",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "jf-primitives",
  "libp2p-core",
  "nll",
@@ -4255,7 +4247,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#1626a8448e7af8ea153241004375deff9fd961da"
+source = "git+https://github.com/EspressoSystems/jellyfish#c0b88424ac1c362c2066971d0da5c43e8832ed5f"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
@@ -4299,7 +4291,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#1626a8448e7af8ea153241004375deff9fd961da"
+source = "git+https://github.com/EspressoSystems/jellyfish#c0b88424ac1c362c2066971d0da5c43e8832ed5f"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381 0.4.0",
@@ -4340,7 +4332,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#1626a8448e7af8ea153241004375deff9fd961da"
+source = "git+https://github.com/EspressoSystems/jellyfish#c0b88424ac1c362c2066971d0da5c43e8832ed5f"
 dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
@@ -4791,7 +4783,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer.git?tag=1.4.1)",
  "async-lock",
@@ -4804,7 +4796,7 @@ dependencies = [
  "derive_builder",
  "either",
  "futures",
- "hotshot-utils 0.1.0 (git+https://github.com/EspressoSystems//hotshot?branch=ed/timeout-hotfix)",
+ "hotshot-utils",
  "libp2p",
  "libp2p-identity",
  "libp2p-noise",
