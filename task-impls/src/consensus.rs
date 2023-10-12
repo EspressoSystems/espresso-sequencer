@@ -858,6 +858,10 @@ where
                                 // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                                 if new_decide_reached {
                                     let mut leaf = leaf.clone();
+                                    consensus
+                                    .metrics
+                                    .last_synced_block_height
+                                    .set(usize::try_from(leaf.height).unwrap_or(0));
 
                                             // If the full block is available for this leaf, include it in the leaf
                                             // chain that we send to the client.
@@ -939,6 +943,12 @@ where
                         .metrics
                         .last_decided_view
                         .set(usize::try_from(consensus.last_decided_view.get_u64()).unwrap());
+                    let cur_number_of_views_per_decide_event =
+                        *self.cur_view - consensus.last_decided_view.get_u64();
+                    consensus
+                        .metrics
+                        .number_of_views_per_decide_event
+                        .add_point(cur_number_of_views_per_decide_event as f64);
 
                     // We're only storing the last QC. We could store more but we're realistically only going to retrieve the last one.
                     if let Err(e) = self.api.store_leaf(old_anchor_view, leaf).await {
