@@ -8,6 +8,3 @@ members = [
   "sequencer",
   "utils",
 ]
-
-[patch."https://github.com/EspressoSystems/hotshot-query-service"]
-hotshot-query-service = { git = "https://github.com/EspressoSystems//hotshot-query-service", rev = "6427bc77f17bfa80fd9112b663cd36f49a76f66b" }
