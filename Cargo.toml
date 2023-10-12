@@ -22,7 +22,7 @@ default = []
 testing = ["rand", "tempdir"]
 
 [dependencies]
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
     "logging-utils",
 ] }
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
