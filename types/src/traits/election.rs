@@ -363,6 +363,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             }
             AssembledSignature::Timeout(qc) => {
                 error!("QC type should not be timeout here");
+                false
             }
             AssembledSignature::Genesis() => true,
             AssembledSignature::ViewSyncPreCommit(_)
