@@ -1314,19 +1314,16 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
     fn is_valid_timeout_cert(&self, qc: &Self::Certificate, view_number: TYPES::Time) -> bool {
         let comparison_commitment = view_number.commit();
 
-        match qc.signatures() {
-            AssembledSignature::Timeout(qc) => {
-                let real_commit = VoteData::Timeout(comparison_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            _ => {
-                error!("Expected TimeoutCertificate, received another certificate variant");
-                false
-            }
+        if let AssembledSignature::Timeout(qc) = qc.signatures() {
+            let real_commit = VoteData::Timeout(comparison_commitment).commit();
+            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                self.membership().get_committee_qc_stake_table(),
+                U256::from(self.membership().success_threshold().get()),
+            );
+            <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
+        } else {
+            error!("Expected TimeoutCertificate, received another certificate variant");
+            false
         }
     }
 }
