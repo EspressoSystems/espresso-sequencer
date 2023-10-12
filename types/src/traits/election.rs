@@ -361,7 +361,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                 );
                 <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
             }
-            AssembledSignature::Timeout(qc) => {
+            AssembledSignature::Timeout(_) => {
                 error!("QC type should not be timeout here");
                 false
             }
