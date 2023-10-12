@@ -786,9 +786,10 @@ where
                     );
                     return;
                 }
-                // Validate the signature.
+                // Validate the signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
                 else if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
                     error!(?proposal.signature, "Could not verify proposal.");
+                    return;
                 }
                 // Create a positive vote if either liveness or safety check
                 // passes.
@@ -811,11 +812,13 @@ where
                     let safety_check = outcome.is_ok();
                     if let Err(e) = outcome {
                         self.api.send_view_error(view, Arc::new(e)).await;
+                        return;
                     }
 
                     // Skip if both saftey and liveness checks fail.
                     if !safety_check && !liveness_check {
                         error!("Failed safety check and liveness check");
+                        return;
                     }
                 }
 
