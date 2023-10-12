@@ -680,8 +680,7 @@ where
         let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
         for i in 0..config.config.total_nodes.get() as u64 {
-            let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
-            let pubkey = TYPES::SignatureKey::from_private(&privkey);
+            let pubkey = TYPES::SignatureKey::get_public_key(config.config.known_nodes_with_stake.get(&i).unwrap());
             if i < config.config.da_committee_size as u64 {
                 da_keys.insert(pubkey.clone());
             }
