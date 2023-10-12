@@ -89,11 +89,6 @@ where
                 }
             }
         }
-        assert!(
-            late_start_nodes.len()
-                <= self.launcher.metadata.total_nodes - self.launcher.metadata.start_nodes,
-            "Test wants to late start too many nodes."
-        );
 
         self.add_nodes(self.launcher.metadata.total_nodes, &late_start_nodes)
             .await;

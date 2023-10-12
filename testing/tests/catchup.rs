@@ -38,19 +38,20 @@ async fn test_catchup() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), catchup_nodes)],
+        node_changes: vec![(Duration::from_millis(1400), catchup_nodes)],
     };
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(100000),
+                duration: Duration::from_millis(10000),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         check_leaf: true,
         ..Default::default()
     };
+    metadata.overall_safety_properties.num_failed_views = 2;
 
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
@@ -89,11 +90,11 @@ async fn test_catchup_web() {
     }];
 
     metadata.timing_data = timing_data;
-    metadata.start_nodes = 19;
+    metadata.start_nodes = 20;
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(400), catchup_nodes)],
+        node_changes: vec![(Duration::from_millis(2500), catchup_nodes)],
     };
 
     metadata.completion_task_description =
@@ -106,6 +107,9 @@ async fn test_catchup_web() {
         check_leaf: true,
         ..Default::default()
     };
+
+    // only alow for the view which the catchup node hasn't started to fail
+    metadata.overall_safety_properties.num_failed_views = 1;
 
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()

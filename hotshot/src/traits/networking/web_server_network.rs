@@ -508,10 +508,11 @@ impl<
 
         let endpoint = match &message.purpose() {
             MessagePurpose::Proposal => config::post_proposal_route(*view_number),
-            MessagePurpose::CurrentProposal => return Err(WebServerNetworkError::EndpointError),
             MessagePurpose::Vote => config::post_vote_route(*view_number),
             MessagePurpose::Data => config::post_transactions_route(),
-            MessagePurpose::Internal => return Err(WebServerNetworkError::EndpointError),
+            MessagePurpose::Internal | MessagePurpose::CurrentProposal => {
+                return Err(WebServerNetworkError::EndpointError)
+            }
             MessagePurpose::ViewSyncProposal => {
                 // error!("Posting view sync proposal route is: {}", config::post_view_sync_proposal_route(*view_number));
                 config::post_view_sync_proposal_route(*view_number)
