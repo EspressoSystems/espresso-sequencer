@@ -793,33 +793,32 @@ where
                 }
                 // Create a positive vote if either liveness or safety check
                 // passes.
-                else {
-                    // Liveness check.
-                    let liveness_check = justify_qc.view_number > consensus.locked_view;
 
-                    // Safety check.
-                    // Check if proposal extends from the locked leaf.
-                    let outcome = consensus.visit_leaf_ancestors(
-                        justify_qc.view_number,
-                        Terminator::Inclusive(consensus.locked_view),
-                        false,
-                        |leaf| {
-                            // if leaf view no == locked view no then we're done, report success by
-                            // returning true
-                            leaf.view_number != consensus.locked_view
-                        },
-                    );
-                    let safety_check = outcome.is_ok();
-                    if let Err(e) = outcome {
-                        self.api.send_view_error(view, Arc::new(e)).await;
-                        return;
-                    }
+                // Liveness check.
+                let liveness_check = justify_qc.view_number > consensus.locked_view;
 
-                    // Skip if both saftey and liveness checks fail.
-                    if !safety_check && !liveness_check {
-                        error!("Failed safety check and liveness check");
-                        return;
-                    }
+                // Safety check.
+                // Check if proposal extends from the locked leaf.
+                let outcome = consensus.visit_leaf_ancestors(
+                    justify_qc.view_number,
+                    Terminator::Inclusive(consensus.locked_view),
+                    false,
+                    |leaf| {
+                        // if leaf view no == locked view no then we're done, report success by
+                        // returning true
+                        leaf.view_number != consensus.locked_view
+                    },
+                );
+                let safety_check = outcome.is_ok();
+                if let Err(e) = outcome {
+                    self.api.send_view_error(view, Arc::new(e)).await;
+                    return;
+                }
+
+                // Skip if both saftey and liveness checks fail.
+                if !safety_check && !liveness_check {
+                    error!("Failed safety check and liveness check");
+                    return;
                 }
 
                 let high_qc = leaf.justify_qc.clone();
