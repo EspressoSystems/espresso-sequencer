@@ -68,6 +68,7 @@ impl OrchestratorClient {
     ) -> NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         let f = |client: Client<ClientError>| {
@@ -76,6 +77,7 @@ impl OrchestratorClient {
                     NetworkConfig<
                         TYPES::SignatureKey,
                         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+                        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
                         TYPES::ElectionConfigType,
                     >,
                     ClientError,

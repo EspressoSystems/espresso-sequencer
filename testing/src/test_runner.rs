@@ -231,6 +231,7 @@ where
         storage: I::Storage,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
         config: HotShotConfig<
+            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
             TYPES::ElectionConfigType,
         >,

@@ -186,6 +186,7 @@ pub trait RunDA<
         config: NetworkConfig<
             TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> Self;
@@ -208,6 +209,7 @@ pub trait RunDA<
         let (pk, sk) =
             TYPES::SignatureKey::generated_from_seed_indexed(config.seed, config.node_index);
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
+        let known_nodes_sk = config.config.known_nodes_sk.clone();
         let entry = pk.get_stake_table_entry(1u64);
 
         let da_network = self.get_da_network();
@@ -373,6 +375,7 @@ pub trait RunDA<
     ) -> NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >;
 }
@@ -388,6 +391,7 @@ pub struct WebServerDARun<
     config: NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >,
     quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
@@ -449,6 +453,7 @@ where
         config: NetworkConfig<
             TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
@@ -518,6 +523,7 @@ where
     ) -> NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         self.config.clone()
@@ -532,6 +538,7 @@ pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP
     config: NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >,
     quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
@@ -593,6 +600,7 @@ where
         config: NetworkConfig<
             TYPES::SignatureKey,
             <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
@@ -752,6 +760,7 @@ where
     ) -> NetworkConfig<
         TYPES::SignatureKey,
         <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         self.config.clone()

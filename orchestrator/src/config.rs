@@ -51,7 +51,7 @@ pub struct WebServerConfig {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
+pub struct NetworkConfig<KEY, ENTRY, PRIVATEKEY, ELECTIONCONFIG> {
     pub rounds: usize,
     pub transactions_per_round: usize,
     pub num_bootrap: usize,
@@ -65,13 +65,13 @@ pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<ENTRY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<PRIVATEKEY, ENTRY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
     _key_type_phantom: PhantomData<KEY>,
 }
 
-impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
+impl<K, ENTRY, PRIVATEKEY, E> Default for NetworkConfig<K, ENTRY, PRIVATEKEY, E> {
     fn default() -> Self {
         Self {
             rounds: default_rounds(),
@@ -123,7 +123,7 @@ fn default_web_server_config() -> Option<WebServerConfig> {
     None
 }
 
-impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
+impl<K, ENTRY, PRIVATEKEY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, PRIVATEKEY, E> {
     fn from(val: NetworkConfigFile) -> Self {
         NetworkConfig {
             rounds: val.rounds,
@@ -194,7 +194,7 @@ pub struct HotShotConfigFile {
     pub propose_max_round_time: Duration,
 }
 
-impl<ENTRY, E> From<HotShotConfigFile> for HotShotConfig<ENTRY, E> {
+impl<PRIVATEKEY, ENTRY, E> From<HotShotConfigFile> for HotShotConfig<PRIVATEKEY, ENTRY, E> {
     fn from(val: HotShotConfigFile) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
@@ -202,6 +202,7 @@ impl<ENTRY, E> From<HotShotConfigFile> for HotShotConfig<ENTRY, E> {
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
             known_nodes_with_stake: Vec::new(),
+            known_nodes_sk: Vec::new(),
             da_committee_size: val.committee_nodes,
             next_view_timeout: val.next_view_timeout,
             timeout_ratio: val.timeout_ratio,
