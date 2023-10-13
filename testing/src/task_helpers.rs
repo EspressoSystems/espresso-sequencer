@@ -49,9 +49,15 @@ pub async fn build_system_handle(
     .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
-    let private_key = config.known_nodes_sk.get(node_id as usize).expect("node_id should be within the range of known_nodes").clone();
+    let private_key = config
+        .known_nodes_sk
+        .get(node_id as usize)
+        .expect("node_id should be within the range of known_nodes")
+        .clone();
     let public_key = <BLSPubKey as SignatureKey>::get_public_key(
-        known_nodes_with_stake.get(node_id as usize).expect("node_id should be within the range of known_nodes")
+        known_nodes_with_stake
+            .get(node_id as usize)
+            .expect("node_id should be within the range of known_nodes"),
     );
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
         <QuorumEx<SequencingTestTypes, SequencingMemoryImpl> as ConsensusExchange<

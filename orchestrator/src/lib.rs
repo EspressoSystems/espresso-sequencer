@@ -36,11 +36,11 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
 }
 
 #[derive(Default, Clone)]
-struct OrchestratorState<KEY, ENTRY, PRIVATEKEY, ELECTION> {
+struct OrchestratorState<KEY: SignatureKey, ELECTION> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
     /// The network configuration
-    config: NetworkConfig<KEY, ENTRY, PRIVATEKEY, ELECTION>,
+    config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
     /// Whether nodes should start their HotShot instances
     /// Will be set to true once all nodes post they are ready to start
     start: bool,
@@ -51,7 +51,7 @@ struct OrchestratorState<KEY, ENTRY, PRIVATEKEY, ELECTION> {
 }
 
 impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
-    OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>
+    OrchestratorState<KEY, ELECTION>
 {
     pub fn new(
         network_config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
@@ -83,7 +83,7 @@ pub trait OrchestratorApi<KEY, ENTRY, PRIVATEKEY, ELECTION> {
 }
 
 impl<KEY, ELECTION> OrchestratorApi<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>
-    for OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>
+    for OrchestratorState<KEY, ELECTION>
 where
     KEY: serde::Serialize + Clone + SignatureKey,
     ELECTION: serde::Serialize + Clone + Send,
@@ -102,7 +102,13 @@ where
 
         //add new node's key to stake table
         if self.config.web_server_config.clone().is_some() {
-            let new_key = KEY::get_public_key(self.config.config.known_nodes_with_stake.get(node_index as usize).expect("node_id should be within the range of known_nodes"));
+            let new_key = KEY::get_public_key(
+                self.config
+                    .config
+                    .known_nodes_with_stake
+                    .get(node_index as usize)
+                    .expect("node_id should be within the range of known_nodes"),
+            );
             let client_clone = self.client.clone().unwrap();
             async move {
                 client_clone
@@ -251,11 +257,11 @@ where
 {
     let api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 
-    let state: RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>> =
+    let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
     let mut app = App::<
-        RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>>,
+        RwLock<OrchestratorState<KEY, ELECTION>>,
         ServerError,
     >::with_state(state);
     app.register_module("api", api.unwrap())

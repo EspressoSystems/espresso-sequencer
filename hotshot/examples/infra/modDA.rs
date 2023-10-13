@@ -208,9 +208,13 @@ pub trait RunDA<
         // Get KeyPair for certificate Aggregation
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let known_nodes_sk = config.config.known_nodes_sk.clone();
-        let entry = known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes");
+        let entry = known_nodes_with_stake
+            .get(config.node_index as usize)
+            .expect("node_id should be within the range of known_nodes");
         let pk = TYPES::SignatureKey::get_public_key(entry);
-        let sk = known_nodes_sk.get(config.node_index as usize).expect("node_id should be within the range of known_nodes");
+        let sk = known_nodes_sk
+            .get(config.node_index as usize)
+            .expect("node_id should be within the range of known_nodes");
 
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();
@@ -246,7 +250,7 @@ pub trait RunDA<
 
         SystemContext::init(
             pk,
-            sk,
+            sk.clone(),
             config.node_index,
             config.config,
             MemoryStorage::empty(),
@@ -459,8 +463,10 @@ where
     ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
         // Generate our own key
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
-        let pub_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
-            known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes")
+        let pubkey = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
+            known_nodes_with_stake
+                .get(config.node_index as usize)
+                .expect("node_id should be within the range of known_nodes"),
         );
 
         // Get the configuration for the web server
@@ -474,7 +480,7 @@ where
             &host.to_string(),
             port,
             wait_between_polls,
-            pub_key.clone(),
+            pubkey.clone(),
             false,
         );
 
@@ -493,7 +499,7 @@ where
 
         // Each node runs the DA network so that leaders have access to transactions and DA votes
         let da_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
-            WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true)
+            WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pubkey, true)
                 .into(),
         );
 
@@ -604,8 +610,10 @@ where
         >,
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
-        let pub_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
-            known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes")
+        let pubkey = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
+            known_nodes_with_stake
+                .get(config.node_index as usize)
+                .expect("node_id should be within the range of known_nodes"),
         );
         let mut config = config;
         let libp2p_config = config
