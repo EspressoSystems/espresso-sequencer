@@ -66,12 +66,12 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 10000,
+            next_view_timeout: 1000,
             timeout_ratio: (11, 10),
-            round_start_delay: 1,
-            start_delay: 1,
+            round_start_delay: 100,
+            start_delay: 100,
             propose_min_round_time: Duration::new(0, 0),
-            propose_max_round_time: Duration::new(5, 0),
+            propose_max_round_time: Duration::from_millis(100),
         }
     }
 }
@@ -125,7 +125,7 @@ impl TestMetadata {
     }
 
     /// Default setting with 20 nodes and 10 views of successful views.
-    pub fn default_more_nodes_less_success() -> TestMetadata {
+    pub fn default_more_nodes() -> TestMetadata {
         TestMetadata {
             total_nodes: 20,
             start_nodes: 20,
@@ -139,12 +139,13 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(40, 0),
+                    duration: Duration::new(140, 0),
                 },
             ),
-            overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 10,
-                ..Default::default()
+            overall_safety_properties: Default::default(),
+            timing_data: TimingData {
+                next_view_timeout: 1000,
+                ..TimingData::default()
             },
             ..TestMetadata::default()
         }

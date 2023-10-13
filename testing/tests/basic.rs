@@ -38,7 +38,7 @@ async fn test_with_failures_one() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestMetadata::default_more_nodes_less_success();
+    let mut metadata = TestMetadata::default_more_nodes();
     // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
     // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
     // following issue.
@@ -50,8 +50,9 @@ async fn test_with_failures_one() {
     }];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(4, 0), dead_nodes)],
+        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
     };
+    metadata.overall_safety_properties.num_failed_views = 2;
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
         .launch()
@@ -77,7 +78,7 @@ async fn test_with_failures_half_f() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestMetadata::default_more_nodes_less_success();
+    let mut metadata = TestMetadata::default_more_nodes();
     // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
     // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
     // following issue.
@@ -99,8 +100,9 @@ async fn test_with_failures_half_f() {
     ];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(4, 0), dead_nodes)],
+        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
     };
+    metadata.overall_safety_properties.num_failed_views = 6;
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
         .launch()
@@ -126,7 +128,10 @@ async fn test_with_failures_f() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestMetadata::default_more_nodes_less_success();
+    let mut metadata = TestMetadata::default_more_nodes();
+    metadata.overall_safety_properties.num_failed_views = 6;
+    // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+    metadata.overall_safety_properties.num_successful_views = 22;
     // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
     // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
     // following issue.
@@ -160,7 +165,7 @@ async fn test_with_failures_f() {
     ];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(4, 0), dead_nodes)],
+        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
     };
     metadata
         .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
