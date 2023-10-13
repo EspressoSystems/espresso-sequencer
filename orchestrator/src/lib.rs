@@ -71,7 +71,7 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     }
 }
 
-pub trait OrchestratorApi<KEY: SignatureKey, ENTRY, PRIVATEKEY, ELECTION> {
+pub trait OrchestratorApi<KEY: SignatureKey, ELECTION> {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
     fn post_getconfig(
         &mut self,
@@ -82,7 +82,7 @@ pub trait OrchestratorApi<KEY: SignatureKey, ENTRY, PRIVATEKEY, ELECTION> {
     fn post_run_results(&mut self) -> Result<(), ServerError>;
 }
 
-impl<KEY, ELECTION> OrchestratorApi<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>
+impl<KEY, ELECTION> OrchestratorApi<KEY, ELECTION>
     for OrchestratorState<KEY, ELECTION>
 where
     KEY: serde::Serialize + Clone + SignatureKey,
@@ -198,13 +198,11 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY: SignatureKey, ELECTION, ENTRY, PRIVATEKEY, State>() -> Result<Api<State, ServerError>, ApiError>
+fn define_api<KEY: SignatureKey, ELECTION, State>() -> Result<Api<State, ServerError>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
-    <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ENTRY, PRIVATEKEY, ELECTION>,
+    <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ELECTION>,
     KEY: serde::Serialize,
-    ENTRY: serde::Serialize,
-    PRIVATEKEY: serde::Serialize,
     ELECTION: serde::Serialize,
 {
     let api_toml = toml::from_str::<toml::Value>(include_str!(concat!(
