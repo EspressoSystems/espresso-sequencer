@@ -12,6 +12,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   static-build:
     runs-on: ubuntu-latest
@@ -40,13 +44,15 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v23
 
-      - uses: cachix/cachix-action@v12
+      - name: Enable Cachix
+        uses: cachix/cachix-action@v12
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
         continue-on-error: true
         with:
           name: espresso-systems-private
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           extraPullNames: nix-community
+          skipPush: ${{ github.actor == 'dependabot[bot]' }}
 
       - name: Cache cargo
         uses: actions/cache@v3.3.2
@@ -112,37 +118,42 @@ jobs:
         id: sequencer
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/sequencer
+          flavor: suffix=musl
 
       - name: Generate web-server docker metadata
         uses: docker/metadata-action@v5
         id: web-server
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/web-server
+          flavor: suffix=musl
 
       - name: Generate orchestrator docker metadata
         uses: docker/metadata-action@v5
         id: orchestrator
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
+          flavor: suffix=musl
 
       - name: Generate commitment task docker metadata
         uses: docker/metadata-action@v5
         id: commitment-task
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
+          flavor: suffix=musl
 
       - name: Generate example rollup metadata
         uses: docker/metadata-action@v5
         id: example-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
+          flavor: suffix=musl
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v4
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
-          platforms: linux/amd64,arm64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
@@ -152,7 +163,7 @@ jobs:
         with:
           context: ./
           file: ./docker/web-server.Dockerfile
-          platforms: linux/amd64,arm64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.web-server.outputs.tags }}
           labels: ${{ steps.web-server.outputs.labels }}
@@ -162,7 +173,7 @@ jobs:
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
-          platforms: linux/amd64,arm64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
@@ -172,7 +183,7 @@ jobs:
         with:
           context: ./
           file: ./docker/commitment-task.Dockerfile
-          platforms: linux/amd64,arm64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.commitment-task.outputs.tags }}
           labels: ${{ steps.commitment-task.outputs.labels }}
