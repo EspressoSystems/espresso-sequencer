@@ -50,10 +50,10 @@ pub trait SignatureKey:
     + Ord
 {
     /// The private key type for this signature algorithm
-    type PrivateKey: Send 
+    type PrivateKey: Send
         + Sync
-        + Sized 
-        + Clone 
+        + Sized
+        + Clone
         + Debug
         + Eq
         + Serialize

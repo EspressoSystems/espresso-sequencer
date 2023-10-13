@@ -53,7 +53,9 @@ struct OrchestratorState<KEY, ENTRY, PRIVATEKEY, ELECTION> {
 impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>
 {
-    pub fn new(network_config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>) -> Self {
+    pub fn new(
+        network_config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
+    ) -> Self {
         let mut web_client = None;
         if network_config.web_server_config.is_some() {
             let base_url = "http://0.0.0.0/9000".to_string().parse().unwrap();
@@ -140,7 +142,8 @@ where
     fn post_getconfig(
         &mut self,
         _node_index: u16,
-    ) -> Result<NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>, ServerError> {
+    ) -> Result<NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>, ServerError>
+    {
         if self.config.libp2p_config.is_some() {
             let libp2p_config = self.config.clone().libp2p_config.unwrap();
             if libp2p_config.bootstrap_nodes.len() < libp2p_config.num_bootstrap_nodes {
@@ -251,7 +254,10 @@ where
     let state: RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
-    let mut app = App::<RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>>, ServerError>::with_state(state);
+    let mut app = App::<
+        RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>>,
+        ServerError,
+    >::with_state(state);
     app.register_module("api", api.unwrap())
         .expect("Error registering api");
     tracing::error!("lisening on {:?}:{:?}", host, port);

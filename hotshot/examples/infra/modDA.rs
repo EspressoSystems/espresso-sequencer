@@ -206,11 +206,11 @@ pub trait RunDA<
         let config = self.get_config();
 
         // Get KeyPair for certificate Aggregation
-        let (pk, sk) =
-            TYPES::SignatureKey::generated_from_seed_indexed(config.seed, config.node_index);
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let known_nodes_sk = config.config.known_nodes_sk.clone();
-        let entry = pk.get_stake_table_entry(1u64);
+        let entry = known_nodes_with_stake.get(config.node_index as usize).unwrap();
+        let pk = TYPES::SignatureKey::get_public_key(entry);
+        let sk = known_nodes_sk.get(config.node_index as usize).unwrap();
 
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();
