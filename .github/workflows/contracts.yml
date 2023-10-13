@@ -12,6 +12,10 @@ on:
     branches:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUST_LOG: info,libp2p=off
 
@@ -19,25 +23,21 @@ jobs:
   contracts:
     runs-on: ubuntu-latest
     steps:
-      - uses: styfle/cancel-workflow-action@0.11.0
-        name: Cancel Outdated Builds
-        with:
-          all_but_latest: true
-          access_token: ${{ github.token }}
-
       - name: Install Nix
         uses: cachix/install-nix-action@v23
 
-      - uses: cachix/cachix-action@v12
+      - name: Enable Cachix
+        uses: cachix/cachix-action@v12
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
         continue-on-error: true
         with:
           name: espresso-systems-private
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           extraPullNames: nix-community
+          skipPush: ${{ github.actor == 'dependabot[bot]' }}
 
-      - uses: actions/checkout@v4
-        name: Checkout Repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 

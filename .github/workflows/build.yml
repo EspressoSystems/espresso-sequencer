@@ -8,9 +8,15 @@ on:
     tags:
       # YYYYMMDD
       - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
+  schedule:
+    - cron: "0 0 * * 1"
   pull_request:
-    branches:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 
 env:
   RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
@@ -18,26 +24,20 @@ env:
 
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: [self-hosted, X64]
     container:
       image: ghcr.io/espressosystems/devops-rust:stable
     steps:
-      - uses: styfle/cancel-workflow-action@0.11.0
-        name: Cancel Outdated Builds
-        with:
-          all_but_latest: true
-          access_token: ${{ github.token }}
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - uses: actions/checkout@v4
-        name: Checkout Repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
           submodules: true
 
-      - uses: Swatinem/rust-cache@v2
-        name: Enable Rust Caching
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: |
@@ -48,3 +48,146 @@ jobs:
           cargo test --release --workspace --all-features --no-run
           cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
         timeout-minutes: 30
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: x86_64-unknown-linux-gnu-services
+          path: |
+            target/release/orchestrator
+            target/release/web-server
+            target/release/sequencer
+            target/release/cli
+            target/release/commitment-task
+
+  build-arm:
+    runs-on: [self-hosted, ARM64]
+    container:
+      image: ghcr.io/espressosystems/devops-rust:stable
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: |
+          cargo build --release --workspace
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: aarch64-unknown-linux-gnu-services
+          path: |
+            target/release/orchestrator
+            target/release/web-server
+            target/release/sequencer
+            target/release/cli
+            target/release/commitment-task
+
+
+  build-dockers:
+    runs-on: ubuntu-latest
+    needs: [build, build-arm]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download executables AMD
+        uses: actions/download-artifact@v3
+        with:
+          name: x86_64-unknown-linux-gnu-services
+          path: target/amd64/release
+
+      - name: Download executables ARM
+        uses: actions/download-artifact@v3
+        with:
+          name: aarch64-unknown-linux-gnu-services
+          path: target/arm64/release
+
+      - name: Setup Docker BuildKit (buildx)
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate sequencer docker metadata
+        uses: docker/metadata-action@v5
+        id: sequencer
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/sequencer
+
+      - name: Generate web-server docker metadata
+        uses: docker/metadata-action@v5
+        id: web-server
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/web-server
+
+      - name: Generate orchestrator docker metadata
+        uses: docker/metadata-action@v5
+        id: orchestrator
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
+
+      - name: Generate commitment task docker metadata
+        uses: docker/metadata-action@v5
+        id: commitment-task
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
+
+      - name: Generate example rollup metadata
+        uses: docker/metadata-action@v5
+        id: example-rollup
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
+
+      - name: Build and push sequencer docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/sequencer.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.sequencer.outputs.tags }}
+          labels: ${{ steps.sequencer.outputs.labels }}
+
+      - name: Build and push web-server docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/web-server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.web-server.outputs.tags }}
+          labels: ${{ steps.web-server.outputs.labels }}
+
+      - name: Build and push orchestrator docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/orchestrator.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.orchestrator.outputs.tags }}
+          labels: ${{ steps.orchestrator.outputs.labels }}
+
+      - name: Build and push commitment-task docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./docker/commitment-task.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.commitment-task.outputs.tags }}
+          labels: ${{ steps.commitment-task.outputs.labels }}
