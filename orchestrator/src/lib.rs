@@ -102,7 +102,7 @@ where
 
         //add new node's key to stake table
         if self.config.web_server_config.clone().is_some() {
-            let new_key = KEY::generated_from_seed_indexed(self.config.seed, node_index.into()).0;
+            let new_key = KEY::get_public_key(self.config.config.known_nodes_with_stake.get(node_index as usize).expect("node_id should be within the range of known_nodes"));
             let client_clone = self.client.clone().unwrap();
             async move {
                 client_clone

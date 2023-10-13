@@ -458,11 +458,10 @@ where
         >,
     ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
         // Generate our own key
-        let (pub_key, _priv_key) =
-            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
-                config.seed,
-                config.node_index,
-            );
+        let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
+        let pub_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
+            known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes")
+        );
 
         // Get the configuration for the web server
         let WebServerConfig {
@@ -604,11 +603,10 @@ where
             TYPES::ElectionConfigType,
         >,
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
-        let (pubkey, _privkey) =
-            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
-                config.seed,
-                config.node_index,
-            );
+        let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
+        let pub_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
+            known_nodes_with_stake.get(config.node_index as usize).unwrap()
+        );
         let mut config = config;
         let libp2p_config = config
             .libp2p_config

@@ -246,11 +246,12 @@ where
     {
         let node_id = self.next_node_id;
         self.next_node_id += 1;
-
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
         // Generate key pair for certificate aggregation
-        let private_key = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
-        let public_key = TYPES::SignatureKey::from_private(&private_key);
+        let private_key = config.known_nodes_sk.get(node_id as usize).expect("node_id should be within the range of known_nodes").clone();
+        let public_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
+            known_nodes_with_stake.get(node_id as usize).expect("node_id should be within the range of known_nodes")
+        );
         let entry = public_key.get_stake_table_entry(1u64);
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
             <QuorumEx<TYPES,I> as ConsensusExchange<
