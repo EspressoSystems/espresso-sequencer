@@ -3,8 +3,12 @@ use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::hot_shot::HotShot;
 use ethers::{prelude::*, providers::Provider, signers::coins_bip39::English};
+use futures::FutureExt;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use std::io;
 use std::sync::Arc;
+use tide_disco::error::ServerError;
+use tide_disco::Api;
 use url::Url;
 
 /// Commitment Task Command
@@ -109,7 +113,7 @@ async fn main() {
     }
 
     if let Some(port) = opt.port {
-        start_http_server(port);
+        start_http_server(port, hotshot_address).unwrap();
     }
 
     let hotshot_contract_options = CommitmentTaskOptions {
@@ -124,7 +128,53 @@ async fn main() {
     run_hotshot_commitment_task(&hotshot_contract_options).await;
 }
 
-fn start_http_server(port: u16) {
-    let app = tide_disco::App::<(), tide_disco::error::ServerError>::with_state(());
+fn start_http_server(port: u16, hotshot_address: Address) -> io::Result<()> {
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    let mut api = Api::<(), ServerError>::new(toml)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    api.get("gethotshotcontract", move |_, _| {
+        async move { Ok(hotshot_address) }.boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    app.register_module("api", api)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
     spawn(app.serve(format!("0.0.0.0:{port}")));
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use portpicker::pick_unused_port;
+    use surf_disco::Client;
+
+    use super::start_http_server;
+    use super::Address;
+    use super::ServerError;
+
+    #[async_std::test]
+    async fn test_get_hotshot_contract() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let expected_addr = "0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
+            .parse::<Address>()
+            .unwrap();
+        start_http_server(port, expected_addr).expect("Failed to start the server");
+
+        let client: Client<ServerError> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+
+        let addr: Address = client.get("api/hotshot_contract").send().await.unwrap();
+
+        assert_eq!(addr, expected_addr);
+    }
 }
