@@ -40,7 +40,7 @@ struct OrchestratorState<KEY: SignatureKey, ELECTION> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
     /// The network configuration
-    config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
+    config: NetworkConfig<KEY, ELECTION>,
     /// Whether nodes should start their HotShot instances
     /// Will be set to true once all nodes post they are ready to start
     start: bool,
@@ -54,7 +54,7 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     OrchestratorState<KEY, ELECTION>
 {
     pub fn new(
-        network_config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
+        network_config: NetworkConfig<KEY, ELECTION>,
     ) -> Self {
         let mut web_client = None;
         if network_config.web_server_config.is_some() {
@@ -71,12 +71,12 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     }
 }
 
-pub trait OrchestratorApi<KEY, ENTRY, PRIVATEKEY, ELECTION> {
+pub trait OrchestratorApi<KEY: SignatureKey, ENTRY, PRIVATEKEY, ELECTION> {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
     fn post_getconfig(
         &mut self,
         node_index: u16,
-    ) -> Result<NetworkConfig<KEY, ENTRY, PRIVATEKEY, ELECTION>, ServerError>;
+    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>;
     fn get_start(&self) -> Result<bool, ServerError>;
     fn post_ready(&mut self) -> Result<(), ServerError>;
     fn post_run_results(&mut self) -> Result<(), ServerError>;
@@ -148,7 +148,7 @@ where
     fn post_getconfig(
         &mut self,
         _node_index: u16,
-    ) -> Result<NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>, ServerError>
+    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>
     {
         if self.config.libp2p_config.is_some() {
             let libp2p_config = self.config.clone().libp2p_config.unwrap();
@@ -198,7 +198,7 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY, ELECTION, ENTRY, PRIVATEKEY, State>() -> Result<Api<State, ServerError>, ApiError>
+fn define_api<KEY: SignatureKey, ELECTION, ENTRY, PRIVATEKEY, State>() -> Result<Api<State, ServerError>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ENTRY, PRIVATEKEY, ELECTION>,
@@ -247,7 +247,7 @@ where
 
 /// Runs the orchestrator
 pub async fn run_orchestrator<KEY, ELECTION>(
-    network_config: NetworkConfig<KEY, KEY::StakeTableEntry, KEY::PrivateKey, ELECTION>,
+    network_config: NetworkConfig<KEY, ELECTION>,
     host: IpAddr,
     port: u16,
 ) -> io::Result<()>
@@ -260,10 +260,7 @@ where
     let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
-    let mut app = App::<
-        RwLock<OrchestratorState<KEY, ELECTION>>,
-        ServerError,
-    >::with_state(state);
+    let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
     app.register_module("api", api.unwrap())
         .expect("Error registering api");
     tracing::error!("lisening on {:?}:{:?}", host, port);

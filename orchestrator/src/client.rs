@@ -5,7 +5,7 @@ use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
 
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::{error::ClientError, Client};
 
 /// Holds the client connection to the orchestrator
@@ -67,8 +67,6 @@ impl OrchestratorClient {
         node_index: u16,
     ) -> NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         let f = |client: Client<ClientError>| {
@@ -76,8 +74,6 @@ impl OrchestratorClient {
                 let config: Result<
                     NetworkConfig<
                         TYPES::SignatureKey,
-                        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-                        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
                         TYPES::ElectionConfigType,
                     >,
                     ClientError,

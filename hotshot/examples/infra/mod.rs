@@ -36,8 +36,6 @@ pub fn load_config_from_file<TYPES: NodeType>(
     config_file: String,
 ) -> NetworkConfig<
     TYPES::SignatureKey,
-    <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-    <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     TYPES::ElectionConfigType,
 > {
     let config_file_as_string: String = fs::read_to_string(config_file.as_str())
@@ -48,8 +46,6 @@ pub fn load_config_from_file<TYPES: NodeType>(
 
     let mut config: NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > = config_toml.into();
 

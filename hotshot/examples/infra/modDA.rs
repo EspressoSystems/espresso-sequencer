@@ -185,8 +185,6 @@ pub trait RunDA<
     async fn initialize_networking(
         config: NetworkConfig<
             TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> Self;
@@ -378,8 +376,6 @@ pub trait RunDA<
         &self,
     ) -> NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >;
 }
@@ -394,8 +390,6 @@ pub struct WebServerDARun<
 > {
     config: NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >,
     quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
@@ -456,8 +450,6 @@ where
     async fn initialize_networking(
         config: NetworkConfig<
             TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
@@ -527,8 +519,6 @@ where
         &self,
     ) -> NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         self.config.clone()
@@ -542,8 +532,6 @@ pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP
 {
     config: NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     >,
     quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
@@ -604,8 +592,6 @@ where
     async fn initialize_networking(
         config: NetworkConfig<
             TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
             TYPES::ElectionConfigType,
         >,
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
@@ -765,8 +751,6 @@ where
         &self,
     ) -> NetworkConfig<
         TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         TYPES::ElectionConfigType,
     > {
         self.config.clone()

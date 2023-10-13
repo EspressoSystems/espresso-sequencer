@@ -1,4 +1,4 @@
-use hotshot_types::{ExecutionType, HotShotConfig};
+use hotshot_types::{ExecutionType, HotShotConfig, traits::signature_key::SignatureKey};
 use std::{
     marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -51,7 +51,7 @@ pub struct WebServerConfig {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct NetworkConfig<KEY, ENTRY, PRIVATEKEY, ELECTIONCONFIG> {
+pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG> {
     pub rounds: usize,
     pub transactions_per_round: usize,
     pub num_bootrap: usize,
@@ -65,13 +65,13 @@ pub struct NetworkConfig<KEY, ENTRY, PRIVATEKEY, ELECTIONCONFIG> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<PRIVATEKEY, ENTRY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<KEY::PrivateKey, KEY::StakeTableEntry, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
     _key_type_phantom: PhantomData<KEY>,
 }
 
-impl<K, ENTRY, PRIVATEKEY, E> Default for NetworkConfig<K, ENTRY, PRIVATEKEY, E> {
+impl<K: SignatureKey, E> Default for NetworkConfig<K, E> {
     fn default() -> Self {
         Self {
             rounds: default_rounds(),
@@ -123,7 +123,7 @@ fn default_web_server_config() -> Option<WebServerConfig> {
     None
 }
 
-impl<K, ENTRY, PRIVATEKEY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, PRIVATEKEY, E> {
+impl<K: SignatureKey, E> From<NetworkConfigFile> for NetworkConfig<K, E> {
     fn from(val: NetworkConfigFile) -> Self {
         NetworkConfig {
             rounds: val.rounds,
