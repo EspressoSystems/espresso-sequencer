@@ -252,7 +252,7 @@ where
         let public_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
             known_nodes_with_stake.get(node_id as usize).expect("node_id should be within the range of known_nodes")
         );
-        let entry = public_key.get_stake_table_entry(1u64);
+        let entry = known_nodes_with_stake.get(node_id as usize).expect("node_id should be within the range of known_nodes");
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
             <QuorumEx<TYPES,I> as ConsensusExchange<
                 TYPES,
