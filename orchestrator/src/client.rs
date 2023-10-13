@@ -65,17 +65,11 @@ impl OrchestratorClient {
     pub async fn get_config_from_orchestrator<TYPES: NodeType>(
         &self,
         node_index: u16,
-    ) -> NetworkConfig<
-        TYPES::SignatureKey,
-        TYPES::ElectionConfigType,
-    > {
+    ) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
         let f = |client: Client<ClientError>| {
             async move {
                 let config: Result<
-                    NetworkConfig<
-                        TYPES::SignatureKey,
-                        TYPES::ElectionConfigType,
-                    >,
+                    NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
                     ClientError,
                 > = client
                     .post(&format!("api/config/{node_index}"))

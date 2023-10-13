@@ -53,9 +53,7 @@ struct OrchestratorState<KEY: SignatureKey, ELECTION> {
 impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     OrchestratorState<KEY, ELECTION>
 {
-    pub fn new(
-        network_config: NetworkConfig<KEY, ELECTION>,
-    ) -> Self {
+    pub fn new(network_config: NetworkConfig<KEY, ELECTION>) -> Self {
         let mut web_client = None;
         if network_config.web_server_config.is_some() {
             let base_url = "http://0.0.0.0/9000".to_string().parse().unwrap();
@@ -82,8 +80,7 @@ pub trait OrchestratorApi<KEY: SignatureKey, ELECTION> {
     fn post_run_results(&mut self) -> Result<(), ServerError>;
 }
 
-impl<KEY, ELECTION> OrchestratorApi<KEY, ELECTION>
-    for OrchestratorState<KEY, ELECTION>
+impl<KEY, ELECTION> OrchestratorApi<KEY, ELECTION> for OrchestratorState<KEY, ELECTION>
 where
     KEY: serde::Serialize + Clone + SignatureKey,
     ELECTION: serde::Serialize + Clone + Send,
@@ -148,8 +145,7 @@ where
     fn post_getconfig(
         &mut self,
         _node_index: u16,
-    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>
-    {
+    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError> {
         if self.config.libp2p_config.is_some() {
             let libp2p_config = self.config.clone().libp2p_config.unwrap();
             if libp2p_config.bootstrap_nodes.len() < libp2p_config.num_bootstrap_nodes {

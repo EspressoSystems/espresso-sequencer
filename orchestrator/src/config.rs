@@ -1,4 +1,4 @@
-use hotshot_types::{ExecutionType, HotShotConfig, traits::signature_key::SignatureKey};
+use hotshot_types::{traits::signature_key::SignatureKey, ExecutionType, HotShotConfig};
 use std::{
     marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
