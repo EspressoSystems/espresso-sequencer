@@ -208,9 +208,9 @@ pub trait RunDA<
         // Get KeyPair for certificate Aggregation
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let known_nodes_sk = config.config.known_nodes_sk.clone();
-        let entry = known_nodes_with_stake.get(config.node_index as usize).unwrap();
+        let entry = known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes");
         let pk = TYPES::SignatureKey::get_public_key(entry);
-        let sk = known_nodes_sk.get(config.node_index as usize).unwrap();
+        let sk = known_nodes_sk.get(config.node_index as usize).expect("node_id should be within the range of known_nodes");
 
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();
@@ -605,7 +605,7 @@ where
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let pub_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
-            known_nodes_with_stake.get(config.node_index as usize).unwrap()
+            known_nodes_with_stake.get(config.node_index as usize).expect("node_id should be within the range of known_nodes")
         );
         let mut config = config;
         let libp2p_config = config
@@ -692,7 +692,7 @@ where
                     .config
                     .known_nodes_with_stake
                     .get(i as usize)
-                    .unwrap(),
+                    .expect("node_id should be within the range of known_nodes"),
             );
             if i < config.config.da_committee_size as u64 {
                 da_keys.insert(pubkey.clone());
