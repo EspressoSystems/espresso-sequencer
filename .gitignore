@@ -21,3 +21,6 @@ target/
 node_modules/
 
 **/*DS_Store
+
+# solidity files cache
+cache
