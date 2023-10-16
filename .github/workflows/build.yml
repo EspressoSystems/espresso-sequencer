@@ -153,7 +153,7 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/example-rollup
 
       - name: Build and push sequencer docker
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
@@ -163,7 +163,7 @@ jobs:
           labels: ${{ steps.sequencer.outputs.labels }}
 
       - name: Build and push web-server docker
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./
           file: ./docker/web-server.Dockerfile
@@ -173,7 +173,7 @@ jobs:
           labels: ${{ steps.web-server.outputs.labels }}
 
       - name: Build and push orchestrator docker
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
@@ -183,7 +183,7 @@ jobs:
           labels: ${{ steps.orchestrator.outputs.labels }}
 
       - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./
           file: ./docker/commitment-task.Dockerfile
