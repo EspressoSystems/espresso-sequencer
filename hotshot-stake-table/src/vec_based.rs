@@ -325,22 +325,18 @@ mod tests {
     };
     use jf_primitives::signatures::schnorr::VerKey as SchnorrVerKey;
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
-    use jf_utils::bytes_to_field_elements;
 
     // KeyType is a pair of BLS verfication key and Schnorr verification key
     type Key = (BLSVerKey, SchnorrVerKey<ark_ed_on_bn254::EdwardsConfig>);
     type F = ark_bn254::Fr;
 
     impl ToFields<F> for Key {
-        const SIZE: usize = 6;
+        const SIZE: usize = 2;
 
         fn to_fields(&self) -> Vec<F> {
-            let bytes = jf_utils::to_bytes!(&self.0.to_affine()).unwrap(); // won't fail
-            let mut v = bytes_to_field_elements(bytes);
+            // For light client contract, we only have to hash the Schnorr key
             let p = self.1.to_affine();
-            v.push(p.x);
-            v.push(p.y);
-            v
+            vec![p.x, p.y]
         }
     }
 
