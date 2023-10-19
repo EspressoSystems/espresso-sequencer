@@ -39,20 +39,20 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
 
     fn register(
         &mut self,
-        new_key: Self::Key,
+        new_key: &Self::Key,
         amount: Self::Amount,
     ) -> Result<(), StakeTableError> {
-        match self.mapping.get(&new_key) {
+        match self.mapping.get(new_key) {
             Some(_) => Err(StakeTableError::ExistingKey),
             None => {
                 let pos = self.mapping.len();
                 self.head = self.head.register(
                     self.height,
                     &to_merkle_path(pos, self.height),
-                    &new_key,
+                    new_key,
                     amount,
                 )?;
-                self.mapping.insert(new_key, pos);
+                self.mapping.insert(new_key.clone(), pos);
                 Ok(())
             }
         }
@@ -224,14 +224,14 @@ mod tests {
 
     #[test]
     fn test_stake_table() -> Result<(), StakeTableError> {
-        let mut st = StakeTable::new(3);
+        let mut st = StakeTable::<Key>::new(3);
         let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(0));
 
         // Registering keys
         keys.iter()
             .take(4)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(400));
         assert_eq!(st.total_stake(SnapshotVersion::EpochStart)?, U256::from(0));
         assert_eq!(
@@ -247,7 +247,7 @@ mod tests {
         keys.iter()
             .skip(4)
             .take(3)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(600));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -260,7 +260,7 @@ mod tests {
         st.advance();
         keys.iter()
             .skip(7)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(900));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -272,7 +272,7 @@ mod tests {
         );
 
         // No duplicate register
-        assert!(st.register(keys[0], U256::from(100)).is_err());
+        assert!(st.register(&keys[0], U256::from(100)).is_err());
         // The 9-th key is still in head stake table
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());

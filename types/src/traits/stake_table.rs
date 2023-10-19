@@ -36,8 +36,11 @@ pub trait StakeTableScheme {
     /// # Errors
     ///
     /// Return err if key is already registered.
-    fn register(&mut self, new_key: Self::Key, amount: Self::Amount)
-        -> Result<(), StakeTableError>;
+    fn register(
+        &mut self,
+        new_key: &Self::Key,
+        amount: Self::Amount,
+    ) -> Result<(), StakeTableError>;
 
     /// Batch register a list of new keys. A default implementation is provided
     /// w/o batch optimization.
@@ -53,7 +56,7 @@ pub trait StakeTableScheme {
         let _ = new_keys
             .into_iter()
             .zip(amounts)
-            .try_for_each(|(key, amount)| Self::register(self, key, amount));
+            .try_for_each(|(key, amount)| Self::register(self, &key, amount));
         Ok(())
     }
 

@@ -26,6 +26,7 @@ tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag 
 typenum = { workspace = true }
 
 [dev-dependencies]
+ark-ed-on-bn254 = "0.4.0"
 rand_chacha = { workspace = true }
 
 [features]
