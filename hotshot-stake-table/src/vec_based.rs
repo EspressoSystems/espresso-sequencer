@@ -1,5 +1,6 @@
 //! A vector based stake table implementation. The commitment is the rescue hash of the list of (key, amount) pairs;
 
+use crate::utils::{u256_to_field, ToFields};
 use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
@@ -7,10 +8,12 @@ use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, Stake
 use jf_primitives::rescue::{sponge::RescueCRHF, RescueParameter};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{u256_to_field, ToFields};
+pub mod config;
 
 /// Locally maintained stake table, generic over public key type `K`.
-/// Whose commitment is a rescue hash over field `F`.
+/// Whose commitment is a rescue hash of all key-value pairs over field `F`.
+/// NOTE: the commitment is only available for the finalized versions, and is
+/// computed only once when it's finalized.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StakeTable<K: Eq + Hash + Clone + ToFields<F>, F: RescueParameter> {
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
@@ -314,31 +317,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::ToFields;
-
+    use super::config::{FieldType as F, KeyType as Key};
     use super::StakeTable;
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
-    use jf_primitives::signatures::bls_over_bn254::{
-        BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey,
-    };
-    use jf_primitives::signatures::schnorr::VerKey as SchnorrVerKey;
+    use jf_primitives::signatures::bls_over_bn254::BLSOverBN254CurveSignatureScheme;
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
-
-    // KeyType is a pair of BLS verfication key and Schnorr verification key
-    type Key = (BLSVerKey, SchnorrVerKey<ark_ed_on_bn254::EdwardsConfig>);
-    type F = ark_bn254::Fr;
-
-    impl ToFields<F> for Key {
-        const SIZE: usize = 2;
-
-        fn to_fields(&self) -> Vec<F> {
-            // For light client contract, we only have to hash the Schnorr key
-            let p = self.1.to_affine();
-            vec![p.x, p.y]
-        }
-    }
 
     #[test]
     fn test_stake_table() -> Result<(), StakeTableError> {
