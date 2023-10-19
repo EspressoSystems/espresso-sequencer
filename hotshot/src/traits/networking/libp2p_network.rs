@@ -1,8 +1,7 @@
 //! Libp2p based/production networking implementation
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
-
-use super::NetworkingMetrics;
+use super::NetworkingMetricsValue;
 use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::{async_block_on, async_sleep, async_spawn},
@@ -19,7 +18,6 @@ use hotshot_types::{
     message::{Message, MessageKind},
     traits::{
         election::Membership,
-        metrics::{Metrics, NoMetrics},
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
             NetworkError, NetworkMsg, TestableChannelImplementation,
@@ -78,6 +76,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Debug for Libp2pNetwork<M, K> {
 pub type PeerInfoVec = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
 
 /// The underlying state of the libp2p network
+#[derive(Debug)]
 struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// this node's public key
     pk: K,
@@ -105,7 +104,7 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// whether or not we've bootstrapped into the DHT yet
     is_bootstrapped: Arc<AtomicBool>,
     /// The networking metrics we're keeping track of
-    metrics: NetworkingMetrics,
+    metrics: NetworkingMetricsValue,
     /// topic map
     /// hash(hashset) -> topic
     /// btreemap ordered so is hashable
@@ -226,7 +225,7 @@ where
                 let da = da_keys.clone();
                 async_block_on(async move {
                     Libp2pNetwork::new(
-                        NoMetrics::boxed(),
+                        NetworkingMetricsValue::new(),
                         config,
                         pubkey,
                         bootstrap_addrs_ref,
@@ -273,7 +272,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     /// This will panic if there are less than 5 bootstrap nodes
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        metrics: Box<dyn Metrics>,
+        metrics: NetworkingMetricsValue,
         config: NetworkNodeConfig,
         pk: K,
         bootstrap_addrs: Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>,
@@ -317,7 +316,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let (broadcast_send, broadcast_recv) = unbounded();
         let (node_lookup_send, node_lookup_recv) = unbounded();
 
-        let result = Libp2pNetwork {
+        let mut result = Libp2pNetwork {
             inner: Arc::new(Libp2pNetworkInner {
                 handle: network_handle,
                 broadcast_recv,
@@ -330,7 +329,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 is_ready: Arc::new(AtomicBool::new(false)),
                 dht_timeout: Duration::from_secs(30),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
-                metrics: NetworkingMetrics::new(&*metrics),
+                metrics,
                 topic_map,
                 node_lookup_send,
                 // Start the latest view from 0. "Latest" refers to "most recent view we are polling for
@@ -376,13 +375,14 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     }
 
     /// Initiates connection to the outside world
-    fn spawn_connect(&self, id: usize) {
+    fn spawn_connect(&mut self, id: usize) {
         let pk = self.inner.pk.clone();
         let bootstrap_ref = self.inner.bootstrap_addrs.clone();
         let num_bootstrap = self.inner.bootstrap_addrs_len;
         let handle = self.inner.handle.clone();
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         let node_type = self.inner.handle.config().node_type;
+        let metrics_connected_peers = self.inner.clone();
         async_spawn({
             let is_ready = self.inner.is_ready.clone();
             async move {
@@ -410,6 +410,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     .wait_to_connect(4, id, timeout_duration)
                     .await
                     .unwrap();
+
+                let connected_num = handle.num_connected().await?;
+                metrics_connected_peers
+                    .metrics
+                    .connected_peers
+                    .set(connected_num);
 
                 while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
@@ -592,7 +598,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
         match self.inner.handle.gossip(topic, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_broadcast_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -640,7 +646,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
         match self.inner.handle.direct_request(pid, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_direct_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -671,7 +677,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                     TransmitType::Broadcast => {
@@ -681,7 +690,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                 }

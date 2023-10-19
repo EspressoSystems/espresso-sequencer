@@ -53,11 +53,14 @@ use hotshot_task::{
     task_launcher::TaskRunner,
 };
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
+use hotshot_types::{
+    certificate::TimeoutCertificate, traits::node_implementation::SequencingTimeoutEx,
+};
 
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
-    consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
+    consensus::{BlockStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
     error::StorageSnafu,
     message::{
@@ -67,7 +70,6 @@ use hotshot_types::{
     traits::{
         consensus_api::{ConsensusSharedApi, SequencingConsensusApi},
         election::{ConsensusExchange, Membership, SignedCertificate},
-        metrics::Metrics,
         network::{CommunicationChannel, NetworkError},
         node_implementation::{
             ChannelMaps, CommitteeEx, ExchangesType, NodeType, SendToTasks, SequencingQuorumEx,
@@ -129,8 +131,8 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Sender for [`Event`]s
     event_sender: RwLock<Option<BroadcastSender<Event<TYPES, I::Leaf>>>>,
 
-    /// a reference to the metrics that the implementor is using.
-    _metrics: Box<dyn Metrics>,
+    /// the metrics that the implementor is using.
+    _metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
@@ -174,13 +176,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
 
-        let consensus_metrics = Arc::new(ConsensusMetrics::new(
-            &*metrics.subgroup("consensus".to_string()),
-        ));
+        let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
 
         // insert to storage
@@ -219,8 +219,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
             high_qc: anchored_leaf.get_justify_qc(),
-            metrics: consensus_metrics,
-            invalid_qc: 0,
+            metrics: consensus_metrics.clone(),
         };
         let consensus = Arc::new(RwLock::new(consensus));
 
@@ -234,7 +233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage,
             exchanges: Arc::new(exchanges),
             event_sender: RwLock::default(),
-            _metrics: metrics,
+            _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
             output_event_stream: ChannelStream::new(),
         });
@@ -242,22 +241,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(Self { inner })
     }
 
-    /// "Starts" consensus by sending a `ViewChange` event
+    /// "Starts" consensus by sending a `QCFormed` event
     pub async fn start_consensus(&self) {
         self.inner
             .internal_event_stream
-            .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(1)))
+            .publish(SequencingHotShotEvent::QCFormed(either::Left(
+                QuorumCertificate::genesis(),
+            )))
             .await;
-
-        // ED This isn't ideal...
-        // async_sleep(Duration::new(1, 0)).await;
-
-        // self.inner
-        //     .internal_event_stream
-        //     .publish(SequencingHotShotEvent::QCFormed(
-        //         QuorumCertificate::genesis(),
-        //     ))
-        //     .await;
     }
 
     /// Marks a given view number as timed out. This should be called a fixed period after a round is started.
@@ -393,7 +384,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
@@ -665,6 +656,14 @@ where
             Proposal = ViewSyncCertificate<TYPES>,
             Certificate = ViewSyncCertificate<TYPES>,
             Commitment = Commitment<ViewSyncData<TYPES>>,
+            Membership = MEMBERSHIP,
+        > + 'static,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+            TYPES,
+            Message<TYPES, I>,
+            Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+            Certificate = TimeoutCertificate<TYPES>,
+            Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
         > + 'static,
 {

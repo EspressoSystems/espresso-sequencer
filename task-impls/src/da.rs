@@ -12,9 +12,6 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::election::SignedCertificate;
-use hotshot_types::vote::DAVoteAccumulator;
-use hotshot_types::vote::VoteType;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
@@ -22,7 +19,7 @@ use hotshot_types::{
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::SequencingConsensusApi,
-        election::{CommitteeExchangeType, ConsensusExchange, Membership},
+        election::{CommitteeExchangeType, ConsensusExchange, Membership, SignedCertificate},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
@@ -30,11 +27,11 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
+    vote::{DAVoteAccumulator, VoteType},
 };
 
 use snafu::Snafu;
-use std::marker::PhantomData;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
@@ -156,7 +153,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match state.committee_exchange.accumulate_vote_2(
+            match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
                 &vote.block_commitment,
@@ -197,7 +194,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match state.committee_exchange.accumulate_vote_2(
+            match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
                 &vote.block_commitment,
@@ -275,7 +272,9 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if view < self.cur_view - 1 {
+                // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
+
+                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
                     return None;
                 }
@@ -373,7 +372,7 @@ where
                     phantom: PhantomData,
                 };
 
-                let accumulator = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,
@@ -455,7 +454,7 @@ where
                     phantom: PhantomData,
                 };
 
-                let accumulator = self.committee_exchange.accumulate_vote_2(
+                let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
                     &vote.clone().block_commitment,
@@ -510,7 +509,9 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if view < self.cur_view - 1 {
+                // TODO ED Revisit this
+
+                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away VID disperse data that is more than one view older");
                     return None;
                 }
@@ -579,9 +580,8 @@ where
                     error!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-                // Inject view info into network
-                // ED I think it is possible that you receive a quorum proposal, vote on it and update your view before the da leader has sent their proposal, and therefore you skip polling for this view?
 
+                // Inject view info into network
                 let is_da = self
                     .committee_exchange
                     .membership()
@@ -636,17 +636,11 @@ where
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
-                // let message = SequencingMessage::<TYPES, I>(Right(
-                //     CommitteeConsensusMessage::DAProposal(Proposal { data, signature }),
-                // ));
                 let message = Proposal { data, signature };
-                // Brodcast DA proposal
-                // TODO ED We should send an event to do this, but just getting it to work for now
 
                 self.event_stream
                     .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
                     .await;
-
                 self.event_stream
                     .publish(SequencingHotShotEvent::DAProposalSend(
                         message.clone(),
@@ -663,6 +657,7 @@ where
             }
 
             SequencingHotShotEvent::Shutdown => {
+                error!("Shutting down because of shutdown signal!");
                 return Some(HotShotTaskCompleted::ShutDown);
             }
             _ => {

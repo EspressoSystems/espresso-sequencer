@@ -63,6 +63,10 @@ impl ConsensusTime for ViewNumber {
     fn new(n: u64) -> Self {
         Self(n)
     }
+    /// Returen the u64 format
+    fn get_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Committable for ViewNumber {
@@ -882,6 +886,10 @@ pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES
         }
         AssembledSignature::No(signatures) => {
             signatures_bytes.extend("No".as_bytes());
+            Some(signatures.clone())
+        }
+        AssembledSignature::Timeout(signatures) => {
+            signatures_bytes.extend("Timeout".as_bytes());
             Some(signatures.clone())
         }
         AssembledSignature::ViewSyncPreCommit(signatures) => {

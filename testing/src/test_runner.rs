@@ -3,8 +3,10 @@ use super::{
     overall_safety_task::{OverallSafetyTask, RoundCtx},
     txn_task::TxnTask,
 };
-use crate::spinning_task::UpDown;
-use crate::test_launcher::{Networks, TestLauncher};
+use crate::{
+    spinning_task::UpDown,
+    test_launcher::{Networks, TestLauncher},
+};
 use hotshot::types::SystemContextHandle;
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
@@ -12,18 +14,17 @@ use hotshot_task::{
     event_stream::ChannelStream, global_registry::GlobalRegistry, task_launcher::TaskRunner,
 };
 use hotshot_types::{
+    consensus::ConsensusMetricsValue,
     message::Message,
     traits::{
         election::{ConsensusExchange, Membership},
-        metrics::NoMetrics,
         network::CommunicationChannel,
         node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumEx},
         signature_key::SignatureKey,
     },
     HotShotConfig,
 };
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[allow(deprecated)]
 use tracing::info;
@@ -276,7 +277,7 @@ where
             storage,
             exchanges,
             initializer,
-            NoMetrics::boxed(),
+            ConsensusMetricsValue::new(),
         )
         .await
         .expect("Could not init hotshot")

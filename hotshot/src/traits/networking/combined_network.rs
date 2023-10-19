@@ -287,7 +287,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
                 .broadcast_message(message.clone(), recipients.clone())
                 .await
             {
-                Ok(_) => {
+                Ok(()) => {
                     self.primary_down.store(0, Ordering::Relaxed);
                 }
                 Err(e) => {
@@ -318,7 +318,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
                 .direct_message(message.clone(), recipient.clone())
                 .await
             {
-                Ok(_) => {
+                Ok(()) => {
                     self.primary_down.store(0, Ordering::Relaxed);
                 }
                 Err(e) => {

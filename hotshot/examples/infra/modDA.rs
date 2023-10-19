@@ -7,7 +7,8 @@ use futures::StreamExt;
 use hotshot::{
     traits::{
         implementations::{
-            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, WebCommChannel, WebServerNetwork,
+            Libp2pCommChannel, Libp2pNetwork, MemoryStorage, NetworkingMetricsValue,
+            WebCommChannel, WebServerNetwork,
         },
         NodeImplementation,
     },
@@ -23,6 +24,7 @@ use hotshot_task::task::FilterEvent;
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
+    consensus::ConsensusMetricsValue,
     data::{QuorumProposal, SequencingLeaf, TestableLeaf},
     event::{Event, EventType},
     message::{Message, SequencingMessage},
@@ -30,7 +32,6 @@ use hotshot_types::{
         election::{
             CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
         },
-        metrics::NoMetrics,
         network::CommunicationChannel,
         node_implementation::{
             CommitteeEx, ExchangesType, NodeType, QuorumEx, SequencingExchanges,
@@ -249,7 +250,7 @@ pub trait RunDA<
             MemoryStorage::empty(),
             exchanges,
             initializer,
-            NoMetrics::boxed(),
+            ConsensusMetricsValue::new(),
         )
         .await
         .expect("Could not init hotshot")
@@ -690,7 +691,7 @@ where
 
         let node_config = config_builder.build().unwrap();
         let underlying_quorum_network = Libp2pNetwork::new(
-            NoMetrics::boxed(),
+            NetworkingMetricsValue::new(),
             node_config,
             pubkey.clone(),
             Arc::new(RwLock::new(

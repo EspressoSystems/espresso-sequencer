@@ -129,7 +129,7 @@ impl<EVENT: PassType + 'static> EventStream for ChannelStream<EVENT> {
             Some((filter, sender)) => {
                 if filter(&event) {
                     match sender.send(event.clone()).await {
-                        Ok(_) => (),
+                        Ok(()) => (),
                         // error sending => stream is closed so remove it
                         Err(_) => self.unsubscribe(id).await,
                     }
@@ -147,7 +147,7 @@ impl<EVENT: PassType + 'static> EventStream for ChannelStream<EVENT> {
         for (uid, (filter, sender)) in &inner.subscribers {
             if filter(&event) {
                 match sender.send(event.clone()).await {
-                    Ok(_) => (),
+                    Ok(()) => (),
                     // error sending => stream is closed so remove it
                     Err(_) => {
                         self.unsubscribe(*uid).await;

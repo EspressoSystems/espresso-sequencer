@@ -27,6 +27,7 @@ pub struct BLSPubKey {
     pub_key: VerKey,
 }
 
+// #[allow(clippy::incorrect_partial_ord_impl_on_ord_type)]
 impl PartialOrd for BLSPubKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_bytes = &self.pub_key.to_string();

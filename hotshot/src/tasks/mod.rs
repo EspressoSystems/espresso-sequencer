@@ -28,15 +28,16 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
+    certificate::{TimeoutCertificate, ViewSyncCertificate},
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
         election::{ConsensusExchange, Membership},
-        network::{CommunicationChannel, TransmitType},
+        network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx,
+            SequencingTimeoutEx, ViewSyncEx,
         },
         state::ConsensusTime,
     },
@@ -276,6 +277,13 @@ where
         Certificate = DACertificate<TYPES>,
         Commitment = Commitment<TYPES::BlockType>,
     >,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Certificate = TimeoutCertificate<TYPES>,
+        Commitment = Commitment<TYPES::Time>,
+    >,
 {
     let consensus = handle.hotshot.get_consensus();
     let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
@@ -290,6 +298,7 @@ where
         cur_view: TYPES::Time::new(0),
         block: Some(VIDBlockPayload::genesis()),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
+        timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
         _pd: PhantomData,
@@ -302,6 +311,16 @@ where
         id: handle.hotshot.inner.id,
         qc: None,
     };
+    consensus_state
+        .quorum_exchange
+        .network()
+        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+        .await;
+    consensus_state
+        .quorum_exchange
+        .network()
+        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(1))
+        .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";
     let consensus_event_handler = HandleEvent(Arc::new(

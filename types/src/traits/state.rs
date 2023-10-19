@@ -90,6 +90,8 @@ pub trait ConsensusTime:
     }
     /// Create a new instance of this time unit
     fn new(val: u64) -> Self;
+    /// Get the u64 format of time
+    fn get_u64(&self) -> u64;
 }
 
 /// extra functions required on state to be usable by hotshot-testing

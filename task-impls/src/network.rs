@@ -90,6 +90,9 @@ impl<
                             GeneralConsensusMessage::ViewSyncCertificate(view_sync_message) => {
                                 SequencingHotShotEvent::ViewSyncCertificateRecv(view_sync_message)
                             }
+                            GeneralConsensusMessage::TimeoutVote(message) => {
+                                SequencingHotShotEvent::TimeoutVoteRecv(message)
+                            }
                             GeneralConsensusMessage::InternalTrigger(_) => {
                                 error!("Got unexpected message type in network task!");
                                 return;
@@ -100,7 +103,6 @@ impl<
                                 SequencingHotShotEvent::DAProposalRecv(proposal.clone(), sender)
                             }
                             CommitteeConsensusMessage::DAVote(vote) => {
-                                // error!("DA Vote message recv {:?}", vote.current_view);
                                 SequencingHotShotEvent::DAVoteRecv(vote.clone())
                             }
                             CommitteeConsensusMessage::DACertificate(cert) => {
@@ -239,7 +241,7 @@ impl<
                     CommitteeConsensusMessage::VidVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view)), // TODO who is VID leader? https://github.com/EspressoSystems/HotShot/issues/1699
+                Some(membership.get_leader(vote.get_view())), // TODO who is VID leader? https://github.com/EspressoSystems/HotShot/issues/1699
             ),
             SequencingHotShotEvent::DAVoteSend(vote) => (
                 vote.signature_key(),
@@ -247,7 +249,7 @@ impl<
                     CommitteeConsensusMessage::DAVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view)),
+                Some(membership.get_leader(vote.get_view())),
             ),
             SequencingHotShotEvent::VidCertSend(certificate, sender) => (
                 sender,
@@ -285,11 +287,20 @@ impl<
                     Some(membership.get_leader(vote.round() + vote.relay())),
                 )
             }
+            SequencingHotShotEvent::TimeoutVoteSend(vote) => (
+                vote.get_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::TimeoutVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view() + 1)),
+            ),
             SequencingHotShotEvent::ViewChange(view) => {
                 self.view = view;
                 return None;
             }
             SequencingHotShotEvent::Shutdown => {
+                error!("Networking task shutting down");
                 return Some(HotShotTaskCompleted::ShutDown);
             }
             event => {
@@ -339,6 +350,7 @@ impl<
                 | SequencingHotShotEvent::DACSend(_, _)
                 | SequencingHotShotEvent::VidCertSend(_, _)
                 | SequencingHotShotEvent::ViewChange(_)
+                | SequencingHotShotEvent::TimeoutVoteSend(_)
         )
     }
 

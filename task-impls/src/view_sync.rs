@@ -490,7 +490,7 @@ where
             }
             &SequencingHotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
-                if view_number < TYPES::Time::new(*self.current_view) {
+                if view_number <= TYPES::Time::new(*self.current_view) {
                     return;
                 }
 
@@ -500,16 +500,12 @@ where
                     self.num_timeouts_tracked, *view_number
                 );
 
-                if self.num_timeouts_tracked > 2 {
+                if self.num_timeouts_tracked > 3 {
                     error!("Too many timeouts!  This shouldn't happen");
                 }
 
                 // TODO ED Make this a configurable variable
-                if self.num_timeouts_tracked == 2 {
-                    error!(
-                        "Starting view sync protocol; attempting to sync on view {}",
-                        *view_number + 1
-                    );
+                if self.num_timeouts_tracked > 2 {
                     // Start polling for view sync certificates
                     self.exchange
                         .network()
@@ -606,7 +602,7 @@ where
                     });
                 } else {
                     // If this is the first timeout we've seen advance to the next view
-                    self.current_view += 1;
+                    self.current_view = view_number;
                     self.event_stream
                         .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
                             *self.current_view,
@@ -1035,7 +1031,7 @@ where
                     *vote_internal.round, vote_internal.relay
                 );
 
-                let accumulator = self.exchange.accumulate_vote_2(
+                let accumulator = self.exchange.accumulate_vote(
                     self.accumulator.left().unwrap(),
                     &vote,
                     &view_sync_data,

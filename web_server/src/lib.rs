@@ -5,6 +5,7 @@ use async_compatibility_layer::channel::OneShotReceiver;
 use async_lock::RwLock;
 use clap::Args;
 use futures::FutureExt;
+use tracing::error;
 
 use hotshot_types::traits::signature_key::{EncodedPublicKey, SignatureKey};
 use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -322,7 +323,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
     /// Stores a received proposal in the `WebServerState`
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
-        debug!("Received proposal for view {}", view_number);
+        error!("Received proposal for view {}", view_number);
 
         if view_number > self.recent_proposal {
             self.recent_proposal = view_number;
