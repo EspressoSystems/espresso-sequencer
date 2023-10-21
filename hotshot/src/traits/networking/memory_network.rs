@@ -329,7 +329,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             } else {
                 let res = node.broadcast_input(vec.clone()).await;
                 match res {
-                    Ok(_) => {
+                    Ok(()) => {
                         self.inner.metrics.outgoing_broadcast_message_count.add(1);
                         trace!(?key, "Delivered message to remote");
                     }
@@ -373,7 +373,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
             } else {
                 let res = node.direct_input(vec).await;
                 match res {
-                    Ok(_) => {
+                    Ok(()) => {
                         self.inner.metrics.outgoing_direct_message_count.add(1);
                         trace!(?recipient, "Delivered message to remote");
                         Ok(())
