@@ -16,7 +16,7 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate},
+    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{LeafType, ProposalType, QuorumProposal, SequencingLeaf},
     event::{Event, EventType},
@@ -128,7 +128,10 @@ pub struct SequencingConsensusTaskState<
     pub output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
 
     /// All the DA certs we've received for current and future views.
-    pub certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
+    pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
+
+    /// All the VID certs we've received for current and future views.
+    pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -486,7 +489,7 @@ where
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
-            if let Some(cert) = self.certs.get(&(proposal.get_view_number())) {
+            if let Some(cert) = self.da_certs.get(&(proposal.get_view_number())) {
                 let view = cert.view_number;
                 let vote_token = self.quorum_exchange.make_vote_token(view);
                 // TODO: do some of this logic without the vote token check, only do that when voting.
@@ -589,7 +592,7 @@ where
             // Remove old certs, we won't vote on past views
             for view in *self.cur_view..*new_view - 1 {
                 let v = TYPES::Time::new(view);
-                self.certs.remove(&v);
+                self.da_certs.remove(&v);
             }
             self.cur_view = new_view;
 
@@ -989,7 +992,7 @@ where
 
                 for v in (*self.cur_view)..=(*view) {
                     let time = TYPES::Time::new(v);
-                    self.certs.remove(&time);
+                    self.da_certs.remove(&time);
                 }
             }
             SequencingHotShotEvent::QuorumVoteRecv(vote) => {
@@ -1247,7 +1250,7 @@ where
                 debug!("DAC Recved for view ! {}", *cert.view_number);
 
                 let view = cert.view_number;
-                self.certs.insert(view, cert);
+                self.da_certs.insert(view, cert);
 
                 if self.vote_if_able().await {
                     self.current_proposal = None;
@@ -1257,7 +1260,7 @@ where
                 debug!("VID cert received for view ! {}", *cert.view_number);
 
                 let view = cert.view_number;
-                self.certs.insert(view, cert); // TODO new cert type for VID https://github.com/EspressoSystems/HotShot/issues/1701
+                self.vid_certs.insert(view, cert);
 
                 // TODO Make sure we aren't voting for an arbitrarily old round for no reason
                 if self.vote_if_able().await {

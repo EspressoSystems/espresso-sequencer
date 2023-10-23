@@ -8,7 +8,8 @@ use crate::{
     },
     vote::{
         DAVote, DAVoteAccumulator, QuorumVote, QuorumVoteAccumulator, TimeoutVote,
-        TimeoutVoteAccumulator, ViewSyncData, ViewSyncVote, ViewSyncVoteAccumulator, VoteType,
+        TimeoutVoteAccumulator, VIDVote, VIDVoteAccumulator, ViewSyncData, ViewSyncVote,
+        ViewSyncVoteAccumulator, VoteType,
     },
 };
 use bincode::Options;
@@ -32,6 +33,21 @@ pub struct DACertificate<TYPES: NodeType> {
     /// The view number this quorum certificate was generated during
     ///
     /// This value is covered by the threshold signature.
+    pub view_number: TYPES::Time,
+
+    /// committment to the block
+    pub block_commitment: Commitment<TYPES::BlockType>,
+
+    /// Assembled signature for certificate aggregation
+    pub signatures: AssembledSignature<TYPES>,
+}
+
+/// A `VIDCertificate` is a threshold signature that some data is available.
+/// It is signed by the whole quorum.
+#[derive(Clone, PartialEq, custom_debug::Debug, serde::Serialize, serde::Deserialize, Hash)]
+#[serde(bound(deserialize = ""))]
+pub struct VIDCertificate<TYPES: NodeType> {
+    /// The view number this VID certificate was generated during
     pub view_number: TYPES::Time,
 
     /// committment to the block
@@ -161,6 +177,8 @@ pub enum AssembledSignature<TYPES: NodeType> {
     No(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for a 'DA' certificate
     DA(<TYPES::SignatureKey as SignatureKey>::QCType),
+    /// These signatures are for a 'VID' certificate
+    VID(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for a `Timeout` certificate
     Timeout(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for genesis certificate
@@ -279,7 +297,47 @@ impl<TYPES: NodeType>
     }
 }
 
+impl<TYPES: NodeType>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
+    for VIDCertificate<TYPES>
+{
+    type Vote = VIDVote<TYPES>;
+    type VoteAccumulator = VIDVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+
+    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
+        VIDCertificate {
+            view_number: vote.get_view(),
+            signatures,
+            block_commitment: vote.block_commitment,
+        }
+    }
+
+    fn view_number(&self) -> TYPES::Time {
+        self.view_number
+    }
+
+    fn signatures(&self) -> AssembledSignature<TYPES> {
+        self.signatures.clone()
+    }
+
+    fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
+        self.block_commitment
+    }
+
+    fn is_genesis(&self) -> bool {
+        // This function is only useful for QC. Will be removed after we have separated cert traits.
+        false
+    }
+
+    fn genesis() -> Self {
+        // This function is only useful for QC. Will be removed after we have separated cert traits.
+        unimplemented!()
+    }
+}
+
 impl<TYPES: NodeType> Eq for DACertificate<TYPES> {}
+
+impl<TYPES: NodeType> Eq for VIDCertificate<TYPES> {}
 
 impl<TYPES: NodeType> Committable for ViewSyncCertificate<TYPES> {
     fn commit(&self) -> Commitment<Self> {

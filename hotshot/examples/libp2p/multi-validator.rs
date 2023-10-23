@@ -7,6 +7,7 @@ use hotshot::demo::DemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use std::net::IpAddr;
 use tracing::instrument;
+use types::VIDNetwork;
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};
 
@@ -54,6 +55,7 @@ async fn main() {
                 DANetwork,
                 QuorumNetwork,
                 ViewSyncNetwork,
+                VIDNetwork,
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {

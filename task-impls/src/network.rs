@@ -33,6 +33,8 @@ pub enum NetworkTaskKind {
     Committee,
     /// view sync
     ViewSync,
+    /// vid
+    VID,
 }
 
 /// the network message task state
@@ -337,6 +339,7 @@ impl<
             NetworkTaskKind::Quorum => FilterEvent(Arc::new(Self::quorum_filter)),
             NetworkTaskKind::Committee => FilterEvent(Arc::new(Self::committee_filter)),
             NetworkTaskKind::ViewSync => FilterEvent(Arc::new(Self::view_sync_filter)),
+            NetworkTaskKind::VID => FilterEvent(Arc::new(Self::vid_filter)),
         }
     }
 
@@ -361,6 +364,17 @@ impl<
             SequencingHotShotEvent::DAProposalSend(_, _)
                 | SequencingHotShotEvent::DAVoteSend(_)
                 | SequencingHotShotEvent::Shutdown
+                | SequencingHotShotEvent::VidDisperseSend(_, _)
+                | SequencingHotShotEvent::VidVoteSend(_)
+                | SequencingHotShotEvent::ViewChange(_)
+        )
+    }
+
+    /// vid filter
+    fn vid_filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
+        matches!(
+            event,
+            SequencingHotShotEvent::Shutdown
                 | SequencingHotShotEvent::VidDisperseSend(_, _)
                 | SequencingHotShotEvent::VidVoteSend(_)
                 | SequencingHotShotEvent::ViewChange(_)

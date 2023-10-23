@@ -21,6 +21,7 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
+use hotshot_types::traits::election::VIDExchange;
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
@@ -85,6 +86,7 @@ pub async fn run_orchestrator_da<
     DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -107,6 +109,7 @@ pub async fn run_orchestrator_da<
                 VIEWSYNCNETWORK,
                 Message<TYPES, NODE>,
             >,
+            VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
@@ -148,6 +151,7 @@ pub trait RunDA<
     DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -170,6 +174,7 @@ pub trait RunDA<
                 VIEWSYNCNETWORK,
                 Message<TYPES, NODE>,
             >,
+            VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
@@ -213,6 +218,7 @@ pub trait RunDA<
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();
         let view_sync_network = self.get_view_sync_network();
+        let vid_network = self.get_vid_network();
 
         // Since we do not currently pass the election config type in the NetworkConfig, this will always be the default election config
         let quorum_election_config = config.config.election_config.clone().unwrap_or_else(|| {
@@ -236,6 +242,7 @@ pub trait RunDA<
                 quorum_network.clone(),
                 da_network.clone(),
                 view_sync_network.clone(),
+                vid_network.clone(),
             ),
             pk.clone(),
             entry.clone(),
@@ -367,6 +374,9 @@ pub trait RunDA<
     ///Returns view sync network for this run
     fn get_view_sync_network(&self) -> VIEWSYNCNETWORK;
 
+    ///Returns VID network for this run
+    fn get_vid_network(&self) -> VIDNETWORK;
+
     /// Returns the config for this run
     fn get_config(
         &self,
@@ -393,6 +403,7 @@ pub struct WebServerDARun<
     quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
     da_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
     view_sync_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    vid_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
 }
 
 #[async_trait]
@@ -426,6 +437,12 @@ impl<
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
                 >,
+                VIDExchange<
+                    TYPES,
+                    MEMBERSHIP,
+                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
             >,
             Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
@@ -434,6 +451,7 @@ impl<
     RunDA<
         TYPES,
         MEMBERSHIP,
+        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
         WebCommChannel<TYPES, NODE, MEMBERSHIP>,
         WebCommChannel<TYPES, NODE, MEMBERSHIP>,
         WebCommChannel<TYPES, NODE, MEMBERSHIP>,
@@ -489,6 +507,17 @@ where
 
         // Each node runs the DA network so that leaders have access to transactions and DA votes
         let da_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
+            WebServerNetwork::create(
+                &host.to_string(),
+                port,
+                wait_between_polls,
+                pub_key.clone(),
+                true,
+            )
+            .into(),
+        );
+
+        let vid_network: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
             WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true)
                 .into(),
         );
@@ -498,6 +527,7 @@ where
             quorum_network,
             da_network,
             view_sync_network,
+            vid_network,
         }
     }
 
@@ -511,6 +541,10 @@ where
 
     fn get_view_sync_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.view_sync_network.clone()
+    }
+
+    fn get_vid_network(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.vid_network.clone()
     }
 
     fn get_config(
@@ -537,6 +571,7 @@ pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP
     quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
     da_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
     view_sync_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    vid_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
 }
 
 #[async_trait]
@@ -570,6 +605,12 @@ impl<
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
                 >,
+                VIDExchange<
+                    TYPES,
+                    MEMBERSHIP,
+                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+                    Message<TYPES, NODE>,
+                >,
             >,
             Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
@@ -578,6 +619,7 @@ impl<
     RunDA<
         TYPES,
         MEMBERSHIP,
+        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
         Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
         Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
         Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
@@ -722,11 +764,15 @@ where
         let da_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
+        let vid_network: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+            Libp2pCommChannel::new(underlying_quorum_network.clone().into());
+
         Libp2pDARun {
             config,
             quorum_network,
             da_network,
             view_sync_network,
+            vid_network,
         }
     }
 
@@ -740,6 +786,10 @@ where
 
     fn get_view_sync_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
         self.view_sync_network.clone()
+    }
+
+    fn get_vid_network(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+        self.vid_network.clone()
     }
 
     fn get_config(
@@ -760,6 +810,7 @@ pub async fn main_entry_point<
     DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     VIEWSYNCNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -782,11 +833,12 @@ pub async fn main_entry_point<
                 VIEWSYNCNETWORK,
                 Message<TYPES, NODE>,
             >,
+            VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
-    RUNDA: RunDA<TYPES, MEMBERSHIP, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, NODE>,
+    RUNDA: RunDA<TYPES, MEMBERSHIP, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,
 >(
     args: ValidatorArgs,
 ) where

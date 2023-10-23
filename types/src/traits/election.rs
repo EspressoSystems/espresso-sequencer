@@ -9,11 +9,11 @@ use super::{
 };
 use crate::{
     certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate,
+        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
         ViewSyncCertificate,
     },
-    data::{DAProposal, ProposalType},
-    vote::TimeoutVote,
+    data::{DAProposal, ProposalType, VidDisperse},
+    vote::{TimeoutVote, VIDVote},
 };
 
 use crate::{
@@ -84,6 +84,8 @@ where
     No(COMMITMENT),
     /// Vote to time out and proceed to the next view.
     Timeout(COMMITMENT),
+    /// Vote for VID proposal
+    VID(COMMITMENT),
     /// Vote to pre-commit the view sync.
     ViewSyncPreCommit(COMMITMENT),
     /// Vote to commit the view sync.
@@ -100,6 +102,7 @@ where
     fn commit(&self) -> Commitment<Self> {
         let (tag, commit) = match self {
             VoteData::DA(c) => ("DA BlockPayload Commit", c),
+            VoteData::VID(c) => ("VID Proposal Commit", c),
             VoteData::Yes(c) => ("Yes Vote Commit", c),
             VoteData::No(c) => ("No Vote Commit", c),
             VoteData::Timeout(c) => ("Timeout View Number Commit", c),
@@ -345,6 +348,14 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                 );
                 <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
             }
+            AssembledSignature::VID(qc) => {
+                let real_commit = VoteData::VID(leaf_commitment).commit();
+                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                    self.membership().get_committee_qc_stake_table(),
+                    U256::from(self.membership().success_threshold().get()),
+                );
+                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
+            }
             AssembledSignature::Yes(qc) => {
                 let real_commit = VoteData::Yes(leaf_commitment).commit();
                 let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
@@ -497,22 +508,6 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
         current_view: TYPES::Time,
         vote_token: TYPES::VoteTokenType,
     ) -> DAVote<TYPES>;
-
-    // TODO temporary vid methods, move to quorum https://github.com/EspressoSystems/HotShot/issues/1696
-
-    /// Create a message with a vote on VID disperse data.
-    fn create_vid_message(
-        &self,
-        block_commitment: Commitment<TYPES::BlockType>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> DAVote<TYPES>;
-
-    /// Sign a vote on VID proposal.
-    fn sign_vid_vote(
-        &self,
-        block_commitment: Commitment<TYPES::BlockType>,
-    ) -> (EncodedPublicKey, EncodedSignature);
 }
 
 /// Standard implementation of [`CommitteeExchangeType`] utilizing a DA committee.
@@ -584,15 +579,125 @@ impl<
             vote_data: VoteData::DA(block_commitment),
         }
     }
+}
 
+impl<
+        TYPES: NodeType,
+        MEMBERSHIP: Membership<TYPES>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        M: NetworkMsg,
+    > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
+{
+    type Proposal = DAProposal<TYPES>;
+    type Vote = DAVote<TYPES>;
+    type Certificate = DACertificate<TYPES>;
+    type Membership = MEMBERSHIP;
+    type Networking = NETWORK;
+    type Commitment = Commitment<TYPES::BlockType>;
+
+    fn create(
+        entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        config: TYPES::ElectionConfigType,
+        network: Self::Networking,
+        pk: TYPES::SignatureKey,
+        entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    ) -> Self {
+        let membership =
+            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        Self {
+            network,
+            membership,
+            public_key: pk,
+            entry,
+            private_key: sk,
+            _pd: PhantomData,
+        }
+    }
+    fn network(&self) -> &NETWORK {
+        &self.network
+    }
+    fn make_vote_token(
+        &self,
+        view_number: TYPES::Time,
+    ) -> std::result::Result<std::option::Option<TYPES::VoteTokenType>, ElectionError> {
+        self.membership
+            .make_vote_token(view_number, &self.private_key)
+    }
+
+    fn membership(&self) -> &Self::Membership {
+        &self.membership
+    }
+    fn public_key(&self) -> &TYPES::SignatureKey {
+        &self.public_key
+    }
+    fn private_key(&self) -> &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey {
+        &self.private_key
+    }
+}
+
+/// A [`ConsensusExchange`] where participants vote to provide availability for blobs of data.
+pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
+    /// Create a message with a vote on VID disperse data.
+    fn create_vid_message(
+        &self,
+        block_commitment: Commitment<TYPES::BlockType>,
+        current_view: TYPES::Time,
+        vote_token: TYPES::VoteTokenType,
+    ) -> VIDVote<TYPES>;
+
+    /// Sign a vote on VID proposal.
+    fn sign_vid_vote(
+        &self,
+        block_commitment: Commitment<TYPES::BlockType>,
+    ) -> (EncodedPublicKey, EncodedSignature);
+
+    /// Sign a VID proposal.
+    fn sign_vid_proposal(
+        &self,
+        block_commitment: &Commitment<TYPES::BlockType>,
+    ) -> EncodedSignature;
+}
+
+/// Standard implementation of [`VIDExchangeType`]
+#[derive(Derivative)]
+#[derivative(Clone, Debug)]
+pub struct VIDExchange<
+    TYPES: NodeType,
+    MEMBERSHIP: Membership<TYPES>,
+    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    M: NetworkMsg,
+> {
+    /// The network being used by this exchange.
+    network: NETWORK,
+    /// The committee which votes on proposals.
+    membership: MEMBERSHIP,
+    /// This participant's public key.
+    public_key: TYPES::SignatureKey,
+    /// Entry with public key and staking value for certificate aggregation
+    entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+    /// This participant's private key.
+    #[derivative(Debug = "ignore")]
+    private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    #[doc(hidden)]
+    _pd: PhantomData<(TYPES, MEMBERSHIP, M)>,
+}
+
+impl<
+        TYPES: NodeType,
+        MEMBERSHIP: Membership<TYPES>,
+        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        M: NetworkMsg,
+    > VIDExchangeType<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
+{
     fn create_vid_message(
         &self,
         block_commitment: Commitment<TYPES::BlockType>,
         current_view: <TYPES as NodeType>::Time,
         vote_token: <TYPES as NodeType>::VoteTokenType,
-    ) -> DAVote<TYPES> {
+    ) -> VIDVote<TYPES> {
         let signature = self.sign_vid_vote(block_commitment);
-        DAVote {
+        VIDVote {
             signature,
             block_commitment,
             current_view,
@@ -611,6 +716,15 @@ impl<
         );
         (self.public_key.to_bytes(), signature)
     }
+
+    /// Sign a VID proposal.
+    fn sign_vid_proposal(
+        &self,
+        block_commitment: &Commitment<TYPES::BlockType>,
+    ) -> EncodedSignature {
+        let signature = TYPES::SignatureKey::sign(&self.private_key, block_commitment.as_ref());
+        signature
+    }
 }
 
 impl<
@@ -618,11 +732,11 @@ impl<
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = DAProposal<TYPES>;
-    type Vote = DAVote<TYPES>;
-    type Certificate = DACertificate<TYPES>;
+    type Proposal = VidDisperse<TYPES>;
+    type Vote = VIDVote<TYPES>;
+    type Certificate = VIDCertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockType>;

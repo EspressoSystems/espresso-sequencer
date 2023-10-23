@@ -4,7 +4,7 @@
 //! `HotShot` nodes can send among themselves.
 
 use crate::{
-    certificate::DACertificate,
+    certificate::{DACertificate, VIDCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
     traits::{
         network::{NetworkMsg, ViewMessage},
@@ -13,7 +13,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, QuorumVote, TimeoutVote, ViewSyncVote, VoteType},
+    vote::{DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncVote, VoteType},
 };
 use commit::Commitment;
 use derivative::Derivative;
@@ -218,9 +218,9 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
-    VidVote(DAVote<TYPES>, TYPES::SignatureKey),
+    VidVote(VIDVote<TYPES>, TYPES::SignatureKey),
     /// Certificate for VID. Like [`DACertificate`]
-    VidCertificate(DACertificate<TYPES>, TYPES::SignatureKey),
+    VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
@@ -352,13 +352,11 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
     /// Vote for VID disperse data
     ///
     /// Like [`DAVote`].
-    /// TODO currently re-using [`DAVote`]; do we need a separate VID vote? <https://github.com/EspressoSystems/HotShot/issues/1703>
-    VidVote(DAVote<TYPES>),
+    VidVote(VIDVote<TYPES>),
     /// VID certificate data is available
     ///
     /// Like [`DACertificate`]
-    /// TODO currently re-using [`DACertificate`]; do we need a separate VID cert? <https://github.com/EspressoSystems/HotShot/issues/1716>
-    VidCertificate(DACertificate<TYPES>),
+    VidCertificate(VIDCertificate<TYPES>),
 }
 
 /// Messages related to the consensus protocol.
@@ -430,8 +428,8 @@ impl<
                         p.data.get_view_number()
                     }
                     CommitteeConsensusMessage::DAVote(vote_message) => vote_message.get_view(),
-                    CommitteeConsensusMessage::DACertificate(cert)
-                    | CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
                     CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
                         disperse.data.get_view_number()
                     }

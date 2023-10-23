@@ -17,7 +17,9 @@ use hotshot_types::block_impl::{VIDBlockPayload, VIDTransaction};
 use hotshot_types::certificate::ViewSyncCertificate;
 use hotshot_types::data::{DAProposal, QuorumProposal, SequencingLeaf};
 use hotshot_types::message::{Message, SequencingMessage};
-use hotshot_types::traits::election::{CommitteeExchange, QuorumExchange, ViewSyncExchange};
+use hotshot_types::traits::election::{
+    CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
+};
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
 use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType, SequencingExchanges};
@@ -67,6 +69,7 @@ pub type ThisMembership = GeneralStaticCommittee<Test, ThisLeaf, <Test as NodeTy
 pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
+pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 
 pub type ThisDAProposal = DAProposal<Test>;
 pub type ThisDAVote = DAVote<Test>;
@@ -99,6 +102,7 @@ impl NodeImplementation<Test> for TestImpl {
             ViewSyncNetwork,
             Message<Test, Self>,
         >,
+        VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<Test, Self>;
 

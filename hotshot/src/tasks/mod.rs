@@ -24,11 +24,12 @@ use hotshot_task_impls::{
         NetworkMessageTaskTypes, NetworkTaskKind,
     },
     transactions::{TransactionTaskState, TransactionsTaskTypes},
+    vid::{VIDTaskState, VIDTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{TimeoutCertificate, ViewSyncCertificate},
+    certificate::{TimeoutCertificate, VIDCertificate, ViewSyncCertificate},
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
     message::{Message, Messages, SequencingMessage},
@@ -37,7 +38,7 @@ use hotshot_types::{
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx,
-            SequencingTimeoutEx, ViewSyncEx,
+            SequencingTimeoutEx, VIDEx, ViewSyncEx,
         },
         state::ConsensusTime,
     },
@@ -306,7 +307,8 @@ where
         timeout_task: async_spawn(async move {}),
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
-        certs: HashMap::new(),
+        da_certs: HashMap::new(),
+        vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
         qc: None,
@@ -360,6 +362,75 @@ where
         consensus_name.to_string(),
         consensus_task,
     )
+}
+
+/// add the VID task
+/// # Panics
+/// Is unable to panic. This section here is just to satisfy clippy
+pub async fn add_vid_task<
+    TYPES: NodeType,
+    I: NodeImplementation<
+        TYPES,
+        Leaf = SequencingLeaf<TYPES>,
+        ConsensusMessage = SequencingMessage<TYPES, I>,
+    >,
+>(
+    task_runner: TaskRunner,
+    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    vid_exchange: VIDEx<TYPES, I>,
+    handle: SystemContextHandle<TYPES, I>,
+) -> TaskRunner
+where
+    VIDEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Certificate = VIDCertificate<TYPES>,
+        Commitment = Commitment<TYPES::BlockType>,
+    >,
+{
+    // build the vid task
+    let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let registry = task_runner.registry.clone();
+    let vid_state = VIDTaskState {
+        registry: registry.clone(),
+        api: c_api.clone(),
+        consensus: handle.hotshot.get_consensus(),
+        cur_view: TYPES::Time::new(0),
+        vid_exchange: vid_exchange.into(),
+        vote_collector: None,
+        event_stream: event_stream.clone(),
+        id: handle.hotshot.inner.id,
+    };
+    let vid_event_handler = HandleEvent(Arc::new(
+        move |event, mut state: VIDTaskState<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>| {
+            async move {
+                let completion_status = state.handle_event(event).await;
+                (completion_status, state)
+            }
+            .boxed()
+        },
+    ));
+    let vid_name = "VID Task";
+    let vid_event_filter = FilterEvent(Arc::new(
+        VIDTaskState::<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>::filter,
+    ));
+
+    let vid_task_builder = TaskBuilder::<
+        VIDTaskTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
+    >::new(vid_name.to_string())
+    .register_event_stream(event_stream.clone(), vid_event_filter)
+    .await
+    .register_registry(&mut registry.clone())
+    .await
+    .register_state(vid_state)
+    .register_event_handler(vid_event_handler);
+    // impossible for unwrap to fail
+    // we *just* registered
+    let vid_task_id = vid_task_builder.get_task_id().unwrap();
+    let vid_task = VIDTaskTypes::build(vid_task_builder).launch();
+    task_runner.add_task(vid_task_id, vid_name.to_string(), vid_task)
 }
 
 /// add the Data Availability task

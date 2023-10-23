@@ -11,7 +11,7 @@ use hotshot_types::{
     data::{DAProposal, QuorumProposal, SequencingLeaf},
     message::{Message, SequencingMessage},
     traits::{
-        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
+        election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, NodeImplementation, NodeType, SequencingExchanges},
     },
     vote::{DAVote, QuorumVote, ViewSyncVote},
@@ -26,6 +26,7 @@ pub type ThisLeaf = SequencingLeaf<DemoTypes>;
 pub type ThisMembership =
     GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
 pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
+pub type VIDNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type QuorumNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type ViewSyncNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 
@@ -60,6 +61,7 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
             ViewSyncNetwork,
             Message<DemoTypes, Self>,
         >,
+        VIDExchange<DemoTypes, ThisMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 

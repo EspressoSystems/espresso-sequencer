@@ -880,6 +880,10 @@ pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES
             signatures_bytes.extend("DA".as_bytes());
             Some(signatures.clone())
         }
+        AssembledSignature::VID(signatures) => {
+            signatures_bytes.extend("VID".as_bytes());
+            Some(signatures.clone())
+        }
         AssembledSignature::Yes(signatures) => {
             signatures_bytes.extend("Yes".as_bytes());
             Some(signatures.clone())
