@@ -51,6 +51,20 @@ pub struct WebServerConfig {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct ValidatorConfig<KEY, PRIVATEKEY, STAKETABLEENTRY> {
+    /// The validator's public key and stake value
+    pub public_key: KEY,
+    /// The validator's private key, should be in the mempool, not public
+    pub private_key: PRIVATEKEY,
+    /// The validator's stake
+    pub stake: u64,
+    /// The validator's index
+    pub node_id: u64,
+    /// The validator's public_key together with its stake value, which can be served as public parameter for key aggregation
+    pub entry: STAKETABLEENTRY,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG> {
     pub rounds: usize,
     pub transactions_per_round: usize,
