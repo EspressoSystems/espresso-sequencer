@@ -7,9 +7,7 @@ use std::{
 use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
 use async_compatibility_layer::art::async_sleep;
 use futures::FutureExt;
-use hotshot::traits::TestableNodeImplementation;
-use hotshot::HotShotType;
-use hotshot::SystemContext;
+use hotshot::{traits::TestableNodeImplementation, HotShotType, SystemContext};
 use hotshot_task::{
     boxed_sync,
     event_stream::ChannelStream,

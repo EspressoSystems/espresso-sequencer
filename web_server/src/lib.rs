@@ -5,6 +5,7 @@ use async_compatibility_layer::channel::OneShotReceiver;
 use async_lock::RwLock;
 use clap::Args;
 use futures::FutureExt;
+use tracing::error;
 
 use hotshot_types::traits::signature_key::{EncodedPublicKey, SignatureKey};
 use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -288,11 +289,11 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vote += 1;
             }
         }
-        let highest_index = self.vote_index.entry(view_number).or_insert(0);
+        let next_index = self.vote_index.entry(view_number).or_insert(0);
         self.votes
             .entry(view_number)
-            .and_modify(|current_votes| current_votes.push((*highest_index, vote.clone())))
-            .or_insert_with(|| vec![(*highest_index, vote)]);
+            .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
+            .or_insert_with(|| vec![(*next_index, vote)]);
         self.vote_index
             .entry(view_number)
             .and_modify(|index| *index += 1);
@@ -310,11 +311,11 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_vote += 1;
             }
         }
-        let highest_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
+        let next_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
         self.view_sync_votes
             .entry(view_number)
-            .and_modify(|current_votes| current_votes.push((*highest_index, vote.clone())))
-            .or_insert_with(|| vec![(*highest_index, vote)]);
+            .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
+            .or_insert_with(|| vec![(*next_index, vote)]);
         self.view_sync_vote_index
             .entry(view_number)
             .and_modify(|index| *index += 1);
@@ -322,7 +323,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
     /// Stores a received proposal in the `WebServerState`
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
-        debug!("Received proposal for view {}", view_number);
+        error!("Received proposal for view {}", view_number);
 
         if view_number > self.recent_proposal {
             self.recent_proposal = view_number;
@@ -349,7 +350,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     ) -> Result<(), Error> {
         // Only keep proposal history for MAX_VIEWS number of view
         if self.view_sync_proposals.len() >= MAX_VIEWS {
-            self.view_sync_proposals.remove(&self.oldest_view_sync_vote);
+            self.view_sync_proposals
+                .remove(&self.oldest_view_sync_proposal);
             while !self
                 .view_sync_proposals
                 .contains_key(&self.oldest_view_sync_proposal)
@@ -357,14 +359,14 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_proposal += 1;
             }
         }
-        let highest_index = self
+        let next_index = self
             .view_sync_proposal_index
             .entry(view_number)
             .or_insert(0);
         self.view_sync_proposals
             .entry(view_number)
-            .and_modify(|current_props| current_props.push((*highest_index, proposal.clone())))
-            .or_insert_with(|| vec![(*highest_index, proposal)]);
+            .and_modify(|current_props| current_props.push((*next_index, proposal.clone())))
+            .or_insert_with(|| vec![(*next_index, proposal)]);
         self.view_sync_proposal_index
             .entry(view_number)
             .and_modify(|index| *index += 1);

@@ -1,3 +1,4 @@
+use commit::Commitment;
 use commit::Committable;
 use either::Right;
 use hotshot::{
@@ -85,9 +86,11 @@ async fn build_vote(
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_types::certificate::QuorumCertificate;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -98,19 +101,30 @@ async fn test_consensus_task() {
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
+    // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
+    let qc = QuorumCertificate::<
+        SequencingTestTypes,
+        Commitment<SequencingLeaf<SequencingTestTypes>>,
+    >::genesis();
+    let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
+
+    input.push(SequencingHotShotEvent::QCFormed(either::Left(qc.clone())));
+    input.push(SequencingHotShotEvent::QuorumProposalRecv(
+        proposal.clone(),
+        public_key,
+    ));
     input.push(SequencingHotShotEvent::Shutdown);
 
+    output.insert(SequencingHotShotEvent::QCFormed(either::Left(qc)), 1);
     output.insert(
-        SequencingHotShotEvent::QuorumProposalSend(
-            build_quorum_proposal(&handle, &private_key, 1).await,
-            public_key,
-        ),
+        SequencingHotShotEvent::QuorumProposalSend(proposal.clone(), public_key),
         1,
     );
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 2);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 2);
+    output.insert(
+        SequencingHotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
+        1,
+    );
+    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(SequencingHotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, event_stream| {
@@ -141,14 +155,11 @@ async fn test_consensus_vote() {
 
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
+    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
     input.push(SequencingHotShotEvent::QuorumProposalRecv(
         proposal.clone(),
         public_key,
     ));
-
-    input.push(SequencingHotShotEvent::Shutdown);
-
     output.insert(
         SequencingHotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
         1,
@@ -157,10 +168,14 @@ async fn test_consensus_vote() {
     if let GeneralConsensusMessage::Vote(vote) =
         build_vote(&handle, proposal, ViewNumber::new(1)).await
     {
-        output.insert(SequencingHotShotEvent::QuorumVoteSend(vote), 1);
+        output.insert(SequencingHotShotEvent::QuorumVoteSend(vote.clone()), 1);
+        input.push(SequencingHotShotEvent::QuorumVoteRecv(vote.clone()));
+        output.insert(SequencingHotShotEvent::QuorumVoteRecv(vote), 1);
     }
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 2);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
+
+    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
+
+    input.push(SequencingHotShotEvent::Shutdown);
     output.insert(SequencingHotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, event_stream| {

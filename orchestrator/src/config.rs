@@ -1,6 +1,6 @@
 use hotshot_types::{ExecutionType, HotShotConfig};
-use std::marker::PhantomData;
 use std::{
+    marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
     time::Duration,

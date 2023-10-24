@@ -136,7 +136,10 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     ///
     /// Will panic if a handler is already spawned
     #[allow(clippy::unused_async)]
-    pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future<Output = ()>
+    // // Tokio and async_std disagree how this function should be linted
+    // #[allow(clippy::ignored_unit_patterns)]
+
+    pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future
     where
         F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,
         RET: Future<Output = Result<(), NetworkNodeHandleError>> + Send + 'static,
@@ -150,12 +153,12 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
         let handle = Arc::clone(self);
         async_spawn(async move {
             let receiver = handle.receiver.receiver.lock().await;
-             let Some(kill_switch) = handle.receiver.recv_kill.lock().await.take() else {
-                     tracing::error!(
-                         "`spawn_handle` was called on a network handle that was already closed"
-                     );
-                     return;
-                 };
+            let Some(kill_switch) = handle.receiver.recv_kill.lock().await.take() else {
+                tracing::error!(
+                    "`spawn_handle` was called on a network handle that was already closed"
+                );
+                return;
+            };
             let mut next_msg = receiver.recv().boxed();
             let mut kill_switch = kill_switch.recv().boxed();
             loop {
@@ -188,7 +191,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
                     }
                 }
             }
-        }).map(|_| ())
+        })
     }
 
     /// Wait until at least `num_peers` have connected, or until `timeout` time has passed.

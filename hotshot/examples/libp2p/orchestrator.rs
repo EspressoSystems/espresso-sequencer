@@ -9,7 +9,7 @@ use types::ThisMembership;
 use crate::{
     infra::OrchestratorArgs,
     infra_da::run_orchestrator_da,
-    types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork},
+    types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork},
 };
 
 #[path = "../infra/mod.rs"]
@@ -34,6 +34,7 @@ async fn main() {
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
+        VIDNetwork,
         NodeImpl,
     >(args)
     .await;

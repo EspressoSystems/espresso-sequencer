@@ -22,6 +22,7 @@ use hotshot_types::{
 use snafu::Snafu;
 use std::{marker::PhantomData, sync::Arc};
 use tracing::error;
+use tracing::instrument;
 
 /// the type of network task
 #[derive(Clone, Copy, Debug)]
@@ -32,6 +33,8 @@ pub enum NetworkTaskKind {
     Committee,
     /// view sync
     ViewSync,
+    /// vid
+    VID,
 }
 
 /// the network message task state
@@ -89,6 +92,9 @@ impl<
                             GeneralConsensusMessage::ViewSyncCertificate(view_sync_message) => {
                                 SequencingHotShotEvent::ViewSyncCertificateRecv(view_sync_message)
                             }
+                            GeneralConsensusMessage::TimeoutVote(message) => {
+                                SequencingHotShotEvent::TimeoutVoteRecv(message)
+                            }
                             GeneralConsensusMessage::InternalTrigger(_) => {
                                 error!("Got unexpected message type in network task!");
                                 return;
@@ -99,7 +105,6 @@ impl<
                                 SequencingHotShotEvent::DAProposalRecv(proposal.clone(), sender)
                             }
                             CommitteeConsensusMessage::DAVote(vote) => {
-                                // error!("DA Vote message recv {:?}", vote.current_view);
                                 SequencingHotShotEvent::DAVoteRecv(vote.clone())
                             }
                             CommitteeConsensusMessage::DACertificate(cert) => {
@@ -190,6 +195,8 @@ impl<
     /// # Panics
     /// Panic sif a direct message event is received with no recipient
     #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
+    #[instrument(skip_all, fields(view = *self.view), name = "Newtork Task", level = "error")]
+
     pub async fn handle_event(
         &mut self,
         event: SequencingHotShotEvent<TYPES, I>,
@@ -236,7 +243,7 @@ impl<
                     CommitteeConsensusMessage::VidVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view)), // TODO who is VID leader? https://github.com/EspressoSystems/HotShot/issues/1699
+                Some(membership.get_leader(vote.get_view())), // TODO who is VID leader? https://github.com/EspressoSystems/HotShot/issues/1699
             ),
             SequencingHotShotEvent::DAVoteSend(vote) => (
                 vote.signature_key(),
@@ -244,7 +251,7 @@ impl<
                     CommitteeConsensusMessage::DAVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.current_view)),
+                Some(membership.get_leader(vote.get_view())),
             ),
             SequencingHotShotEvent::VidCertSend(certificate, sender) => (
                 sender,
@@ -282,11 +289,20 @@ impl<
                     Some(membership.get_leader(vote.round() + vote.relay())),
                 )
             }
+            SequencingHotShotEvent::TimeoutVoteSend(vote) => (
+                vote.get_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::TimeoutVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view() + 1)),
+            ),
             SequencingHotShotEvent::ViewChange(view) => {
                 self.view = view;
                 return None;
             }
             SequencingHotShotEvent::Shutdown => {
+                error!("Networking task shutting down");
                 return Some(HotShotTaskCompleted::ShutDown);
             }
             event => {
@@ -323,6 +339,7 @@ impl<
             NetworkTaskKind::Quorum => FilterEvent(Arc::new(Self::quorum_filter)),
             NetworkTaskKind::Committee => FilterEvent(Arc::new(Self::committee_filter)),
             NetworkTaskKind::ViewSync => FilterEvent(Arc::new(Self::view_sync_filter)),
+            NetworkTaskKind::VID => FilterEvent(Arc::new(Self::vid_filter)),
         }
     }
 
@@ -336,6 +353,7 @@ impl<
                 | SequencingHotShotEvent::DACSend(_, _)
                 | SequencingHotShotEvent::VidCertSend(_, _)
                 | SequencingHotShotEvent::ViewChange(_)
+                | SequencingHotShotEvent::TimeoutVoteSend(_)
         )
     }
 
@@ -346,6 +364,17 @@ impl<
             SequencingHotShotEvent::DAProposalSend(_, _)
                 | SequencingHotShotEvent::DAVoteSend(_)
                 | SequencingHotShotEvent::Shutdown
+                | SequencingHotShotEvent::VidDisperseSend(_, _)
+                | SequencingHotShotEvent::VidVoteSend(_)
+                | SequencingHotShotEvent::ViewChange(_)
+        )
+    }
+
+    /// vid filter
+    fn vid_filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
+        matches!(
+            event,
+            SequencingHotShotEvent::Shutdown
                 | SequencingHotShotEvent::VidDisperseSend(_, _)
                 | SequencingHotShotEvent::VidVoteSend(_)
                 | SequencingHotShotEvent::ViewChange(_)

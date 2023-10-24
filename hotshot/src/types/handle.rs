@@ -191,7 +191,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
             if anchor_leaf.view_number == TYPES::Time::genesis() {
                 let leaf: I::Leaf = I::Leaf::from_stored_view(anchor_leaf);
                 let mut qc = QuorumCertificate::<TYPES, Commitment<I::Leaf>>::genesis();
-                qc.set_leaf_commitment(leaf.commit());
+                qc.leaf_commitment = leaf.commit();
                 let event = Event {
                     view_number: TYPES::Time::genesis(),
                     event: EventType::Decide {

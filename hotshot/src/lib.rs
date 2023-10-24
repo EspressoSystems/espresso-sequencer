@@ -53,11 +53,16 @@ use hotshot_task::{
     task_launcher::TaskRunner,
 };
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
+use hotshot_types::{
+    certificate::{TimeoutCertificate, VIDCertificate},
+    data::VidDisperse,
+    traits::node_implementation::SequencingTimeoutEx,
+};
 
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
-    consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
+    consensus::{BlockStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
     error::StorageSnafu,
     message::{
@@ -67,11 +72,10 @@ use hotshot_types::{
     traits::{
         consensus_api::{ConsensusSharedApi, SequencingConsensusApi},
         election::{ConsensusExchange, Membership, SignedCertificate},
-        metrics::Metrics,
         network::{CommunicationChannel, NetworkError},
         node_implementation::{
             ChannelMaps, CommitteeEx, ExchangesType, NodeType, SendToTasks, SequencingQuorumEx,
-            ViewSyncEx,
+            VIDEx, ViewSyncEx,
         },
         signature_key::SignatureKey,
         state::ConsensusTime,
@@ -89,6 +93,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tasks::add_vid_task;
 use tracing::{debug, error, info, instrument, trace, warn};
 // -- Rexports
 // External
@@ -129,8 +134,8 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Sender for [`Event`]s
     event_sender: RwLock<Option<BroadcastSender<Event<TYPES, I::Leaf>>>>,
 
-    /// a reference to the metrics that the implementor is using.
-    _metrics: Box<dyn Metrics>,
+    /// the metrics that the implementor is using.
+    _metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
     consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
@@ -174,13 +179,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
 
-        let consensus_metrics = Arc::new(ConsensusMetrics::new(
-            &*metrics.subgroup("consensus".to_string()),
-        ));
+        let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
 
         // insert to storage
@@ -219,8 +222,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
             high_qc: anchored_leaf.get_justify_qc(),
-            metrics: consensus_metrics,
-            invalid_qc: 0,
+            metrics: consensus_metrics.clone(),
         };
         let consensus = Arc::new(RwLock::new(consensus));
 
@@ -234,7 +236,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage,
             exchanges: Arc::new(exchanges),
             event_sender: RwLock::default(),
-            _metrics: metrics,
+            _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
             output_event_stream: ChannelStream::new(),
         });
@@ -242,22 +244,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(Self { inner })
     }
 
-    /// "Starts" consensus by sending a `ViewChange` event
+    /// "Starts" consensus by sending a `QCFormed` event
     pub async fn start_consensus(&self) {
         self.inner
             .internal_event_stream
-            .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(1)))
+            .publish(SequencingHotShotEvent::QCFormed(either::Left(
+                QuorumCertificate::genesis(),
+            )))
             .await;
-
-        // ED This isn't ideal...
-        // async_sleep(Duration::new(1, 0)).await;
-
-        // self.inner
-        //     .internal_event_stream
-        //     .publish(SequencingHotShotEvent::QCFormed(
-        //         QuorumCertificate::genesis(),
-        //     ))
-        //     .await;
     }
 
     /// Marks a given view number as timed out. This should be called a fixed period after a round is started.
@@ -393,7 +387,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        metrics: Box<dyn Metrics>,
+        metrics: ConsensusMetricsValue,
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
@@ -671,11 +665,28 @@ where
             Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
+    VIDEx<TYPES, I>: ConsensusExchange<
+            TYPES,
+            Message<TYPES, I>,
+            Proposal = VidDisperse<TYPES>,
+            Certificate = VIDCertificate<TYPES>,
+            Commitment = Commitment<TYPES::BlockType>,
+            Membership = MEMBERSHIP,
+        > + 'static,
+    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+            TYPES,
+            Message<TYPES, I>,
+            Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+            Certificate = TimeoutCertificate<TYPES>,
+            Commitment = Commitment<TYPES::Time>,
+            Membership = MEMBERSHIP,
+        > + 'static,
 {
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
         &self.inner.consensus
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn run_tasks(self) -> SystemContextHandle<TYPES, I> {
         // ED Need to set first first number to 1, or properly trigger the change upon start
         let task_runner = TaskRunner::new();
@@ -687,6 +698,7 @@ where
         let quorum_exchange = self.inner.exchanges.quorum_exchange().clone();
         let committee_exchange = self.inner.exchanges.committee_exchange().clone();
         let view_sync_exchange = self.inner.exchanges.view_sync_exchange().clone();
+        let vid_exchange = self.inner.exchanges.vid_exchange().clone();
 
         let handle = SystemContextHandle {
             registry,
@@ -714,10 +726,16 @@ where
             view_sync_exchange.clone(),
         )
         .await;
+        let task_runner = add_network_message_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
+        )
+        .await;
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            quorum_exchange,
+            quorum_exchange.clone(),
             NetworkTaskKind::Quorum,
         )
         .await;
@@ -735,6 +753,13 @@ where
             NetworkTaskKind::ViewSync,
         )
         .await;
+        let task_runner = add_network_event_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
+            NetworkTaskKind::VID,
+        )
+        .await;
         let task_runner = add_consensus_task(
             task_runner,
             internal_event_stream.clone(),
@@ -749,10 +774,17 @@ where
             handle.clone(),
         )
         .await;
+        let task_runner = add_vid_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
+            handle.clone(),
+        )
+        .await;
         let task_runner = add_transaction_task(
             task_runner,
             internal_event_stream.clone(),
-            committee_exchange.clone(),
+            quorum_exchange,
             handle.clone(),
         )
         .await;
@@ -766,7 +798,6 @@ where
             task_runner.launch().await;
             info!("Task runner exited!");
         });
-
         handle
     }
 }

@@ -3,7 +3,7 @@ use async_compatibility_layer::art::async_spawn;
 
 use futures::FutureExt;
 use hotshot_task::{
-    event_stream::{self, ChannelStream, EventStream},
+    event_stream::{ChannelStream, EventStream},
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
     task_launcher::TaskRunner,
@@ -52,7 +52,7 @@ pub async fn run_harness<TYPES, I, Fut>(
 {
     let task_runner = TaskRunner::new();
     let registry = task_runner.registry.clone();
-    let event_stream = event_stream.unwrap_or(event_stream::ChannelStream::new());
+    let event_stream = event_stream.unwrap_or_default();
     let state = TestHarnessState { expected_output };
     let handler = HandleEvent(Arc::new(move |event, state| {
         async move { handle_event(event, state) }.boxed()
@@ -76,7 +76,7 @@ pub async fn run_harness<TYPES, I, Fut>(
     let runner = async_spawn(async move { task_runner.launch().await });
 
     for event in input {
-        let _ = event_stream.publish(event).await;
+        let () = event_stream.publish(event).await;
     }
 
     let _ = runner.await;

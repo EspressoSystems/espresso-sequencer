@@ -4,7 +4,7 @@
 //! `HotShot` nodes can send among themselves.
 
 use crate::{
-    certificate::DACertificate,
+    certificate::{DACertificate, VIDCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
     traits::{
         network::{NetworkMsg, ViewMessage},
@@ -13,7 +13,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote, VoteType},
+    vote::{DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncVote, VoteType},
 };
 use commit::Commitment;
 use derivative::Derivative;
@@ -22,15 +22,13 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
 /// Incoming message
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative)]
+#[derive(Serialize, Deserialize, Clone, Debug, Derivative, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
-#[derivative(PartialEq)]
 pub struct Message<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The sender of this message
     pub sender: TYPES::SignatureKey,
 
     /// The message kind
-    #[derivative(PartialEq = "ignore")]
     pub kind: MessageKind<TYPES, I>,
 
     /// Phantom data.
@@ -83,7 +81,7 @@ pub enum MessagePurpose {
 // TODO (da) make it more customized to the consensus layer, maybe separating the specific message
 // data from the kind enum.
 /// Enum representation of any message type
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub enum MessageKind<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Messages related to the consensus protocol
@@ -132,7 +130,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewMessage<TYPES> for Messa
 }
 
 /// Internal triggers sent by consensus messages.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub enum InternalTrigger<TYPES: NodeType> {
     // May add other triggers if necessary.
@@ -202,6 +200,7 @@ where
             }
             GeneralConsensusMessage::ViewSyncVote(_)
             | GeneralConsensusMessage::ViewSyncCertificate(_) => todo!(),
+            GeneralConsensusMessage::TimeoutVote(_) => todo!(),
         }
     }
 }
@@ -219,9 +218,9 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
-    VidVote(DAVote<TYPES>, TYPES::SignatureKey),
+    VidVote(VIDVote<TYPES>, TYPES::SignatureKey),
     /// Certificate for VID. Like [`DACertificate`]
-    VidCertificate(DACertificate<TYPES>, TYPES::SignatureKey),
+    VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
@@ -304,7 +303,7 @@ impl<
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to both validating and sequencing consensus.
 pub enum GeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
@@ -323,12 +322,15 @@ where
     /// Message with a view sync certificate.
     ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
 
+    /// Message with a Timeout vote
+    TimeoutVote(TimeoutVote<TYPES>),
+
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to the sequencing consensus protocol for the DA committee.
 pub enum CommitteeConsensusMessage<TYPES: NodeType> {
@@ -350,13 +352,11 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
     /// Vote for VID disperse data
     ///
     /// Like [`DAVote`].
-    /// TODO currently re-using [`DAVote`]; do we need a separate VID vote? <https://github.com/EspressoSystems/HotShot/issues/1703>
-    VidVote(DAVote<TYPES>),
+    VidVote(VIDVote<TYPES>),
     /// VID certificate data is available
     ///
     /// Like [`DACertificate`]
-    /// TODO currently re-using [`DACertificate`]; do we need a separate VID cert? <https://github.com/EspressoSystems/HotShot/issues/1716>
-    VidCertificate(DACertificate<TYPES>),
+    VidCertificate(VIDCertificate<TYPES>),
 }
 
 /// Messages related to the consensus protocol.
@@ -383,7 +383,7 @@ pub trait SequencingMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>>:
 }
 
 /// Messages for sequencing consensus.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct SequencingMessage<
     TYPES: NodeType,
@@ -417,6 +417,7 @@ impl<
                     GeneralConsensusMessage::ViewSyncCertificate(message) => {
                         message.data.get_view_number()
                     }
+                    GeneralConsensusMessage::TimeoutVote(message) => message.get_view(),
                 }
             }
             Right(committee_message) => {
@@ -427,8 +428,8 @@ impl<
                         p.data.get_view_number()
                     }
                     CommitteeConsensusMessage::DAVote(vote_message) => vote_message.get_view(),
-                    CommitteeConsensusMessage::DACertificate(cert)
-                    | CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
+                    CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
                     CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
                         disperse.data.get_view_number()
                     }
@@ -444,7 +445,9 @@ impl<
         match &self.0 {
             Left(general_message) => match general_message {
                 GeneralConsensusMessage::Proposal(_) => MessagePurpose::Proposal,
-                GeneralConsensusMessage::Vote(_) => MessagePurpose::Vote,
+                GeneralConsensusMessage::Vote(_) | GeneralConsensusMessage::TimeoutVote(_) => {
+                    MessagePurpose::Vote
+                }
                 GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
                 GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
                 GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
@@ -455,7 +458,7 @@ impl<
                 CommitteeConsensusMessage::VidVote(_) => MessagePurpose::VidVote,
                 CommitteeConsensusMessage::DACertificate(_) => MessagePurpose::DAC,
                 CommitteeConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
-                CommitteeConsensusMessage::VidCertificate(_) => todo!(),
+                CommitteeConsensusMessage::VidCertificate(_) => MessagePurpose::VidCert,
             },
         }
     }

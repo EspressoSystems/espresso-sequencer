@@ -4,7 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot::demo::DemoTypes;
 use tracing::instrument;
-use types::ThisMembership;
+use types::{ThisMembership, VIDNetwork};
 
 use crate::{
     infra::OrchestratorArgs,
@@ -34,6 +34,7 @@ async fn main() {
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
+        VIDNetwork,
         NodeImpl,
     >(args)
     .await;

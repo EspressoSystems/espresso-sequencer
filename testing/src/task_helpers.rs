@@ -14,12 +14,12 @@ use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::SequencingHotShotEvent;
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
+    consensus::ConsensusMetricsValue,
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership, SignedCertificate},
-        metrics::NoMetrics,
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
@@ -82,7 +82,7 @@ pub async fn build_system_handle(
         storage,
         exchanges,
         initializer,
-        NoMetrics::boxed(),
+        ConsensusMetricsValue::new(),
     )
     .await
     .expect("Could not init hotshot")

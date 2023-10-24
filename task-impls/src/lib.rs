@@ -31,3 +31,6 @@ pub mod harness;
 
 /// The task which implements view synchronization
 pub mod view_sync;
+
+/// The task which implements verifiable information dispersal
+pub mod vid;

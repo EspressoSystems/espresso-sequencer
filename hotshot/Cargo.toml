@@ -76,7 +76,6 @@ required-features = ["demo", "libp2p/rsa"]
 path = "examples/web-server-da/multi-web-server.rs"
 
 [dependencies]
-# TODO ED We should upgrade ark libraries to 0.4
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
@@ -111,6 +110,7 @@ serde = { workspace = true, features = ["rc"] }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
+dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.14" }
 
 tracing = { workspace = true }
 typenum = { workspace = true }

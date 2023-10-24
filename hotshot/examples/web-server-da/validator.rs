@@ -2,6 +2,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot::demo::DemoTypes;
 use tracing::{info, instrument};
+use types::VIDNetwork;
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};
 
@@ -34,6 +35,7 @@ async fn main() {
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
+        VIDNetwork,
         NodeImpl,
         ThisRun,
     >(args)

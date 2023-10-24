@@ -18,7 +18,7 @@ async fn test_success() {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(1_200_000),
+                duration: Duration::from_secs(60),
             },
         ),
         ..TestMetadata::default()
