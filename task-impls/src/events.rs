@@ -60,8 +60,8 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     TransactionsRecv(Vec<TYPES::Transaction>),
     /// Send transactions to the network
     TransactionSend(TYPES::Transaction, TYPES::SignatureKey),
-    /// Event to send DA block data from DA leader to next quorum leader (which should always be the same node); internal event only
-    SendDABlockData(TYPES::BlockPayload),
+    /// Event to send block commitment from DA leader to the quorum; internal event only
+    SendBlockCommitment(Commitment<TYPES::BlockPayload>),
     /// Event when the transactions task has a block formed
     BlockReady(TYPES::BlockPayload, TYPES::Time),
     /// Event when consensus decided on a leaf

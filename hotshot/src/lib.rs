@@ -55,7 +55,7 @@ use hotshot_task::{
 use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetrics, View, ViewInner, ViewQueue},
     data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
@@ -634,7 +634,11 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType<
+            BlockHeader = VIDBlockHeader,
+            BlockPayload = VIDBlockPayload,
+            Transaction = VIDTransaction,
+        >,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,

@@ -15,7 +15,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::vote::QuorumVoteAccumulator;
+use hotshot_types::{block_impl::VIDBlockPayload, vote::QuorumVoteAccumulator};
 use hotshot_types::{
     certificate::{DACertificate, QuorumCertificate},
     consensus::{Consensus, View},
@@ -23,6 +23,7 @@ use hotshot_types::{
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
+        block_contents::BlockHeader,
         consensus_api::SequencingConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -83,8 +84,8 @@ pub struct SequencingConsensusTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// Current block submitted to DA
-    pub block: TYPES::BlockPayload,
+    /// The commitment to the current block submitted to DA
+    pub block_commitment: Commitment<TYPES::BlockPayload>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -259,7 +260,7 @@ where
 }
 
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<BlockHeader = VIDBlockHeader, BlockPayload = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
@@ -348,10 +349,10 @@ where
 
                         let leaf: SequencingLeaf<_> = SequencingLeaf {
                             view_number: view,
-                            height: proposal.height,
+                            height: proposal.block_header.block_number,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_commitment),
+                            deltas: Right(self.block_commitment),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -414,10 +415,10 @@ where
 
                         let leaf: SequencingLeaf<_> = SequencingLeaf {
                             view_number: view,
-                            height: proposal.height,
+                            height: proposal.block_header.block_number,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_commitment),
+                            deltas: Right(proposal.block_header.commitment),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -426,7 +427,7 @@ where
                         // Validate the DAC.
                         if self
                             .committee_exchange
-                            .is_valid_cert(cert, proposal.block_commitment)
+                            .is_valid_cert(cert, proposal.block_header.commitment)
                         {
                             self.quorum_exchange.create_yes_message(
                                 proposal.justify_qc.commit(),
@@ -605,10 +606,10 @@ where
                         let parent_commitment = parent.commit();
                         let leaf: SequencingLeaf<_> = SequencingLeaf {
                             view_number: view,
-                            height: proposal.data.height,
+                            height: proposal.data.block_header.block_number,
                             justify_qc: justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.data.block_commitment),
+                            deltas: Right(proposal.data.block_header.commitment),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: sender.to_bytes(),
@@ -1076,9 +1077,9 @@ where
                     *view
                 );
             }
-            SequencingHotShotEvent::SendDABlockData(block) => {
+            SequencingHotShotEvent::SendBlockCommitment(block_commitment) => {
                 // ED TODO Should make sure this is actually the most recent block
-                self.block = block;
+                self.block_commitment = block_commitment;
             }
             _ => {}
         }
@@ -1150,16 +1151,12 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        let block_commitment = self.block.commit();
-
         let leaf = SequencingLeaf {
             view_number: view,
             height: parent_leaf.height + 1,
             justify_qc: consensus.high_qc.clone(),
             parent_commitment: parent_leaf.commit(),
-            // Use the block commitment rather than the block, so that the replica can construct
-            // the same leaf with the commitment.
-            deltas: Right(block_commitment),
+            deltas: Right(self.block_commitment),
             rejected: vec![],
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: self.api.public_key().to_bytes(),
@@ -1170,9 +1167,11 @@ where
             .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
         // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
         let proposal = QuorumProposal {
-            block_commitment,
+            block_header: VIDBlockHeader {
+                block_number: parent_leaf.height + 1,
+                commitment: self.block_commitment,
+            },
             view_number: leaf.view_number,
-            height: leaf.height,
             justify_qc: consensus.high_qc.clone(),
             // TODO ED Update this to be the actual TC if there is one
             timeout_certificate: None,
@@ -1240,7 +1239,7 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
-    TYPES: NodeType,
+    TYPES: NodeType<BlockHeader = VIDBlockHeader, BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -1289,7 +1288,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::DACRecv(_)
             | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
-            | SequencingHotShotEvent::SendDABlockData(_)
+            | SequencingHotShotEvent::SendBlockCommitment(_)
             | SequencingHotShotEvent::Timeout(_)
             | SequencingHotShotEvent::Shutdown,
     )

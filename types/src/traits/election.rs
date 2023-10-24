@@ -534,8 +534,10 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
     /// Sign a DA proposal.
-    fn sign_da_proposal(&self, block_commitment: &Commitment<TYPES::BlockPayload>)
-        -> EncodedSignature;
+    fn sign_da_proposal(
+        &self,
+        block_commitment: &Commitment<TYPES::BlockPayload>,
+    ) -> EncodedSignature;
 
     /// Sign a vote on DA proposal.
     ///

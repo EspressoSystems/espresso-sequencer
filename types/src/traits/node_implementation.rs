@@ -4,7 +4,7 @@
 //! describing the overall behavior of a node, as a composition of implementations of the node trait.
 
 use super::{
-    block_contents::Transaction,
+    block_contents::{BlockHeader, Transaction},
     election::{
         CommitteeExchangeType, ConsensusExchange, ElectionConfig, QuorumExchangeType,
         ViewSyncExchangeType, VoteToken,
@@ -546,6 +546,8 @@ pub trait NodeType:
     ///
     /// This should be the same `Time` that `StateType::Time` is using.
     type Time: ConsensusTime;
+    /// The block header type that this hotshot setup is using.
+    type BlockHeader: BlockHeader<Payload = Self::BlockPayload>;
     /// The block type that this hotshot setup is using.
     ///
     /// This should be the same block that `StateType::BlockPayload` is using.

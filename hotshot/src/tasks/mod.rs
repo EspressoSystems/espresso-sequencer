@@ -5,7 +5,7 @@ use crate::{
     QuorumCertificate, SequencingQuorumEx,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, CommitmentBounds};
+use commit::{Commitment, CommitmentBounds, Committable};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -27,7 +27,7 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
     data::{ProposalType, QuorumProposal, SequencingLeaf},
     event::Event,
@@ -250,7 +250,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType<BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType<BlockHeader = VIDBlockHeader, BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
@@ -288,7 +288,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: VIDBlockPayload::genesis(),
+        block_commitment: VIDBlockPayload::genesis().commit(),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         api: c_api.clone(),
         committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),

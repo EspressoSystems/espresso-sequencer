@@ -5,8 +5,12 @@ use std::{
 };
 
 use crate::{
-    data::{test_srs, VidScheme, VidSchemeTrait, SequencingLeaf},
-    traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
+    data::{test_srs, VidScheme, VidSchemeTrait},
+    traits::{
+        block_contents::{BlockHeader, Transaction},
+        state::TestableBlock,
+        BlockPayload,
+    },
 };
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
@@ -127,10 +131,18 @@ impl BlockPayload for VIDBlockPayload {
 }
 
 /// A [`BlockHeader`] that commits to [`VIDBlockPayload`].
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct VIDBlockHeader<TYPES: NodeType> {
-    /// Previous leaf.
-    pub previous_leaf: SequencingLeaf<TYPES>,
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Deserialize, Serialize)]
+pub struct VIDBlockHeader {
+    /// Block number.
+    pub block_number: u64,
     /// VID commitment.
-    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
+    pub commitment: Commitment<VIDBlockPayload>,
+}
+
+impl BlockHeader for VIDBlockHeader {
+    type Payload = VIDBlockPayload;
+
+    fn commitment(&self) -> Commitment<Self::Payload> {
+        self.commitment
+    }
 }

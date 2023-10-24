@@ -202,14 +202,11 @@ pub fn test_srs(
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
-    /// The commitment to append.
-    pub block_commitment: Commitment<TYPES::BlockPayload>,
+    /// The block header to append
+    pub block_header: TYPES::BlockHeader,
 
     /// CurView from leader when proposing leaf
     pub view_number: TYPES::Time,
-
-    /// Height from leader when proposing leaf
-    pub height: u64,
 
     /// Per spec, justification
     pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,

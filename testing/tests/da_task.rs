@@ -95,7 +95,10 @@ async fn test_da_task() {
         SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         1,
     );
-    output.insert(SequencingHotShotEvent::SendDABlockData(block.clone()), 1);
+    output.insert(
+        SequencingHotShotEvent::SendBlockCommitment(block.commit()),
+        1,
+    );
     output.insert(
         SequencingHotShotEvent::DAProposalSend(message.clone(), pub_key),
         1,

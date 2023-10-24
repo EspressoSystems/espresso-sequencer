@@ -124,7 +124,10 @@ async fn test_network_task() {
         SequencingHotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,
     );
-    output.insert(SequencingHotShotEvent::SendDABlockData(block), 1);
+    output.insert(
+        SequencingHotShotEvent::SendBlockCommitment(block.commit()),
+        1,
+    );
     output.insert(
         SequencingHotShotEvent::DAProposalRecv(da_proposal, pub_key),
         1,

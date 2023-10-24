@@ -628,7 +628,8 @@ where
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let signature = self.committee_exchange.sign_da_proposal(&block.commit());
+                let block_commitment = block.commit();
+                let signature = self.committee_exchange.sign_da_proposal(&block_commitment);
                 let data: DAProposal<TYPES> = DAProposal {
                     deltas: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
@@ -644,7 +645,9 @@ where
                 // TODO ED We should send an event to do this, but just getting it to work for now
 
                 self.event_stream
-                    .publish(SequencingHotShotEvent::SendDABlockData(block.clone()))
+                    .publish(SequencingHotShotEvent::SendBlockCommitment(
+                        block_commitment,
+                    ))
                     .await;
 
                 self.event_stream

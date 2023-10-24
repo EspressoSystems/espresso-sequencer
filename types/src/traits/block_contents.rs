@@ -50,24 +50,27 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
+    // type Header: BlockHeader;
+
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
     fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
+/// Header of a block, which commits to a [`BlockPayload`].
 pub trait BlockHeader:
     Serialize
     + Clone
     + Debug
-    + Display
+    // + Display
     + Hash
     + PartialEq
     + Eq
     + Send
     + Sync
-    + Committable
     + DeserializeOwned
 {
+    /// Block payload associated with the commitment.
     type Payload: BlockPayload;
 
     /// Get the payload commitment.
@@ -78,7 +81,9 @@ pub trait BlockHeader:
 pub mod dummy {
     use std::fmt::Display;
 
-    use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
+    use super::{
+        BlockHeader, BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize,
+    };
     use rand::Rng;
     use serde::Deserialize;
 
@@ -136,6 +141,16 @@ pub mod dummy {
     impl Display for DummyBlock {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{self:#?}")
+        }
+    }
+
+    impl BlockHeader for DummyBlock {
+        type Payload = Self;
+
+        fn commitment(&self) -> commit::Commitment<Self> {
+            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
+                .u64_field("Nonce", self.nonce)
+                .finalize()
         }
     }
 
