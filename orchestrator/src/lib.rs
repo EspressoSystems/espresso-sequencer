@@ -36,7 +36,7 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
 }
 
 #[derive(Default, Clone)]
-struct OrchestratorState<KEY: SignatureKey, ELECTION> {
+struct OrchestratorState<KEY: SignatureKey, ELECTION: ElectionConfig> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
     /// The network configuration
@@ -69,7 +69,7 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     }
 }
 
-pub trait OrchestratorApi<KEY: SignatureKey, ELECTION> {
+pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
     fn post_getconfig(
         &mut self,
@@ -83,7 +83,7 @@ pub trait OrchestratorApi<KEY: SignatureKey, ELECTION> {
 impl<KEY, ELECTION> OrchestratorApi<KEY, ELECTION> for OrchestratorState<KEY, ELECTION>
 where
     KEY: serde::Serialize + Clone + SignatureKey,
-    ELECTION: serde::Serialize + Clone + Send,
+    ELECTION: serde::Serialize + Clone + Send + ElectionConfig,
 {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError> {
         let node_index = self.latest_index;
@@ -194,7 +194,7 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY: SignatureKey, ELECTION, State>() -> Result<Api<State, ServerError>, ApiError>
+fn define_api<KEY: SignatureKey, ELECTION: ElectionConfig, State>() -> Result<Api<State, ServerError>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ELECTION>,

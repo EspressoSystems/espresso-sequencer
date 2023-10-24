@@ -1,4 +1,4 @@
-use hotshot_types::{traits::signature_key::SignatureKey, ExecutionType, HotShotConfig};
+use hotshot_types::{traits::{signature_key::SignatureKey, election::ElectionConfig,}, ExecutionType, HotShotConfig};
 use std::{
     marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -51,21 +51,42 @@ pub struct WebServerConfig {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct ValidatorConfig<KEY, PRIVATEKEY, STAKETABLEENTRY> {
+#[serde(bound(deserialize = ""))]
+pub struct ValidatorConfig<KEY: SignatureKey> {
     /// The validator's public key and stake value
     pub public_key: KEY,
     /// The validator's private key, should be in the mempool, not public
-    pub private_key: PRIVATEKEY,
+    pub private_key: KEY::PrivateKey,
     /// The validator's stake
-    pub stake: u64,
-    /// The validator's index
-    pub node_id: u64,
+    pub stake_value: u64,
     /// The validator's public_key together with its stake value, which can be served as public parameter for key aggregation
-    pub entry: STAKETABLEENTRY,
+    pub entry: KEY::StakeTableEntry,
+}
+
+impl<KEY: SignatureKey> ValidatorConfig<KEY> {
+    fn generated_from_seed_indexed(seed: [u8; 32], index: u64, stake_value: u64) -> Self {
+        let (public_key, private_key) = KEY::generated_from_seed_indexed(
+            seed,
+            index,
+        );
+        Self {
+            public_key: public_key.clone(),
+            private_key: private_key,
+            stake_value: stake_value,
+            entry: public_key.get_stake_table_entry(stake_value),
+        }
+    }
+}
+
+impl<KEY: SignatureKey> Default for ValidatorConfig<KEY> {
+    fn default() -> Self {
+        Self::generated_from_seed_indexed([0u8; 32], 0, 1)
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG> {
+#[serde(bound(deserialize = ""))]
+pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub rounds: usize,
     pub transactions_per_round: usize,
     pub num_bootrap: usize,
@@ -74,6 +95,7 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG> {
     pub propose_max_round_time: Duration,
     pub node_index: u64,
     pub seed: [u8; 32],
+    pub validator_config: ValidatorConfig<KEY>,
     pub padding: usize,
     pub start_delay_seconds: u64,
     pub key_type_name: String,
@@ -85,13 +107,14 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG> {
     _key_type_phantom: PhantomData<KEY>,
 }
 
-impl<K: SignatureKey, E> Default for NetworkConfig<K, E> {
+impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
     fn default() -> Self {
         Self {
             rounds: default_rounds(),
             transactions_per_round: default_transactions_per_round(),
             node_index: 0,
             seed: [0u8; 32],
+            validator_config: ValidatorConfig::default(),
             padding: default_padding(),
             libp2p_config: None,
             config: default_config().into(),
@@ -137,7 +160,7 @@ fn default_web_server_config() -> Option<WebServerConfig> {
     None
 }
 
-impl<K: SignatureKey, E> From<NetworkConfigFile> for NetworkConfig<K, E> {
+impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile> for NetworkConfig<K, E> {
     fn from(val: NetworkConfigFile) -> Self {
         NetworkConfig {
             rounds: val.rounds,
@@ -148,6 +171,7 @@ impl<K: SignatureKey, E> From<NetworkConfigFile> for NetworkConfig<K, E> {
             propose_max_round_time: val.config.propose_max_round_time,
             propose_min_round_time: val.config.propose_min_round_time,
             seed: val.seed,
+            validator_config: ValidatorConfig::generated_from_seed_indexed(val.seed, 0, 1),
             padding: val.padding,
             libp2p_config: val.libp2p_config.map(|libp2p_config| Libp2pConfig {
                 num_bootstrap_nodes: val.config.num_bootstrap,
