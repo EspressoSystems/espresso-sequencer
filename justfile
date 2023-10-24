@@ -61,3 +61,8 @@ gen-bindings:
     mv ./contracts/out/bindings ./contract-bindings
     cargo fmt --all
     cargo sort -g -w
+
+# Lint solidity files
+sol-lint:
+    forge fmt
+    solhint --fix 'contracts/{script,src,test}/**/*.sol'

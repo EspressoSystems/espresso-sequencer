@@ -1,0 +1,249 @@
+// SPDX-License-Identifier: Unlicensed
+
+pragma solidity ^0.8.0;
+
+import { BN254 } from "bn254/BN254.sol";
+
+/* solhint-disable no-inline-assembly */
+
+library PolynomialEval {
+    /// Unsupported polynomial degree, currently size must in 2^{14~17}.
+    error UnsupportedDegree();
+
+    /// @dev a Radix 2 Evaluation Domain
+    struct EvalDomain {
+        uint256 logSize; // log_2(self.size)
+        uint256 size; // Size of the domain as a field element
+        uint256 sizeInv; // Inverse of the size in the field
+        uint256 groupGen; // A generator of the subgroup
+        uint256 groupGenInv; // Inverse of the generator of the subgroup
+    }
+
+    /// @dev stores vanishing poly, lagrange at 1, and Public input poly
+    struct EvalData {
+        uint256 vanishEval;
+        uint256 lagrangeOne;
+        uint256 piEval;
+    }
+
+    /// @dev compute the EvalData for a given domain and a challenge zeta
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+        internal
+        view
+        returns (EvalData memory evalData)
+    {
+        evalData.vanishEval = evaluateVanishingPoly(self, zeta);
+        evalData.lagrangeOne = evaluateLagrangeOne(self, zeta, evalData.vanishEval);
+        evalData.piEval = evaluatePiPoly(self, publicInput, zeta, evalData.vanishEval);
+    }
+
+    /// @dev Create a new Radix2EvalDomain with `domainSize` which should be power of 2.
+    /// @dev Will revert if domainSize is not among {2^14, 2^15, 2^16, 2^17}
+    function newEvalDomain(uint256 domainSize) internal pure returns (EvalDomain memory) {
+        if (domainSize == 16384) {
+            return EvalDomain(
+                14,
+                domainSize,
+                0x30638CE1A7661B6337A964756AA75257C6BF4778D89789AB819CE60C19B04001,
+                0x2D965651CDD9E4811F4E51B80DDCA8A8B4A93EE17420AAE6ADAA01C2617C6E85,
+                0x281C036F06E7E9E911680D42558E6E8CF40976B0677771C0F8EEE934641C8410
+            );
+        } else if (domainSize == 32768) {
+            return EvalDomain(
+                15,
+                domainSize,
+                0x3063edaa444bddc677fcd515f614555a777997e0a9287d1e62bf6dd004d82001,
+                0x2d1ba66f5941dc91017171fa69ec2bd0022a2a2d4115a009a93458fd4e26ecfb,
+                0x05d33766e4590b3722701b6f2fa43d0dc3f028424d384e68c92a742fb2dbc0b4
+            );
+        } else if (domainSize == 65536) {
+            return EvalDomain(
+                16,
+                domainSize,
+                0x30641e0e92bebef818268d663bcad6dbcfd6c0149170f6d7d350b1b1fa6c1001,
+                0x00eeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7,
+                0x0b5d56b77fe704e8e92338c0082f37e091126414c830e4c6922d5ac802d842d4
+            );
+        } else if (domainSize == 131072) {
+            return EvalDomain(
+                17,
+                domainSize,
+                0x30643640b9f82f90e83b698e5ea6179c7c05542e859533b48b9953a2f5360801,
+                0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5,
+                0x244cf010c43ca87237d8b00bf9dd50c4c01c7f086bd4e8c920e75251d96f0d22
+            );
+        } else {
+            revert UnsupportedDegree();
+        }
+    }
+
+    // This evaluates the vanishing polynomial for this domain at zeta.
+    // For multiplicative subgroups, this polynomial is
+    // `z(X) = X^self.size - 1`.
+    function evaluateVanishingPoly(EvalDomain memory self, uint256 zeta)
+        internal
+        pure
+        returns (uint256 res)
+    {
+        uint256 p = BN254.R_MOD;
+        uint256 logSize = self.logSize;
+
+        assembly {
+            switch zeta
+            case 0 { res := sub(p, 1) }
+            default {
+                res := zeta
+                for { let i := 0 } lt(i, logSize) { i := add(i, 1) } { res := mulmod(res, res, p) }
+                // since zeta != 0 we know that res is not 0
+                // so we can safely do a subtraction
+                res := sub(res, 1)
+            }
+        }
+    }
+
+    /// @dev Evaluate the lagrange polynomial at point `zeta` given the vanishing polynomial
+    /// evaluation `vanish_eval`.
+    function evaluateLagrangeOne(EvalDomain memory self, uint256 zeta, uint256 vanishEval)
+        internal
+        view
+        returns (uint256 res)
+    {
+        if (vanishEval == 0) {
+            return 0;
+        }
+
+        uint256 p = BN254.R_MOD;
+        uint256 divisor;
+        uint256 vanishEvalMulSizeInv = self.sizeInv;
+
+        // =========================
+        // lagrange_1_eval = vanish_eval / self.size / (zeta - 1)
+        // =========================
+        assembly {
+            vanishEvalMulSizeInv := mulmod(vanishEval, vanishEvalMulSizeInv, p)
+
+            switch zeta
+            case 0 { divisor := sub(p, 1) }
+            default { divisor := sub(zeta, 1) }
+        }
+        divisor = BN254.invert(divisor);
+        assembly {
+            res := mulmod(vanishEvalMulSizeInv, divisor, p)
+        }
+    }
+
+    /// @dev Evaluate public input polynomial at point `zeta`.
+    function evaluatePiPoly(
+        EvalDomain memory self,
+        uint256[] memory pi,
+        uint256 zeta,
+        uint256 vanishEval
+    ) internal view returns (uint256 res) {
+        if (vanishEval == 0) {
+            return 0;
+        }
+
+        uint256 p = BN254.R_MOD;
+        uint256 length = pi.length;
+        uint256 ithLagrange;
+        uint256 ithDivisor;
+        uint256 tmp;
+        uint256 vanishEvalDivN = self.sizeInv;
+        uint256 divisorProd;
+        uint256[] memory localDomainElements = domainElements(self, length);
+        uint256[] memory divisors = new uint256[](length);
+
+        assembly {
+            // vanish_eval_div_n = (zeta^n-1)/n
+            vanishEvalDivN := mulmod(vanishEvalDivN, vanishEval, p)
+
+            // Now we need to compute
+            //  \sum_{i=0..l} L_{i,H}(zeta) * pub_input[i]
+            // where
+            // - L_{i,H}(zeta)
+            //      = Z_H(zeta) * v_i / (zeta - g^i)
+            //      = vanish_eval_div_n * g^i / (zeta - g^i)
+            // - v_i = g^i / n
+            //
+            // we want to use batch inversion method where we compute
+            //
+            //      divisorProd = 1 / \prod (zeta - g^i)
+            //
+            // and then each 1 / (zeta - g^i) can be computed via (length - 1)
+            // multiplications:
+            //
+            //      1 / (zeta - g^i) = divisorProd * \prod_{j!=i} (zeta - g^j)
+            //
+            // In total this takes n(n-1) multiplications and 1 inversion,
+            // instead of doing n inversions.
+            divisorProd := 1
+
+            for { let i := 0 } lt(i, length) { i := add(i, 1) } {
+                // tmp points to g^i
+                // first 32 bytes of reference is the length of an array
+                tmp := mload(add(add(localDomainElements, 0x20), mul(i, 0x20)))
+                // compute (zeta - g^i)
+                ithDivisor := addmod(sub(p, tmp), zeta, p)
+                // accumulate (zeta - g^i) to the divisorProd
+                divisorProd := mulmod(divisorProd, ithDivisor, p)
+                // store ithDivisor in the array
+                mstore(add(add(divisors, 0x20), mul(i, 0x20)), ithDivisor)
+            }
+        }
+
+        // compute 1 / \prod_{i=0}^length (zeta - g^i)
+        divisorProd = BN254.invert(divisorProd);
+
+        assembly {
+            for { let i := 0 } lt(i, length) { i := add(i, 1) } {
+                // tmp points to g^i
+                // first 32 bytes of reference is the length of an array
+                tmp := mload(add(add(localDomainElements, 0x20), mul(i, 0x20)))
+                // vanish_eval_div_n * g^i
+                ithLagrange := mulmod(vanishEvalDivN, tmp, p)
+
+                // now we compute vanish_eval_div_n * g^i / (zeta - g^i) via
+                // vanish_eval_div_n * g^i * divisorProd * \prod_{j!=i} (zeta - g^j)
+                ithLagrange := mulmod(ithLagrange, divisorProd, p)
+                for { let j := 0 } lt(j, length) { j := add(j, 1) } {
+                    if iszero(eq(i, j)) {
+                        ithDivisor := mload(add(add(divisors, 0x20), mul(j, 0x20)))
+                        ithLagrange := mulmod(ithLagrange, ithDivisor, p)
+                    }
+                }
+
+                // multiply by pub_input[i] and update res
+                // tmp points to public input
+                tmp := mload(add(add(pi, 0x20), mul(i, 0x20)))
+                ithLagrange := mulmod(ithLagrange, tmp, p)
+                res := addmod(res, ithLagrange, p)
+            }
+        }
+    }
+
+    /// @dev Generate the domain elements for indexes 0..length
+    /// which are essentially g^0, g^1, ..., g^{length-1}
+    function domainElements(EvalDomain memory self, uint256 length)
+        internal
+        pure
+        returns (uint256[] memory elements)
+    {
+        uint256 groupGen = self.groupGen;
+        uint256 tmp = 1;
+        uint256 p = BN254.R_MOD;
+        elements = new uint256[](length);
+        assembly {
+            if not(iszero(length)) {
+                let ptr := add(elements, 0x20)
+                let end := add(ptr, mul(0x20, length))
+                mstore(ptr, 1)
+                ptr := add(ptr, 0x20)
+                // for (; ptr < end; ptr += 32) loop through the memory of `elements`
+                for { } lt(ptr, end) { ptr := add(ptr, 0x20) } {
+                    tmp := mulmod(tmp, groupGen, p)
+                    mstore(ptr, tmp)
+                }
+            }
+        }
+    }
+}
