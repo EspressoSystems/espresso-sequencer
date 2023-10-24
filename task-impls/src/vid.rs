@@ -53,7 +53,7 @@ pub struct VIDTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// The state's api
@@ -89,7 +89,7 @@ pub struct VIDVoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// the vid exchange
@@ -101,7 +101,7 @@ pub struct VIDVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Commitment<TYPES::BlockType>,
+            Commitment<TYPES::BlockPayload>,
         >>::VoteAccumulator,
         VIDCertificate<TYPES>,
     >,
@@ -120,7 +120,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }
@@ -140,7 +140,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     match event {
@@ -199,7 +199,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// main task event handler
@@ -415,7 +415,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }

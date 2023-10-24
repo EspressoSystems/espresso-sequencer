@@ -385,7 +385,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     // build the vid task

@@ -595,7 +595,7 @@ impl<
     type Certificate = DACertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockType>;
+    type Commitment = Commitment<TYPES::BlockPayload>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -722,7 +722,7 @@ impl<
     /// Sign a VID proposal.
     fn sign_vid_proposal(
         &self,
-        block_commitment: &Commitment<TYPES::BlockType>,
+        block_commitment: &Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, block_commitment.as_ref());
         signature
@@ -810,7 +810,7 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
     /// Sign a block commitment.
     fn sign_block_commitment(
         &self,
-        block_commitment: Commitment<TYPES::BlockType>,
+        block_commitment: Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature;
 
     /// Sign a positive vote on validating or commitment proposal.
@@ -914,7 +914,7 @@ impl<
 
     fn sign_block_commitment(
         &self,
-        block_commitment: Commitment<<TYPES as NodeType>::BlockType>,
+        block_commitment: Commitment<<TYPES as NodeType>::BlockPayload>,
     ) -> EncodedSignature {
         TYPES::SignatureKey::sign(&self.private_key, block_commitment.as_ref())
     }

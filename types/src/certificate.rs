@@ -51,7 +51,7 @@ pub struct VIDCertificate<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    pub block_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -298,11 +298,11 @@ impl<TYPES: NodeType>
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockPayload>>
     for VIDCertificate<TYPES>
 {
     type Vote = VIDVote<TYPES>;
-    type VoteAccumulator = VIDVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+    type VoteAccumulator = VIDVoteAccumulator<TYPES, Commitment<TYPES::BlockPayload>, Self::Vote>;
 
     fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         VIDCertificate {
@@ -320,7 +320,7 @@ impl<TYPES: NodeType>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
+    fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
         self.block_commitment
     }
 

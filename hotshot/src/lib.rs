@@ -670,7 +670,7 @@ where
             Message<TYPES, I>,
             Proposal = VidDisperse<TYPES>,
             Certificate = VIDCertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockType>,
+            Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     SequencingTimeoutEx<TYPES, I>: ConsensusExchange<

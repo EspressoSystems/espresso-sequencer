@@ -16,14 +16,13 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    block_impl::VIDBlockPayload
+    block_impl::{VIDBlockHeader, VIDBlockPayload},
     certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{LeafType, ProposalType, QuorumProposal, SequencingLeaf},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
-        block_contents::BlockHeader,
         consensus_api::SequencingConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -461,7 +460,7 @@ where
                             height: proposal.block_header.block_number,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(self.block_commitment),
+                            deltas: Right(proposal.block_header.commitment),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -543,7 +542,7 @@ where
                             .is_valid_cert(cert)
                         {
                             // Validate the block commitment for non-genesis DAC.
-                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_commitment {
+                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_header.commitment {
                                 error!("Block commitment does not equal parent commitment");
                                 return false;
                             }
@@ -745,10 +744,10 @@ where
                     );
                     let leaf = SequencingLeaf {
                         view_number: view,
-                        height: proposal.data.height,
+                        height: proposal.data.block_header.block_number,
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.leaf_commitment(),
-                        deltas: Right(proposal.data.block_commitment),
+                        deltas: Right(proposal.data.block_header.commitment),
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender.to_bytes(),
@@ -770,10 +769,10 @@ where
                 let parent_commitment = parent.commit();
                 let leaf: SequencingLeaf<_> = SequencingLeaf {
                     view_number: view,
-                    height: proposal.data.height,
+                    height: proposal.data.block_header.block_number,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    deltas: Right(proposal.data.block_commitment),
+                    deltas: Right(proposal.data.block_header.commitment),
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender.to_bytes(),
@@ -1399,10 +1398,7 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        // let block_commitment = Some(self.block.commit());
-        if let Some(block) = &self.block {
-            let block_commitment = block.commit();
-
+        if let Some(block_commitment) = &self.block_commitment {
             let leaf = SequencingLeaf {
                 view_number: view,
                 height: parent_leaf.height + 1,
@@ -1410,7 +1406,7 @@ where
                 parent_commitment: parent_leaf.commit(),
                 // Use the block commitment rather than the block, so that the replica can construct
                 // the same leaf with the commitment.
-                deltas: Right(block_commitment),
+                deltas: Right(*block_commitment),
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().to_bytes(),
@@ -1423,9 +1419,8 @@ where
             let proposal = QuorumProposal {
                 block_header: VIDBlockHeader {
                     block_number: leaf.height,
-                    commitment: block_commitment,
+                    commitment: *block_commitment,
                 },
-                block_commitment,
                 view_number: leaf.view_number,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
@@ -1441,14 +1436,13 @@ where
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
->>>>>>> develop
             self.event_stream
                 .publish(SequencingHotShotEvent::QuorumProposalSend(
                     message,
                     self.quorum_exchange.public_key().clone(),
                 ))
                 .await;
-            self.block = None;
+            self.block_commitment = None;
             return true;
         }
         debug!("Self block was None");
