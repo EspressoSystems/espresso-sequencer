@@ -59,16 +59,7 @@ pub trait BlockPayload:
 
 /// Header of a block, which commits to a [`BlockPayload`].
 pub trait BlockHeader:
-    Serialize
-    + Clone
-    + Debug
-    // + Display
-    + Hash
-    + PartialEq
-    + Eq
-    + Send
-    + Sync
-    + DeserializeOwned
+    Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned
 {
     /// Block payload associated with the commitment.
     type Payload: BlockPayload;
