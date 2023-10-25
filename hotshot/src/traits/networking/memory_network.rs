@@ -361,7 +361,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
                         Arc::new(move |msg: Vec<u8>| {
                             let node2 = node.clone();
                             boxed_sync(async move {
-                                let _res = node2.broadcast_input(msg).await;
+                                let _res = node2.direct_input(msg).await;
                                 // NOTE we're dropping metrics here but this is only for testing
                                 // purposes. I think that should be okay
                             })

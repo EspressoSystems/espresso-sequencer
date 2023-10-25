@@ -452,9 +452,17 @@ impl<S> NetworkNodeHandle<S> {
         msg: &impl Serialize,
     ) -> Result<(), NetworkNodeHandleError> {
         let serialized_msg = bincode_opts().serialize(msg).context(SerializationSnafu)?;
+        self.direct_request_no_serialize(pid, serialized_msg).await
+    }
+
+    pub async fn direct_request_no_serialize(
+        &self,
+        pid: PeerId,
+        contents: Vec<u8>,
+    ) -> Result<(), NetworkNodeHandleError> {
         let req = ClientRequest::DirectRequest {
             pid,
-            contents: serialized_msg,
+            contents,
             retry_count: 1,
         };
         self.send_request(req).await
@@ -474,7 +482,7 @@ impl<S> NetworkNodeHandle<S> {
         self.send_request(req).await
     }
 
-    /// Forcefully disconnet from a peer
+    /// Forcefully disconnect from a peer
     /// # Errors
     /// If the channel is closed somehow
     /// Shouldnt' happen.
@@ -496,7 +504,11 @@ impl<S> NetworkNodeHandle<S> {
         msg: &impl Serialize,
     ) -> Result<(), NetworkNodeHandleError> {
         let serialized_msg = bincode_opts().serialize(msg).context(SerializationSnafu)?;
-        let req = ClientRequest::GossipMsg(topic, serialized_msg);
+        self.gossip_no_serialize(topic, serialized_msg).await
+    }
+
+    pub async fn gossip_no_serialize(&self, topic: String, msg: Vec<u8>) -> Result<(), NetworkNodeHandleError>{
+        let req = ClientRequest::GossipMsg(topic, msg);
         self.send_request(req).await
     }
 

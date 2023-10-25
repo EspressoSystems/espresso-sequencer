@@ -405,6 +405,9 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send {
     /// whether or not to send duplicates
     /// and whether or not to include noise with the message
     /// then send the message
+    /// note: usually self is stored in a rwlock
+    /// so instead of doing the sending part, we just fiddle with the message
+    /// then return a future that does the sending and delaying
     fn chaos_send_msg(
         &self,
         msg: Vec<u8>,
