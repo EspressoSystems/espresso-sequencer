@@ -40,7 +40,7 @@ async fn test_combined_network() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>(0)
         .launch()
         .run_test()
         .await
@@ -59,7 +59,7 @@ async fn test_stress_combined_network() {
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata::default_stress();
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>(0)
         .launch()
         .run_test()
         .await

@@ -1,6 +1,5 @@
-use hotshot_types::{traits::{signature_key::SignatureKey, election::ElectionConfig,}, ExecutionType, HotShotConfig};
+use hotshot_types::{traits::{signature_key::SignatureKey, election::ElectionConfig,}, ExecutionType, HotShotConfig, ValidatorConfig};
 use std::{
-    marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
     time::Duration,
@@ -52,40 +51,6 @@ pub struct WebServerConfig {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound(deserialize = ""))]
-pub struct ValidatorConfig<KEY: SignatureKey> {
-    /// The validator's public key and stake value
-    pub public_key: KEY,
-    /// The validator's private key, should be in the mempool, not public
-    pub private_key: KEY::PrivateKey,
-    /// The validator's stake
-    pub stake_value: u64,
-    /// The validator's public_key together with its stake value, which can be served as public parameter for key aggregation
-    pub entry: KEY::StakeTableEntry,
-}
-
-impl<KEY: SignatureKey> ValidatorConfig<KEY> {
-    fn generated_from_seed_indexed(seed: [u8; 32], index: u64, stake_value: u64) -> Self {
-        let (public_key, private_key) = KEY::generated_from_seed_indexed(
-            seed,
-            index,
-        );
-        Self {
-            public_key: public_key.clone(),
-            private_key: private_key,
-            stake_value: stake_value,
-            entry: public_key.get_stake_table_entry(stake_value),
-        }
-    }
-}
-
-impl<KEY: SignatureKey> Default for ValidatorConfig<KEY> {
-    fn default() -> Self {
-        Self::generated_from_seed_indexed([0u8; 32], 0, 1)
-    }
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-#[serde(bound(deserialize = ""))]
 pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub rounds: usize,
     pub transactions_per_round: usize,
@@ -101,10 +66,9 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<KEY::PrivateKey, KEY::StakeTableEntry, ELECTIONCONFIG>,
+    pub config: HotShotConfig<KEY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
-    _key_type_phantom: PhantomData<KEY>,
 }
 
 impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
@@ -123,7 +87,6 @@ impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
             election_config_type_name: std::any::type_name::<E>().to_string(),
             web_server_config: None,
             da_web_server_config: None,
-            _key_type_phantom: PhantomData,
             next_view_timeout: 10,
             num_bootrap: 5,
             propose_min_round_time: Duration::from_secs(0),
@@ -200,7 +163,6 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile> for NetworkConf
             start_delay_seconds: val.start_delay_seconds,
             web_server_config: val.web_server_config,
             da_web_server_config: val.da_web_server_config,
-            _key_type_phantom: PhantomData,
         }
     }
 }
@@ -232,7 +194,7 @@ pub struct HotShotConfigFile {
     pub propose_max_round_time: Duration,
 }
 
-impl<PRIVATEKEY, ENTRY, E> From<HotShotConfigFile> for HotShotConfig<PRIVATEKEY, ENTRY, E> {
+impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile> for HotShotConfig<KEY, E> {
     fn from(val: HotShotConfigFile) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
@@ -240,7 +202,7 @@ impl<PRIVATEKEY, ENTRY, E> From<HotShotConfigFile> for HotShotConfig<PRIVATEKEY,
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
             known_nodes_with_stake: Vec::new(),
-            known_nodes_sk: Vec::new(),
+            my_own_validator_config: ValidatorConfig::default(),
             da_committee_size: val.committee_nodes,
             next_view_timeout: val.next_view_timeout,
             timeout_ratio: val.timeout_ratio,

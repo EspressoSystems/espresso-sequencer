@@ -16,7 +16,6 @@ use hotshot_types::{
         node_implementation::{
             ExchangesType, NodeType, QuorumCommChannel, QuorumEx, QuorumNetwork,
         },
-        signature_key::SignatureKey,
     },
     HotShotConfig,
 };
@@ -92,8 +91,7 @@ where
     pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<
-        <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+        TYPES::SignatureKey,
         TYPES::ElectionConfigType,
     >,
 }
@@ -196,8 +194,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
         mut self,
         mut f: impl FnMut(
             &mut HotShotConfig<
-                <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-                <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+                TYPES::SignatureKey,
                 TYPES::ElectionConfigType,
             >,
         ),

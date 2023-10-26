@@ -201,6 +201,7 @@ pub trait RunDA<
         let config = self.get_config();
 
         // Get KeyPair for certificate Aggregation
+        // Sishan NOTE: Looks like this file is not used anymore, so ignore the following initialization on keys.
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let known_nodes_sk = config.config.known_nodes_sk.clone();
         let entry = known_nodes_with_stake

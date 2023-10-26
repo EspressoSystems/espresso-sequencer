@@ -57,7 +57,7 @@ async fn test_timeout_web() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -120,7 +120,7 @@ async fn test_timeout_libp2p() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>(0)
         .launch()
         .run_test()
         .await;

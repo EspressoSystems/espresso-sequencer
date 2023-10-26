@@ -59,7 +59,6 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub high_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
 
     /// A reference to the metrics trait
-    #[debug(skip)]
     pub metrics: Arc<ConsensusMetricsValue>,
 }
 

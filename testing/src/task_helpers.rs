@@ -25,6 +25,7 @@ use hotshot_types::{
         state::{ConsensusTime, TestableBlock},
     },
 };
+use tracing::error;
 
 pub async fn build_system_handle(
     node_id: u64,
@@ -34,7 +35,7 @@ pub async fn build_system_handle(
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 
-    let launcher = builder.gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>();
+    let launcher = builder.gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>(node_id);
 
     let networks = (launcher.resource_generator.channel_generator)(node_id);
     let storage = (launcher.resource_generator.storage)(node_id);
@@ -49,16 +50,8 @@ pub async fn build_system_handle(
     .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
-    let private_key = config
-        .known_nodes_sk
-        .get(node_id as usize)
-        .expect("node_id should be within the range of known_nodes")
-        .clone();
-    let public_key = <BLSPubKey as SignatureKey>::get_public_key(
-        known_nodes_with_stake
-            .get(node_id as usize)
-            .expect("node_id should be within the range of known_nodes"),
-    );
+    let private_key = config.my_own_validator_config.private_key.clone();
+    let public_key = config.my_own_validator_config.public_key.clone();
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
         <QuorumEx<SequencingTestTypes, SequencingMemoryImpl> as ConsensusExchange<
             SequencingTestTypes,

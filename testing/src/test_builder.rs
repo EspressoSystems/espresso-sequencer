@@ -7,7 +7,7 @@ use hotshot_types::message::{Message, SequencingMessage};
 
 use hotshot_types::{
     traits::node_implementation::{NodeType, QuorumEx, TestableExchange},
-    ExecutionType, HotShotConfig,
+    ExecutionType, HotShotConfig, ValidatorConfig,
 };
 
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
@@ -180,6 +180,7 @@ impl Default for TestMetadata {
 impl TestMetadata {
     pub fn gen_launcher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
+        node_id: u64,
     ) -> TestLauncher<TYPES, I>
     where
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
@@ -200,12 +201,10 @@ impl TestMetadata {
             ..
         } = self.clone();
 
-        let mut known_nodes_sk: Vec<<TYPES::SignatureKey as SignatureKey>::PrivateKey> = Vec::new();
         let known_nodes: Vec<<TYPES as NodeType>::SignatureKey> = (0..total_nodes)
             .map(|id| {
                 let priv_key =
                     TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], id as u64).1;
-                known_nodes_sk.push(priv_key.clone());
                 TYPES::SignatureKey::from_private(&priv_key)
             })
             .collect();
@@ -213,7 +212,11 @@ impl TestMetadata {
             (0..total_nodes)
                 .map(|id| known_nodes[id].get_stake_table_entry(1u64))
                 .collect();
-
+        let my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
+            [0u8; 32],
+            node_id,
+            1,
+        );
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
             // TODO this doesn't exist anymore
@@ -223,7 +226,7 @@ impl TestMetadata {
             min_transactions,
             max_transactions: NonZeroUsize::new(99999).unwrap(),
             known_nodes_with_stake,
-            known_nodes_sk,
+            my_own_validator_config,
             da_committee_size,
             next_view_timeout: 500,
             timeout_ratio: (11, 10),
@@ -250,7 +253,7 @@ impl TestMetadata {
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
-            |a: &mut HotShotConfig<<TYPES::SignatureKey as SignatureKey>::PrivateKey, <TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
+            |a: &mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>| {
                 a.next_view_timeout = next_view_timeout;
                 a.timeout_ratio = timeout_ratio;
                 a.round_start_delay = round_start_delay;

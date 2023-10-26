@@ -22,7 +22,7 @@ use hotshot_types::{
         node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumEx},
         signature_key::SignatureKey,
     },
-    HotShotConfig,
+    HotShotConfig, ValidatorConfig,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -207,8 +207,9 @@ where
             let initializer =
                 HotShotInitializer::<TYPES, I::Leaf>::from_genesis(I::block_genesis()).unwrap();
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
+            let validator_config = ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
             let hotshot = self
-                .add_node_with_config(networks, storage, initializer, config)
+                .add_node_with_config(networks, storage, initializer, config, validator_config)
                 .await;
             if late_start.contains(&node_id) {
                 self.late_start.insert(node_id, hotshot);
@@ -231,10 +232,10 @@ where
         storage: I::Storage,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
         config: HotShotConfig<
-            <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+            TYPES::SignatureKey,
             TYPES::ElectionConfigType,
         >,
+        validator_config: ValidatorConfig<TYPES::SignatureKey>,
     ) -> SystemContext<TYPES, I>
     where
         I::Exchanges: ExchangesType<
@@ -247,20 +248,11 @@ where
         let node_id = self.next_node_id;
         self.next_node_id += 1;
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
-        // Generate key pair for certificate aggregation
-        let private_key = config
-            .known_nodes_sk
-            .get(node_id as usize)
-            .expect("node_id should be within the range of known_nodes")
-            .clone();
-        let public_key = <<TYPES as NodeType>::SignatureKey as SignatureKey>::get_public_key(
-            known_nodes_with_stake
-                .get(node_id as usize)
-                .expect("node_id should be within the range of known_nodes"),
-        );
-        let entry = known_nodes_with_stake
-            .get(node_id as usize)
-            .expect("node_id should be within the range of known_nodes");
+        // Get key pair for certificate aggregation
+        let private_key = validator_config.private_key.clone();
+        let public_key = validator_config.public_key.clone();
+        let entry = 
+            public_key.get_stake_table_entry(validator_config.stake_value);
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
             <QuorumEx<TYPES,I> as ConsensusExchange<
                 TYPES,
