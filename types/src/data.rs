@@ -14,7 +14,7 @@ use crate::{
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
         BlockPayload, State,
-    }, error,
+    },
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -33,7 +33,6 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
-use tracing::error;
 
 /// Type-safe wrapper around `u64` so we know the thing we're talking about is a view number.
 #[derive(

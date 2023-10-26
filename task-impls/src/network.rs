@@ -108,7 +108,6 @@ impl<
                                 SequencingHotShotEvent::DAVoteRecv(vote.clone())
                             }
                             CommitteeConsensusMessage::DACertificate(cert) => {
-                                // panic!("Recevid DA C! ");
                                 SequencingHotShotEvent::DACRecv(cert)
                             }
                             CommitteeConsensusMessage::VidDisperseMsg(proposal) => {

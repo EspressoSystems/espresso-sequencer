@@ -305,7 +305,8 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if view < self.cur_view - 1 {
+                // Sishan NOTE: Looks like for this `VidDisperseRecv` task we do not have a view change
+                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away VID disperse data that is more than one view older");
                     return None;
                 }
