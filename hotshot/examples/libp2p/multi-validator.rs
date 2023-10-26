@@ -15,8 +15,6 @@ pub mod types;
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
-#[path = "../infra/modDA.rs"]
-pub mod infra_da;
 
 #[derive(Parser, Debug, Clone)]
 struct MultiValidatorArgs {
@@ -49,7 +47,7 @@ async fn main() {
     let mut nodes = Vec::new();
     for _ in 0..args.num_nodes {
         let node = async_spawn(async move {
-            infra_da::main_entry_point::<
+            infra::main_entry_point::<
                 DemoTypes,
                 ThisMembership,
                 DANetwork,

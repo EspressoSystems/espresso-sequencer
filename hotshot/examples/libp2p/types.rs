@@ -1,4 +1,4 @@
-use crate::infra_da::Libp2pDARun;
+use crate::infra::Libp2pDARun;
 use hotshot::{
     demo::DemoTypes,
     traits::{

@@ -1,4 +1,4 @@
-use crate::infra_da::WebServerDARun;
+use crate::infra::WebServerDARun;
 use hotshot::{
     demo::DemoTypes,
     traits::{

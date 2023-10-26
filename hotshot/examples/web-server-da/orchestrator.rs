@@ -6,16 +6,12 @@ use hotshot::demo::DemoTypes;
 use tracing::instrument;
 use types::{ThisMembership, VIDNetwork};
 
-use crate::{
-    infra::OrchestratorArgs,
-    infra_da::run_orchestrator_da,
-    types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork},
-};
+use crate::infra::run_orchestrator;
+use crate::infra::OrchestratorArgs;
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork};
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
-#[path = "../infra/modDA.rs"]
-pub mod infra_da;
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -28,7 +24,7 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator_da::<
+    run_orchestrator::<
         DemoTypes,
         ThisMembership,
         DANetwork,
