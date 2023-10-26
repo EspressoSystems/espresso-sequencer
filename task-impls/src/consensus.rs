@@ -1318,6 +1318,7 @@ where
     }
 
     /// Sends a proposal if possible from the high qc we have
+    #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
         _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
