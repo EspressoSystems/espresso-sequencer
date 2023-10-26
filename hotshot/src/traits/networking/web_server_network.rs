@@ -1082,6 +1082,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
             port,
         ));
 
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let known_nodes = (0..expected_node_count as u64)
             .map(|id| {
                 TYPES::SignatureKey::from_private(

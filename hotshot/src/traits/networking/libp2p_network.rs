@@ -150,6 +150,7 @@ where
             "DA committee size must be less than or equal to total # nodes"
         );
         let bootstrap_addrs: PeerInfoVec = Arc::default();
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
 
@@ -174,6 +175,7 @@ where
                 let addr =
                     // Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/0/quic-v1")).unwrap();
                     Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{}{}/quic-v1", 5000 + node_id, network_id)).unwrap();
+                // We assign node's public key and stake value rather than read from config file since it's a test
                 let privkey =
                     TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
                 let pubkey = TYPES::SignatureKey::from_private(&privkey);

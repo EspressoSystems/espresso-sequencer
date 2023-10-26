@@ -207,6 +207,7 @@ where
             let initializer =
                 HotShotInitializer::<TYPES, I::Leaf>::from_genesis(I::block_genesis()).unwrap();
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
+            // We assign node's public key and stake value rather than read from config file since it's a test
             let validator_config =
                 ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
             let hotshot = self
