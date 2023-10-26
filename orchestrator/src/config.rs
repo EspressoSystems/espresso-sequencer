@@ -235,14 +235,16 @@ fn default_padding() -> usize {
 
 impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
     fn default() -> Self {
-     let gen_known_nodes_with_stake = (0..10)
-        .map(|node_id| {
-            let cur_validator_config: ValidatorConfig<KEY> = 
-                ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
-            
-            cur_validator_config.public_key.get_stake_table_entry(cur_validator_config.stake_value)   
-        } )
-        .collect();
+        let gen_known_nodes_with_stake = (0..10)
+            .map(|node_id| {
+                let cur_validator_config: ValidatorConfig<KEY> =
+                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+
+                cur_validator_config
+                    .public_key
+                    .get_stake_table_entry(cur_validator_config.stake_value)
+            })
+            .collect();
         Self {
             total_nodes: NonZeroUsize::new(10).unwrap(),
             my_own_validator_config: ValidatorConfig::default(),

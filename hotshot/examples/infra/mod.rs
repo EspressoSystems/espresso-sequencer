@@ -103,23 +103,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
         toml::from_str::<NetworkConfigFile<TYPES::SignatureKey>>(&config_file_as_string)
             .expect("Unable to convert config file to TOML");
 
-    let mut config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> =
-        config_toml.into();
-
-    // Generate network's public keys
-    let known_nodes: Vec<_> = (0..config.config.total_nodes.get())
-        .map(|node_id| {
-            let (key_pair, sk) = TYPES::SignatureKey::generated_from_seed_indexed(
-                config.seed,
-                node_id.try_into().unwrap(),
-            );
-            key_pair
-        })
-        .collect();
-
-    config.config.known_nodes_with_stake = (0..config.config.total_nodes.get())
-        .map(|node_id| known_nodes[node_id].get_stake_table_entry(1u64))
-        .collect();
+    let config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> = config_toml.into();
     config
 }
 

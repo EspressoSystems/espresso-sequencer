@@ -201,6 +201,7 @@ impl TestMetadata {
             ..
         } = self.clone();
 
+        // We will assign known_nodes' public key and stake value rather than read from config file since it's a test
         let known_nodes: Vec<<TYPES as NodeType>::SignatureKey> = (0..total_nodes)
             .map(|id| {
                 let priv_key =

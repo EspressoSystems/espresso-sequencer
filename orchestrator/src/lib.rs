@@ -99,13 +99,12 @@ where
 
         //add new node's key to stake table
         if self.config.web_server_config.clone().is_some() {
-            let new_key = KEY::get_public_key(
-                self.config
-                    .config
-                    .known_nodes_with_stake
-                    .get(node_index as usize)
-                    .expect("node_id should be within the range of known_nodes"),
-            );
+            let new_key = self
+                .config
+                .config
+                .my_own_validator_config
+                .public_key
+                .clone();
             let client_clone = self.client.clone().unwrap();
             async move {
                 client_clone
