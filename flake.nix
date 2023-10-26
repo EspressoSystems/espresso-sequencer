@@ -50,10 +50,10 @@
             src = fetchFromGitHub {
               owner = "protofire";
               repo = pname;
-              rev = "v${version}";
-              hash = "sha256-i2W+2My4DixRY+uOGi1iSdLLNLsdzdGRrPibQTPxtr8=";
+              rev = "refs/tags/${version}";
+              hash = "sha256-VI6J2iSgimcT9TWPlPD6aIDfRFmlQafCc/J4dwF9rMs=";
             };
-            npmDepsHash = "sha256-4icK1K8o9OfFWs4fnQGOgGt6tI4By0EWPQ3YerUDYU8=";
+            npmDepsHash = "sha256-lSe3Rt3I2yFy9Je3SLD2QJA/608ppvbLWmwDt6vkDIk=";
             dontNpmBuild = true;
           };
 
