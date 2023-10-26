@@ -12,8 +12,6 @@ pub mod types;
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
-#[path = "../infra/modDA.rs"]
-pub mod infra_da;
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -29,7 +27,7 @@ async fn main() {
         "connecting to orchestrator at {:?}:{:?}",
         args.host, args.port
     );
-    infra_da::main_entry_point::<
+    infra::main_entry_point::<
         DemoTypes,
         ThisMembership,
         DANetwork,
