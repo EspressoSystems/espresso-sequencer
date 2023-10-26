@@ -45,7 +45,6 @@ pub fn load_config_from_file<TYPES: NodeType>(
         config_toml.into();
 
     // Generate network's public keys
-    // Sishan NOTE: Looks like this file is not used anymore, so ignore the following initialization on keys.
     let mut known_nodes_sk = Vec::new();
     let known_nodes: Vec<_> = (0..config.config.total_nodes.get())
         .map(|node_id| {
