@@ -25,7 +25,6 @@ use hotshot_types::{
         state::{ConsensusTime, TestableBlock},
     },
 };
-use tracing::error;
 
 pub async fn build_system_handle(
     node_id: u64,
