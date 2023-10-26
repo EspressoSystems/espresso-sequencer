@@ -107,14 +107,12 @@ pub fn load_config_from_file<TYPES: NodeType>(
         config_toml.into();
 
     // Generate network's public keys
-    let mut known_nodes_sk = Vec::new();
     let known_nodes: Vec<_> = (0..config.config.total_nodes.get())
         .map(|node_id| {
             let (key_pair, sk) = TYPES::SignatureKey::generated_from_seed_indexed(
                 config.seed,
                 node_id.try_into().unwrap(),
             );
-            known_nodes_sk.push(sk);
             key_pair
         })
         .collect();
