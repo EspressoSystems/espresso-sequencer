@@ -29,9 +29,7 @@ pub struct BLSPubKey {
 
 impl PartialOrd for BLSPubKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let self_bytes = &self.pub_key.to_string();
-        let other_bytes = &other.pub_key.to_string();
-        self_bytes.partial_cmp(other_bytes)
+        Some(self.cmp(other))
     }
 }
 

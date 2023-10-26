@@ -56,9 +56,7 @@ impl BLSPrivKey {
 
 impl PartialOrd for BLSPrivKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let self_bytes = &self.priv_key.to_string();
-        let other_bytes = &other.priv_key.to_string();
-        self_bytes.partial_cmp(other_bytes)
+        Some(self.cmp(other))
     }
 }
 
