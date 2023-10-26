@@ -782,7 +782,6 @@ where
             }
             all_keys.insert(pubkey);
         }
-
         let node_config = config_builder.build().unwrap();
         let underlying_quorum_network = Libp2pNetwork::new(
             NetworkingMetricsValue::new(),
@@ -799,7 +798,8 @@ where
             // NOTE: this introduces an invariant that the keys are assigned using this indexed
             // function
             all_keys,
-            da_keys,
+            da_keys.clone(),
+            da_keys.contains(&pubkey),
         )
         .await
         .unwrap();
