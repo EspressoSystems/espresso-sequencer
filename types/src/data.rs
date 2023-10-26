@@ -102,7 +102,6 @@ impl std::ops::Deref for ViewNumber {
 impl std::ops::Sub<u64> for ViewNumber {
     type Output = ViewNumber;
     fn sub(self, rhs: u64) -> Self::Output {
-        error!("self.0 = {}, rhs = {}", self.0, rhs);
         Self(self.0 - rhs)
     }
 }
