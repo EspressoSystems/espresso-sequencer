@@ -20,7 +20,7 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_types::traits::election::VIDExchange;
+use hotshot_types::{block_impl::VIDBlockHeader, traits::election::VIDExchange};
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
@@ -460,7 +460,11 @@ pub struct WebServerDARun<
 
 #[async_trait]
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType<
+            Transaction = VIDTransaction,
+            BlockPayload = VIDBlockPayload,
+            BlockHeader = VIDBlockHeader,
+        >,
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
@@ -628,7 +632,11 @@ pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP
 
 #[async_trait]
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType<
+            Transaction = VIDTransaction,
+            BlockPayload = VIDBlockPayload,
+            BlockHeader = VIDBlockHeader,
+        >,
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
@@ -857,7 +865,11 @@ where
 
 /// Main entry point for validators
 pub async fn main_entry_point<
-    TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType<
+        Transaction = VIDTransaction,
+        BlockPayload = VIDBlockPayload,
+        BlockHeader = VIDBlockHeader,
+    >,
     MEMBERSHIP: Membership<TYPES> + Debug,
     DANETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     QUORUMNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
