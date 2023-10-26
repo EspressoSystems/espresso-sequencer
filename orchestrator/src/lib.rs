@@ -36,11 +36,11 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
 }
 
 #[derive(Default, Clone)]
-struct OrchestratorState<KEY, ENTRY, ELECTION> {
+struct OrchestratorState<KEY: SignatureKey, ELECTION: ElectionConfig> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
     /// The network configuration
-    config: NetworkConfig<KEY, ENTRY, ELECTION>,
+    config: NetworkConfig<KEY, ELECTION>,
     /// Whether nodes should start their HotShot instances
     /// Will be set to true once all nodes post they are ready to start
     start: bool,
@@ -51,9 +51,9 @@ struct OrchestratorState<KEY, ENTRY, ELECTION> {
 }
 
 impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
-    OrchestratorState<KEY, KEY::StakeTableEntry, ELECTION>
+    OrchestratorState<KEY, ELECTION>
 {
-    pub fn new(network_config: NetworkConfig<KEY, KEY::StakeTableEntry, ELECTION>) -> Self {
+    pub fn new(network_config: NetworkConfig<KEY, ELECTION>) -> Self {
         let mut web_client = None;
         if network_config.web_server_config.is_some() {
             let base_url = "http://0.0.0.0/9000".to_string().parse().unwrap();
@@ -69,22 +69,21 @@ impl<KEY: SignatureKey + 'static, ELECTION: ElectionConfig + 'static>
     }
 }
 
-pub trait OrchestratorApi<KEY, ENTRY, ELECTION> {
+pub trait OrchestratorApi<KEY: SignatureKey, ELECTION: ElectionConfig> {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError>;
     fn post_getconfig(
         &mut self,
         node_index: u16,
-    ) -> Result<NetworkConfig<KEY, ENTRY, ELECTION>, ServerError>;
+    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError>;
     fn get_start(&self) -> Result<bool, ServerError>;
     fn post_ready(&mut self) -> Result<(), ServerError>;
     fn post_run_results(&mut self) -> Result<(), ServerError>;
 }
 
-impl<KEY, ELECTION> OrchestratorApi<KEY, KEY::StakeTableEntry, ELECTION>
-    for OrchestratorState<KEY, KEY::StakeTableEntry, ELECTION>
+impl<KEY, ELECTION> OrchestratorApi<KEY, ELECTION> for OrchestratorState<KEY, ELECTION>
 where
     KEY: serde::Serialize + Clone + SignatureKey,
-    ELECTION: serde::Serialize + Clone + Send,
+    ELECTION: serde::Serialize + Clone + Send + ElectionConfig,
 {
     fn post_identity(&mut self, identity: IpAddr) -> Result<u16, ServerError> {
         let node_index = self.latest_index;
@@ -100,7 +99,13 @@ where
 
         //add new node's key to stake table
         if self.config.web_server_config.clone().is_some() {
-            let new_key = KEY::generated_from_seed_indexed(self.config.seed, node_index.into()).0;
+            let new_key = KEY::get_public_key(
+                self.config
+                    .config
+                    .known_nodes_with_stake
+                    .get(node_index as usize)
+                    .expect("node_id should be within the range of known_nodes"),
+            );
             let client_clone = self.client.clone().unwrap();
             async move {
                 client_clone
@@ -140,7 +145,7 @@ where
     fn post_getconfig(
         &mut self,
         _node_index: u16,
-    ) -> Result<NetworkConfig<KEY, KEY::StakeTableEntry, ELECTION>, ServerError> {
+    ) -> Result<NetworkConfig<KEY, ELECTION>, ServerError> {
         if self.config.libp2p_config.is_some() {
             let libp2p_config = self.config.clone().libp2p_config.unwrap();
             if libp2p_config.bootstrap_nodes.len() < libp2p_config.num_bootstrap_nodes {
@@ -189,12 +194,12 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY, ELECTION, ENTRY, State>() -> Result<Api<State, ServerError>, ApiError>
+fn define_api<KEY: SignatureKey, ELECTION: ElectionConfig, State>(
+) -> Result<Api<State, ServerError>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
-    <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ENTRY, ELECTION>,
+    <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY, ELECTION>,
     KEY: serde::Serialize,
-    ENTRY: serde::Serialize,
     ELECTION: serde::Serialize,
 {
     let api_toml = toml::from_str::<toml::Value>(include_str!(concat!(
@@ -237,7 +242,7 @@ where
 
 /// Runs the orchestrator
 pub async fn run_orchestrator<KEY, ELECTION>(
-    network_config: NetworkConfig<KEY, KEY::StakeTableEntry, ELECTION>,
+    network_config: NetworkConfig<KEY, ELECTION>,
     host: IpAddr,
     port: u16,
 ) -> io::Result<()>
@@ -247,10 +252,10 @@ where
 {
     let api = define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 
-    let state: RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, ELECTION>> =
+    let state: RwLock<OrchestratorState<KEY, ELECTION>> =
         RwLock::new(OrchestratorState::new(network_config));
 
-    let mut app = App::<RwLock<OrchestratorState<KEY, KEY::StakeTableEntry, ELECTION>>, ServerError>::with_state(state);
+    let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
     app.register_module("api", api.unwrap())
         .expect("Error registering api");
     tracing::error!("lisening on {:?}:{:?}", host, port);

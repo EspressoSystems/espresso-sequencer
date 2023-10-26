@@ -1,6 +1,8 @@
-use hotshot_types::{ExecutionType, HotShotConfig};
+use hotshot_types::{
+    traits::{election::ElectionConfig, signature_key::SignatureKey},
+    ExecutionType, HotShotConfig, ValidatorConfig,
+};
 use std::{
-    marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
     time::Duration,
@@ -51,7 +53,8 @@ pub struct WebServerConfig {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
+#[serde(bound(deserialize = ""))]
+pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub rounds: usize,
     pub transactions_per_round: usize,
     pub num_bootrap: usize,
@@ -65,13 +68,12 @@ pub struct NetworkConfig<KEY, ENTRY, ELECTIONCONFIG> {
     pub key_type_name: String,
     pub election_config_type_name: String,
     pub libp2p_config: Option<Libp2pConfig>,
-    pub config: HotShotConfig<ENTRY, ELECTIONCONFIG>,
+    pub config: HotShotConfig<KEY, ELECTIONCONFIG>,
     pub web_server_config: Option<WebServerConfig>,
     pub da_web_server_config: Option<WebServerConfig>,
-    _key_type_phantom: PhantomData<KEY>,
 }
 
-impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
+impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
     fn default() -> Self {
         Self {
             rounds: default_rounds(),
@@ -80,13 +82,12 @@ impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
             seed: [0u8; 32],
             padding: default_padding(),
             libp2p_config: None,
-            config: default_config().into(),
+            config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
             key_type_name: std::any::type_name::<K>().to_string(),
             election_config_type_name: std::any::type_name::<E>().to_string(),
             web_server_config: None,
             da_web_server_config: None,
-            _key_type_phantom: PhantomData,
             next_view_timeout: 10,
             num_bootrap: 5,
             propose_min_round_time: Duration::from_secs(0),
@@ -96,7 +97,8 @@ impl<K, ENTRY, E> Default for NetworkConfig<K, ENTRY, E> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct NetworkConfigFile {
+#[serde(bound(deserialize = ""))]
+pub struct NetworkConfigFile<KEY: SignatureKey> {
     #[serde(default = "default_rounds")]
     pub rounds: usize,
     #[serde(default = "default_transactions_per_round")]
@@ -111,8 +113,8 @@ pub struct NetworkConfigFile {
     pub start_delay_seconds: u64,
     #[serde(default)]
     pub libp2p_config: Option<Libp2pConfigFile>,
-    #[serde(default = "default_config")]
-    pub config: HotShotConfigFile,
+    #[serde(default)]
+    pub config: HotShotConfigFile<KEY>,
     #[serde(default = "default_web_server_config")]
     pub web_server_config: Option<WebServerConfig>,
     #[serde(default = "default_web_server_config")]
@@ -123,8 +125,8 @@ fn default_web_server_config() -> Option<WebServerConfig> {
     None
 }
 
-impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
-    fn from(val: NetworkConfigFile) -> Self {
+impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkConfig<K, E> {
+    fn from(val: NetworkConfigFile<K>) -> Self {
         NetworkConfig {
             rounds: val.rounds,
             transactions_per_round: val.transactions_per_round,
@@ -162,16 +164,18 @@ impl<K, ENTRY, E> From<NetworkConfigFile> for NetworkConfig<K, ENTRY, E> {
             start_delay_seconds: val.start_delay_seconds,
             web_server_config: val.web_server_config,
             da_web_server_config: val.da_web_server_config,
-            _key_type_phantom: PhantomData,
         }
     }
 }
 
 /// Holds configuration for a `HotShot`
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct HotShotConfigFile {
+#[serde(bound(deserialize = ""))]
+pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// Total number of nodes in the network
     pub total_nodes: NonZeroUsize,
+    /// My own public key, secret key, stake value
+    pub my_own_validator_config: ValidatorConfig<KEY>,
     /// Number of committee nodes
     pub committee_nodes: usize,
     /// Maximum transactions per block
@@ -194,14 +198,15 @@ pub struct HotShotConfigFile {
     pub propose_max_round_time: Duration,
 }
 
-impl<ENTRY, E> From<HotShotConfigFile> for HotShotConfig<ENTRY, E> {
-    fn from(val: HotShotConfigFile) -> Self {
+impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY, E> {
+    fn from(val: HotShotConfigFile<KEY>) -> Self {
         HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: val.total_nodes,
             max_transactions: val.max_transactions,
             min_transactions: val.min_transactions,
             known_nodes_with_stake: Vec::new(),
+            my_own_validator_config: val.my_own_validator_config,
             da_committee_size: val.committee_nodes,
             next_view_timeout: val.next_view_timeout,
             timeout_ratio: val.timeout_ratio,
@@ -225,19 +230,23 @@ fn default_transactions_per_round() -> usize {
 fn default_padding() -> usize {
     100
 }
-fn default_config() -> HotShotConfigFile {
-    HotShotConfigFile {
-        total_nodes: NonZeroUsize::new(10).unwrap(),
-        committee_nodes: 5,
-        max_transactions: NonZeroUsize::new(100).unwrap(),
-        min_transactions: 1,
-        next_view_timeout: 10000,
-        timeout_ratio: (11, 10),
-        round_start_delay: 1,
-        start_delay: 1,
-        propose_min_round_time: Duration::from_secs(0),
-        propose_max_round_time: Duration::from_secs(10),
-        num_bootstrap: 5,
+
+impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
+    fn default() -> Self {
+        Self {
+            total_nodes: NonZeroUsize::new(10).unwrap(),
+            my_own_validator_config: ValidatorConfig::default(),
+            committee_nodes: 5,
+            max_transactions: NonZeroUsize::new(100).unwrap(),
+            min_transactions: 1,
+            next_view_timeout: 10000,
+            timeout_ratio: (11, 10),
+            round_start_delay: 1,
+            start_delay: 1,
+            propose_min_round_time: Duration::from_secs(0),
+            propose_max_round_time: Duration::from_secs(10),
+            num_bootstrap: 5,
+        }
     }
 }
 

@@ -24,7 +24,7 @@ async fn test_success() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -63,7 +63,7 @@ async fn test_with_failures_one() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -112,7 +112,7 @@ async fn test_with_failures_half_f() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -173,7 +173,7 @@ async fn test_with_failures_f() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>(0)
         .launch()
         .run_test()
         .await;

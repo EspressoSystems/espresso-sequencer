@@ -39,7 +39,7 @@ async fn web_server_network() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
+        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>(0)
         .launch()
         .run_test()
         .await;
