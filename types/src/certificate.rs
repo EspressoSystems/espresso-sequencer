@@ -35,8 +35,8 @@ pub struct DACertificate<TYPES: NodeType> {
     /// This value is covered by the threshold signature.
     pub view_number: TYPES::Time,
 
-    /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockPayload>,
+    /// committment to the block payload
+    pub payload_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -50,8 +50,8 @@ pub struct VIDCertificate<TYPES: NodeType> {
     /// The view number this VID certificate was generated during
     pub view_number: TYPES::Time,
 
-    /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockPayload>,
+    /// Committment to the block payload
+    pub payload_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -270,7 +270,7 @@ impl<TYPES: NodeType>
         DACertificate {
             view_number: vote.get_view(),
             signatures,
-            block_commitment: vote.block_commitment,
+            payload_commitment: vote.payload_commitment,
         }
     }
 
@@ -283,7 +283,7 @@ impl<TYPES: NodeType>
     }
 
     fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
-        self.block_commitment
+        self.payload_commitment
     }
 
     fn is_genesis(&self) -> bool {
@@ -308,7 +308,7 @@ impl<TYPES: NodeType>
         VIDCertificate {
             view_number: vote.get_view(),
             signatures,
-            block_commitment: vote.block_commitment,
+            payload_commitment: vote.payload_commitment,
         }
     }
 
@@ -321,7 +321,7 @@ impl<TYPES: NodeType>
     }
 
     fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
-        self.block_commitment
+        self.payload_commitment
     }
 
     fn is_genesis(&self) -> bool {

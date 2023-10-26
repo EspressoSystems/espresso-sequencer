@@ -63,10 +63,9 @@ async fn build_vote(
 
     let leaf: SequencingLeaf<_> = SequencingLeaf {
         view_number: view,
-        height: proposal.block_header.block_number,
         justify_qc: proposal.justify_qc.clone(),
         parent_commitment,
-        deltas: Right(proposal.block_header.commitment),
+        deltas: Right(proposal.block_header),
         rejected: Vec::new(),
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),

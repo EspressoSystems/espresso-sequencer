@@ -16,13 +16,14 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload},
+    block_impl::VIDBlockPayload,
     certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{LeafType, ProposalType, QuorumProposal, SequencingLeaf},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
+        block_contents::BlockHeader,
         consensus_api::SequencingConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -94,8 +95,8 @@ pub struct SequencingConsensusTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// The commitment to the current block submitted to DA
-    pub block_commitment: Option<Commitment<TYPES::BlockPayload>>,
+    /// The commitment to the current block payload submitted to DA
+    pub payload_commitment: Option<Commitment<TYPES::BlockPayload>>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<SequencingQuorumEx<TYPES, I>>,
@@ -360,13 +361,14 @@ where
 }
 
 impl<
-        TYPES: NodeType<BlockHeader = VIDBlockHeader, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType<BlockHeader = H, BlockPayload = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
         A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        H: BlockHeader<Payload = VIDBlockPayload>,
     > SequencingConsensusTaskState<TYPES, I, A>
 where
     SequencingQuorumEx<TYPES, I>: ConsensusExchange<
@@ -457,10 +459,9 @@ where
 
                         let leaf: SequencingLeaf<_> = SequencingLeaf {
                             view_number: view,
-                            height: proposal.block_header.block_number,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_header.commitment),
+                            deltas: Right(proposal.block_header.clone()),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -527,10 +528,9 @@ where
 
                         let leaf: SequencingLeaf<_> = SequencingLeaf {
                             view_number: view,
-                            height: proposal.block_header.block_number,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_header.commitment),
+                            deltas: Right(proposal.block_header.clone()),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -541,9 +541,9 @@ where
                             .committee_exchange
                             .is_valid_cert(cert)
                         {
-                            // Validate the block commitment for non-genesis DAC.
-                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_header.commitment {
-                                error!("Block commitment does not equal parent commitment");
+                            // Validate the block payload commitment for non-genesis DAC.
+                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_header.payload_commitment() {
+                                error!("Block payload commitment does not equal parent commitment");
                                 return false;
                             }
                             self.quorum_exchange.create_yes_message(
@@ -744,10 +744,9 @@ where
                     );
                     let leaf = SequencingLeaf {
                         view_number: view,
-                        height: proposal.data.block_header.block_number,
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.leaf_commitment(),
-                        deltas: Right(proposal.data.block_header.commitment),
+                        deltas: Right(proposal.data.block_header),
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender.to_bytes(),
@@ -769,29 +768,17 @@ where
                 let parent_commitment = parent.commit();
                 let leaf: SequencingLeaf<_> = SequencingLeaf {
                     view_number: view,
-                    height: proposal.data.block_header.block_number,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    deltas: Right(proposal.data.block_header.commitment),
+                    deltas: Right(proposal.data.block_header),
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender.to_bytes(),
                 };
                 let leaf_commitment = leaf.commit();
 
-                // Validate the `height`
-                // TODO Remove height from proposal validation; view number is sufficient
-                // https://github.com/EspressoSystems/HotShot/issues/1796
-                if leaf.height != parent.height + 1 {
-                    error!(
-                        "Incorrect height in proposal (expected {}, got {})",
-                        parent.height + 1,
-                        leaf.height
-                    );
-                    return;
-                }
                 // Validate the signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
-                else if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
                     error!(?proposal.signature, "Could not verify proposal.");
                     return;
                 }
@@ -869,7 +856,7 @@ where
                                     consensus
                                     .metrics
                                     .last_synced_block_height
-                                    .set(usize::try_from(leaf.height).unwrap_or(0));
+                                    .set(usize::try_from(leaf.get_height()).unwrap_or(0));
 
                                             // If the full block is available for this leaf, include it in the leaf
                                             // chain that we send to the client.
@@ -884,7 +871,7 @@ where
 
                                     leaf_views.push(leaf.clone());
                                     match &leaf.deltas {
-                                        Left(block) => {
+                                        Left((_,block)) => {
                                             let txns = block.contained_transactions();
                                             for txn in txns {
                                                 included_txns.insert(txn);
@@ -1323,8 +1310,8 @@ where
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
-            SequencingHotShotEvent::SendBlockCommitment(block_commitment) => {
-                self.block_commitment = Some(block_commitment);
+            SequencingHotShotEvent::SendPayloadCommitment(payload_commitment) => {
+                self.payload_commitment = Some(payload_commitment);
             }
             _ => {}
         }
@@ -1380,6 +1367,16 @@ where
         }
 
         let parent_leaf = leaf.clone();
+        let parent_header = match parent_leaf.deltas {
+            Left((_, ref payload)) => {
+                if parent_leaf.view_number != TYPES::Time::new(0) {
+                    error!("Non-genesis parent leaf should contain the block header rather than payload.");
+                    return false;
+                }
+                TYPES::BlockHeader::genesis(payload.clone())
+            }
+            Right(ref header) => header.clone(),
+        };
 
         let original_parent_hash = parent_leaf.commit();
 
@@ -1398,15 +1395,17 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        if let Some(block_commitment) = &self.block_commitment {
+        if let Some(payload_commitment) = &self.payload_commitment {
             let leaf = SequencingLeaf {
                 view_number: view,
-                height: parent_leaf.height + 1,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
-                // Use the block commitment rather than the block, so that the replica can construct
-                // the same leaf with the commitment.
-                deltas: Right(*block_commitment),
+                // Use the payload commitment rather than the payload, so that the replica can
+                // construct the same leaf with the commitment.
+                deltas: Right(TYPES::BlockHeader::new(
+                    *payload_commitment,
+                    parent_header.clone(),
+                )),
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().to_bytes(),
@@ -1417,10 +1416,7 @@ where
                 .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_header: VIDBlockHeader {
-                    block_number: leaf.height,
-                    commitment: *block_commitment,
-                },
+                block_header: TYPES::BlockHeader::new(*payload_commitment, parent_header.clone()),
                 view_number: leaf.view_number,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
@@ -1442,7 +1438,7 @@ where
                     self.quorum_exchange.public_key().clone(),
                 ))
                 .await;
-            self.block_commitment = None;
+            self.payload_commitment = None;
             return true;
         }
         debug!("Self block was None");
@@ -1501,13 +1497,14 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
-    TYPES: NodeType<BlockHeader = VIDBlockHeader, BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType<BlockHeader = H, BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
     A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+    H: BlockHeader<Payload = VIDBlockPayload>,
 >(
     event: SequencingHotShotEvent<TYPES, I>,
     mut state: SequencingConsensusTaskState<TYPES, I, A>,
@@ -1557,7 +1554,7 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | SequencingHotShotEvent::DACRecv(_)
             | SequencingHotShotEvent::VidCertRecv(_)
             | SequencingHotShotEvent::ViewChange(_)
-            | SequencingHotShotEvent::SendBlockCommitment(_)
+            | SequencingHotShotEvent::SendPayloadCommitment(_)
             | SequencingHotShotEvent::Timeout(_)
             | SequencingHotShotEvent::TimeoutVoteRecv(_)
             | SequencingHotShotEvent::Shutdown,

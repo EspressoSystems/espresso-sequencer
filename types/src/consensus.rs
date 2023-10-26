@@ -321,7 +321,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
         // perform gc
         self.state_map
             .range(old_anchor_view..new_anchor_view)
-            .filter_map(|(_view_number, view)| view.get_block_commitment())
+            .filter_map(|(_view_number, view)| view.get_payload_commitment())
             .for_each(|block| {
                 self.saved_blocks.remove(block);
             });
@@ -351,7 +351,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     }
 }
 
-/// Mapping from block commitments to full blocks.
+/// Mapping from block payload commitments to full blocks.
 ///
 /// Entries in this mapping are reference-counted, so multiple consensus objects can refer to the
 /// same block, and the block will only be deleted after _all_ such objects are garbage collected.

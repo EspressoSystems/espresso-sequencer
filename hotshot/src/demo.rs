@@ -62,11 +62,13 @@ impl Default for SDemoState {
 impl State for SDemoState {
     type Error = BlockPayloadError;
 
+    type BlockHeader = VIDBlockHeader;
+
     type BlockPayload = VIDBlockPayload;
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block: &Self::BlockPayload, view_number: &Self::Time) -> bool {
+    fn validate_block(&self, _block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
         } else {
@@ -74,12 +76,18 @@ impl State for SDemoState {
         }
     }
 
+    fn initialize() -> Self {
+        let mut state = Self::default();
+        state.block_height += 1;
+        state
+    }
+
     fn append(
         &self,
-        block: &Self::BlockPayload,
+        block_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if !self.validate_block(block, view_number) {
+        if !self.validate_block(block_header, view_number) {
             return Err(BlockPayloadError::InvalidBlock);
         }
 
@@ -174,7 +182,6 @@ pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPE
     rng: &mut dyn rand::RngCore,
 ) -> QuorumCertificate<TYPES, Commitment<LEAF>> {
     QuorumCertificate {
-        // block_commitment: random_commitment(rng),
         leaf_commitment: random_commitment(rng),
         view_number: TYPES::Time::new(rng.gen()),
         signatures: AssembledSignature::Genesis(),

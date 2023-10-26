@@ -64,8 +64,17 @@ pub trait BlockHeader:
     /// Block payload associated with the commitment.
     type Payload: BlockPayload;
 
+    /// Build a header with the payload commitment and parent header.
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: Self) -> Self;
+
+    /// Build a genesis header with the genesis payload.
+    fn genesis(payload: Self::Payload) -> Self;
+
+    /// Get the block number.
+    fn block_number(&self) -> u64;
+
     /// Get the payload commitment.
-    fn commitment(&self) -> Commitment<Self::Payload>;
+    fn payload_commitment(&self) -> Commitment<Self::Payload>;
 }
 
 /// Dummy implementation of `BlockPayload` for unit tests
@@ -138,7 +147,19 @@ pub mod dummy {
     impl BlockHeader for DummyBlock {
         type Payload = Self;
 
-        fn commitment(&self) -> commit::Commitment<Self> {
+        fn new(_payload_commitment: Commitment<Self>, _parent_header: Self) -> Self {
+            Self { nonce: 0 }
+        }
+
+        fn genesis(_payload: Self::Payload) -> Self {
+            Self { nonce: 0 }
+        }
+
+        fn block_number(&self) -> u64 {
+            0
+        }
+
+        fn payload_commitment(&self) -> commit::Commitment<Self> {
             commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
                 .u64_field("Nonce", self.nonce)
                 .finalize()

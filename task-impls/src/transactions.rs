@@ -144,7 +144,7 @@ where
                 let mut included_txn_count = 0;
                 for leaf in leaf_chain {
                     match &leaf.deltas {
-                        Left(block) => {
+                        Left((_, block)) => {
                             let txns = block.contained_transactions();
                             for txn in txns {
                                 included_txns.insert(txn);
@@ -263,7 +263,7 @@ where
                 let vid_disperse = vid.disperse(&txns_flatten).unwrap();
                 let block = VIDBlockPayload {
                     transactions: txns,
-                    commitment: vid_disperse.commit,
+                    payload_commitment: vid_disperse.commit,
                 };
 
                 // TODO never clone a block
@@ -279,12 +279,12 @@ where
                         Proposal {
                             data: VidDisperse {
                                 view_number: view + 1,
-                                commitment: block.commit(),
+                                payload_commitment: block.commit(),
                                 shares: vid_disperse.shares,
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self.quorum_exchange.sign_block_commitment(block.commit()),
+                            signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
                         },
                         self.quorum_exchange.public_key().clone(),
                     ))

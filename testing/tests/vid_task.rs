@@ -41,10 +41,10 @@ async fn test_vid_task() {
     let vid = vid_init();
     let txn = vec![0u8];
     let vid_disperse = vid.disperse(&txn).unwrap();
-    let block_commitment = vid_disperse.commit;
+    let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions: vec![VIDTransaction(txn)],
-        commitment: block_commitment,
+        payload_commitment,
     };
 
     let signature = vid_exchange.sign_vid_proposal(&block.commit());
@@ -59,7 +59,7 @@ async fn test_vid_task() {
     let vid_proposal = Proposal {
         data: VidDisperse {
             view_number: message.data.view_number,
-            commitment: block.commit(),
+            payload_commitment: block.commit(),
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },

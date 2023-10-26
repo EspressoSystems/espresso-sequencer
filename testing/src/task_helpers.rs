@@ -3,7 +3,7 @@ use crate::{
     test_builder::TestMetadata,
 };
 use commit::Committable;
-use either::Right;
+use either::{Either::Left, Right};
 use hotshot::{
     certificate::QuorumCertificate,
     traits::{NodeImplementation, TestableNodeImplementation},
@@ -18,6 +18,7 @@ use hotshot_types::{
     data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
+        block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership, SignedCertificate},
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
@@ -115,26 +116,30 @@ async fn build_quorum_proposal_and_signature(
         panic!("Failed to find high QC parent.");
     };
     let parent_leaf = leaf.clone();
+    let parent_header = match parent_leaf.deltas {
+        Left((block_number, ref payload)) => VIDBlockHeader {
+            block_number,
+            payload_commitment: payload.commit(),
+        },
+        Right(ref header) => header.clone(),
+    };
 
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
-    let block_commitment = block.commit();
+    let payload_commitment = block.commit();
+    let block_header = VIDBlockHeader::new(payload_commitment, parent_header);
     let leaf = SequencingLeaf {
         view_number: ViewNumber::new(view),
-        height: parent_leaf.height + 1,
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
-        deltas: Right(block_commitment),
+        deltas: Right(block_header.clone()),
         rejected: vec![],
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
     let proposal = QuorumProposal::<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>> {
-        block_header: VIDBlockHeader {
-            block_number: 1,
-            commitment: block_commitment,
-        },
+        block_header,
         view_number: ViewNumber::new(view),
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,

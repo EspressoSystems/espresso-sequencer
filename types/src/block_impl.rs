@@ -65,8 +65,8 @@ pub enum BlockPayloadError {
 pub struct VIDBlockPayload {
     /// List of transactions.
     pub transactions: Vec<VIDTransaction>,
-    /// VID commitment.
-    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
+    /// VID commitment to the block payload.
+    pub payload_commitment: <VidScheme as VidSchemeTrait>::Commit,
 }
 
 impl VIDBlockPayload {
@@ -86,14 +86,14 @@ impl VIDBlockPayload {
         let vid_disperse = vid.disperse(&txn).unwrap();
         VIDBlockPayload {
             transactions: vec![VIDTransaction(txn)],
-            commitment: vid_disperse.commit,
+            payload_commitment: vid_disperse.commit,
         }
     }
 }
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.commitment)
+        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.payload_commitment)
             .expect("conversion from VidScheme::Commit to Commitment should succeed")
     }
 
@@ -136,14 +136,32 @@ impl BlockPayload for VIDBlockPayload {
 pub struct VIDBlockHeader {
     /// Block number.
     pub block_number: u64,
-    /// VID commitment.
-    pub commitment: Commitment<VIDBlockPayload>,
+    /// VID commitment to the payload.
+    pub payload_commitment: Commitment<VIDBlockPayload>,
 }
 
 impl BlockHeader for VIDBlockHeader {
     type Payload = VIDBlockPayload;
 
-    fn commitment(&self) -> Commitment<Self::Payload> {
-        self.commitment
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: Self) -> Self {
+        Self {
+            block_number: parent_header.block_number + 1,
+            payload_commitment,
+        }
+    }
+
+    fn genesis(payload: Self::Payload) -> Self {
+        Self {
+            block_number: 0,
+            payload_commitment: payload.commit(),
+        }
+    }
+
+    fn block_number(&self) -> u64 {
+        self.block_number
+    }
+
+    fn payload_commitment(&self) -> Commitment<Self::Payload> {
+        self.payload_commitment
     }
 }

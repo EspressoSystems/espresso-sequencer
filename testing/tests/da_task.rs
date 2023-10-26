@@ -42,10 +42,10 @@ async fn test_da_task() {
     let vid = vid_init();
     let txn = vec![0u8];
     let vid_disperse = vid.disperse(&txn).unwrap();
-    let block_commitment = vid_disperse.commit;
+    let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions: vec![VIDTransaction(txn)],
-        commitment: block_commitment,
+        payload_commitment,
     };
 
     let signature = committee_exchange.sign_da_proposal(&block.commit());
@@ -58,7 +58,7 @@ async fn test_da_task() {
         signature,
     };
 
-    // TODO for now reuse the same block commitment and signature as DA committee
+    // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
 
     // Every event input is seen on the event stream in the output.
@@ -85,7 +85,7 @@ async fn test_da_task() {
         1,
     );
     output.insert(
-        SequencingHotShotEvent::SendBlockCommitment(block.commit()),
+        SequencingHotShotEvent::SendPayloadCommitment(block.commit()),
         1,
     );
     output.insert(

@@ -156,7 +156,7 @@ where
             match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
-                &vote.block_commitment,
+                &vote.payload_commitment,
             ) {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
@@ -242,7 +242,7 @@ where
                     "Got a DA block with {} transactions!",
                     proposal.data.deltas.contained_transactions().len()
                 );
-                let block_commitment = proposal.data.deltas.commit();
+                let payload_commitment = proposal.data.deltas.commit();
 
                 // ED Is this the right leader?
                 let view_leader_key = self.committee_exchange.get_leader(view);
@@ -251,7 +251,7 @@ where
                     return None;
                 }
 
-                if !view_leader_key.validate(&proposal.signature, block_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, payload_commitment.as_ref()) {
                     error!("Could not verify proposal.");
                     return None;
                 }
@@ -267,7 +267,7 @@ where
                     Ok(Some(vote_token)) => {
                         // Generate and send vote
                         let vote = self.committee_exchange.create_da_message(
-                            block_commitment,
+                            payload_commitment,
                             view,
                             vote_token,
                         );
@@ -286,7 +286,7 @@ where
                         // contains strictly more information.
                         consensus.state_map.entry(view).or_insert(View {
                             view_inner: ViewInner::DA {
-                                block: block_commitment,
+                                block: payload_commitment,
                             },
                         });
 
@@ -334,7 +334,7 @@ where
                 let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
-                    &vote.clone().block_commitment,
+                    &vote.clone().payload_commitment,
                 );
 
                 if view > collection_view {
@@ -428,8 +428,10 @@ where
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let block_commitment = block.commit();
-                let signature = self.committee_exchange.sign_da_proposal(&block_commitment);
+                let payload_commitment = block.commit();
+                let signature = self
+                    .committee_exchange
+                    .sign_da_proposal(&payload_commitment);
                 let data: DAProposal<TYPES> = DAProposal {
                     deltas: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
@@ -440,8 +442,8 @@ where
                 let message = Proposal { data, signature };
 
                 self.event_stream
-                    .publish(SequencingHotShotEvent::SendBlockCommitment(
-                        block_commitment,
+                    .publish(SequencingHotShotEvent::SendPayloadCommitment(
+                        payload_commitment,
                     ))
                     .await;
                 self.event_stream

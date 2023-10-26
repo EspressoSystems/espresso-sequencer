@@ -154,7 +154,7 @@ where
 
             match state
                 .vid_exchange
-                .accumulate_vote(accumulator, &vote, &vote.block_commitment)
+                .accumulate_vote(accumulator, &vote, &vote.payload_commitment)
             {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
@@ -254,7 +254,7 @@ where
                 let accumulator = self.vid_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
-                    &vote.clone().block_commitment,
+                    &vote.clone().payload_commitment,
                 );
 
                 if view > collection_view {
@@ -311,7 +311,7 @@ where
                 }
 
                 debug!("VID disperse data is fresh.");
-                let block_commitment = disperse.data.commitment;
+                let payload_commitment = disperse.data.payload_commitment;
 
                 // ED Is this the right leader?
                 let view_leader_key = self.vid_exchange.get_leader(view);
@@ -320,7 +320,7 @@ where
                     return None;
                 }
 
-                if !view_leader_key.validate(&disperse.signature, block_commitment.as_ref()) {
+                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
                     error!("Could not verify VID proposal sig.");
                     return None;
                 }
@@ -336,7 +336,7 @@ where
                     Ok(Some(vote_token)) => {
                         // Generate and send vote
                         let vote = self.vid_exchange.create_vid_message(
-                            block_commitment,
+                            payload_commitment,
                             view,
                             vote_token,
                         );
@@ -355,7 +355,7 @@ where
                         // contains strictly more information.
                         consensus.state_map.entry(view).or_insert(View {
                             view_inner: ViewInner::DA {
-                                block: block_commitment,
+                                block: payload_commitment,
                             },
                         });
 

@@ -1087,17 +1087,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(genesis_block: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
-        let state = TYPES::StateType::default()
-            .append(&genesis_block, &TYPES::Time::new(0))
-            .map_err(|err| HotShotError::Misc {
-                context: err.to_string(),
-            })?;
+    pub fn from_genesis(genesis_payload: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
+        let state = TYPES::StateType::initialize();
         let time = TYPES::Time::genesis();
         let justify_qc = QuorumCertificate::<TYPES, Commitment<LEAF>>::genesis();
 
         Ok(Self {
-            inner: LEAF::new(time, justify_qc, genesis_block, state),
+            inner: LEAF::new(time, justify_qc, genesis_payload, state),
         })
     }
 
