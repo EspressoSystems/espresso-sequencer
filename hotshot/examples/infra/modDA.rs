@@ -203,14 +203,13 @@ pub trait RunDA<
         // Get KeyPair for certificate Aggregation
         // Sishan NOTE: Looks like this file is not used anymore, so ignore the following initialization on keys.
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
-        let known_nodes_sk = config.config.known_nodes_sk.clone();
-        let entry = known_nodes_with_stake
-            .get(config.node_index as usize)
-            .expect("node_id should be within the range of known_nodes");
-        let pk = TYPES::SignatureKey::get_public_key(entry);
-        let sk = known_nodes_sk
-            .get(config.node_index as usize)
-            .expect("node_id should be within the range of known_nodes");
+        let entry = config
+            .config
+            .my_own_validator_config
+            .public_key
+            .get_stake_table_entry(config.config.my_own_validator_config.stake_value);
+        let pk = config.config.my_own_validator_config.public_key.clone();
+        let sk = config.config.my_own_validator_config.private_key.clone();
 
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();

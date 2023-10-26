@@ -1,4 +1,7 @@
-use hotshot_types::{traits::{signature_key::SignatureKey, election::ElectionConfig,}, ExecutionType, HotShotConfig, ValidatorConfig};
+use hotshot_types::{
+    traits::{election::ElectionConfig, signature_key::SignatureKey},
+    ExecutionType, HotShotConfig, ValidatorConfig,
+};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,

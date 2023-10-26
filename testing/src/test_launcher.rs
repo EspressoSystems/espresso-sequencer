@@ -90,10 +90,7 @@ where
     /// generate a new storage for each node
     pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
     /// configuration used to generate each hotshot node
-    pub config: HotShotConfig<
-        TYPES::SignatureKey,
-        TYPES::ElectionConfigType,
-    >,
+    pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 }
 
 /// test launcher
@@ -192,12 +189,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     /// Modifies the config used when generating nodes with `f`
     pub fn modify_default_config(
         mut self,
-        mut f: impl FnMut(
-            &mut HotShotConfig<
-                TYPES::SignatureKey,
-                TYPES::ElectionConfigType,
-            >,
-        ),
+        mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>),
     ) -> Self {
         f(&mut self.resource_generator.config);
         self

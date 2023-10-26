@@ -212,11 +212,8 @@ impl TestMetadata {
             (0..total_nodes)
                 .map(|id| known_nodes[id].get_stake_table_entry(1u64))
                 .collect();
-        let my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
-            [0u8; 32],
-            node_id,
-            1,
-        );
+        let my_own_validator_config =
+            ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
             // TODO this doesn't exist anymore

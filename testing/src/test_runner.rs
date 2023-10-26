@@ -207,7 +207,8 @@ where
             let initializer =
                 HotShotInitializer::<TYPES, I::Leaf>::from_genesis(I::block_genesis()).unwrap();
             let networks = (self.launcher.resource_generator.channel_generator)(node_id);
-            let validator_config = ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+            let validator_config =
+                ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
             let hotshot = self
                 .add_node_with_config(networks, storage, initializer, config, validator_config)
                 .await;
@@ -231,10 +232,7 @@ where
         networks: Networks<TYPES, I>,
         storage: I::Storage,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
-        config: HotShotConfig<
-            TYPES::SignatureKey,
-            TYPES::ElectionConfigType,
-        >,
+        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
     ) -> SystemContext<TYPES, I>
     where
@@ -251,8 +249,7 @@ where
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
-        let entry = 
-            public_key.get_stake_table_entry(validator_config.stake_value);
+        let entry = public_key.get_stake_table_entry(validator_config.stake_value);
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
             <QuorumEx<TYPES,I> as ConsensusExchange<
                 TYPES,

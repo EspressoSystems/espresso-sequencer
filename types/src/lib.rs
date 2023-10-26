@@ -11,7 +11,7 @@
 
 use std::{num::NonZeroUsize, time::Duration};
 
-use traits::{signature_key::SignatureKey, election::ElectionConfig};
+use traits::{election::ElectionConfig, signature_key::SignatureKey};
 
 pub mod block_impl;
 pub mod certificate;
@@ -50,15 +50,13 @@ pub struct ValidatorConfig<KEY: SignatureKey> {
 
 impl<KEY: SignatureKey> ValidatorConfig<KEY> {
     /// generate validator config from input seed, index and stake value
+    #[must_use]
     pub fn generated_from_seed_indexed(seed: [u8; 32], index: u64, stake_value: u64) -> Self {
-        let (public_key, private_key) = KEY::generated_from_seed_indexed(
-            seed,
-            index,
-        );
+        let (public_key, private_key) = KEY::generated_from_seed_indexed(seed, index);
         Self {
-            public_key: public_key.clone(),
-            private_key: private_key,
-            stake_value: stake_value,
+            public_key,
+            private_key,
+            stake_value,
         }
     }
 }
