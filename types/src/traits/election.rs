@@ -204,7 +204,7 @@ where
     fn genesis() -> Self;
 }
 
-/// A protocol for determining membership in and participating in a ccommittee.
+/// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + 'static
 {
