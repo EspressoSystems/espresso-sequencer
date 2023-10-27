@@ -12,7 +12,7 @@ use hotshot_task::{
     task::FilterEvent,
     BoxSyncFuture,
 };
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::Consensus,
     data::LeafType,
@@ -47,7 +47,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// method is needed to generate new receivers to expose to the user
     pub(crate) output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
     /// access to the internal ev ent stream, in case we need to, say, shut something down
-    pub(crate) internal_event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// registry for controlling tasks
     pub(crate) registry: GlobalRegistry,
 
@@ -147,8 +147,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// NOTE: this is only used for sanity checks in our tests
     pub async fn get_internal_event_stream_known_impl(
         &mut self,
-        filter: FilterEvent<SequencingHotShotEvent<TYPES, I>>,
-    ) -> (UnboundedStream<SequencingHotShotEvent<TYPES, I>>, StreamId) {
+        filter: FilterEvent<HotShotEvent<TYPES, I>>,
+    ) -> (UnboundedStream<HotShotEvent<TYPES, I>>, StreamId) {
         self.internal_event_stream.subscribe(filter).await
     }
 

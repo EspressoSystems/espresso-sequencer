@@ -1,5 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
-use crate::events::SequencingHotShotEvent;
+use crate::events::HotShotEvent;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use commit::{Commitment, Committable};
 use either::Either::{self, Left, Right};
@@ -21,10 +21,10 @@ use bitvec::prelude::*;
 use hotshot_task::global_registry::GlobalRegistry;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
-    data::SequencingLeaf,
+    data::Leaf,
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
-        consensus_api::SequencingConsensusApi,
+        consensus_api::ConsensusApi,
         election::{ConsensusExchange, ViewSyncExchangeType},
         network::CommunicationChannel,
         node_implementation::{NodeImplementation, NodeType, ViewSyncEx},
@@ -63,12 +63,8 @@ pub struct ViewSyncTaskError {}
 /// Main view sync task state
 pub struct ViewSyncTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
-    A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static + std::clone::Clone,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
 > where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -81,7 +77,7 @@ pub struct ViewSyncTaskState<
     /// Registry to register sub tasks
     pub registry: GlobalRegistry,
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// View HotShot is currently in
     pub current_view: TYPES::Time,
     /// View HotShot wishes to be in
@@ -113,10 +109,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static + std::clone::Clone,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
 where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -132,20 +128,16 @@ where
 /// Types for the main view sync task
 pub type ViewSyncTaskStateTypes<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     ViewSyncTaskState<TYPES, I, A>,
 >;
 
 /// State of a view sync replica task
 pub struct ViewSyncReplicaTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
-    A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -177,17 +169,17 @@ pub struct ViewSyncReplicaTaskState<
     /// HotShot consensus API
     pub api: A,
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 }
 
 impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for ViewSyncReplicaTaskState<TYPES, I, A>
 where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -203,22 +195,18 @@ where
 /// Types for view sync replica state
 pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     ViewSyncReplicaTaskState<TYPES, I, A>,
 >;
 
 /// State of a view sync relay task
 pub struct ViewSyncRelayTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 > {
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// View sync exchange
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
@@ -240,7 +228,7 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
     > TS for ViewSyncRelayTaskState<TYPES, I>
@@ -250,8 +238,8 @@ impl<
 /// Types used by the view sync relay task
 pub type ViewSyncRelayTaskStateTypes<TYPES, I> = HSTWithEvent<
     ViewSyncTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     ViewSyncRelayTaskState<TYPES, I>,
 >;
 
@@ -259,10 +247,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static + std::clone::Clone,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > ViewSyncTaskState<TYPES, I, A>
 where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -275,9 +263,9 @@ where
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
     /// Handles incoming events for the main view sync task
-    pub async fn handle_event(&mut self, event: SequencingHotShotEvent<TYPES, I>) {
+    pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
         match &event {
-            SequencingHotShotEvent::ViewSyncCertificateRecv(message) => {
+            HotShotEvent::ViewSyncCertificateRecv(message) => {
                 let (certificate_internal, last_seen_certificate) = match &message.data {
                     ViewSyncCertificate::PreCommit(certificate_internal) => {
                         (certificate_internal, ViewSyncPhase::PreCommit)
@@ -367,7 +355,7 @@ where
                 });
             }
 
-            SequencingHotShotEvent::ViewSyncVoteRecv(vote) => {
+            HotShotEvent::ViewSyncVoteRecv(vote) => {
                 let vote_internal = match vote {
                     ViewSyncVote::PreCommit(vote_internal)
                     | ViewSyncVote::Commit(vote_internal)
@@ -448,7 +436,7 @@ where
                 });
             }
 
-            &SequencingHotShotEvent::ViewChange(new_view) => {
+            &HotShotEvent::ViewChange(new_view) => {
                 let new_view = TYPES::Time::new(*new_view);
                 if self.current_view < new_view {
                     debug!(
@@ -469,7 +457,7 @@ where
                             self.event_stream
                                 .direct_message(
                                     replica_task_info.event_stream_id,
-                                    SequencingHotShotEvent::Shutdown,
+                                    HotShotEvent::Shutdown,
                                 )
                                 .await;
                         }
@@ -479,7 +467,7 @@ where
                             self.event_stream
                                 .direct_message(
                                     relay_task_info.event_stream_id,
-                                    SequencingHotShotEvent::Shutdown,
+                                    HotShotEvent::Shutdown,
                                 )
                                 .await;
                         }
@@ -488,7 +476,7 @@ where
                     self.last_garbage_collected_view = self.current_view - 1;
                 }
             }
-            &SequencingHotShotEvent::Timeout(view_number) => {
+            &HotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
                 if view_number <= TYPES::Time::new(*self.current_view) {
                     return;
@@ -558,7 +546,7 @@ where
 
                     // TODO ED Make all these view numbers into a single variable to avoid errors
                     let result = replica_state
-                        .handle_event(SequencingHotShotEvent::ViewSyncTrigger(view_number + 1))
+                        .handle_event(HotShotEvent::ViewSyncTrigger(view_number + 1))
                         .await;
 
                     if result.0 == Some(HotShotTaskCompleted::ShutDown) {
@@ -604,7 +592,7 @@ where
                     // If this is the first timeout we've seen advance to the next view
                     self.current_view = view_number;
                     self.event_stream
-                        .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
+                        .publish(HotShotEvent::ViewChange(TYPES::Time::new(
                             *self.current_view,
                         )))
                         .await;
@@ -616,15 +604,15 @@ where
     }
 
     /// Filter view sync related events.
-    pub fn filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
-            SequencingHotShotEvent::ViewSyncCertificateRecv(_)
-                | SequencingHotShotEvent::ViewSyncVoteRecv(_)
-                | SequencingHotShotEvent::Shutdown
-                | SequencingHotShotEvent::Timeout(_)
-                | SequencingHotShotEvent::ViewSyncTimeout(_, _, _)
-                | SequencingHotShotEvent::ViewChange(_)
+            HotShotEvent::ViewSyncCertificateRecv(_)
+                | HotShotEvent::ViewSyncVoteRecv(_)
+                | HotShotEvent::Shutdown
+                | HotShotEvent::Timeout(_)
+                | HotShotEvent::ViewSyncTimeout(_, _, _)
+                | HotShotEvent::ViewChange(_)
         )
     }
 }
@@ -633,10 +621,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > ViewSyncReplicaTaskState<TYPES, I, A>
 where
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -651,13 +639,13 @@ where
     /// Handle incoming events for the view sync replica task
     pub async fn handle_event(
         mut self,
-        event: SequencingHotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES, I>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncReplicaTaskState<TYPES, I, A>,
     ) {
         match event {
-            SequencingHotShotEvent::ViewSyncCertificateRecv(message) => {
+            HotShotEvent::ViewSyncCertificateRecv(message) => {
                 let (certificate_internal, last_seen_certificate) = match message.data.clone() {
                     ViewSyncCertificate::PreCommit(certificate_internal) => {
                         (certificate_internal, ViewSyncPhase::PreCommit)
@@ -715,9 +703,7 @@ where
                 if self.phase >= ViewSyncPhase::Commit && !self.sent_view_change_event {
                     error!("VIEW SYNC UPDATING VIEW TO {}", *self.next_view);
                     self.event_stream
-                        .publish(SequencingHotShotEvent::ViewChange(TYPES::Time::new(
-                            *self.next_view,
-                        )))
+                        .publish(HotShotEvent::ViewChange(TYPES::Time::new(*self.next_view)))
                         .await;
                     self.sent_view_change_event = true;
                 }
@@ -771,7 +757,7 @@ where
                             // error!("Sending vs vote {:?}", vote.clone());
 
                             self.event_stream
-                                .publish(SequencingHotShotEvent::ViewSyncVoteSend(vote))
+                                .publish(HotShotEvent::ViewSyncVoteSend(vote))
                                 .await;
                         }
 
@@ -798,7 +784,7 @@ where
                                 // error!("Sending vs vote {:?}", vote.clone());
 
                                 self.event_stream
-                                    .publish(SequencingHotShotEvent::ViewSyncVoteSend(vote))
+                                    .publish(HotShotEvent::ViewSyncVoteSend(vote))
                                     .await;
                             }
                         }
@@ -811,7 +797,7 @@ where
                                 async_sleep(self.view_sync_timeout).await;
                                 error!("Vote sending timed out in ViewSyncCertificateRecv");
                                 stream
-                                    .publish(SequencingHotShotEvent::ViewSyncTimeout(
+                                    .publish(HotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
                                         self.relay,
                                         phase,
@@ -836,7 +822,7 @@ where
                 }
             }
 
-            SequencingHotShotEvent::ViewSyncTrigger(view_number) => {
+            HotShotEvent::ViewSyncTrigger(view_number) => {
                 if self.next_view != TYPES::Time::new(*view_number) {
                     error!("Unexpected view number to triger view sync");
                     return (None, self);
@@ -862,7 +848,7 @@ where
                             // error!("Sending vs vote {:?}", vote.clone());
 
                             self.event_stream
-                                .publish(SequencingHotShotEvent::ViewSyncVoteSend(vote))
+                                .publish(HotShotEvent::ViewSyncVoteSend(vote))
                                 .await;
                         }
 
@@ -873,7 +859,7 @@ where
                                 async_sleep(self.view_sync_timeout).await;
                                 error!("Vote sending timed out in ViewSyncTrigger");
                                 stream
-                                    .publish(SequencingHotShotEvent::ViewSyncTimeout(
+                                    .publish(HotShotEvent::ViewSyncTimeout(
                                         TYPES::Time::new(*self.next_view),
                                         self.relay,
                                         ViewSyncPhase::None,
@@ -894,7 +880,7 @@ where
                 }
             }
 
-            SequencingHotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
+            HotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
                 // Shouldn't ever receive a timeout for a relay higher than ours
                 if TYPES::Time::new(*round) == self.next_view
                     && relay == self.relay
@@ -933,7 +919,7 @@ where
 
                             if let GeneralConsensusMessage::ViewSyncVote(vote) = message {
                                 self.event_stream
-                                    .publish(SequencingHotShotEvent::ViewSyncVoteSend(vote))
+                                    .publish(HotShotEvent::ViewSyncVoteSend(vote))
                                     .await;
                             }
 
@@ -944,7 +930,7 @@ where
                                     async_sleep(self.view_sync_timeout).await;
                                     error!("Vote sending timed out in ViewSyncTimeout");
                                     stream
-                                        .publish(SequencingHotShotEvent::ViewSyncTimeout(
+                                        .publish(HotShotEvent::ViewSyncTimeout(
                                             TYPES::Time::new(*self.next_view),
                                             self.relay,
                                             last_seen_certificate,
@@ -968,7 +954,7 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
     > ViewSyncRelayTaskState<TYPES, I>
@@ -985,13 +971,13 @@ where
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
     pub async fn handle_event(
         mut self,
-        event: SequencingHotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES, I>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncRelayTaskState<TYPES, I>,
     ) {
         match event {
-            SequencingHotShotEvent::ViewSyncVoteRecv(vote) => {
+            HotShotEvent::ViewSyncVoteRecv(vote) => {
                 if self.accumulator.is_right() {
                     return (Some(HotShotTaskCompleted::ShutDown), self);
                 }
@@ -1047,7 +1033,7 @@ where
                             signature,
                         };
                         self.event_stream
-                            .publish(SequencingHotShotEvent::ViewSyncCertificateSend(
+                            .publish(HotShotEvent::ViewSyncCertificateSend(
                                 message,
                                 self.exchange.public_key().clone(),
                             ))

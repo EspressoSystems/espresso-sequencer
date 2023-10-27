@@ -13,7 +13,7 @@ use hotshot_types::{
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Shutdown the task
     Shutdown,
     /// A quorum proposal has been received from the network; handled by the consensus task

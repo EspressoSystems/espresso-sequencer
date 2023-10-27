@@ -1,4 +1,4 @@
-use crate::events::SequencingHotShotEvent;
+use crate::events::HotShotEvent;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
@@ -18,10 +18,10 @@ use hotshot_types::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{ProposalType, SequencingLeaf},
+    data::{Leaf, ProposalType},
     message::{Message, SequencingMessage},
     traits::{
-        consensus_api::SequencingConsensusApi,
+        consensus_api::ConsensusApi,
         election::{ConsensusExchange, VIDExchangeType},
         node_implementation::{NodeImplementation, NodeType, VIDEx},
         signature_key::SignatureKey,
@@ -42,12 +42,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a DA task
 pub struct VIDTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
-    A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     VIDEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -65,7 +61,7 @@ pub struct VIDTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
 
     /// the VID exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
@@ -74,7 +70,7 @@ pub struct VIDTaskState<
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 
     /// This state's ID
     pub id: u64,
@@ -83,7 +79,7 @@ pub struct VIDTaskState<
 /// Struct to maintain DA Vote Collection task state
 pub struct VIDVoteCollectionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
 > where
     VIDEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -108,12 +104,12 @@ pub struct VIDVoteCollectionTaskState<
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// the id of this task state
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>> TS
+impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
     for VIDVoteCollectionTaskState<TYPES, I>
 where
     VIDEx<TYPES, I>: ConsensusExchange<
@@ -128,14 +124,14 @@ where
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "VID Vote Collection Task", level = "error")]
 async fn vote_handle<TYPES, I>(
     mut state: VIDVoteCollectionTaskState<TYPES, I>,
-    event: SequencingHotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES, I>,
 ) -> (
     Option<HotShotTaskCompleted>,
     VIDVoteCollectionTaskState<TYPES, I>,
 )
 where
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     VIDEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
@@ -144,7 +140,7 @@ where
     >,
 {
     match event {
-        SequencingHotShotEvent::VidVoteRecv(vote) => {
+        HotShotEvent::VidVoteRecv(vote) => {
             // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
 
             debug!("VID vote recv, collection task {:?}", vote.get_view());
@@ -164,7 +160,7 @@ where
                     debug!("Sending VID cert! {:?}", vid_cert.view_number);
                     state
                         .event_stream
-                        .publish(SequencingHotShotEvent::VidCertSend(
+                        .publish(HotShotEvent::VidCertSend(
                             vid_cert.clone(),
                             state.vid_exchange.public_key().clone(),
                         ))
@@ -177,7 +173,7 @@ where
                 }
             }
         }
-        SequencingHotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
+        HotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
         _ => {
             error!("unexpected event {:?}", event);
         }
@@ -189,10 +185,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>: ConsensusExchange<
@@ -206,10 +202,10 @@ where
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
-        event: SequencingHotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES, I>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            SequencingHotShotEvent::VidVoteRecv(vote) => {
+            HotShotEvent::VidVoteRecv(vote) => {
                 // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
 
                 // warn!(
@@ -268,7 +264,7 @@ where
                     };
                     let name = "VID Vote Collection";
                     let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, SequencingHotShotEvent::VidVoteRecv(_))
+                        matches!(event, HotShotEvent::VidVoteRecv(_))
                     }));
                     let builder =
                         TaskBuilder::<VIDVoteCollectionTypes<TYPES, I>>::new(name.to_string())
@@ -286,11 +282,11 @@ where
                     self.vote_collector = Some((view, id, stream_id));
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
-                        .direct_message(stream_id, SequencingHotShotEvent::VidVoteRecv(vote))
+                        .direct_message(stream_id, HotShotEvent::VidVoteRecv(vote))
                         .await;
                 };
             }
-            SequencingHotShotEvent::VidDisperseRecv(disperse, sender) => {
+            HotShotEvent::VidDisperseRecv(disperse, sender) => {
                 // TODO copy-pasted from DAProposalRecv https://github.com/EspressoSystems/HotShot/issues/1690
                 debug!(
                     "VID disperse received for view: {:?}",
@@ -346,7 +342,7 @@ where
 
                         debug!("Sending vote to the VID leader {:?}", vote.current_view);
                         self.event_stream
-                            .publish(SequencingHotShotEvent::VidVoteSend(vote))
+                            .publish(HotShotEvent::VidVoteSend(vote))
                             .await;
                         let mut consensus = self.consensus.write().await;
 
@@ -365,7 +361,7 @@ where
                     }
                 }
             }
-            SequencingHotShotEvent::ViewChange(view) => {
+            HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
                 }
@@ -378,7 +374,7 @@ where
                 return None;
             }
 
-            SequencingHotShotEvent::Shutdown => {
+            HotShotEvent::Shutdown => {
                 return Some(HotShotTaskCompleted::ShutDown);
             }
             _ => {
@@ -389,13 +385,13 @@ where
     }
 
     /// Filter the DA event.
-    pub fn filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
-            SequencingHotShotEvent::Shutdown
-                | SequencingHotShotEvent::VidDisperseRecv(_, _)
-                | SequencingHotShotEvent::VidVoteRecv(_)
-                | SequencingHotShotEvent::ViewChange(_)
+            HotShotEvent::Shutdown
+                | HotShotEvent::VidDisperseRecv(_, _)
+                | HotShotEvent::VidVoteRecv(_)
+                | HotShotEvent::ViewChange(_)
         )
     }
 }
@@ -405,10 +401,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>: ConsensusExchange<
@@ -423,15 +419,15 @@ where
 /// Type alias for VID Vote Collection Types
 pub type VIDVoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     VIDVoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for VID Task Types
 pub type VIDTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     VIDTaskState<TYPES, I, A>,
 >;
