@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use commit::Commitment;
 use derivative::Derivative;
 use snafu::Snafu;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 /// Errors that can occur in the storage layer.
 #[derive(Clone, Debug, Snafu)]
 #[snafu(visibility(pub))]
@@ -127,16 +127,19 @@ where
 pub struct StoredView<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// The view number of this view
     pub view_number: TYPES::Time,
-    /// The index of `parent` in the chain
-    pub height: u64,
     /// The parent of this view
     pub parent: Commitment<LEAF>,
     /// The justify QC of this view. See the hotstuff paper for more information on this.
     pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
     /// The state of this view
     pub state: LEAF::MaybeState,
-    /// The deltas of this view
-    pub deltas: LEAF::DeltasType,
+    /// Block header.
+    pub block_header: TYPES::BlockHeader,
+    /// Set of commitments to the contained transactions.
+    ///
+    /// It may be empty for nodes not in the DA committee.
+    pub transaction_commitments:
+        HashSet<Commitment<<TYPES::BlockPayload as BlockPayload>::Transaction>>,
     /// transactions rejected in this view
     pub rejected: Vec<TYPES::Transaction>,
     /// the timestamp this view was recv-ed in nanonseconds
@@ -157,7 +160,10 @@ where
     /// Note that this will set the `parent` to `LeafHash::default()`, so this will not have a parent.
     pub fn from_qc_block_and_state(
         qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
-        deltas: LEAF::DeltasType,
+        block_header: TYPES::BlockHeader,
+        transaction_commitments: HashSet<
+            Commitment<<TYPES::BlockPayload as BlockPayload>::Transaction>,
+        >,
         state: LEAF::MaybeState,
         height: u64,
         parent_commitment: Commitment<LEAF>,
@@ -165,12 +171,13 @@ where
         proposer_id: EncodedPublicKey,
     ) -> Self {
         Self {
-            deltas,
             view_number: qc.view_number(),
             height,
             parent: parent_commitment,
             justify_qc: qc,
             state,
+            block_header,
+            transaction_commitments,
             rejected,
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id,

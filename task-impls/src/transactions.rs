@@ -143,14 +143,8 @@ where
                 let mut included_txn_size = 0;
                 let mut included_txn_count = 0;
                 for leaf in leaf_chain {
-                    match &leaf.deltas {
-                        Left((_, block)) => {
-                            let txns = block.contained_transactions();
-                            for txn in txns {
-                                included_txns.insert(txn);
-                            }
-                        }
-                        Right(_) => {}
+                    for txn in leaf.transaction_commitments {
+                        included_txns.insert(txn);
                     }
                 }
                 let consensus = self.consensus.read().await;
@@ -329,9 +323,9 @@ where
         // TODO (Keyao) Investigate the use of transaction hash
         // <https://github.com/EspressoSystems/HotShot/issues/1811>
         // let parent_leaf = self.parent_leaf().await?;
-        // let previous_used_txns = match parent_leaf.deltas {
-        //     Either::Left(block) => block.contained_transactions(),
-        //     Either::Right(_commitment) => HashSet::new(),
+        // let previous_used_txns = match parent_leaf.tarnsaction_commitments {
+        //     Some(txns) => txns,
+        //     None => HashSet::new(),
         // };
 
         let receiver = self.transactions.subscribe().await;

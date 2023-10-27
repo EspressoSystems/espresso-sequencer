@@ -116,13 +116,7 @@ async fn build_quorum_proposal_and_signature(
         panic!("Failed to find high QC parent.");
     };
     let parent_leaf = leaf.clone();
-    let parent_header = match parent_leaf.deltas {
-        Left((block_number, ref payload)) => VIDBlockHeader {
-            block_number,
-            payload_commitment: payload.commit(),
-        },
-        Right(ref header) => header.clone(),
-    };
+    let parent_header = parent_leaf.block_header;
 
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
@@ -132,7 +126,8 @@ async fn build_quorum_proposal_and_signature(
         view_number: ViewNumber::new(view),
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
-        deltas: Right(block_header.clone()),
+        block_header: block_header.clone(),
+        transaction_commitments: HashSet::new(),
         rejected: vec![],
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),

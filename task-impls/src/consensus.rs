@@ -361,16 +361,16 @@ where
 }
 
 impl<
-        TYPES: NodeType<BlockHeader = H, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType<BlockPayload = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
             Leaf = SequencingLeaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
         A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
-        H: BlockHeader<Payload = VIDBlockPayload>,
     > SequencingConsensusTaskState<TYPES, I, A>
 where
+    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     SequencingQuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
@@ -461,7 +461,8 @@ where
                             view_number: view,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_header.clone()),
+                            block_header: proposal.block_header.clone(),
+                            transaction_commitments: HashSet::new(),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -530,7 +531,8 @@ where
                             view_number: view,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_header.clone()),
+                            block_header: proposal.block_header.clone(),
+                            transaction_commitments: HashSet::new(),
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -746,7 +748,8 @@ where
                         view_number: view,
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.leaf_commitment(),
-                        deltas: Right(proposal.data.block_header),
+                        block_header: proposal.data.block_header,
+                        transaction_commitments: HashSet::new(),
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender.to_bytes(),
@@ -770,7 +773,8 @@ where
                     view_number: view,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    deltas: Right(proposal.data.block_header),
+                    block_header: proposal.data.block_header,
+                    transaction_commitments: HashSet::new(),
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender.to_bytes(),
@@ -870,15 +874,9 @@ where
                                             }
 
                                     leaf_views.push(leaf.clone());
-                                    match &leaf.deltas {
-                                        Left((_,block)) => {
-                                            let txns = block.contained_transactions();
-                                            for txn in txns {
+                                            for txn in leaf.transaction_commitments {
                                                 included_txns.insert(txn);
                                             }
-                                        }
-                                        Right(_) => {}
-                                }
                             }
                                 true
                             },
@@ -1368,16 +1366,7 @@ where
         }
 
         let parent_leaf = leaf.clone();
-        let parent_header = match parent_leaf.deltas {
-            Left((_, ref payload)) => {
-                if parent_leaf.view_number != TYPES::Time::new(0) {
-                    error!("Non-genesis parent leaf should contain the block header rather than payload.");
-                    return false;
-                }
-                TYPES::BlockHeader::genesis(payload.clone())
-            }
-            Right(ref header) => header.clone(),
-        };
+        let parent_header = parent_leaf.block_header;
 
         let original_parent_hash = parent_leaf.commit();
 
@@ -1401,12 +1390,8 @@ where
                 view_number: view,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
-                // Use the payload commitment rather than the payload, so that the replica can
-                // construct the same leaf with the commitment.
-                deltas: Right(TYPES::BlockHeader::new(
-                    *payload_commitment,
-                    parent_header.clone(),
-                )),
+                block_header: TYPES::BlockHeader::new(*payload_commitment, parent_header.clone()),
+                transaction_commitments: HashSet::new(),
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().to_bytes(),
@@ -1498,14 +1483,13 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
-    TYPES: NodeType<BlockHeader = H, BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType<BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<
         TYPES,
         Leaf = SequencingLeaf<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, I>,
     >,
     A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
-    H: BlockHeader<Payload = VIDBlockPayload>,
 >(
     event: SequencingHotShotEvent<TYPES, I>,
     mut state: SequencingConsensusTaskState<TYPES, I, A>,
@@ -1514,6 +1498,7 @@ pub async fn sequencing_consensus_handle<
     SequencingConsensusTaskState<TYPES, I, A>,
 )
 where
+    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     SequencingQuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
