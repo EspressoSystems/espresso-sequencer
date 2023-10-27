@@ -438,9 +438,7 @@ where
                 let message = Proposal { data, signature };
 
                 self.event_stream
-                    .publish(HotShotEvent::SendPayloadCommitment(
-                        payload_commitment,
-                    ))
+                    .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))
                     .await;
                 self.event_stream
                     .publish(HotShotEvent::DAProposalSend(

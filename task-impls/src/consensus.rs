@@ -1297,7 +1297,7 @@ where
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
-HotShotEvent::SendPayloadCommitment(payload_commitment) => {
+            HotShotEvent::SendPayloadCommitment(payload_commitment) => {
                 self.payload_commitment = Some(payload_commitment);
             }
             _ => {}
@@ -1473,11 +1473,7 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
     TYPES: NodeType<BlockPayload = VIDBlockPayload>,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = Leaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 >(
     event: HotShotEvent<TYPES, I>,

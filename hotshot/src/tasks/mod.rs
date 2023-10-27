@@ -244,11 +244,7 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
     TYPES: NodeType<BlockPayload = VIDBlockPayload>,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = Leaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -486,11 +482,7 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
     TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = Leaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
