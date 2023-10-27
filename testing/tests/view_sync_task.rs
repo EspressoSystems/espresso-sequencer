@@ -1,7 +1,7 @@
 use commit::Committable;
-use hotshot::{types::SignatureKey, HotShotSequencingConsensusApi};
-use hotshot_task_impls::events::SequencingHotShotEvent;
-use hotshot_testing::node_types::{SequencingMemoryImpl, SequencingTestTypes};
+use hotshot::{types::SignatureKey, HotShotConsensusApi};
+use hotshot_task_impls::events::HotShotEvent;
+use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
     data::ViewNumber,
     traits::{
@@ -35,17 +35,16 @@ async fn test_view_sync_task() {
 
     // Build the API for node 3.
     let handle = build_system_handle(5).await.0;
-    let api: HotShotSequencingConsensusApi<SequencingTestTypes, SequencingMemoryImpl> =
-        HotShotSequencingConsensusApi {
-            inner: handle.hotshot.inner.clone(),
-        };
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
     let view_sync_exchange = api.inner.exchanges.view_sync_exchange().clone();
     let relay_pub_key = api.public_key().to_bytes();
     let vote_token = view_sync_exchange
         .make_vote_token(ViewNumber::new(5))
         .unwrap_or_else(|_| panic!("Error making vote token"))
         .unwrap_or_else(|| panic!("Not chosen for the committee"));
-    let vote_data_internal: ViewSyncData<SequencingTestTypes> = ViewSyncData {
+    let vote_data_internal: ViewSyncData<TestTypes> = ViewSyncData {
         relay: relay_pub_key.clone(),
         round: ViewNumber::new(5),
     };
@@ -64,21 +63,21 @@ async fn test_view_sync_task() {
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    input.push(SequencingHotShotEvent::Timeout(ViewNumber::new(2)));
-    input.push(SequencingHotShotEvent::Timeout(ViewNumber::new(3)));
-    input.push(SequencingHotShotEvent::Timeout(ViewNumber::new(4)));
+    input.push(HotShotEvent::Timeout(ViewNumber::new(2)));
+    input.push(HotShotEvent::Timeout(ViewNumber::new(3)));
+    input.push(HotShotEvent::Timeout(ViewNumber::new(4)));
 
-    input.push(SequencingHotShotEvent::Shutdown);
+    input.push(HotShotEvent::Shutdown);
 
-    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(2)), 1);
-    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(3)), 1);
-    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(4)), 1);
+    output.insert(HotShotEvent::Timeout(ViewNumber::new(2)), 1);
+    output.insert(HotShotEvent::Timeout(ViewNumber::new(3)), 1);
+    output.insert(HotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
-    output.insert(SequencingHotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(3)), 1);
+    output.insert(HotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(3)), 1);
 
-    output.insert(SequencingHotShotEvent::Shutdown, 1);
+    output.insert(HotShotEvent::Shutdown, 1);
 
     let build_fn =
         |task_runner, event_stream| add_view_sync_task(task_runner, event_stream, handle);

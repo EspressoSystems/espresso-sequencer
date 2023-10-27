@@ -1,4 +1,4 @@
-use crate::events::SequencingHotShotEvent;
+use crate::events::HotShotEvent;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
@@ -16,10 +16,10 @@ use hotshot_types::vote::DAVoteAccumulator;
 use hotshot_types::{
     certificate::DACertificate,
     consensus::{Consensus, View},
-    data::{DAProposal, ProposalType, SequencingLeaf},
+    data::{DAProposal, Leaf, ProposalType},
     message::{Message, Proposal, SequencingMessage},
     traits::{
-        consensus_api::SequencingConsensusApi,
+        consensus_api::ConsensusApi,
         election::{CommitteeExchangeType, ConsensusExchange, Membership, SignedCertificate},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
@@ -41,12 +41,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a DA task
 pub struct DATaskState<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
-    A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -64,7 +60,7 @@ pub struct DATaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, SequencingLeaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
 
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -73,7 +69,7 @@ pub struct DATaskState<
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 
     /// This state's ID
     pub id: u64,
@@ -82,7 +78,7 @@ pub struct DATaskState<
 /// Struct to maintain DA Vote Collection task state
 pub struct DAVoteCollectionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
 > where
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -107,12 +103,12 @@ pub struct DAVoteCollectionTaskState<
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
-    pub event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// the id of this task state
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>> TS
+impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
     for DAVoteCollectionTaskState<TYPES, I>
 where
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -125,9 +121,9 @@ where
 }
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = SequencingLeaf<TYPES>>>(
+async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
     mut state: DAVoteCollectionTaskState<TYPES, I>,
-    event: SequencingHotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES, I>,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     DAVoteCollectionTaskState<TYPES, I>,
@@ -141,7 +137,7 @@ where
     >,
 {
     match event {
-        SequencingHotShotEvent::DAVoteRecv(vote) => {
+        HotShotEvent::DAVoteRecv(vote) => {
             debug!("DA vote recv, collection task {:?}", vote.current_view);
             // panic!("Vote handle received DA vote for view {}", *vote.current_view);
 
@@ -166,7 +162,7 @@ where
                     debug!("Sending DAC! {:?}", dac.view_number);
                     state
                         .event_stream
-                        .publish(SequencingHotShotEvent::DACSend(
+                        .publish(HotShotEvent::DACSend(
                             dac.clone(),
                             state.committee_exchange.public_key().clone(),
                         ))
@@ -186,7 +182,7 @@ where
                 }
             }
         }
-        SequencingHotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
+        HotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
         _ => {
             error!("unexpected event {:?}", event);
         }
@@ -198,10 +194,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -215,10 +211,10 @@ where
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
-        event: SequencingHotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES, I>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            SequencingHotShotEvent::DAProposalRecv(proposal, sender) => {
+            HotShotEvent::DAProposalRecv(proposal, sender) => {
                 debug!(
                     "DA proposal received for view: {:?}",
                     proposal.data.get_view_number()
@@ -277,7 +273,7 @@ where
 
                         debug!("Sending vote to the DA leader {:?}", vote.current_view);
                         self.event_stream
-                            .publish(SequencingHotShotEvent::DAVoteSend(vote))
+                            .publish(HotShotEvent::DAVoteSend(vote))
                             .await;
                         let mut consensus = self.consensus.write().await;
 
@@ -295,7 +291,7 @@ where
                     }
                 }
             }
-            SequencingHotShotEvent::DAVoteRecv(vote) => {
+            HotShotEvent::DAVoteRecv(vote) => {
                 // warn!(
                 //     "DA vote recv, Main Task {:?}, key: {:?}",
                 //     vote.current_view,
@@ -348,7 +344,7 @@ where
                     };
                     let name = "DA Vote Collection";
                     let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, SequencingHotShotEvent::DAVoteRecv(_))
+                        matches!(event, HotShotEvent::DAVoteRecv(_))
                     }));
                     let builder =
                         TaskBuilder::<DAVoteCollectionTypes<TYPES, I>>::new(name.to_string())
@@ -367,11 +363,11 @@ where
                     self.vote_collector = Some((view, id, stream_id));
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
-                        .direct_message(stream_id, SequencingHotShotEvent::DAVoteRecv(vote))
+                        .direct_message(stream_id, HotShotEvent::DAVoteRecv(vote))
                         .await;
                 };
             }
-            SequencingHotShotEvent::ViewChange(view) => {
+            HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
                 }
@@ -422,7 +418,7 @@ where
 
                 return None;
             }
-            SequencingHotShotEvent::BlockReady(block, view) => {
+            HotShotEvent::BlockReady(block, view) => {
                 self.committee_exchange
                     .network()
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
@@ -442,26 +438,26 @@ where
                 let message = Proposal { data, signature };
 
                 self.event_stream
-                    .publish(SequencingHotShotEvent::SendPayloadCommitment(
+                    .publish(HotShotEvent::SendPayloadCommitment(
                         payload_commitment,
                     ))
                     .await;
                 self.event_stream
-                    .publish(SequencingHotShotEvent::DAProposalSend(
+                    .publish(HotShotEvent::DAProposalSend(
                         message.clone(),
                         self.committee_exchange.public_key().clone(),
                     ))
                     .await;
             }
 
-            SequencingHotShotEvent::Timeout(view) => {
+            HotShotEvent::Timeout(view) => {
                 self.committee_exchange
                     .network()
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
             }
 
-            SequencingHotShotEvent::Shutdown => {
+            HotShotEvent::Shutdown => {
                 error!("Shutting down because of shutdown signal!");
                 return Some(HotShotTaskCompleted::ShutDown);
             }
@@ -473,15 +469,15 @@ where
     }
 
     /// Filter the DA event.
-    pub fn filter(event: &SequencingHotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
-            SequencingHotShotEvent::DAProposalRecv(_, _)
-                | SequencingHotShotEvent::DAVoteRecv(_)
-                | SequencingHotShotEvent::Shutdown
-                | SequencingHotShotEvent::BlockReady(_, _)
-                | SequencingHotShotEvent::Timeout(_)
-                | SequencingHotShotEvent::ViewChange(_)
+            HotShotEvent::DAProposalRecv(_, _)
+                | HotShotEvent::DAVoteRecv(_)
+                | HotShotEvent::Shutdown
+                | HotShotEvent::BlockReady(_, _)
+                | HotShotEvent::Timeout(_)
+                | HotShotEvent::ViewChange(_)
         )
     }
 }
@@ -491,10 +487,10 @@ impl<
         TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-        A: SequencingConsensusApi<TYPES, SequencingLeaf<TYPES>, I> + 'static,
+        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -509,15 +505,15 @@ where
 /// Type alias for DA Vote Collection Types
 pub type DAVoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     DAVoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for DA Task Types
 pub type DATaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    SequencingHotShotEvent<TYPES, I>,
-    ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES, I>,
+    ChannelStream<HotShotEvent<TYPES, I>>,
     DATaskState<TYPES, I, A>,
 >;

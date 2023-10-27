@@ -1,8 +1,8 @@
 use commit::Committable;
-use hotshot::{tasks::add_vid_task, HotShotSequencingConsensusApi};
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot::{tasks::add_vid_task, HotShotConsensusApi};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
-    node_types::{SequencingMemoryImpl, SequencingTestTypes},
+    node_types::{MemoryImpl, TestTypes},
     task_helpers::vid_init,
 };
 use hotshot_types::traits::election::VIDExchangeType;
@@ -31,10 +31,9 @@ async fn test_vid_task() {
 
     // Build the API for node 2.
     let handle = build_system_handle(2).await.0;
-    let api: HotShotSequencingConsensusApi<SequencingTestTypes, SequencingMemoryImpl> =
-        HotShotSequencingConsensusApi {
-            inner: handle.hotshot.inner.clone(),
-        };
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
     let vid_exchange = api.inner.exchanges.vid_exchange().clone();
     let pub_key = *api.public_key();
 
@@ -48,7 +47,7 @@ async fn test_vid_task() {
     };
 
     let signature = vid_exchange.sign_vid_proposal(&block.commit());
-    let proposal: DAProposal<SequencingTestTypes> = DAProposal {
+    let proposal: DAProposal<TestTypes> = DAProposal {
         deltas: block.clone(),
         view_number: ViewNumber::new(2),
     };
@@ -71,22 +70,16 @@ async fn test_vid_task() {
     let mut output = HashMap::new();
 
     // In view 1, node 2 is the next leader.
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(SequencingHotShotEvent::BlockReady(
-        block.clone(),
-        ViewNumber::new(2),
-    ));
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
 
-    input.push(SequencingHotShotEvent::VidDisperseRecv(
-        vid_proposal.clone(),
-        pub_key,
-    ));
-    input.push(SequencingHotShotEvent::Shutdown);
+    input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
+    input.push(HotShotEvent::Shutdown);
 
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 1);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         1,
     );
 
@@ -95,14 +88,11 @@ async fn test_vid_task() {
         .unwrap()
         .unwrap();
     let vid_vote = vid_exchange.create_vid_message(block.commit(), ViewNumber::new(2), vote_token);
-    output.insert(SequencingHotShotEvent::VidVoteSend(vid_vote), 1);
+    output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 
-    output.insert(
-        SequencingHotShotEvent::VidDisperseRecv(vid_proposal, pub_key),
-        1,
-    );
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 1);
-    output.insert(SequencingHotShotEvent::Shutdown, 1);
+    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
+    output.insert(HotShotEvent::Shutdown, 1);
 
     let build_fn =
         |task_runner, event_stream| add_vid_task(task_runner, event_stream, vid_exchange, handle);

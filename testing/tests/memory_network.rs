@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
-use hotshot::demo::SDemoState;
+use hotshot::demo::DemoState;
 use hotshot::traits::election::static_committee::{
     GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
 };
@@ -15,14 +15,14 @@ use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
 use hotshot_types::certificate::ViewSyncCertificate;
-use hotshot_types::data::{DAProposal, QuorumProposal, SequencingLeaf};
+use hotshot_types::data::{DAProposal, Leaf, QuorumProposal};
 use hotshot_types::message::{Message, SequencingMessage};
 use hotshot_types::traits::election::{
     CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
 };
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
-use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType, SequencingExchanges};
+use hotshot_types::traits::node_implementation::{ChannelMaps, Exchanges, NodeType};
 use hotshot_types::vote::{DAVote, ViewSyncVote};
 use hotshot_types::{
     data::ViewNumber,
@@ -59,13 +59,13 @@ impl NodeType for Test {
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = SDemoState;
+    type StateType = DemoState;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type ThisLeaf = SequencingLeaf<Test>;
+pub type ThisLeaf = Leaf<Test>;
 pub type ThisMembership = GeneralStaticCommittee<Test, ThisLeaf, <Test as NodeType>::SignatureKey>;
 pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
@@ -83,8 +83,8 @@ pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test, Self::Leaf>;
-    type Leaf = SequencingLeaf<Test>;
-    type Exchanges = SequencingExchanges<
+    type Leaf = Leaf<Test>;
+    type Exchanges = Exchanges<
         Test,
         Message<Test, Self>,
         QuorumExchange<

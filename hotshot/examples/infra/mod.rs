@@ -25,7 +25,7 @@ use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
     consensus::ConsensusMetricsValue,
-    data::{QuorumProposal, SequencingLeaf, TestableLeaf},
+    data::{Leaf, QuorumProposal, TestableLeaf},
     event::{Event, EventType},
     message::{Message, SequencingMessage},
     traits::{
@@ -33,9 +33,7 @@ use hotshot_types::{
             CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
         },
         network::CommunicationChannel,
-        node_implementation::{
-            CommitteeEx, ExchangesType, NodeType, QuorumEx, SequencingExchanges,
-        },
+        node_implementation::{CommitteeEx, Exchanges, ExchangesType, NodeType, QuorumEx},
         state::{ConsensusTime, TestableBlock, TestableState},
     },
     HotShotConfig,
@@ -141,14 +139,14 @@ pub async fn run_orchestrator<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        Exchanges = SequencingExchanges<
+        Leaf = Leaf<TYPES>,
+        Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                SequencingLeaf<TYPES>,
-                QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                Leaf<TYPES>,
+                QuorumProposal<TYPES, Leaf<TYPES>>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -163,7 +161,7 @@ pub async fn run_orchestrator<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 >(
@@ -206,14 +204,14 @@ pub trait RunDA<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        Exchanges = SequencingExchanges<
+        Leaf = Leaf<TYPES>,
+        Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                SequencingLeaf<TYPES>,
-                QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                Leaf<TYPES>,
+                QuorumProposal<TYPES, Leaf<TYPES>>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -228,13 +226,13 @@ pub trait RunDA<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 > where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    SequencingLeaf<TYPES>: TestableLeaf,
+    Leaf<TYPES>: TestableLeaf,
     Self: Sync,
     SystemContext<TYPES, NODE>: HotShotType<TYPES, NODE>,
 {
@@ -254,10 +252,8 @@ pub trait RunDA<
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
         let genesis_block = TYPES::BlockPayload::genesis();
         let initializer =
-            hotshot::HotShotInitializer::<TYPES, SequencingLeaf<TYPES>>::from_genesis(
-                genesis_block,
-            )
-            .expect("Couldn't generate genesis block");
+            hotshot::HotShotInitializer::<TYPES, Leaf<TYPES>>::from_genesis(genesis_block)
+                .expect("Couldn't generate genesis block");
 
         let config = self.get_config();
 
@@ -468,14 +464,14 @@ impl<
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
-            Exchanges = SequencingExchanges<
+            Leaf = Leaf<TYPES>,
+            Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    SequencingLeaf<TYPES>,
-                    QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                    Leaf<TYPES>,
+                    QuorumProposal<TYPES, Leaf<TYPES>>,
                     MEMBERSHIP,
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -500,7 +496,7 @@ impl<
                     Message<TYPES, NODE>,
                 >,
             >,
-            Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+            Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
@@ -516,7 +512,7 @@ impl<
 where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    SequencingLeaf<TYPES>: TestableLeaf,
+    Leaf<TYPES>: TestableLeaf,
     Self: Sync,
 {
     async fn initialize_networking(
@@ -640,14 +636,14 @@ impl<
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
-            Exchanges = SequencingExchanges<
+            Leaf = Leaf<TYPES>,
+            Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    SequencingLeaf<TYPES>,
-                    QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                    Leaf<TYPES>,
+                    QuorumProposal<TYPES, Leaf<TYPES>>,
                     MEMBERSHIP,
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -672,7 +668,7 @@ impl<
                     Message<TYPES, NODE>,
                 >,
             >,
-            Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+            Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
@@ -688,7 +684,7 @@ impl<
 where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    SequencingLeaf<TYPES>: TestableLeaf,
+    Leaf<TYPES>: TestableLeaf,
     Self: Sync,
 {
     async fn initialize_networking(
@@ -790,7 +786,6 @@ where
             }
             all_keys.insert(pubkey);
         }
-
         let node_config = config_builder.build().unwrap();
         let underlying_quorum_network = Libp2pNetwork::new(
             NetworkingMetricsValue::new(),
@@ -807,7 +802,8 @@ where
             // NOTE: this introduces an invariant that the keys are assigned using this indexed
             // function
             all_keys,
-            da_keys,
+            da_keys.clone(),
+            da_keys.contains(&pubkey),
         )
         .await
         .unwrap();
@@ -877,14 +873,14 @@ pub async fn main_entry_point<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        Exchanges = SequencingExchanges<
+        Leaf = Leaf<TYPES>,
+        Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                SequencingLeaf<TYPES>,
-                QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+                Leaf<TYPES>,
+                QuorumProposal<TYPES, Leaf<TYPES>>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -899,7 +895,7 @@ pub async fn main_entry_point<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, SequencingLeaf<TYPES>>,
+        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
     RUNDA: RunDA<TYPES, MEMBERSHIP, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,
@@ -908,7 +904,7 @@ pub async fn main_entry_point<
 ) where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    SequencingLeaf<TYPES>: TestableLeaf,
+    Leaf<TYPES>: TestableLeaf,
 {
     setup_logging();
     setup_backtrace();

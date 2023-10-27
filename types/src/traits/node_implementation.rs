@@ -15,7 +15,7 @@ use super::{
     State,
 };
 use crate::{
-    data::{LeafType, SequencingLeaf, TestableLeaf},
+    data::{Leaf, LeafType, TestableLeaf},
     message::{ConsensusMessageType, Message, SequencingMessage},
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
@@ -134,7 +134,7 @@ pub trait NodeImplementation<TYPES: NodeType>:
 
     /// Consensus type selected exchanges.
     ///
-    /// Implements either `ValidatingExchangesType` or `SequencingExchangesType`.
+    /// Implements either `ValidatingExchangesType` or `ExchangesType`.
     type Exchanges: ExchangesType<TYPES, Self::Leaf, Message<TYPES, Self>>;
 
     /// Create channels for sending/recv-ing proposals and votes for quorum and committee
@@ -228,12 +228,12 @@ pub trait TestableExchange<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, ME
     >;
 }
 
-/// Implementes [`SequencingExchangesType`].
+/// Implementes [`ExchangesType`].
 #[derive(Clone, Debug)]
-pub struct SequencingExchanges<
+pub struct Exchanges<
     TYPES: NodeType,
     MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, SequencingLeaf<TYPES>, MESSAGE> + Clone + Debug,
+    QUORUMEXCHANGE: QuorumExchangeType<TYPES, Leaf<TYPES>, MESSAGE> + Clone + Debug,
     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
@@ -255,13 +255,33 @@ pub struct SequencingExchanges<
     // It is here to avoid needing to instantiate it where all the other exchanges are instantiated
     // https://github.com/EspressoSystems/HotShot/issues/1799
     #[allow(clippy::type_complexity)]
-
-    pub timeout_exchange: TimeoutExchange<TYPES, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-        as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange
-        as ConsensusExchange<TYPES, MESSAGE>>::Proposal, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-        as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange
-        as ConsensusExchange<TYPES, MESSAGE>>::Membership, <QUORUMEXCHANGE
-        as ConsensusExchange<TYPES, MESSAGE>>::Networking, MESSAGE>,
+    pub timeout_exchange: TimeoutExchange<
+        TYPES,
+        <<Exchanges<
+            TYPES,
+            MESSAGE,
+            QUORUMEXCHANGE,
+            COMMITTEEEXCHANGE,
+            VIEWSYNCEXCHANGE,
+            VIDEXCHANGE,
+        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
+            TYPES,
+            MESSAGE,
+        >>::Proposal,
+        <<Exchanges<
+            TYPES,
+            MESSAGE,
+            QUORUMEXCHANGE,
+            COMMITTEEEXCHANGE,
+            VIEWSYNCEXCHANGE,
+            VIDEXCHANGE,
+        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
+            TYPES,
+            MESSAGE,
+        >>::Membership,
+        <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+        MESSAGE,
+    >,
 
     /// Phantom data
     _phantom: PhantomData<(TYPES, MESSAGE)>,
@@ -269,19 +289,12 @@ pub struct SequencingExchanges<
 
 #[async_trait]
 impl<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-    ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>
-    for SequencingExchanges<
-        TYPES,
-        MESSAGE,
-        QUORUMEXCHANGE,
-        COMMITTEEEXCHANGE,
-        VIEWSYNCEXCHANGE,
-        VIDEXCHANGE,
-    >
+    ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>
+    for Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
 where
     TYPES: NodeType,
     MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, SequencingLeaf<TYPES>, MESSAGE> + Clone + Debug,
+    QUORUMEXCHANGE: QuorumExchangeType<TYPES, Leaf<TYPES>, MESSAGE> + Clone + Debug,
     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
@@ -291,7 +304,33 @@ where
     type ViewSyncExchange = VIEWSYNCEXCHANGE;
     type VIDExchange = VIDEXCHANGE;
     #[allow(clippy::type_complexity)]
-    type TimeoutExchange = TimeoutExchange<TYPES, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Proposal, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Membership, <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking, MESSAGE>;
+    type TimeoutExchange = TimeoutExchange<
+        TYPES,
+        <<Exchanges<
+            TYPES,
+            MESSAGE,
+            QUORUMEXCHANGE,
+            COMMITTEEEXCHANGE,
+            VIEWSYNCEXCHANGE,
+            VIDEXCHANGE,
+        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
+            TYPES,
+            MESSAGE,
+        >>::Proposal,
+        <<Exchanges<
+            TYPES,
+            MESSAGE,
+            QUORUMEXCHANGE,
+            COMMITTEEEXCHANGE,
+            VIEWSYNCEXCHANGE,
+            VIDEXCHANGE,
+        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
+            TYPES,
+            MESSAGE,
+        >>::Membership,
+        <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+        MESSAGE,
+    >;
 
     type ElectionConfigs = (TYPES::ElectionConfigType, TYPES::ElectionConfigType);
 
@@ -325,7 +364,7 @@ where
             sk.clone(),
         );
         #[allow(clippy::type_complexity)]
-        let timeout_exchange: TimeoutExchange<TYPES, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Proposal, <<SequencingExchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, SequencingLeaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Membership, <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking, MESSAGE> = TimeoutExchange::create(
+        let timeout_exchange: TimeoutExchange<TYPES, <<Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Proposal, <<Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Membership, <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking, MESSAGE> = TimeoutExchange::create(
             entries.clone(),
             configs.0.clone(),
             networks.0,
@@ -396,21 +435,12 @@ pub type QuorumEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as Ex
     Message<TYPES, I>,
 >>::QuorumExchange;
 
-/// Alias for the [`CommitteeExchange`] type for sequencing consensus.
-pub type SequencingQuorumEx<TYPES, I> =
-    <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::QuorumExchange;
-
 /// Alias for `TimeoutExchange` type
-pub type SequencingTimeoutEx<TYPES, I> =
-    <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::TimeoutExchange;
+pub type TimeoutEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+    TYPES,
+    <I as NodeImplementation<TYPES>>::Leaf,
+    Message<TYPES, I>,
+>>::TimeoutExchange;
 
 /// Alias for the [`CommitteeExchange`] type.
 pub type CommitteeEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<

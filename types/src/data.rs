@@ -601,14 +601,14 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
 /// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
 #[serde(bound(deserialize = ""))]
-pub struct SequencingLeaf<TYPES: NodeType> {
+pub struct Leaf<TYPES: NodeType> {
     /// CurView from leader when proposing leaf
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
     pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
 
-    /// The hash of the parent `SequencingLeaf`
+    /// The hash of the parent `Leaf`
     /// So we can ask if it extends
     pub parent_commitment: Commitment<Self>,
 
@@ -632,7 +632,7 @@ pub struct SequencingLeaf<TYPES: NodeType> {
     pub proposer_id: EncodedPublicKey,
 }
 
-impl<TYPES: NodeType> PartialEq for SequencingLeaf<TYPES> {
+impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
     fn eq(&self, other: &Self) -> bool {
         self.view_number == other.view_number
             && self.justify_qc == other.justify_qc
@@ -643,7 +643,7 @@ impl<TYPES: NodeType> PartialEq for SequencingLeaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> Hash for SequencingLeaf<TYPES> {
+impl<TYPES: NodeType> Hash for Leaf<TYPES> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.view_number.hash(state);
         self.justify_qc.hash(state);
@@ -768,7 +768,7 @@ where
     }
 }
 
-impl<TYPES: NodeType> Display for SequencingLeaf<TYPES> {
+impl<TYPES: NodeType> Display for Leaf<TYPES> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -780,7 +780,7 @@ impl<TYPES: NodeType> Display for SequencingLeaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
+impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
     type NodeType = TYPES;
     type DeltasType = Either<(u64, TYPES::BlockPayload), TYPES::BlockHeader>;
     type MaybeState = ();
@@ -858,7 +858,7 @@ impl<TYPES: NodeType> LeafType for SequencingLeaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> TestableLeaf for SequencingLeaf<TYPES>
+impl<TYPES: NodeType> TestableLeaf for Leaf<TYPES>
 where
     TYPES::StateType: TestableState,
     TYPES::BlockPayload: TestableBlock,
@@ -974,7 +974,7 @@ impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> Committable for SequencingLeaf<TYPES> {
+impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
         let signatures_bytes = serialize_signature(&self.justify_qc.signatures);
 

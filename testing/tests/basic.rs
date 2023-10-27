@@ -7,7 +7,7 @@
 async fn test_success() {
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -24,7 +24,7 @@ async fn test_success() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -41,7 +41,7 @@ async fn test_with_failures_one() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -63,7 +63,7 @@ async fn test_with_failures_one() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -80,7 +80,7 @@ async fn test_with_failures_half_f() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -112,7 +112,7 @@ async fn test_with_failures_half_f() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -129,7 +129,7 @@ async fn test_with_failures_f() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -173,7 +173,7 @@ async fn test_with_failures_f() {
         node_changes: vec![(Duration::new(4, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;

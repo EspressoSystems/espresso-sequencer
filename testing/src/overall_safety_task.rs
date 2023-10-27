@@ -1,7 +1,7 @@
 use commit::Commitment;
 use either::Either;
 use hotshot_task::{event_stream::EventStream, Merge};
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot_task_impls::events::HotShotEvent;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
@@ -600,15 +600,12 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     ChannelStream<GlobalTestEvent>,
     (
         usize,
-        Either<
-            Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>,
-            SequencingHotShotEvent<TYPES, I>,
-        >,
+        Either<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>, HotShotEvent<TYPES, I>>,
     ),
     MergeN<
         Merge<
             UnboundedStream<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
-            UnboundedStream<SequencingHotShotEvent<TYPES, I>>,
+            UnboundedStream<HotShotEvent<TYPES, I>>,
         >,
     >,
     OverallSafetyTask<TYPES, I>,
