@@ -12,7 +12,7 @@ use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     block_impl::{BlockPayloadError, VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::{AssembledSignature, QuorumCertificate},
-    data::{fake_commitment, random_commitment, Leaf, LeafType, ViewNumber},
+    data::{fake_commitment, random_commitment, LeafType, ViewNumber},
     traits::{
         election::Membership,
         node_implementation::NodeType,

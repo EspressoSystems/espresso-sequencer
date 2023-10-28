@@ -22,14 +22,12 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, Serializatio
 use bincode::Options;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
-use either::{Either, Left, Right};
 use espresso_systems_common::hotshot::tag;
 use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
 use std::{
     collections::HashSet,
     fmt::{Debug, Display},
@@ -161,7 +159,7 @@ where
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
     /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockPayload,
+    pub block_payload: TYPES::BlockPayload,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
 }
@@ -317,140 +315,6 @@ pub trait DeltasType<BlockPayload: Committable>:
     fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
 }
 
-/// Error which occurs when [`DeltasType::fill`] is called with a block that does not match the
-/// deltas' internal block payload commitment.
-#[derive(Clone, Copy, Debug, Snafu)]
-#[snafu(display("the block {:?} has commitment {} (expected {})", block, block.commit(), commitment))]
-pub struct InconsistentDeltasError<BLOCK: Committable + Debug> {
-    /// The block with the wrong commitment.
-    block: BLOCK,
-    /// The expected commitment.
-    commitment: Commitment<BLOCK>,
-}
-
-impl<BLOCK> DeltasType<BLOCK> for BLOCK
-where
-    BLOCK: Committable
-        + Clone
-        + Debug
-        + for<'a> Deserialize<'a>
-        + PartialEq
-        + Eq
-        + std::hash::Hash
-        + Send
-        + Serialize
-        + Sync,
-{
-    type Error = InconsistentDeltasError<BLOCK>;
-
-    fn payload_commitment(&self) -> Commitment<BLOCK> {
-        self.commit()
-    }
-
-    fn try_resolve(self) -> Result<BLOCK, Self> {
-        Ok(self)
-    }
-
-    fn fill(&mut self, block: BLOCK) -> Result<(), Self::Error> {
-        ensure!(
-            block.commit() == self.commit(),
-            InconsistentDeltasSnafu {
-                block,
-                commitment: self.commit()
-            }
-        );
-        // If the commitments are equal the blocks are equal, and we already have the block, so we
-        // don't have to do anything.
-        Ok(())
-    }
-}
-
-impl<BLOCK> DeltasType<BLOCK> for Either<BLOCK, Commitment<BLOCK>>
-where
-    BLOCK: Committable
-        + Clone
-        + Debug
-        + for<'a> Deserialize<'a>
-        + PartialEq
-        + Eq
-        + std::hash::Hash
-        + Send
-        + Serialize
-        + Sync,
-{
-    type Error = InconsistentDeltasError<BLOCK>;
-
-    fn payload_commitment(&self) -> Commitment<BLOCK> {
-        match self {
-            Either::Left(block) => block.commit(),
-            Either::Right(comm) => *comm,
-        }
-    }
-
-    fn try_resolve(self) -> Result<BLOCK, Self> {
-        match self {
-            Either::Left(block) => Ok(block),
-            Either::Right(_) => Err(self),
-        }
-    }
-
-    fn fill(&mut self, block: BLOCK) -> Result<(), Self::Error> {
-        match self {
-            Either::Left(curr) => curr.fill(block),
-            Either::Right(comm) => {
-                ensure!(
-                    *comm == block.commit(),
-                    InconsistentDeltasSnafu {
-                        block,
-                        commitment: *comm
-                    }
-                );
-                *self = Either::Left(block);
-                Ok(())
-            }
-        }
-    }
-}
-
-impl<HEADER, PAYLOAD> DeltasType<PAYLOAD> for Either<(u64, PAYLOAD), HEADER>
-where
-    HEADER: BlockHeader<Payload = PAYLOAD>,
-    PAYLOAD: BlockPayload,
-{
-    type Error = InconsistentDeltasError<PAYLOAD>;
-
-    fn payload_commitment(&self) -> Commitment<PAYLOAD> {
-        match self {
-            Either::Left((_, block)) => block.commit(),
-            Either::Right(header) => header.payload_commitment(),
-        }
-    }
-
-    fn try_resolve(self) -> Result<PAYLOAD, Self> {
-        match self {
-            Either::Left((_, block)) => Ok(block),
-            Either::Right(_) => Err(self),
-        }
-    }
-
-    fn fill(&mut self, block: PAYLOAD) -> Result<(), Self::Error> {
-        match self {
-            Either::Left((_, curr)) => curr.fill(block),
-            Either::Right(header) => {
-                ensure!(
-                    header.payload_commitment() == block.commit(),
-                    InconsistentDeltasSnafu {
-                        block,
-                        commitment: header.payload_commitment()
-                    }
-                );
-                *self = Either::Left((header.block_number(), block));
-                Ok(())
-            }
-        }
-    }
-}
-
 /// An item which is appended to a blockchain.
 pub trait LeafType:
     Debug
@@ -467,8 +331,8 @@ pub trait LeafType:
 {
     /// Type of nodes participating in the network.
     type NodeType: NodeType;
-    /// Type of block contained by this leaf.
-    type DeltasType: DeltasType<LeafBlockPayload<Self>>;
+    // /// Type of block contained by this leaf.
+    // type DeltasType: DeltasType<LeafBlockPayload<Self>>;
     /// Either state or empty
     type MaybeState: Clone
         + Debug
@@ -497,18 +361,21 @@ pub trait LeafType:
     fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Commitment<Self>>;
     /// Commitment to this leaf's parent.
     fn get_parent_commitment(&self) -> Commitment<Self>;
-    /// The block contained in this leaf.
-    fn get_deltas(&self) -> Self::DeltasType;
-    /// Fill this leaf with the entire corresponding block.
-    ///
-    /// After this function succeeds, `self.get_deltas().try_resolve()` is guaranteed to return
-    /// `Ok(block)`.
-    ///
-    /// # Errors
-    ///
-    /// Fails if `block` does not match `self.get_deltas_commitment()`, or if the block is not able
-    /// to be stored for some implementation-defined reason.
-    fn fill_deltas(&mut self, block: LeafBlockPayload<Self>) -> Result<(), LeafDeltasError<Self>>;
+    /// The block header contained in this leaf.
+    fn get_block_header(&self) -> <Self::NodeType as NodeType>::BlockHeader;
+    /// A commitment to the block payload contained in this leaf.
+    fn get_payload_commitment(&self) -> Commitment<LeafBlockPayload<Self>> {
+        self.get_block_header().payload_commitment()
+    }
+    /// Fill the transaciton commitments of this leaf with the corresponding block payload.
+    fn fill_transaction_commitments(
+        &mut self,
+        transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
+    );
+    /// Optional set of commitments to the transactions.
+    fn get_transanction_commitments(
+        &self,
+    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>;
     /// The blockchain state after appending this leaf.
     fn get_state(&self) -> Self::MaybeState;
     /// Transactions rejected or invalidated by the application of this leaf.
@@ -519,17 +386,8 @@ pub trait LeafType:
     fn get_proposer_id(&self) -> EncodedPublicKey;
     /// Create a leaf from information stored about a view.
     fn from_stored_view(stored_view: StoredView<Self::NodeType, Self>) -> Self;
-
-    /// A commitment to the block payload contained in this leaf.
-    fn get_deltas_commitment(&self) -> Commitment<LeafBlockPayload<Self>> {
-        self.get_deltas().payload_commitment()
-    }
 }
 
-/// The [`DeltasType`] in a [`LeafType`].
-pub type LeafDeltas<LEAF> = <LEAF as LeafType>::DeltasType;
-/// Errors reported by the [`DeltasType`] in a [`LeafType`].
-pub type LeafDeltasError<LEAF> = <LeafDeltas<LEAF> as DeltasType<LeafBlockPayload<LEAF>>>::Error;
 /// The [`NodeType`] in a [`LeafType`].
 pub type LeafNode<LEAF> = <LEAF as LeafType>::NodeType;
 /// The [`StateType`] in a [`LeafType`].
@@ -648,8 +506,10 @@ impl<TYPES: NodeType> Hash for Leaf<TYPES> {
         self.view_number.hash(state);
         self.justify_qc.hash(state);
         self.parent_commitment.hash(state);
-        self.block_header.hasher(state);
-        self.transaction_commitments.hash(state);
+        self.block_header.hash(state);
+        for com in &self.transaction_commitments {
+            com.hash(state);
+        }
         self.rejected.hash(state);
     }
 }
@@ -666,7 +526,7 @@ impl<TYPES: NodeType> Display for ValidatingLeaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
     type NodeType = TYPES;
-    type DeltasType = TYPES::BlockPayload;
+    // type DeltasType = TYPES::BlockPayload;
     type MaybeState = TYPES::StateType;
 
     fn new(
@@ -704,16 +564,21 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.parent_commitment
     }
 
-    fn get_deltas(&self) -> Self::DeltasType {
-        self.deltas.clone()
+    fn get_block_header(&self) -> <Self::NodeType as NodeType>::BlockHeader {
+        unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
-    fn get_deltas_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockPayload> {
-        self.deltas.payload_commitment()
+    fn fill_transaction_commitments(
+        &mut self,
+        _transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
+    ) {
+        unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
-    fn fill_deltas(&mut self, block: LeafBlockPayload<Self>) -> Result<(), LeafDeltasError<Self>> {
-        self.deltas.fill(block)
+    fn get_transanction_commitments(
+        &self,
+    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>> {
+        unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
     fn get_state(&self) -> Self::MaybeState {
@@ -732,19 +597,8 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.proposer_id.clone()
     }
 
-    fn from_stored_view(stored_view: StoredView<Self::NodeType, Self>) -> Self {
-        Self {
-            view_number: stored_view.view_number,
-            height: 0,
-            justify_qc: stored_view.justify_qc,
-            parent_commitment: stored_view.parent,
-            block_header: stored_view.block_header,
-            transaction_commitments: stored_view.transaction_commitments,
-            state: stored_view.state,
-            rejected: stored_view.rejected,
-            timestamp: stored_view.timestamp,
-            proposer_id: stored_view.proposer_id,
-        }
+    fn from_stored_view(_stored_view: StoredView<Self::NodeType, Self>) -> Self {
+        unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 }
 
@@ -782,20 +636,21 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
     type NodeType = TYPES;
-    type DeltasType = Either<(u64, TYPES::BlockPayload), TYPES::BlockHeader>;
+    // type DeltasType = Either<(u64, TYPES::BlockPayload), TYPES::BlockHeader>;
     type MaybeState = ();
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
         justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
-        deltas: <Self::NodeType as NodeType>::BlockPayload,
+        payload: <Self::NodeType as NodeType>::BlockPayload,
         _state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
         Self {
             view_number,
             justify_qc,
             parent_commitment: fake_commitment(),
-            deltas: Either::Left((0, deltas)),
+            block_header: TYPES::BlockHeader::genesis(payload.clone()),
+            transaction_commitments: payload.transaction_commitments(),
             rejected: Vec::new(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: genesis_proposer_id(),
@@ -822,12 +677,17 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
         self.block_header.clone()
     }
 
-    fn get_block_commitment(&self) -> Commitment<<Self::NodeType as NodeType>::BlockPayload> {
-        self.block_header.payload_commitment()
+    fn fill_transaction_commitments(
+        &mut self,
+        transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
+    ) {
+        self.transaction_commitments = transaction_commitments;
     }
 
-    fn fill_deltas(&mut self, block: LeafBlockPayload<Self>) -> Result<(), LeafDeltasError<Self>> {
-        self.deltas.fill(block)
+    fn get_transanction_commitments(
+        &self,
+    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>> {
+        self.transaction_commitments.clone()
     }
 
     // The Sequencing Leaf doesn't have a state.
@@ -850,7 +710,8 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
             view_number: stored_view.view_number,
             justify_qc: stored_view.justify_qc,
             parent_commitment: stored_view.parent,
-            deltas: stored_view.deltas,
+            block_header: stored_view.block_header,
+            transaction_commitments: stored_view.transaction_commitments,
             rejected: stored_view.rejected,
             timestamp: stored_view.timestamp,
             proposer_id: stored_view.proposer_id,
@@ -981,8 +842,9 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
         // Skip the transaction commitments, so that the repliacs can reconstruct the leaf.
         commit::RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)
+            .u64_field("block number", self.get_height())
             .field("parent Leaf commitment", self.parent_commitment)
-            .field("block header", self.block_header)
+            .field("block payload commitment", self.get_payload_commitment())
             .constant_str("justify_qc view number")
             .u64(*self.justify_qc.view_number)
             .field(
@@ -1021,11 +883,11 @@ where
     fn from(leaf: LEAF) -> Self {
         StoredView {
             view_number: leaf.get_view_number(),
-            height: leaf.get_height(),
             parent: leaf.get_parent_commitment(),
             justify_qc: leaf.get_justify_qc(),
             state: leaf.get_state(),
-            deltas: leaf.get_deltas(),
+            block_header: leaf.get_block_header(),
+            transaction_commitments: leaf.get_transanction_commitments(),
             rejected: leaf.get_rejected(),
             timestamp: leaf.get_timestamp(),
             proposer_id: leaf.get_proposer_id(),

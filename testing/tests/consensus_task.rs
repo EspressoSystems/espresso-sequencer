@@ -1,6 +1,5 @@
 use commit::Commitment;
 use commit::Committable;
-use either::Right;
 use hotshot::{
     tasks::add_consensus_task,
     types::{SignatureKey, SystemContextHandle},
@@ -23,6 +22,7 @@ use hotshot_types::{
 };
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,

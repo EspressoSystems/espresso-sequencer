@@ -165,14 +165,12 @@ where
             Commitment<<TYPES::BlockPayload as BlockPayload>::Transaction>,
         >,
         state: LEAF::MaybeState,
-        height: u64,
         parent_commitment: Commitment<LEAF>,
         rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
         proposer_id: EncodedPublicKey,
     ) -> Self {
         Self {
             view_number: qc.view_number(),
-            height,
             parent: parent_commitment,
             justify_qc: qc,
             state,

@@ -123,7 +123,7 @@ impl BlockPayload for VIDBlockPayload {
 
     type Transaction = VIDTransaction;
 
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
+    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
@@ -143,7 +143,7 @@ pub struct VIDBlockHeader {
 impl BlockHeader for VIDBlockHeader {
     type Payload = VIDBlockPayload;
 
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: Self) -> Self {
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self {
         Self {
             block_number: parent_header.block_number + 1,
             payload_commitment,

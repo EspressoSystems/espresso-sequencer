@@ -243,7 +243,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType<BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,

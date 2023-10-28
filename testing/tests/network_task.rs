@@ -52,7 +52,7 @@ async fn test_network_task() {
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let da_proposal = Proposal {
         data: DAProposal {
-            deltas: block.clone(),
+            block_payload: block.clone(),
             view_number: ViewNumber::new(2),
         },
         signature,
@@ -117,7 +117,7 @@ async fn test_network_task() {
         HotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,
     );
-    output.insert(HotShotEvent::SendDABlockData(block), 1);
+    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
     output.insert(
         HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),

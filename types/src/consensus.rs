@@ -13,13 +13,14 @@ use crate::{
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
+        BlockPayload,
     },
     utils::Terminator,
 };
-use commit::{Commitment, Committable};
+use commit::Commitment;
 use derivative::Derivative;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use tracing::error;
@@ -47,10 +48,11 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// - includes the MOST RECENT decided leaf
     pub saved_leaves: CommitmentMap<LEAF>,
 
-    /// Saved blocks
+    /// Saved transaction commitments
     ///
-    /// Contains the full block for every leaf in `saved_leaves` if that block is available.
-    pub saved_blocks: BlockStore<TYPES::BlockPayload>,
+    /// Contains the transaction commitments of the block for every leaf in `saved_leaves` if that
+    /// commitment set is available.
+    pub saved_transaction_commitments: TransactionStore<TYPES::BlockPayload>,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,
@@ -297,7 +299,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     }
 
     /// garbage collects based on state change
-    /// right now, this removes from both the `saved_blocks`
+    /// right now, this removes from both the `saved_transaction_commitments`
     /// and `state_map` fields of `Consensus`
     /// # Panics
     /// On inconsistent stored entries
@@ -323,14 +325,15 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_payload_commitment())
             .for_each(|block| {
-                self.saved_blocks.remove(block);
+                self.saved_transaction_commitments.remove(block);
             });
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 if let Some(removed) = self.saved_leaves.remove(&leaf) {
-                    self.saved_blocks.remove(removed.get_deltas_commitment());
+                    self.saved_transaction_commitments
+                        .remove(removed.get_payload_commitment());
                 }
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
@@ -351,7 +354,10 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     }
 }
 
-/// Mapping from block payload commitments to full blocks.
+/// Alias for the set of transaction commitments.
+type TransactionCommitments<PAYLOAD> = HashSet<Commitment<<PAYLOAD as BlockPayload>::Transaction>>;
+
+/// Mapping from block payload commitments to the set of transaction commitents.
 ///
 /// Entries in this mapping are reference-counted, so multiple consensus objects can refer to the
 /// same block, and the block will only be deleted after _all_ such objects are garbage collected.
@@ -359,46 +365,60 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
 /// before all but one branch are ultimately garbage collected.
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct BlockStore<BLOCK: Committable>(HashMap<Commitment<BLOCK>, (BLOCK, u64)>);
+pub struct TransactionStore<PAYLOAD: BlockPayload>(
+    HashMap<Commitment<PAYLOAD>, (TransactionCommitments<PAYLOAD>, u64)>,
+);
 
-impl<BLOCK: Committable> BlockStore<BLOCK> {
-    /// Save `block` for later retrieval.
+impl<PAYLOAD: BlockPayload> TransactionStore<PAYLOAD> {
+    /// Save payload commitment for later retrieval.
     ///
     /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
-    /// `self.get(block.commit())` will return `Some(block)`.
+    /// `self.get(payload_commitment)` will return `Some(transaction_commitments)`.
     ///
-    /// This function will increment a reference count on the saved block, so that multiple calls to
-    /// [`insert`](Self::insert) for the same block result in multiple owning references to the
-    /// block. [`remove`](Self::remove) must be called once for each reference before the block will
-    /// be deallocated.
-    pub fn insert(&mut self, block: BLOCK) {
+    /// This function will increment a reference count on the saved payload commitment, so that
+    /// multiple calls to [`insert`](Self::insert) for the same payload commitment result in
+    /// multiple owning references to the payload commitment. [`remove`](Self::remove) must be
+    /// called once for each reference before the payload commitment will be deallocated.
+    pub fn insert(
+        &mut self,
+        payload_commitment: Commitment<PAYLOAD>,
+        transaction_commitments: TransactionCommitments<PAYLOAD>,
+    ) {
         self.0
-            .entry(block.commit())
+            .entry(payload_commitment)
             .and_modify(|(_, refcount)| *refcount += 1)
-            .or_insert((block, 1));
+            .or_insert((transaction_commitments, 1));
     }
 
-    /// Get a saved block, if available.
+    /// Get a saved set of transaction commitments, if available.
     ///
-    /// If a block has been saved with [`insert`](Self::insert), this function will retrieve it. It
-    /// may return [`None`] if a block with the given commitment has not been saved or if the block
-    /// has been dropped with [`remove`](Self::remove).
+    /// If a set of transaction commitments has been saved with [`insert`](Self::insert), this
+    /// function will retrieve it. It may return [`None`] if a block with the given commitment has
+    /// not been saved or if the block has been dropped with [`remove`](Self::remove).
     #[must_use]
-    pub fn get(&self, block: Commitment<BLOCK>) -> Option<&BLOCK> {
-        self.0.get(&block).map(|(block, _)| block)
+    pub fn get(
+        &self,
+        payload_commitment: Commitment<PAYLOAD>,
+    ) -> Option<&HashSet<Commitment<<PAYLOAD as BlockPayload>::Transaction>>> {
+        self.0
+            .get(&payload_commitment)
+            .map(|(txn_comm, _)| txn_comm)
     }
 
-    /// Drop a reference to a saved block.
+    /// Drop a reference to a saved set of transaction commitments.
     ///
-    /// If the block exists and this call drops the last reference to it, the block will be
-    /// returned. Otherwise, the return value is [`None`].
-    pub fn remove(&mut self, block: Commitment<BLOCK>) -> Option<BLOCK> {
-        if let Entry::Occupied(mut e) = self.0.entry(block) {
+    /// If the set exists and this call drops the last reference to it, the set will be returned,
+    /// Otherwise, the return value is [`None`].
+    pub fn remove(
+        &mut self,
+        payload_commitment: Commitment<PAYLOAD>,
+    ) -> Option<HashSet<Commitment<<PAYLOAD as BlockPayload>::Transaction>>> {
+        if let Entry::Occupied(mut e) = self.0.entry(payload_commitment) {
             let (_, refcount) = e.get_mut();
             *refcount -= 1;
             if *refcount == 0 {
-                let (block, _) = e.remove();
-                return Some(block);
+                let (txn_comm, _) = e.remove();
+                return Some(txn_comm);
             }
         }
         None

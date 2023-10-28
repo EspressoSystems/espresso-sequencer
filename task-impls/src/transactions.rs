@@ -6,7 +6,6 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use bincode::config::Options;
 use commit::{Commitment, Committable};
-use either::{Left, Right};
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
@@ -23,7 +22,6 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, Membership, QuorumExchangeType},
         node_implementation::{NodeImplementation, NodeType, QuorumEx},
-        BlockPayload,
     },
 };
 use hotshot_utils::bincode::bincode_opts;

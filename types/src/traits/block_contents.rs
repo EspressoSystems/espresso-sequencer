@@ -54,7 +54,7 @@ pub trait BlockPayload:
 
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
+    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
 /// Header of a block, which commits to a [`BlockPayload`].
@@ -65,7 +65,7 @@ pub trait BlockHeader:
     type Payload: BlockPayload;
 
     /// Build a header with the payload commitment and parent header.
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: Self) -> Self;
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self;
 
     /// Build a genesis header with the genesis payload.
     fn genesis(payload: Self::Payload) -> Self;
@@ -147,7 +147,7 @@ pub mod dummy {
     impl BlockHeader for DummyBlock {
         type Payload = Self;
 
-        fn new(_payload_commitment: Commitment<Self>, _parent_header: Self) -> Self {
+        fn new(_payload_commitment: Commitment<Self>, _parent_header: &Self) -> Self {
             Self { nonce: 0 }
         }
 
@@ -171,7 +171,7 @@ pub mod dummy {
 
         type Transaction = DummyTransaction;
 
-        fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
+        fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()
         }
     }

@@ -49,7 +49,7 @@ async fn test_da_task() {
 
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
-        deltas: block.clone(),
+        block_payload: block.clone(),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -77,7 +77,7 @@ async fn test_da_task() {
         HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         1,
     );
-    output.insert(HotShotEvent::SendDABlockData(block.clone()), 1);
+    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let vote_token = committee_exchange
         .make_vote_token(ViewNumber::new(2))

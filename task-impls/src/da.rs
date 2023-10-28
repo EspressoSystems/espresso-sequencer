@@ -236,9 +236,9 @@ where
 
                 debug!(
                     "Got a DA block with {} transactions!",
-                    proposal.data.deltas.contained_transactions().len()
+                    proposal.data.block_payload.transaction_commitments().len()
                 );
-                let payload_commitment = proposal.data.deltas.commit();
+                let payload_commitment = proposal.data.block_payload.commit();
 
                 // ED Is this the right leader?
                 let view_leader_key = self.committee_exchange.get_leader(view);
@@ -287,7 +287,10 @@ where
                         });
 
                         // Record the block we have promised to make available.
-                        consensus.saved_blocks.insert(proposal.data.deltas);
+                        consensus.saved_transaction_commitments.insert(
+                            proposal.data.block_payload.commit(),
+                            proposal.data.block_payload.transaction_commitments(),
+                        );
                     }
                 }
             }
@@ -429,7 +432,7 @@ where
                     .committee_exchange
                     .sign_da_proposal(&payload_commitment);
                 let data: DAProposal<TYPES> = DAProposal {
-                    deltas: block.clone(),
+                    block_payload: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number: view,
                 };
