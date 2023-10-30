@@ -9,11 +9,13 @@ mod cache;
 
 use async_compatibility_layer::art::async_block_on;
 use futures::channel::oneshot::Sender;
+use libp2p::kad::Behaviour as KademliaBehaviour;
+use libp2p::kad::Event as KademliaEvent;
 use libp2p::{
     kad::{
         /* handler::KademliaHandlerIn, */ store::MemoryStore, BootstrapError, BootstrapOk,
-        GetClosestPeersOk, GetRecordOk, GetRecordResult, Kademlia, KademliaEvent, Mode,
-        ProgressStep, PutRecordResult, QueryId, QueryResult, Quorum, Record,
+        GetClosestPeersOk, GetRecordOk, GetRecordResult, Mode, ProgressStep, PutRecordResult,
+        QueryId, QueryResult, Quorum, Record,
     },
     swarm::{NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm},
     Multiaddr,
@@ -52,7 +54,7 @@ pub struct DHTBehaviour {
     /// List of previously failled put requests
     queued_put_record_queries: VecDeque<KadPutQuery>,
     /// Kademlia behaviour
-    pub kadem: Kademlia<MemoryStore>,
+    pub kadem: KademliaBehaviour<MemoryStore>,
     /// State of bootstrapping
     pub bootstrap_state: Bootstrap,
     /// State of last random walk
@@ -114,7 +116,7 @@ impl DHTBehaviour {
     /// Create a new DHT behaviour
     #[must_use]
     pub async fn new(
-        mut kadem: Kademlia<MemoryStore>,
+        mut kadem: KademliaBehaviour<MemoryStore>,
         pid: PeerId,
         replication_factor: NonZeroUsize,
         cache_location: Option<String>,
@@ -540,7 +542,8 @@ pub enum DHTProgress {
 // 1. use of deprecated associated function `libp2p::libp2p_swarm::NetworkBehaviour::inject_event`: Implement `NetworkBehaviour::on_connection_handler_event` instead. The default implementation of this `inject_*` method delegates to it.
 
 impl NetworkBehaviour for DHTBehaviour {
-    type ConnectionHandler = <Kademlia<MemoryStore> as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionHandler =
+        <KademliaBehaviour<MemoryStore> as NetworkBehaviour>::ConnectionHandler;
 
     type ToSwarm = DHTEvent;
 

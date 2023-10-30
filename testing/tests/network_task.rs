@@ -1,8 +1,8 @@
 use commit::Committable;
-use hotshot::HotShotSequencingConsensusApi;
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot::HotShotConsensusApi;
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
-    node_types::{SequencingMemoryImpl, SequencingTestTypes},
+    node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, vid_init},
 };
 use hotshot_types::{
@@ -35,10 +35,9 @@ async fn test_network_task() {
 
     // Build the API for node 2.
     let (handle, event_stream) = build_system_handle(2).await;
-    let api: HotShotSequencingConsensusApi<SequencingTestTypes, SequencingMemoryImpl> =
-        HotShotSequencingConsensusApi {
-            inner: handle.hotshot.inner.clone(),
-        };
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
@@ -75,45 +74,39 @@ async fn test_network_task() {
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(SequencingHotShotEvent::BlockReady(
-        block.clone(),
-        ViewNumber::new(2),
-    ));
-    input.push(SequencingHotShotEvent::DAProposalSend(
-        da_proposal.clone(),
-        pub_key,
-    ));
-    input.push(SequencingHotShotEvent::VidDisperseSend(
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
+    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
+    input.push(HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key));
+    input.push(HotShotEvent::VidDisperseSend(
         da_vid_disperse.clone(),
         pub_key,
     ));
-    input.push(SequencingHotShotEvent::QuorumProposalSend(
+    input.push(HotShotEvent::QuorumProposalSend(
         quorum_proposal.clone(),
         pub_key,
     ));
-    input.push(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(SequencingHotShotEvent::Shutdown);
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    input.push(HotShotEvent::Shutdown);
 
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(1)), 2);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 2);
     output.insert(
-        SequencingHotShotEvent::DAProposalSend(da_proposal.clone(), pub_key),
+        HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key),
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
     output.insert(
-        SequencingHotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         2,
     );
     output.insert(
-        SequencingHotShotEvent::VidDisperseRecv(da_vid_disperse.clone(), pub_key),
+        HotShotEvent::VidDisperseRecv(da_vid_disperse.clone(), pub_key),
         1,
     );
     output.insert(
-        SequencingHotShotEvent::VidDisperseSend(da_vid_disperse, pub_key),
+        HotShotEvent::VidDisperseSend(da_vid_disperse, pub_key),
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
-    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(1)), 1);
-    output.insert(SequencingHotShotEvent::Timeout(ViewNumber::new(2)), 1);
+    output.insert(HotShotEvent::Timeout(ViewNumber::new(1)), 1);
+    output.insert(HotShotEvent::Timeout(ViewNumber::new(2)), 1);
 
     // Only one output from the input.
     // The consensus task will fail to send a second proposal, like the DA task does, due to the
@@ -121,20 +114,17 @@ async fn test_network_task() {
     // logging, but that is fine for testing as long as the network task is correctly handling
     // events.
     output.insert(
-        SequencingHotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
+        HotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,
     );
-    output.insert(SequencingHotShotEvent::SendDABlockData(block), 1);
+    output.insert(HotShotEvent::SendDABlockData(block), 1);
+    output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
     output.insert(
-        SequencingHotShotEvent::DAProposalRecv(da_proposal, pub_key),
+        HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),
         1,
     );
-    output.insert(
-        SequencingHotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),
-        1,
-    );
-    output.insert(SequencingHotShotEvent::ViewChange(ViewNumber::new(2)), 2);
-    output.insert(SequencingHotShotEvent::Shutdown, 1);
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 2);
+    output.insert(HotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, _| async { task_runner };
     run_harness(input, output, Some(event_stream), build_fn).await;

@@ -113,6 +113,8 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// NOTE: supposed to represent a ViewNumber but we
     /// haven't made that atomic yet and we prefer lock-free
     latest_seen_view: Arc<AtomicU64>,
+    /// if we're a member of the DA committee or not
+    is_da: bool,
 }
 
 /// Networking implementation that uses libp2p
@@ -227,12 +229,13 @@ where
                     Libp2pNetwork::new(
                         NetworkingMetricsValue::new(),
                         config,
-                        pubkey,
+                        pubkey.clone(),
                         bootstrap_addrs_ref,
                         num_bootstrap,
                         node_id as usize,
                         keys,
-                        da,
+                        da.clone(),
+                        da.contains(&pubkey),
                     )
                     .await
                     .unwrap()
@@ -281,6 +284,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         // HACK
         committee_pks: BTreeSet<K>,
         da_pks: BTreeSet<K>,
+        is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
         let network_handle = Arc::new(
@@ -336,6 +340,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // proposals on". We need this because to have consensus info injected we need a working
                 // network already. In the worst case, we send a few lookups we don't need.
                 latest_seen_view: Arc::new(AtomicU64::new(0)),
+                is_da,
             }),
         };
 
@@ -383,6 +388,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         let node_type = self.inner.handle.config().node_type;
         let metrics_connected_peers = self.inner.clone();
+        let is_da = self.inner.is_da;
         async_spawn({
             let is_ready = self.inner.is_ready.clone();
             async move {
@@ -422,7 +428,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 }
 
                 handle.subscribe(QC_TOPIC.to_string()).await.unwrap();
-                handle.subscribe("DA".to_string()).await.unwrap();
+
+                // only subscribe to DA events if we are DA
+                if is_da {
+                    handle.subscribe("DA".to_string()).await.unwrap();
+                }
+
                 // TODO figure out some way of passing in ALL keypairs. That way we can add the
                 // global topic to the topic map
                 // NOTE this wont' work without this change

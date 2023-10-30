@@ -8,11 +8,11 @@ use hotshot::{
 };
 use hotshot_types::{
     certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf},
+    data::{DAProposal, Leaf, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, NodeImplementation, NodeType, SequencingExchanges},
+        node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
     },
     vote::{DAVote, QuorumVote, ViewSyncVote},
 };
@@ -22,7 +22,7 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = SequencingLeaf<DemoTypes>;
+pub type ThisLeaf = Leaf<DemoTypes>;
 pub type ThisMembership =
     GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
 pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
@@ -41,8 +41,8 @@ pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
-    type Leaf = SequencingLeaf<DemoTypes>;
-    type Exchanges = SequencingExchanges<
+    type Leaf = Leaf<DemoTypes>;
+    type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,
         QuorumExchange<
