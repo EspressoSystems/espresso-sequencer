@@ -2,18 +2,18 @@ use crate::view_sync::ViewSyncPhase;
 use commit::Commitment;
 use either::Either;
 use hotshot_types::{
-    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate},
+    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     data::{DAProposal, VidDisperse},
     message::Proposal,
     traits::node_implementation::{
         NodeImplementation, NodeType, QuorumProposalType, ViewSyncProposalType,
     },
-    vote::{DAVote, QuorumVote, TimeoutVote, ViewSyncVote},
+    vote::{DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncVote},
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Shutdown the task
     Shutdown,
     /// A quorum proposal has been received from the network; handled by the consensus task
@@ -82,17 +82,17 @@ pub enum SequencingHotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
     ///
     /// Like [`DAVoteSend`]
-    VidVoteSend(DAVote<TYPES>),
+    VidVoteSend(VIDVote<TYPES>),
     /// A VID vote has been received by the network; handled by the DA task
     ///
     /// Like [`DAVoteRecv`]
-    VidVoteRecv(DAVote<TYPES>),
+    VidVoteRecv(VIDVote<TYPES>),
     /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
     ///
     /// Like [`DACSend`]
-    VidCertSend(DACertificate<TYPES>, TYPES::SignatureKey),
+    VidCertSend(VIDCertificate<TYPES>, TYPES::SignatureKey),
     /// A VID cert has been recieved by the network; handled by the consensus task
     ///
     /// Like [`DACRecv`]
-    VidCertRecv(DACertificate<TYPES>),
+    VidCertRecv(VIDCertificate<TYPES>),
 }

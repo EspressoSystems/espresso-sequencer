@@ -1,5 +1,5 @@
 use crate::{
-    node_types::{SequencingMemoryImpl, SequencingTestTypes},
+    node_types::{MemoryImpl, TestTypes},
     test_builder::TestMetadata,
 };
 use commit::Committable;
@@ -8,14 +8,14 @@ use hotshot::{
     certificate::QuorumCertificate,
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
-    HotShotInitializer, HotShotSequencingConsensusApi, SystemContext,
+    HotShotConsensusApi, HotShotInitializer, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     block_impl::{VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::ConsensusMetricsValue,
-    data::{QuorumProposal, SequencingLeaf, VidScheme, ViewNumber},
+    data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
     traits::{
         consensus_api::ConsensusSharedApi,
@@ -29,51 +29,50 @@ use hotshot_types::{
 pub async fn build_system_handle(
     node_id: u64,
 ) -> (
-    SystemContextHandle<SequencingTestTypes, SequencingMemoryImpl>,
-    ChannelStream<SequencingHotShotEvent<SequencingTestTypes, SequencingMemoryImpl>>,
+    SystemContextHandle<TestTypes, MemoryImpl>,
+    ChannelStream<HotShotEvent<TestTypes, MemoryImpl>>,
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 
-    let launcher = builder.gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>();
+    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>();
 
     let networks = (launcher.resource_generator.channel_generator)(node_id);
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
     let initializer = HotShotInitializer::<
-        SequencingTestTypes,
-        <SequencingMemoryImpl as NodeImplementation<SequencingTestTypes>>::Leaf,
-    >::from_genesis(<SequencingMemoryImpl as TestableNodeImplementation<
-        SequencingTestTypes,
-    >>::block_genesis())
+        TestTypes,
+        <MemoryImpl as NodeImplementation<TestTypes>>::Leaf,
+    >::from_genesis(
+        <MemoryImpl as TestableNodeImplementation<TestTypes>>::block_genesis()
+    )
     .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key =
         <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
-    let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
+    let public_key = <TestTypes as NodeType>::SignatureKey::from_private(&private_key);
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
-        <QuorumEx<SequencingTestTypes, SequencingMemoryImpl> as ConsensusExchange<
-            SequencingTestTypes,
-            Message<SequencingTestTypes, SequencingMemoryImpl>,
+        <QuorumEx<TestTypes, MemoryImpl> as ConsensusExchange<
+            TestTypes,
+            Message<TestTypes, MemoryImpl>,
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
 
     let committee_election_config = config.election_config.clone().unwrap_or_else(|| {
-        <CommitteeEx<SequencingTestTypes, SequencingMemoryImpl> as ConsensusExchange<
-            SequencingTestTypes,
-            Message<SequencingTestTypes, SequencingMemoryImpl>,
+        <CommitteeEx<TestTypes, MemoryImpl> as ConsensusExchange<
+            TestTypes,
+            Message<TestTypes, MemoryImpl>,
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
-    let exchanges =
-        <SequencingMemoryImpl as NodeImplementation<SequencingTestTypes>>::Exchanges::create(
-            known_nodes_with_stake.clone(),
-            (quorum_election_config, committee_election_config),
-            networks,
-            public_key,
-            public_key.get_stake_table_entry(1u64),
-            private_key.clone(),
-        );
+    let exchanges = <MemoryImpl as NodeImplementation<TestTypes>>::Exchanges::create(
+        known_nodes_with_stake.clone(),
+        (quorum_election_config, committee_election_config),
+        networks,
+        public_key,
+        public_key.get_stake_table_entry(1u64),
+        private_key.clone(),
+    );
     SystemContext::init(
         public_key,
         private_key,
@@ -89,19 +88,15 @@ pub async fn build_system_handle(
 }
 
 async fn build_quorum_proposal_and_signature(
-    handle: &SystemContextHandle<SequencingTestTypes, SequencingMemoryImpl>,
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> (
-    QuorumProposal<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>,
-    EncodedSignature,
-) {
+) -> (QuorumProposal<TestTypes, Leaf<TestTypes>>, EncodedSignature) {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
-    let api: HotShotSequencingConsensusApi<SequencingTestTypes, SequencingMemoryImpl> =
-        HotShotSequencingConsensusApi {
-            inner: handle.hotshot.inner.clone(),
-        };
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
     let _quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
 
     let parent_view_number = &consensus.high_qc.view_number();
@@ -118,7 +113,7 @@ async fn build_quorum_proposal_and_signature(
 
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
-    let leaf = SequencingLeaf {
+    let leaf = Leaf {
         view_number: ViewNumber::new(view),
         height: parent_leaf.height + 1,
         justify_qc: consensus.high_qc.clone(),
@@ -131,7 +126,7 @@ async fn build_quorum_proposal_and_signature(
         proposer_id: api.public_key().to_bytes(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
-    let proposal = QuorumProposal::<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>> {
+    let proposal = QuorumProposal::<TestTypes, Leaf<TestTypes>> {
         block_commitment: block.commit(),
         view_number: ViewNumber::new(view),
         height: 1,
@@ -145,10 +140,10 @@ async fn build_quorum_proposal_and_signature(
 }
 
 pub async fn build_quorum_proposal(
-    handle: &SystemContextHandle<SequencingTestTypes, SequencingMemoryImpl>,
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> Proposal<QuorumProposal<SequencingTestTypes, SequencingLeaf<SequencingTestTypes>>> {
+) -> Proposal<QuorumProposal<TestTypes, Leaf<TestTypes>>> {
     let (proposal, signature) =
         build_quorum_proposal_and_signature(handle, private_key, view).await;
     Proposal {
@@ -160,7 +155,7 @@ pub async fn build_quorum_proposal(
 pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey, BLSPubKey) {
     let private_key =
         <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
-    let public_key = <SequencingTestTypes as NodeType>::SignatureKey::from_private(&private_key);
+    let public_key = <TestTypes as NodeType>::SignatureKey::from_private(&private_key);
     (private_key, public_key)
 }
 

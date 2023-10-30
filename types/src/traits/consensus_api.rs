@@ -1,4 +1,4 @@
-//! Contains the [`SequencingConsensusApi`] and [`ValidatingConsensusApi`] traits.
+//! Contains the [`ConsensusApi`] trait.
 
 use crate::{
     certificate::QuorumCertificate,
@@ -122,7 +122,7 @@ pub trait ConsensusSharedApi<
 
 /// The API that [`HotStuff`] needs to talk to the system, for sequencing consensus.
 #[async_trait]
-pub trait SequencingConsensusApi<
+pub trait ConsensusApi<
     TYPES: NodeType,
     LEAF: LeafType<NodeType = TYPES>,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,

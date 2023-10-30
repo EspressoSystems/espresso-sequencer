@@ -52,27 +52,29 @@ use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
 };
-use hotshot_task_impls::{events::SequencingHotShotEvent, network::NetworkTaskKind};
+use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    certificate::TimeoutCertificate, traits::node_implementation::SequencingTimeoutEx,
+    certificate::{TimeoutCertificate, VIDCertificate},
+    data::VidDisperse,
+    traits::node_implementation::TimeoutEx,
 };
 
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{DAProposal, DeltasType, LeafType, QuorumProposal, SequencingLeaf},
+    data::{DAProposal, DeltasType, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
         ProcessedGeneralConsensusMessage, SequencingMessage,
     },
     traits::{
-        consensus_api::{ConsensusSharedApi, SequencingConsensusApi},
+        consensus_api::{ConsensusApi, ConsensusSharedApi},
         election::{ConsensusExchange, Membership, SignedCertificate},
         network::{CommunicationChannel, NetworkError},
         node_implementation::{
-            ChannelMaps, CommitteeEx, ExchangesType, NodeType, SendToTasks, SequencingQuorumEx,
+            ChannelMaps, CommitteeEx, ExchangesType, NodeType, QuorumEx, SendToTasks, VIDEx,
             ViewSyncEx,
         },
         signature_key::SignatureKey,
@@ -91,6 +93,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tasks::add_vid_task;
 use tracing::{debug, error, info, instrument, trace, warn};
 // -- Rexports
 // External
@@ -146,7 +149,7 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
 
     /// access to the internal event stream, in case we need to, say, shut something down
-    internal_event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 
     /// uid for instrumentation
     id: u64,
@@ -245,7 +248,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     pub async fn start_consensus(&self) {
         self.inner
             .internal_event_stream
-            .publish(SequencingHotShotEvent::QCFormed(either::Left(
+            .publish(HotShotEvent::QCFormed(either::Left(
                 QuorumCertificate::genesis(),
             )))
             .await;
@@ -388,7 +391,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
-            ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+            ChannelStream<HotShotEvent<TYPES, I>>,
         ),
         HotShotError<TYPES>,
     >
@@ -628,18 +631,18 @@ impl<
         TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
         I: NodeImplementation<
             TYPES,
-            Leaf = SequencingLeaf<TYPES>,
+            Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
         MEMBERSHIP: Membership<TYPES>,
     > HotShotType<TYPES, I> for SystemContext<TYPES, I>
 where
-    SequencingQuorumEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
-            Commitment = Commitment<SequencingLeaf<TYPES>>,
+            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+            Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
+            Commitment = Commitment<Leaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -658,10 +661,18 @@ where
             Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
-    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+    VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+            Proposal = VidDisperse<TYPES>,
+            Certificate = VIDCertificate<TYPES>,
+            Commitment = Commitment<TYPES::BlockType>,
+            Membership = MEMBERSHIP,
+        > + 'static,
+    TimeoutEx<TYPES, I>: ConsensusExchange<
+            TYPES,
+            Message<TYPES, I>,
+            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
             Certificate = TimeoutCertificate<TYPES>,
             Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
@@ -671,6 +682,7 @@ where
         &self.inner.consensus
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn run_tasks(self) -> SystemContextHandle<TYPES, I> {
         // ED Need to set first first number to 1, or properly trigger the change upon start
         let task_runner = TaskRunner::new();
@@ -682,6 +694,7 @@ where
         let quorum_exchange = self.inner.exchanges.quorum_exchange().clone();
         let committee_exchange = self.inner.exchanges.committee_exchange().clone();
         let view_sync_exchange = self.inner.exchanges.view_sync_exchange().clone();
+        let vid_exchange = self.inner.exchanges.vid_exchange().clone();
 
         let handle = SystemContextHandle {
             registry,
@@ -709,6 +722,12 @@ where
             view_sync_exchange.clone(),
         )
         .await;
+        let task_runner = add_network_message_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
+        )
+        .await;
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
@@ -730,6 +749,13 @@ where
             NetworkTaskKind::ViewSync,
         )
         .await;
+        let task_runner = add_network_event_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
+            NetworkTaskKind::VID,
+        )
+        .await;
         let task_runner = add_consensus_task(
             task_runner,
             internal_event_stream.clone(),
@@ -741,6 +767,13 @@ where
             task_runner,
             internal_event_stream.clone(),
             committee_exchange.clone(),
+            handle.clone(),
+        )
+        .await;
+        let task_runner = add_vid_task(
+            task_runner,
+            internal_event_stream.clone(),
+            vid_exchange.clone(),
             handle.clone(),
         )
         .await;
@@ -761,91 +794,20 @@ where
             task_runner.launch().await;
             info!("Task runner exited!");
         });
-
         handle
     }
 }
 
 /// A handle that exposes the interface that hotstuff needs to interact with [`HotShot`]
-#[derive(Clone)]
-struct HotShotValidatingConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Reference to the [`SystemContextInner`]
-    inner: Arc<SystemContextInner<TYPES, I>>,
-}
-
-#[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I::Leaf, I>
-    for HotShotValidatingConsensusApi<TYPES, I>
-{
-    fn total_nodes(&self) -> NonZeroUsize {
-        self.inner.config.total_nodes
-    }
-
-    fn propose_min_round_time(&self) -> Duration {
-        self.inner.config.propose_min_round_time
-    }
-
-    fn propose_max_round_time(&self) -> Duration {
-        self.inner.config.propose_max_round_time
-    }
-
-    fn max_transactions(&self) -> NonZeroUsize {
-        self.inner.config.max_transactions
-    }
-
-    fn min_transactions(&self) -> usize {
-        self.inner.config.min_transactions
-    }
-
-    /// Generates and encodes a vote token
-
-    async fn should_start_round(&self, _: TYPES::Time) -> bool {
-        false
-    }
-
-    async fn send_event(&self, event: Event<TYPES, I::Leaf>) {
-        debug!(?event, "send_event");
-        let mut event_sender = self.inner.event_sender.write().await;
-        if let Some(sender) = &*event_sender {
-            if let Err(e) = sender.send_async(event).await {
-                error!(?e, "Could not send event to event_sender");
-                *event_sender = None;
-            }
-        }
-    }
-
-    fn public_key(&self) -> &TYPES::SignatureKey {
-        &self.inner.public_key
-    }
-
-    fn private_key(&self) -> &<TYPES::SignatureKey as SignatureKey>::PrivateKey {
-        &self.inner.private_key
-    }
-
-    async fn store_leaf(
-        &self,
-        old_anchor_view: TYPES::Time,
-        leaf: I::Leaf,
-    ) -> std::result::Result<(), hotshot_types::traits::storage::StorageError> {
-        let view_to_insert = StoredView::from(leaf);
-        let storage = &self.inner.storage;
-        storage.append_single_view(view_to_insert).await?;
-        storage.cleanup_storage_up_to_view(old_anchor_view).await?;
-        storage.commit().await?;
-        Ok(())
-    }
-}
-
-/// A handle that exposes the interface that hotstuff needs to interact with [`HotShot`]
 #[derive(Clone, Debug)]
-pub struct HotShotSequencingConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct HotShotConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to the [`SystemContextInner`]
     pub inner: Arc<SystemContextInner<TYPES, I>>,
 }
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I::Leaf, I>
-    for HotShotSequencingConsensusApi<TYPES, I>
+    for HotShotConsensusApi<TYPES, I>
 {
     fn total_nodes(&self) -> NonZeroUsize {
         self.inner.config.total_nodes
@@ -910,7 +872,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    > SequencingConsensusApi<TYPES, I::Leaf, I> for HotShotSequencingConsensusApi<TYPES, I>
+    > ConsensusApi<TYPES, I::Leaf, I> for HotShotConsensusApi<TYPES, I>
 {
     async fn send_direct_message(
         &self,

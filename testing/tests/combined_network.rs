@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-    node_types::{SequencingCombinedImpl, SequencingTestTypes},
+    node_types::{CombinedImpl, TestTypes},
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::{TestMetadata, TimingData},
 };
@@ -40,7 +40,7 @@ async fn test_combined_network() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>()
+        .gen_launcher::<TestTypes, CombinedImpl>()
         .launch()
         .run_test()
         .await
@@ -59,7 +59,7 @@ async fn test_stress_combined_network() {
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata::default_stress();
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingCombinedImpl>()
+        .gen_launcher::<TestTypes, CombinedImpl>()
         .launch()
         .run_test()
         .await

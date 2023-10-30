@@ -1,8 +1,7 @@
 //! Provides a number of tasks that run continuously on a [`HotShot`]
 
 use crate::{
-    async_spawn, types::SystemContextHandle, DACertificate, HotShotSequencingConsensusApi,
-    QuorumCertificate, SequencingQuorumEx,
+    async_spawn, types::SystemContextHandle, DACertificate, HotShotConsensusApi, QuorumCertificate,
 };
 use async_compatibility_layer::art::async_sleep;
 use commit::{Commitment, CommitmentBounds};
@@ -16,28 +15,29 @@ use hotshot_task::{
     GeneratedStream, Merge,
 };
 use hotshot_task_impls::{
-    consensus::{consensus_event_filter, ConsensusTaskTypes, SequencingConsensusTaskState},
+    consensus::{consensus_event_filter, ConsensusTaskState, ConsensusTaskTypes},
     da::{DATaskState, DATaskTypes},
-    events::SequencingHotShotEvent,
+    events::HotShotEvent,
     network::{
         NetworkEventTaskState, NetworkEventTaskTypes, NetworkMessageTaskState,
         NetworkMessageTaskTypes, NetworkTaskKind,
     },
     transactions::{TransactionTaskState, TransactionsTaskTypes},
+    vid::{VIDTaskState, VIDTaskTypes},
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{TimeoutCertificate, ViewSyncCertificate},
-    data::{ProposalType, QuorumProposal, SequencingLeaf},
+    certificate::{TimeoutCertificate, VIDCertificate, ViewSyncCertificate},
+    data::{Leaf, ProposalType, QuorumProposal},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
         election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx,
-            SequencingTimeoutEx, ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, TimeoutEx, VIDEx,
+            ViewSyncEx,
         },
         state::ConsensusTime,
     },
@@ -64,11 +64,7 @@ pub enum GlobalEvent {
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_network_message_task<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     VOTE: VoteType<TYPES, COMMITMENT>,
@@ -82,7 +78,7 @@ pub async fn add_network_message_task<
         > + 'static,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     exchange: EXCHANGE,
 ) -> TaskRunner
 // This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
@@ -174,11 +170,7 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_network_event_task<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     VOTE: VoteType<TYPES, COMMITMENT>,
@@ -192,7 +184,7 @@ pub async fn add_network_event_task<
         > + 'static,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     exchange: EXCHANGE,
     task_kind: NetworkTaskKind,
 ) -> TaskRunner
@@ -252,24 +244,20 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
     TYPES: NodeType<BlockType = VIDBlockPayload>,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     output_stream: ChannelStream<Event<TYPES, I::Leaf>>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    SequencingQuorumEx<TYPES, I>: ConsensusExchange<
+    QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<SequencingLeaf<TYPES>>>,
-        Commitment = Commitment<SequencingLeaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
+        Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -277,21 +265,21 @@ where
         Certificate = DACertificate<TYPES>,
         Commitment = Commitment<TYPES::BlockType>,
     >,
-    SequencingTimeoutEx<TYPES, I>: ConsensusExchange<
+    TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, SequencingLeaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
     let consensus = handle.hotshot.get_consensus();
-    let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
+    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     let registry = task_runner.registry.clone();
     // build the consensus task
-    let consensus_state = SequencingConsensusTaskState {
+    let consensus_state = ConsensusTaskState {
         registry: registry.clone(),
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
@@ -306,7 +294,8 @@ where
         timeout_task: async_spawn(async move {}),
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
-        certs: HashMap::new(),
+        da_certs: HashMap::new(),
+        vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
         qc: None,
@@ -324,14 +313,9 @@ where
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";
     let consensus_event_handler = HandleEvent(Arc::new(
-        move |event,
-              mut state: SequencingConsensusTaskState<
-            TYPES,
-            I,
-            HotShotSequencingConsensusApi<TYPES, I>,
-        >| {
+        move |event, mut state: ConsensusTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
             async move {
-                if let SequencingHotShotEvent::Shutdown = event {
+                if let HotShotEvent::Shutdown = event {
                     (Some(HotShotTaskCompleted::ShutDown), state)
                 } else {
                     state.handle_event(event).await;
@@ -342,7 +326,7 @@ where
         },
     ));
     let consensus_task_builder = TaskBuilder::<
-        ConsensusTaskTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
+        ConsensusTaskTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>,
     >::new(consensus_name.to_string())
     .register_event_stream(event_stream.clone(), filter)
     .await
@@ -362,19 +346,81 @@ where
     )
 }
 
+/// add the VID task
+/// # Panics
+/// Is unable to panic. This section here is just to satisfy clippy
+pub async fn add_vid_task<
+    TYPES: NodeType,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+>(
+    task_runner: TaskRunner,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    vid_exchange: VIDEx<TYPES, I>,
+    handle: SystemContextHandle<TYPES, I>,
+) -> TaskRunner
+where
+    VIDEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES, I>,
+        Certificate = VIDCertificate<TYPES>,
+        Commitment = Commitment<TYPES::BlockType>,
+    >,
+{
+    // build the vid task
+    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let registry = task_runner.registry.clone();
+    let vid_state = VIDTaskState {
+        registry: registry.clone(),
+        api: c_api.clone(),
+        consensus: handle.hotshot.get_consensus(),
+        cur_view: TYPES::Time::new(0),
+        vid_exchange: vid_exchange.into(),
+        vote_collector: None,
+        event_stream: event_stream.clone(),
+        id: handle.hotshot.inner.id,
+    };
+    let vid_event_handler = HandleEvent(Arc::new(
+        move |event, mut state: VIDTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
+            async move {
+                let completion_status = state.handle_event(event).await;
+                (completion_status, state)
+            }
+            .boxed()
+        },
+    ));
+    let vid_name = "VID Task";
+    let vid_event_filter = FilterEvent(Arc::new(
+        VIDTaskState::<TYPES, I, HotShotConsensusApi<TYPES, I>>::filter,
+    ));
+
+    let vid_task_builder =
+        TaskBuilder::<VIDTaskTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>>::new(
+            vid_name.to_string(),
+        )
+        .register_event_stream(event_stream.clone(), vid_event_filter)
+        .await
+        .register_registry(&mut registry.clone())
+        .await
+        .register_state(vid_state)
+        .register_event_handler(vid_event_handler);
+    // impossible for unwrap to fail
+    // we *just* registered
+    let vid_task_id = vid_task_builder.get_task_id().unwrap();
+    let vid_task = VIDTaskTypes::build(vid_task_builder).launch();
+    task_runner.add_task(vid_task_id, vid_name.to_string(), vid_task)
+}
+
 /// add the Data Availability task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_da_task<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     committee_exchange: CommitteeEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
@@ -387,7 +433,7 @@ where
     >,
 {
     // build the da task
-    let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
+    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     let registry = task_runner.registry.clone();
@@ -402,7 +448,7 @@ where
         id: handle.hotshot.inner.id,
     };
     let da_event_handler = HandleEvent(Arc::new(
-        move |event, mut state: DATaskState<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>| {
+        move |event, mut state: DATaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
             async move {
                 let completion_status = state.handle_event(event).await;
                 (completion_status, state)
@@ -412,12 +458,12 @@ where
     ));
     let da_name = "DA Task";
     let da_event_filter = FilterEvent(Arc::new(
-        DATaskState::<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>::filter,
+        DATaskState::<TYPES, I, HotShotConsensusApi<TYPES, I>>::filter,
     ));
 
-    let da_task_builder = TaskBuilder::<
-        DATaskTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
-    >::new(da_name.to_string())
+    let da_task_builder = TaskBuilder::<DATaskTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>>::new(
+        da_name.to_string(),
+    )
     .register_event_stream(event_stream.clone(), da_event_filter)
     .await
     .register_registry(&mut registry.clone())
@@ -436,14 +482,10 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
     TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     quorum_exchange: QuorumEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
@@ -455,7 +497,7 @@ where
     >,
 {
     // build the transactions task
-    let c_api: HotShotSequencingConsensusApi<TYPES, I> = HotShotSequencingConsensusApi {
+    let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     let registry = task_runner.registry.clone();
@@ -471,12 +513,7 @@ where
         id: handle.hotshot.inner.id,
     };
     let transactions_event_handler = HandleEvent(Arc::new(
-        move |event,
-              mut state: TransactionTaskState<
-            TYPES,
-            I,
-            HotShotSequencingConsensusApi<TYPES, I>,
-        >| {
+        move |event, mut state: TransactionTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
             async move {
                 let completion_status = state.handle_event(event).await;
                 (completion_status, state)
@@ -486,11 +523,11 @@ where
     ));
     let transactions_name = "Transactions Task";
     let transactions_event_filter = FilterEvent(Arc::new(
-        TransactionTaskState::<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>::filter,
+        TransactionTaskState::<TYPES, I, HotShotConsensusApi<TYPES, I>>::filter,
     ));
 
     let transactions_task_builder = TaskBuilder::<
-        TransactionsTaskTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
+        TransactionsTaskTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>,
     >::new(transactions_name.to_string())
     .register_event_stream(event_stream.clone(), transactions_event_filter)
     .await
@@ -509,14 +546,10 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_view_sync_task<
     TYPES: NodeType,
-    I: NodeImplementation<
-        TYPES,
-        Leaf = SequencingLeaf<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, I>,
-    >,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
@@ -528,7 +561,7 @@ where
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
-    let api = HotShotSequencingConsensusApi {
+    let api = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     // build the view sync task
@@ -547,32 +580,26 @@ where
         last_garbage_collected_view: TYPES::Time::new(0),
     };
     let registry = task_runner.registry.clone();
-    let view_sync_event_handler =
-        HandleEvent(Arc::new(
-            move |event,
-                  mut state: ViewSyncTaskState<
-                TYPES,
-                I,
-                HotShotSequencingConsensusApi<TYPES, I>,
-            >| {
-                async move {
-                    if let SequencingHotShotEvent::Shutdown = event {
-                        (Some(HotShotTaskCompleted::ShutDown), state)
-                    } else {
-                        state.handle_event(event).await;
-                        (None, state)
-                    }
+    let view_sync_event_handler = HandleEvent(Arc::new(
+        move |event, mut state: ViewSyncTaskState<TYPES, I, HotShotConsensusApi<TYPES, I>>| {
+            async move {
+                if let HotShotEvent::Shutdown = event {
+                    (Some(HotShotTaskCompleted::ShutDown), state)
+                } else {
+                    state.handle_event(event).await;
+                    (None, state)
                 }
-                .boxed()
-            },
-        ));
+            }
+            .boxed()
+        },
+    ));
     let view_sync_name = "ViewSync Task";
     let view_sync_event_filter = FilterEvent(Arc::new(
-        ViewSyncTaskState::<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>::filter,
+        ViewSyncTaskState::<TYPES, I, HotShotConsensusApi<TYPES, I>>::filter,
     ));
 
     let view_sync_task_builder = TaskBuilder::<
-        ViewSyncTaskStateTypes<TYPES, I, HotShotSequencingConsensusApi<TYPES, I>>,
+        ViewSyncTaskStateTypes<TYPES, I, HotShotConsensusApi<TYPES, I>>,
     >::new(view_sync_name.to_string())
     .register_event_stream(event_stream.clone(), view_sync_event_filter)
     .await
