@@ -46,7 +46,7 @@ async fn test_vid_task() {
         commitment: block_commitment,
     };
 
-    let signature = vid_exchange.sign_vid_proposal(&block.commit());
+    let signature = vid_exchange.sign_vid_disperse(&block.commit());
     let proposal: DAProposal<TestTypes> = DAProposal {
         deltas: block.clone(),
         view_number: ViewNumber::new(2),

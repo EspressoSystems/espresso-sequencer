@@ -446,7 +446,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             &Checked::Unchecked(vote.get_vote_token()),
         ) {
             error!("Vote data is {:?}", vote.get_data());
-
             error!("Invalid vote!");
             return Either::Left(accumulator);
         }
@@ -646,14 +645,14 @@ pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYP
         vote_token: TYPES::VoteTokenType,
     ) -> VIDVote<TYPES>;
 
-    /// Sign a vote on VID proposal.
+    /// Sign a vote on VID disperse
     fn sign_vid_vote(
         &self,
         block_commitment: Commitment<TYPES::BlockType>,
     ) -> (EncodedPublicKey, EncodedSignature);
 
-    /// Sign a VID proposal.
-    fn sign_vid_proposal(
+    /// Sign a VID disperse
+    fn sign_vid_disperse(
         &self,
         block_commitment: &Commitment<TYPES::BlockType>,
     ) -> EncodedSignature;
@@ -702,7 +701,7 @@ impl<
             block_commitment,
             current_view,
             vote_token,
-            vote_data: VoteData::DA(block_commitment),
+            vote_data: VoteData::VID(block_commitment),
         }
     }
 
@@ -712,13 +711,13 @@ impl<
     ) -> (EncodedPublicKey, EncodedSignature) {
         let signature = TYPES::SignatureKey::sign(
             &self.private_key,
-            VoteData::DA(block_commitment).commit().as_ref(),
+            VoteData::VID(block_commitment).commit().as_ref(),
         );
         (self.public_key.to_bytes(), signature)
     }
 
     /// Sign a VID proposal.
-    fn sign_vid_proposal(
+    fn sign_vid_disperse(
         &self,
         block_commitment: &Commitment<TYPES::BlockType>,
     ) -> EncodedSignature {

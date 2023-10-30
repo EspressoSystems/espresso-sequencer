@@ -292,11 +292,7 @@ where
                 }
             }
             HotShotEvent::DAVoteRecv(vote) => {
-                // warn!(
-                //     "DA vote recv, Main Task {:?}, key: {:?}",
-                //     vote.current_view,
-                //     self.committee_exchange.public_key()
-                // );
+                debug!("DA vote recv, Main Task {:?}", vote.current_view,);
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.current_view;
                 if !self.committee_exchange.is_leader(view) {

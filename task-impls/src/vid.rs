@@ -12,7 +12,8 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::vote::VoteType;
+use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
     certificate::VIDCertificate, traits::election::SignedCertificate, vote::VIDVoteAccumulator,
 };
@@ -141,13 +142,16 @@ where
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
-            // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
+            debug!("VID vote recv, collection task {:?}", vote.current_view);
+            // panic!("Vote handle received VID vote for view {}", *vote.current_view);
 
-            debug!("VID vote recv, collection task {:?}", vote.get_view());
-            // panic!("Vote handle received DA vote for view {}", *vote.current_view);
+            // For the case where we receive votes after we've made a certificate
+            if state.accumulator.is_right() {
+                debug!("VID accumulator finished view: {:?}", state.cur_view);
+                return (None, state);
+            }
 
             let accumulator = state.accumulator.left().unwrap();
-
             match state
                 .vid_exchange
                 .accumulate_vote(accumulator, &vote, &vote.block_commitment)
@@ -167,13 +171,19 @@ where
                         .await;
 
                     state.accumulator = Right(vid_cert.clone());
+                    state
+                        .vid_exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDVotes(
+                            *vid_cert.view_number,
+                        ))
+                        .await;
 
                     // Return completed at this point
                     return (Some(HotShotTaskCompleted::ShutDown), state);
                 }
             }
         }
-        HotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
         _ => {
             error!("unexpected event {:?}", event);
         }
@@ -206,12 +216,10 @@ where
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::VidVoteRecv(vote) => {
-                // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
-
                 // warn!(
                 //     "VID vote recv, Main Task {:?}, key: {:?}",
                 //     vote.current_view,
-                //     self.vid_exchange.public_key()
+                //     self.committee_exchange.public_key()
                 // );
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.current_view;
@@ -361,6 +369,9 @@ where
                     }
                 }
             }
+            HotShotEvent::VidCertRecv(_) => {
+                // RM TODO
+            }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
@@ -370,6 +381,35 @@ where
                     error!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
+
+                // Start polling for VID disperse for the new view
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDDisperse(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
+
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDCertificate(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
+
+                // If we are not the next leader, we should exit
+                if !self.vid_exchange.is_leader(self.cur_view + 1) {
+                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
+                    return None;
+                }
+
+                // Start polling for VID votes for the "next view"
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDVotes(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
 
                 return None;
             }

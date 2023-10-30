@@ -53,6 +53,18 @@ struct WebServerState<KEY> {
 
     oldest_view_sync_vote: u64,
 
+    vid_disperses: HashMap<u64, (String, Vec<u8>)>,
+    oldest_vid_disperse: u64,
+    recent_vid_disperse: u64,
+
+    vid_votes: HashMap<u64, Vec<(u64, Vec<u8>)>>,
+    oldest_vid_vote: u64,
+    // recent_vid_vote: u64,
+    vid_certificates: HashMap<u64, (String, Vec<u8>)>,
+    oldest_vid_certificate: u64,
+    // recent_vid_certificate: u64,
+    vid_vote_index: HashMap<u64, u64>,
+
     /// index -> transaction
     // TODO ED Make indexable by hash of tx
     transactions: HashMap<u64, Vec<u8>>,
@@ -88,6 +100,19 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             view_sync_proposals: HashMap::new(),
             view_sync_votes: HashMap::new(),
             view_sync_vote_index: HashMap::new(),
+
+            vid_disperses: HashMap::new(),
+            oldest_vid_disperse: 0,
+            recent_vid_disperse: 0,
+
+            vid_votes: HashMap::new(),
+            oldest_vid_vote: 0,
+            // recent_vid_vote: 0,
+            vid_certificates: HashMap::new(),
+            oldest_vid_certificate: 0,
+            // recent_vid_certificate: 0,
+            vid_vote_index: HashMap::new(),
+
             oldest_view_sync_vote: 0,
             oldest_view_sync_proposal: 0,
             view_sync_proposal_index: HashMap::new(),
@@ -135,6 +160,15 @@ pub trait WebServerDataSource<KEY> {
     fn post_completed_transaction(&mut self, block: Vec<u8>) -> Result<(), Error>;
     fn post_secret_proposal(&mut self, _view_number: u64, _proposal: Vec<u8>) -> Result<(), Error>;
     fn proposal(&self, view_number: u64) -> Option<(String, Vec<u8>)>;
+
+    fn post_vid_disperse(&mut self, view_number: u64, disperse: Vec<u8>) -> Result<(), Error>;
+    fn post_vid_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error>;
+    fn post_vid_certificate(&mut self, view_number: u64, certificate: Vec<u8>)
+        -> Result<(), Error>;
+
+    fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_vid_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_vid_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
 }
 
 impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
@@ -157,6 +191,26 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             None => Err(ServerError {
                 status: StatusCode::NotImplemented,
                 message: format!("Proposal not found for view {view_number}"),
+            }),
+        }
+    }
+
+    /// Return the VID disperse data that the server has received for a particular view
+    fn get_vid_disperse(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        match self.vid_disperses.get(&view_number) {
+            Some(disperse) => {
+                if disperse.1.is_empty() {
+                    Err(ServerError {
+                        status: StatusCode::NotImplemented,
+                        message: format!("VID disperse not found for view {view_number}"),
+                    })
+                } else {
+                    Ok(Some(vec![disperse.1.clone()]))
+                }
+            }
+            None => Err(ServerError {
+                status: StatusCode::NotImplemented,
+                message: format!("VID disperse not found for view {view_number}"),
             }),
         }
     }
@@ -191,6 +245,22 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         if let Some(votes) = votes {
             for i in index..*self.vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
+            }
+        }
+        if !ret_votes.is_empty() {
+            Ok(Some(ret_votes))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Return all VID votes the server has received for a particular view from provided index to most recent
+    fn get_vid_votes(&self, view_number: u64, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        let vid_votes = self.vid_votes.get(&view_number);
+        let mut ret_votes = vec![];
+        if let Some(vid_votes) = vid_votes {
+            for i in index..*self.vid_vote_index.get(&view_number).unwrap() {
+                ret_votes.push(vid_votes[i as usize].1.clone());
             }
         }
         if !ret_votes.is_empty() {
@@ -280,6 +350,26 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         }
     }
 
+    /// Return the VID certificate the server has received for a particular view
+    fn get_vid_certificate(&self, index: u64) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        match self.vid_certificates.get(&index) {
+            Some(vid_cert) => {
+                if vid_cert.1.is_empty() {
+                    Err(ServerError {
+                        status: StatusCode::NotImplemented,
+                        message: format!("VID Certificate not found for view {index}"),
+                    })
+                } else {
+                    Ok(Some(vec![vid_cert.1.clone()]))
+                }
+            }
+            None => Err(ServerError {
+                status: StatusCode::NotImplemented,
+                message: format!("VID certificate not found for view {index}"),
+            }),
+        }
+    }
+
     /// Stores a received vote in the `WebServerState`
     fn post_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error> {
         // Only keep vote history for MAX_VIEWS number of views
@@ -295,6 +385,26 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
             .or_insert_with(|| vec![(*next_index, vote)]);
         self.vote_index
+            .entry(view_number)
+            .and_modify(|index| *index += 1);
+        Ok(())
+    }
+
+    /// Stores a received VID vote in the `WebServerState`
+    fn post_vid_vote(&mut self, view_number: u64, vote: Vec<u8>) -> Result<(), Error> {
+        // Only keep vote history for MAX_VIEWS number of views
+        if self.vid_votes.len() >= MAX_VIEWS {
+            self.vid_votes.remove(&self.oldest_vote);
+            while !self.vid_votes.contains_key(&self.oldest_vid_vote) {
+                self.oldest_vid_vote += 1;
+            }
+        }
+        let next_index = self.vid_vote_index.entry(view_number).or_insert(0);
+        self.vid_votes
+            .entry(view_number)
+            .and_modify(|current_votes| current_votes.push((*next_index, vote.clone())))
+            .or_insert_with(|| vec![(*next_index, vote)]);
+        self.vid_vote_index
             .entry(view_number)
             .and_modify(|index| *index += 1);
         Ok(())
@@ -340,6 +450,26 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             .entry(view_number)
             .and_modify(|(_, empty_proposal)| empty_proposal.append(&mut proposal))
             .or_insert_with(|| (String::new(), proposal));
+        Ok(())
+    }
+
+    fn post_vid_disperse(&mut self, view_number: u64, mut disperse: Vec<u8>) -> Result<(), Error> {
+        error!("Received VID disperse for view {}", view_number);
+        if view_number > self.recent_vid_disperse {
+            self.recent_vid_disperse = view_number;
+        }
+
+        // Only keep proposal history for MAX_VIEWS number of view
+        if self.vid_disperses.len() >= MAX_VIEWS {
+            self.vid_disperses.remove(&self.oldest_vid_disperse);
+            while !self.vid_disperses.contains_key(&self.oldest_vid_disperse) {
+                self.oldest_vid_disperse += 1;
+            }
+        }
+        self.vid_disperses
+            .entry(view_number)
+            .and_modify(|(_, empty_proposal)| empty_proposal.append(&mut disperse))
+            .or_insert_with(|| (String::new(), disperse));
         Ok(())
     }
 
@@ -390,6 +520,31 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             .or_insert_with(|| (String::new(), cert));
         Ok(())
     }
+
+    fn post_vid_certificate(
+        &mut self,
+        view_number: u64,
+        mut certificate: Vec<u8>,
+    ) -> Result<(), Error> {
+        error!("Received VID Certificate for view {}", view_number);
+
+        // Only keep proposal history for MAX_VIEWS number of view
+        if self.vid_certificates.len() >= MAX_VIEWS {
+            self.vid_certificates.remove(&self.oldest_vid_certificate);
+            while !self
+                .vid_certificates
+                .contains_key(&self.oldest_vid_certificate)
+            {
+                self.oldest_vid_certificate += 1;
+            }
+        }
+        self.vid_certificates
+            .entry(view_number)
+            .and_modify(|(_, empty_cert)| empty_cert.append(&mut certificate))
+            .or_insert_with(|| (String::new(), certificate));
+        Ok(())
+    }
+
     /// Stores a received group of transactions in the `WebServerState`
     fn post_transaction(&mut self, txn: Vec<u8>) -> Result<(), Error> {
         if self.transactions.len() >= MAX_TXNS {
@@ -508,6 +663,13 @@ where
         }
         .boxed()
     })?
+    .get("getviddisperse", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            state.get_vid_disperse(view_number)
+        }
+        .boxed()
+    })?
     .get("getrecentproposal", |_req, state| {
         async move { state.get_recent_proposal() }.boxed()
     })?
@@ -526,11 +688,26 @@ where
         }
         .boxed()
     })?
+    .get("getvidcertificate", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            state.get_vid_certificate(view_number)
+        }
+        .boxed()
+    })?
     .get("getvotes", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
             let index: u64 = req.integer_param("index")?;
             state.get_votes(view_number, index)
+        }
+        .boxed()
+    })?
+    .get("getvidvotes", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            let index: u64 = req.integer_param("index")?;
+            state.get_vid_votes(view_number, index)
         }
         .boxed()
     })?
@@ -558,6 +735,15 @@ where
         }
         .boxed()
     })?
+    .post("postvidvote", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
+            let vote = req.body_bytes();
+            state.post_vid_vote(view_number, vote)
+        }
+        .boxed()
+    })?
     .post("postviewsyncvote", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
@@ -575,6 +761,14 @@ where
         }
         .boxed()
     })?
+    .post("postviddisperse", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            let disperse = req.body_bytes();
+            state.post_vid_disperse(view_number, disperse)
+        }
+        .boxed()
+    })?
     .post("postviewsyncproposal", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
@@ -588,6 +782,14 @@ where
             let view_number: u64 = req.integer_param("view_number")?;
             let cert = req.body_bytes();
             state.post_da_certificate(view_number, cert)
+        }
+        .boxed()
+    })?
+    .post("postvidcertificate", |req, state| {
+        async move {
+            let view_number: u64 = req.integer_param("view_number")?;
+            let cert = req.body_bytes();
+            state.post_vid_certificate(view_number, cert)
         }
         .boxed()
     })?
