@@ -20,7 +20,7 @@ use crate::traits::{
 };
 
 /// A simple vote that has a signer and commitment to the data voted on.
-pub trait Vote2<TYPES: NodeType> {
+pub trait Vote2<TYPES: NodeType>: 'static {
     /// The membership of those that send this vote type
     type Membership: Membership<TYPES>;
     /// Type of data commitment this vote uses.
@@ -95,10 +95,7 @@ impl<
         let key = vote.get_signing_key();
 
         let vote_commitment = vote.get_data_commitment();
-        if !key.validate(
-            &vote.get_signature(),
-            &bincode_opts().serialize(&vote_commitment).unwrap(),
-        ) {
+        if !key.validate(&vote.get_signature(), vote_commitment.as_ref()) {
             error!("Vote data is {:?}", vote.get_data_commitment());
             error!("Invalid vote! Data");
             return Either::Left(self);

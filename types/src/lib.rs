@@ -18,6 +18,7 @@ pub mod data;
 pub mod error;
 pub mod event;
 pub mod message;
+pub mod quorum_vote;
 pub mod traits;
 pub mod utils;
 pub mod vote;
