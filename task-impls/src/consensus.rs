@@ -30,6 +30,7 @@ use hotshot_types::{
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, QuorumEx, TimeoutEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
+        BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, QuorumVoteAccumulator, TimeoutVoteAccumulator, VoteType},
@@ -455,7 +456,7 @@ where
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
                             block_header: proposal.block_header.clone(),
-                            transaction_commitments: HashSet::new(),
+                            block_payload: None,
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -525,7 +526,7 @@ where
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
                             block_header: proposal.block_header.clone(),
-                            transaction_commitments: HashSet::new(),
+                            block_payload: None,
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -740,7 +741,7 @@ where
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.leaf_commitment(),
                         block_header: proposal.data.block_header,
-                        transaction_commitments: HashSet::new(),
+                        block_payload: None,
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender.to_bytes(),
@@ -765,7 +766,7 @@ where
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
                     block_header: proposal.data.block_header,
-                    transaction_commitments: HashSet::new(),
+                    block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender.to_bytes(),
@@ -853,18 +854,25 @@ where
                                     .last_synced_block_height
                                     .set(usize::try_from(leaf.get_height()).unwrap_or(0));
 
-                                // If the full block is available for this leaf, include it in the leaf
-                                // chain that we send to the client.
-                                if let Some(comm) = consensus
-                                    .saved_transaction_commitments
+                                // If the block payload is available for this leaf, include it in
+                                // the leaf chain that we send to the client.
+                                if let Some(payload) = consensus
+                                    .saved_block_payloads
                                     .get(leaf.get_payload_commitment())
                                 {
-                                    leaf.fill_transaction_commitments(comm.clone());
+                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
+                                        error!(
+                                            "Saved block payload and commitment don't match: {:?}",
+                                            e
+                                        );
+                                    }
                                 }
 
                                 leaf_views.push(leaf.clone());
-                                for txn in leaf.transaction_commitments {
-                                    included_txns.insert(txn);
+                                if let Some(payload) = leaf.block_payload {
+                                    for txn in payload.transaction_commitments() {
+                                        included_txns.insert(txn);
+                                    }
                                 }
                             }
                             true
@@ -1379,7 +1387,7 @@ where
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
                 block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
-                transaction_commitments: HashSet::new(),
+                block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().to_bytes(),

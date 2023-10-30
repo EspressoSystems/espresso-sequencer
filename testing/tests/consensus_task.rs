@@ -22,7 +22,6 @@ use hotshot_types::{
 };
 
 use std::collections::HashMap;
-use std::collections::HashSet;
 
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
@@ -65,7 +64,7 @@ async fn build_vote(
         justify_qc: proposal.justify_qc.clone(),
         parent_commitment,
         block_header: proposal.block_header,
-        transaction_commitments: HashSet::new(),
+        block_payload: None,
         rejected: Vec::new(),
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),

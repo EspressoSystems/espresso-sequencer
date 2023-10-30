@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     node_types::{MemoryImpl, TestTypes},
     test_builder::TestMetadata,
@@ -123,7 +121,7 @@ async fn build_quorum_proposal_and_signature(
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
         block_header: block_header.clone(),
-        transaction_commitments: HashSet::new(),
+        block_payload: None,
         rejected: vec![],
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),

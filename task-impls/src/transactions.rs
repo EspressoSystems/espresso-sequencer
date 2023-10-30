@@ -22,6 +22,7 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, Membership, QuorumExchangeType},
         node_implementation::{NodeImplementation, NodeType, QuorumEx},
+        BlockPayload,
     },
 };
 use hotshot_utils::bincode::bincode_opts;
@@ -137,8 +138,10 @@ where
                 let mut included_txn_size = 0;
                 let mut included_txn_count = 0;
                 for leaf in leaf_chain {
-                    for txn in leaf.transaction_commitments {
-                        included_txns.insert(txn);
+                    if let Some(payload) = leaf.block_payload {
+                        for txn in payload.transaction_commitments() {
+                            included_txns.insert(txn);
+                        }
                     }
                 }
                 let consensus = self.consensus.read().await;

@@ -173,7 +173,7 @@ mod test {
                 view_number,
             },
             DummyBlock::random(rng),
-            DummyBlock::random(rng).transaction_commitments(),
+            Some(DummyBlock::random(rng)),
             DummyState::random(rng),
             dummy_leaf_commit,
             Vec::new(),

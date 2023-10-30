@@ -286,11 +286,10 @@ where
                             },
                         });
 
-                        // Record the block we have promised to make available.
-                        consensus.saved_transaction_commitments.insert(
-                            proposal.data.block_payload.commit(),
-                            proposal.data.block_payload.transaction_commitments(),
-                        );
+                        // Record the block payload we have promised to make available.
+                        consensus
+                            .saved_block_payloads
+                            .insert(proposal.data.block_payload);
                     }
                 }
             }

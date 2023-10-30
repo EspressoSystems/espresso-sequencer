@@ -62,7 +62,7 @@ use hotshot_types::{
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
-    consensus::{Consensus, ConsensusMetricsValue, TransactionStore, View, ViewInner, ViewQueue},
+    consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
     message::{
@@ -204,13 +204,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let mut saved_leaves = HashMap::new();
-        let mut saved_transaction_commitments = TransactionStore::default();
+        let mut saved_block_payloads = BlockPayloadStore::default();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
-        if !anchored_leaf.get_transanction_commitments().is_empty() {
-            saved_transaction_commitments.insert(
-                anchored_leaf.get_payload_commitment(),
-                anchored_leaf.get_transanction_commitments(),
-            );
+        if let Some(payload) = anchored_leaf.get_block_payload() {
+            saved_block_payloads.insert(payload);
         }
 
         let start_view = anchored_leaf.get_view_number();
@@ -220,7 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
-            saved_transaction_commitments,
+            saved_block_payloads,
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),

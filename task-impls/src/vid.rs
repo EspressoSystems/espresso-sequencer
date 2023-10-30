@@ -357,7 +357,7 @@ where
 
                         // Record the block we have promised to make available.
                         // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                        // consensus.saved_transaction_commitments.insert(proposal.data.block_payload);
+                        // consensus.saved_block_payloads.insert(proposal.data.block_payload);
                     }
                 }
             }

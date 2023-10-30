@@ -28,8 +28,8 @@ use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 use std::{
-    collections::HashSet,
     fmt::{Debug, Display},
     hash::Hash,
 };
@@ -315,6 +315,17 @@ pub trait DeltasType<BlockPayload: Committable>:
     fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
 }
 
+/// Error which occurs when [`LeafType::fill_block_payload`] is called with a payload commitment
+/// that does not match the internal payload commitment of the leaf.
+#[derive(Clone, Copy, Debug, Snafu)]
+#[snafu(display("the block payload {:?} has commitment {} (expected {})", payload, payload.commit(), commitment))]
+pub struct InconsistentPayloadCommitmentError<PAYLOAD: BlockPayload> {
+    /// The block payload with the wrong commitment.
+    payload: PAYLOAD,
+    /// The expected commitment.
+    commitment: Commitment<PAYLOAD>,
+}
+
 /// An item which is appended to a blockchain.
 pub trait LeafType:
     Debug
@@ -362,20 +373,22 @@ pub trait LeafType:
     /// Commitment to this leaf's parent.
     fn get_parent_commitment(&self) -> Commitment<Self>;
     /// The block header contained in this leaf.
-    fn get_block_header(&self) -> <Self::NodeType as NodeType>::BlockHeader;
+    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader;
     /// A commitment to the block payload contained in this leaf.
     fn get_payload_commitment(&self) -> Commitment<LeafBlockPayload<Self>> {
         self.get_block_header().payload_commitment()
     }
-    /// Fill the transaciton commitments of this leaf with the corresponding block payload.
-    fn fill_transaction_commitments(
+    /// Fill this leaf with the block payload.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the payload commitment doesn't match `self.block_header.payload_commitment()`.
+    fn fill_block_payload(
         &mut self,
-        transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
-    );
-    /// Optional set of commitments to the transactions.
-    fn get_transanction_commitments(
-        &self,
-    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>;
+        block_payload: <Self::NodeType as NodeType>::BlockPayload,
+    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>;
+    /// Optional block payload.
+    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload>;
     /// The blockchain state after appending this leaf.
     fn get_state(&self) -> Self::MaybeState;
     /// Transactions rejected or invalidated by the application of this leaf.
@@ -473,11 +486,10 @@ pub struct Leaf<TYPES: NodeType> {
     /// Block header.
     pub block_header: TYPES::BlockHeader,
 
-    /// Set of commitments to the contained transactions.
+    /// Optional block payload.
     ///
     /// It may be empty for nodes not in the DA committee.
-    pub transaction_commitments:
-        HashSet<Commitment<<TYPES::BlockPayload as BlockPayload>::Transaction>>,
+    pub block_payload: Option<TYPES::BlockPayload>,
 
     /// Transactions that were marked for rejection while collecting the block.
     pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
@@ -496,7 +508,6 @@ impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
             && self.justify_qc == other.justify_qc
             && self.parent_commitment == other.parent_commitment
             && self.block_header == other.block_header
-            && self.transaction_commitments == other.transaction_commitments
             && self.rejected == other.rejected
     }
 }
@@ -507,13 +518,9 @@ impl<TYPES: NodeType> Hash for Leaf<TYPES> {
         self.justify_qc.hash(state);
         self.parent_commitment.hash(state);
         self.block_header.hash(state);
-        for com in &self.transaction_commitments {
-            com.hash(state);
-        }
         self.rejected.hash(state);
     }
 }
-
 impl<TYPES: NodeType> Display for ValidatingLeaf<TYPES> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -526,7 +533,6 @@ impl<TYPES: NodeType> Display for ValidatingLeaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
     type NodeType = TYPES;
-    // type DeltasType = TYPES::BlockPayload;
     type MaybeState = TYPES::StateType;
 
     fn new(
@@ -564,20 +570,19 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.parent_commitment
     }
 
-    fn get_block_header(&self) -> <Self::NodeType as NodeType>::BlockHeader {
+    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader {
         unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
-    fn fill_transaction_commitments(
+    fn fill_block_payload(
         &mut self,
-        _transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
-    ) {
+        _block_payload: <Self::NodeType as NodeType>::BlockPayload,
+    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>
+    {
         unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
-    fn get_transanction_commitments(
-        &self,
-    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>> {
+    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload> {
         unimplemented!("Unimplemented for validating consensus which will be removed.");
     }
 
@@ -650,7 +655,7 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
             justify_qc,
             parent_commitment: fake_commitment(),
             block_header: TYPES::BlockHeader::genesis(payload.clone()),
-            transaction_commitments: payload.transaction_commitments(),
+            block_payload: Some(payload),
             rejected: Vec::new(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: genesis_proposer_id(),
@@ -673,21 +678,27 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
         self.parent_commitment
     }
 
-    fn get_block_header(&self) -> <Self::NodeType as NodeType>::BlockHeader {
-        self.block_header.clone()
+    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader {
+        &self.block_header
     }
 
-    fn fill_transaction_commitments(
+    fn fill_block_payload(
         &mut self,
-        transaction_commitments: HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>>,
-    ) {
-        self.transaction_commitments = transaction_commitments;
+        block_payload: <Self::NodeType as NodeType>::BlockPayload,
+    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>
+    {
+        if block_payload.commit() != self.block_header.payload_commitment() {
+            return Err(InconsistentPayloadCommitmentError {
+                payload: block_payload,
+                commitment: self.block_header.payload_commitment(),
+            });
+        }
+        self.block_payload = Some(block_payload);
+        Ok(())
     }
 
-    fn get_transanction_commitments(
-        &self,
-    ) -> HashSet<Commitment<<Self::NodeType as NodeType>::Transaction>> {
-        self.transaction_commitments.clone()
+    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload> {
+        self.block_payload.clone()
     }
 
     // The Sequencing Leaf doesn't have a state.
@@ -711,7 +722,7 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
             justify_qc: stored_view.justify_qc,
             parent_commitment: stored_view.parent,
             block_header: stored_view.block_header,
-            transaction_commitments: stored_view.transaction_commitments,
+            block_payload: stored_view.block_payload,
             rejected: stored_view.rejected,
             timestamp: stored_view.timestamp,
             proposer_id: stored_view.proposer_id,
@@ -886,8 +897,8 @@ where
             parent: leaf.get_parent_commitment(),
             justify_qc: leaf.get_justify_qc(),
             state: leaf.get_state(),
-            block_header: leaf.get_block_header(),
-            transaction_commitments: leaf.get_transanction_commitments(),
+            block_header: leaf.get_block_header().clone(),
+            block_payload: leaf.get_block_payload(),
             rejected: leaf.get_rejected(),
             timestamp: leaf.get_timestamp(),
             proposer_id: leaf.get_proposer_id(),
