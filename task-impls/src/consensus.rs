@@ -1244,11 +1244,9 @@ where
                 let view = cert.view_number;
                 self.vid_certs.insert(view, cert);
 
-                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
-                if self.vote_if_able().await {
-                    self.current_proposal = None;
-                }
+                // RM TODO: VOTING
             }
+
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1530,7 +1528,6 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | HotShotEvent::QuorumVoteRecv(_)
             | HotShotEvent::QCFormed(_)
             | HotShotEvent::DACRecv(_)
-            | HotShotEvent::VidCertRecv(_)
             | HotShotEvent::ViewChange(_)
             | HotShotEvent::SendPayloadCommitment(_)
             | HotShotEvent::Timeout(_)

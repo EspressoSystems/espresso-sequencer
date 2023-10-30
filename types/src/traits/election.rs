@@ -204,7 +204,7 @@ where
     fn genesis() -> Self;
 }
 
-/// A protocol for determining membership in and participating in a ccommittee.
+/// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + 'static
 {
@@ -446,7 +446,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
             &Checked::Unchecked(vote.get_vote_token()),
         ) {
             error!("Vote data is {:?}", vote.get_data());
-
             error!("Invalid vote!");
             return Either::Left(accumulator);
         }
@@ -648,14 +647,14 @@ pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYP
         vote_token: TYPES::VoteTokenType,
     ) -> VIDVote<TYPES>;
 
-    /// Sign a vote on VID proposal.
+    /// Sign a vote on VID disperse
     fn sign_vid_vote(
         &self,
         payload_commitment: Commitment<TYPES::BlockPayload>,
     ) -> (EncodedPublicKey, EncodedSignature);
 
-    /// Sign a VID proposal.
-    fn sign_vid_proposal(
+    /// Sign a VID disperse
+    fn sign_vid_disperse(
         &self,
         payload_commitment: &Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature;
@@ -704,7 +703,7 @@ impl<
             payload_commitment,
             current_view,
             vote_token,
-            vote_data: VoteData::DA(payload_commitment),
+            vote_data: VoteData::VID(payload_commitment),
         }
     }
 
@@ -714,13 +713,13 @@ impl<
     ) -> (EncodedPublicKey, EncodedSignature) {
         let signature = TYPES::SignatureKey::sign(
             &self.private_key,
-            VoteData::DA(payload_commitment).commit().as_ref(),
+            VoteData::VID(payload_commitment).commit().as_ref(),
         );
         (self.public_key.to_bytes(), signature)
     }
 
     /// Sign a VID proposal.
-    fn sign_vid_proposal(
+    fn sign_vid_disperse(
         &self,
         payload_commitment: &Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature {

@@ -343,7 +343,6 @@ impl<
                 | HotShotEvent::QuorumVoteSend(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::DACSend(_, _)
-                | HotShotEvent::VidCertSend(_, _)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::TimeoutVoteSend(_)
         )
@@ -356,8 +355,6 @@ impl<
             HotShotEvent::DAProposalSend(_, _)
                 | HotShotEvent::DAVoteSend(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::VidDisperseSend(_, _)
-                | HotShotEvent::VidVoteSend(_)
                 | HotShotEvent::ViewChange(_)
         )
     }
@@ -368,6 +365,7 @@ impl<
             event,
             HotShotEvent::Shutdown
                 | HotShotEvent::VidDisperseSend(_, _)
+                | HotShotEvent::VidCertSend(_, _)
                 | HotShotEvent::VidVoteSend(_)
                 | HotShotEvent::ViewChange(_)
         )
