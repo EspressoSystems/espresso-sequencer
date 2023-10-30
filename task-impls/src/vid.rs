@@ -384,13 +384,14 @@ where
         None
     }
 
-    /// Filter the DA event.
+    /// Filter the VID event.
     pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
             HotShotEvent::Shutdown
                 | HotShotEvent::VidDisperseRecv(_, _)
                 | HotShotEvent::VidVoteRecv(_)
+                | HotShotEvent::VidCertRecv(_)
                 | HotShotEvent::ViewChange(_)
         )
     }
