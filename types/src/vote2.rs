@@ -7,29 +7,34 @@ use std::{
 
 use bincode::Options;
 use bitvec::vec::BitVec;
-use commit::CommitmentBounds;
+use commit::Commitment;
 use either::Either;
 use ethereum_types::U256;
 use hotshot_utils::bincode::bincode_opts;
 use tracing::error;
 
-use crate::traits::{
-    election::Membership,
-    node_implementation::NodeType,
-    signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
+use crate::{
+    simple_vote::Voteable,
+    traits::{
+        election::Membership,
+        node_implementation::NodeType,
+        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
+    },
 };
 
 /// A simple vote that has a signer and commitment to the data voted on.
-pub trait Vote2<TYPES: NodeType>: 'static {
+pub trait Vote2<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// The membership of those that send this vote type
     type Membership: Membership<TYPES>;
     /// Type of data commitment this vote uses.
-    type Commitment: CommitmentBounds;
+    type Commitment: Voteable;
 
     /// Get the signature of the vote sender
     fn get_signature(&self) -> EncodedSignature;
-    /// Gets the Data commitment the vote references
-    fn get_data_commitment(&self) -> Self::Commitment;
+    /// Gets the data which was voted on by this vote
+    fn get_data(&self) -> &Self::Commitment;
+    /// Gets the Data commitment of the vote
+    fn get_data_commitment(&self) -> Commitment<Self::Commitment>;
 
     /// Gets the public signature key of the votes creator/sender
     fn get_signing_key(&self) -> TYPES::SignatureKey;
@@ -37,33 +42,43 @@ pub trait Vote2<TYPES: NodeType>: 'static {
 }
 
 /// Any type that is associated with a view
-pub trait ViewNumber<TYPES: NodeType> {
+pub trait HasViewNumber<TYPES: NodeType> {
     /// Returns the view number the type refers to.
     fn get_view_number(&self) -> TYPES::Time;
 }
 
-/// The certificate formed from the collection of signatures a committee.
-/// The committee is defined by the `Membership` associated type.
-/// The votes all must be over the `Commitment` associated type.
+/**
+The certificate formed from the collection of signatures a committee.
+The committee is defined by the `Membership` associated type.
+The votes all must be over the `Commitment` associated type.
+*/
 pub trait Certificate2<TYPES: NodeType> {
     /// Type that defines membership for voters on the certificate
     type Membership: Membership<TYPES>;
     /// The data commitment this certificate certifies.
-    type Commitment: CommitmentBounds;
+    type Commitment: Voteable;
 
     /// Build a certificate from the data commitment and the quorum of signers
     fn create_signed_certificate(
-        data_commitment: Self::Commitment,
+        vote_commitment: Commitment<Self::Commitment>,
+        data: Self::Commitment,
         sig: <TYPES::SignatureKey as SignatureKey>::QCType,
+        view: TYPES::Time,
     ) -> Self;
 
     /// Checks if the cert is valid
-    fn is_valid_cert(&self) -> bool;
+    fn is_valid_cert(
+        &self,
+        vote_commitment: Commitment<Self::Commitment>,
+        membership: &Self::Membership,
+    ) -> bool;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
-    fn threshold() -> u64;
-    /// Get the data commitment the certificate is referencing
-    fn get_data_commitment(&self) -> Self::Commitment;
+    fn threshold(membership: &Self::Membership) -> u64;
+    /// Get the commitment which was voted on
+    fn get_data(&self) -> &Self::Commitment;
+    /// Get the vote commitment which the votes commit to
+    fn get_data_commitment(&self) -> Commitment<Self::Commitment>;
 }
 
 /// Accumulates votes until a certificate is formed.  This implementation works for all simple vote and certificate pairs
@@ -73,7 +88,7 @@ pub struct VoteAccumulator2<
     CERT: Certificate2<TYPES, Commitment = VOTE::Commitment>,
 > {
     /// Map of all signatures accumlated so far
-    pub vote_outcomes: VoteMap2<VOTE::Commitment>,
+    pub vote_outcomes: VoteMap2<Commitment<VOTE::Commitment>>,
     /// A list of valid signatures for certificate aggregation
     pub sig_lists: Vec<<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType>,
     /// A bitvec to indicate which node is active and send out a valid signature for certificate aggregation, this automatically do uniqueness check
@@ -85,7 +100,7 @@ pub struct VoteAccumulator2<
 impl<
         TYPES: NodeType,
         VOTE: Vote2<TYPES>,
-        CERT: Certificate2<TYPES, Commitment = VOTE::Commitment>,
+        CERT: Certificate2<TYPES, Commitment = VOTE::Commitment, Membership = VOTE::Membership>,
     > VoteAccumulator2<TYPES, VOTE, CERT>
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
@@ -144,11 +159,11 @@ impl<
             (vote.get_signature(), vote.get_data_commitment()),
         );
 
-        if *total_stake_casted >= CERT::threshold() {
+        if *total_stake_casted >= CERT::threshold(membership) {
             // Assemble QC
             let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
                 stake_table.clone(),
-                U256::from(CERT::threshold()),
+                U256::from(CERT::threshold(membership)),
             );
 
             let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
@@ -157,7 +172,12 @@ impl<
                 &self.sig_lists[..],
             );
 
-            let cert = CERT::create_signed_certificate(vote.get_data_commitment(), real_qc_sig);
+            let cert = CERT::create_signed_certificate(
+                vote.get_data_commitment(),
+                vote.get_data().clone(),
+                real_qc_sig,
+                vote.get_view_number(),
+            );
             return Either::Right(cert);
         }
         Either::Left(self)
