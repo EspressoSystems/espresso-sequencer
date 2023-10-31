@@ -200,6 +200,18 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub propose_max_round_time: Duration,
 }
 
+/// Holds configuration for a validator node
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(bound(deserialize = ""))]
+pub struct ValidatorConfigFile<KEY: SignatureKey> {
+    /// The validator's public key and stake value
+    pub public_key: KEY,
+    /// The validator's private key, should be in the mempool, not public
+    pub private_key: KEY::PrivateKey,
+    /// The validator's stake
+    pub stake_value: u64,
+}
+
 impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY, E> {
     fn from(val: HotShotConfigFile<KEY>) -> Self {
         HotShotConfig {
@@ -231,6 +243,23 @@ fn default_transactions_per_round() -> usize {
 }
 fn default_padding() -> usize {
     100
+}
+
+impl<K: SignatureKey> From<ValidatorConfigFile<K>> for ValidatorConfig<K> {
+    fn from(val: ValidatorConfigFile<K>) -> Self {
+        ValidatorConfig {
+            public_key: val.public_key,
+            private_key: val.private_key,
+            stake_value: val.stake_value,
+        }
+    }
+}
+impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile<KEY>> for HotShotConfig<KEY, E> {
+    fn from(value: ValidatorConfigFile<KEY>) -> Self {
+        let mut config: HotShotConfig<KEY, E> = HotShotConfigFile::default().into();
+        config.my_own_validator_config = value.into();
+        config
+    }
 }
 
 impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
