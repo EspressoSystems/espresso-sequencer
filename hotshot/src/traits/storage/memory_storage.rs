@@ -117,16 +117,13 @@ mod test {
     use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 
     use super::*;
+    use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
+        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         certificate::{AssembledSignature, QuorumCertificate},
         data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
-        traits::{
-            block_contents::dummy::{DummyBlock, DummyState},
-            node_implementation::NodeType,
-            state::ConsensusTime,
-            BlockPayload,
-        },
+        traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
     use std::{fmt::Debug, hash::Hash};
     use tracing::instrument;
@@ -148,11 +145,11 @@ mod test {
 
     impl NodeType for DummyTypes {
         type Time = ViewNumber;
-        type BlockHeader = DummyBlock;
-        type BlockPayload = DummyBlock;
+        type BlockHeader = VIDBlockHeader;
+        type BlockPayload = VIDBlockPayload;
         type SignatureKey = BLSPubKey;
         type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
-        type Transaction = <DummyBlock as BlockPayload>::Transaction;
+        type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
     }
@@ -162,8 +159,11 @@ mod test {
         rng: &mut dyn rand::RngCore,
         view_number: <DummyTypes as NodeType>::Time,
     ) -> StoredView<DummyTypes, ValidatingLeaf<DummyTypes>> {
-        // TODO is it okay to be using genesis here?
-        let _dummy_block_commit = fake_commitment::<DummyBlock>();
+        let payload = VIDBlockPayload::genesis();
+        let header = VIDBlockHeader {
+            block_number: 0,
+            payload_commitment: payload.commit(),
+        };
         let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
         StoredView::from_qc_block_and_state(
             QuorumCertificate {
@@ -172,8 +172,8 @@ mod test {
                 signatures: AssembledSignature::Genesis(),
                 view_number,
             },
-            DummyBlock::random(rng),
-            Some(DummyBlock::random(rng)),
+            header,
+            Some(payload),
             DummyState::random(rng),
             dummy_leaf_commit,
             Vec::new(),
