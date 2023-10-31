@@ -44,3 +44,65 @@ contract PolynomialEval_newEvalDomain_Test is Test {
         Poly.newEvalDomain(domainSize);
     }
 }
+
+contract PolynomialEval_domainElements_Test is Test {
+    /// @dev Test if the domain elements are generated correctly
+    /// forge-config: default.fuzz.runs = 25
+    function testFuzz_domainElements_matches(uint8 logSize, uint256 length) external {
+        vm.assume(14 <= logSize && logSize <= 17);
+        Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
+
+        if (length > domain.size || length == 0) {
+            vm.expectRevert(Poly.InvalidPolyEvalArgs.selector);
+            Poly.domainElements(domain, length);
+        } else {
+            string[] memory cmds = new string[](7);
+            cmds[0] = "cargo";
+            cmds[1] = "run";
+            cmds[2] = "--bin";
+            cmds[3] = "diff-test";
+            cmds[4] = "eval-domain-elements";
+            cmds[5] = vm.toString(logSize);
+            cmds[6] = vm.toString(length);
+
+            bytes memory result = vm.ffi(cmds);
+            (uint256[] memory elems) = abi.decode(result, (uint256[]));
+
+            assertEq(elems, Poly.domainElements(domain, length));
+        }
+    }
+}
+
+contract PolynomialEval_evalDataGen_Test is Test {
+    /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
+    /// poly are correct.
+    function testFuzz_evalDataGen_matches(uint8 logSize, uint256 zeta, uint256[] memory publicInput)
+        external
+    {
+        vm.assume(14 <= logSize && logSize <= 17);
+        Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
+
+        // TODO:
+        return;
+    }
+}
+
+contract WhateverTest is Test {
+    function test_whatever() external {
+        uint256[] memory array = new uint256[](3);
+        array[0] = 1;
+        array[1] = 10;
+        array[2] = 100;
+        console.logBytes(abi.encode(array));
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "cargo";
+        cmds[1] = "run";
+        cmds[2] = "--bin";
+        cmds[3] = "diff-test";
+        cmds[4] = "test-only";
+        cmds[5] = string(abi.encode(array));
+
+        bytes memory result = vm.ffi(cmds);
+    }
+}

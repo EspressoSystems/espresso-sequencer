@@ -9,6 +9,8 @@ import { BN254 } from "bn254/BN254.sol";
 library PolynomialEval {
     /// Unsupported polynomial degree, currently size must in 2^{14~17}.
     error UnsupportedDegree();
+    /// Unexpected input arguments, some precondition assumptions violated.
+    error InvalidPolyEvalArgs();
 
     /// @dev a Radix 2 Evaluation Domain
     struct EvalDomain {
@@ -24,17 +26,6 @@ library PolynomialEval {
         uint256 vanishEval;
         uint256 lagrangeOne;
         uint256 piEval;
-    }
-
-    /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
-        internal
-        view
-        returns (EvalData memory evalData)
-    {
-        evalData.vanishEval = evaluateVanishingPoly(self, zeta);
-        evalData.lagrangeOne = evaluateLagrangeOne(self, zeta, evalData.vanishEval);
-        evalData.piEval = evaluatePiPoly(self, publicInput, zeta, evalData.vanishEval);
     }
 
     /// @dev Create a new Radix2EvalDomain with `domainSize` which should be power of 2.
@@ -228,6 +219,7 @@ library PolynomialEval {
         pure
         returns (uint256[] memory elements)
     {
+        if (length > self.size || length == 0) revert InvalidPolyEvalArgs();
         uint256 groupGen = self.groupGen;
         uint256 tmp = 1;
         uint256 p = BN254.R_MOD;
@@ -245,5 +237,16 @@ library PolynomialEval {
                 }
             }
         }
+    }
+
+    /// @dev compute the EvalData for a given domain and a challenge zeta
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+        internal
+        view
+        returns (EvalData memory evalData)
+    {
+        evalData.vanishEval = evaluateVanishingPoly(self, zeta);
+        evalData.lagrangeOne = evaluateLagrangeOne(self, zeta, evalData.vanishEval);
+        evalData.piEval = evaluatePiPoly(self, publicInput, zeta, evalData.vanishEval);
     }
 }
