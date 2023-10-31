@@ -1,4 +1,4 @@
-use ark_bn254::Fr;
+use ark_bn254::{Bn254, Fr};
 use ark_ff::{BigInteger, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
@@ -7,6 +7,7 @@ use ethers::{
     abi::{AbiDecode, AbiEncode},
     types::U256,
 };
+use jf_plonk::testing_apis::Verifier;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -67,10 +68,23 @@ fn main() {
         Action::EvalDataGen => {
             let arg1 = cli.arg1.as_ref().expect("Should provide arg1=logSize");
             let arg2 = cli.arg2.as_ref().expect("Should provide arg2=zeta");
-            let arg3 = cli.arg2.as_ref().expect("Should provide arg3=publicInput");
+            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=publicInput");
+
             let log_size = arg1.parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
-            // let pi =
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg3).unwrap();
+            let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
+
+            let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
+            let (vanish_eval, lagrange_one, pi_eval) = verifier
+                .compute_poly_evals_for_pcs_info(&zeta, &pi)
+                .unwrap();
+            let res = (
+                field_to_u256(vanish_eval),
+                field_to_u256(lagrange_one),
+                field_to_u256(pi_eval),
+            );
+            println!("{}", res.encode_hex());
         }
         Action::TestOnly => {
             let arg1 = cli.arg1.as_ref().expect("Should provide arg1=array");

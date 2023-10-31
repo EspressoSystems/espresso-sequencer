@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Unlicensed
 
-/* solhint-disable contract-name-camelcase, func-name-mixedcase */
+/* solhint-disable contract-name-camelcase, func-name-mixedcase, one-contract-per-file */
 
 pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
+import { BN254 } from "bn254/BN254.sol";
 
 // Target contract
 import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
@@ -74,35 +75,41 @@ contract PolynomialEval_domainElements_Test is Test {
 }
 
 contract PolynomialEval_evalDataGen_Test is Test {
+    // FIXME: (alex) this test is failing
     /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
     /// poly are correct.
+    /// forge-config: default.fuzz.runs = 1
     function testFuzz_evalDataGen_matches(uint8 logSize, uint256 zeta, uint256[] memory publicInput)
         external
     {
         vm.assume(14 <= logSize && logSize <= 17);
+        vm.assume(zeta < BN254.R_MOD);
+        vm.assume(publicInput.length > 0);
+        // Since these user-provided `publicInputs` were checked outside before passing in via
+        // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
+        for (uint256 i = 0; i < publicInput.length; i++) {
+            vm.assume(publicInput[i] < BN254.R_MOD);
+        }
+
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
 
-        // TODO:
-        return;
-    }
-}
-
-contract WhateverTest is Test {
-    function test_whatever() external {
-        uint256[] memory array = new uint256[](3);
-        array[0] = 1;
-        array[1] = 10;
-        array[2] = 100;
-        console.logBytes(abi.encode(array));
-
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](8);
         cmds[0] = "cargo";
         cmds[1] = "run";
         cmds[2] = "--bin";
         cmds[3] = "diff-test";
-        cmds[4] = "test-only";
-        cmds[5] = string(abi.encode(array));
+        cmds[4] = "eval-data-gen";
+        cmds[5] = vm.toString(logSize);
+        cmds[6] = vm.toString(zeta);
+        cmds[7] = vm.toString(abi.encode(publicInput));
 
         bytes memory result = vm.ffi(cmds);
+        (uint256 vanishEval, uint256 lagrangeOne, uint256 piEval) =
+            abi.decode(result, (uint256, uint256, uint256));
+
+        Poly.EvalData memory evalData = Poly.evalDataGen(domain, zeta, publicInput);
+        assertEq(vanishEval, evalData.vanishEval);
+        assertEq(lagrangeOne, evalData.lagrangeOne);
+        assertEq(piEval, evalData.piEval);
     }
 }
