@@ -6,7 +6,12 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
     time::Duration,
+    env,
+    path::PathBuf,
 };
+use tracing::error;
+use toml;
+use std::fs;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
@@ -203,13 +208,64 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
 /// Holds configuration for a validator node
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
-pub struct ValidatorConfigFile<KEY: SignatureKey> {
-    /// The validator's public key and stake value
-    pub public_key: KEY,
-    /// The validator's private key, should be in the mempool, not public
-    pub private_key: KEY::PrivateKey,
+pub struct ValidatorConfigFile {
+    /// The validator's seed
+    pub seed: [u8; 32],
+    /// The validator's index, which can be treated as another input to the seed
+    pub node_id: u64,
     /// The validator's stake
     pub stake_value: u64,
+}
+
+impl Default for ValidatorConfigFile {
+    fn default() -> Self {
+        Self {
+            seed: [0u8; 32],
+            node_id: 0,
+            stake_value: 1,
+        }
+    }
+}
+
+fn get_current_working_dir() -> std::io::Result<PathBuf> {
+    env::current_dir()
+}
+
+impl ValidatorConfigFile {
+    pub fn from_file() -> Self {
+        let current_working_dir = match get_current_working_dir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                error!("get_current_working_dir error: {:?}", e);
+                PathBuf::from("")
+            }
+        };
+        let filename = current_working_dir.into_os_string().into_string().unwrap()
+             + "/../../config/ValidatorConfigFile.toml";
+        match fs::read_to_string(filename.clone()) {
+            // If successful return the files text as `contents`.
+            Ok(contents) => {
+                let data: ValidatorConfigFile = match toml::from_str(&contents) {
+                    // If successful, return data as `Data` struct.
+                    // `d` is a local variable.
+                    Ok(d) => d,
+                    // Handle the `error` case.
+                    Err(e) => {
+                        // Write `msg` to `stderr`.
+                        error!("Unable to load data from `{}`: {}", filename, e);
+                        ValidatorConfigFile::default()
+                    }
+                };
+                data
+            }
+            // Handle the `error` case.
+            Err(e) => {
+                // Write `msg` to `stderr`.
+                error!("Could not read file `{}`: {}", filename, e);
+                ValidatorConfigFile::default()
+            }
+        }
+    }
 }
 
 impl<KEY: SignatureKey, E: ElectionConfig> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY, E> {
@@ -245,17 +301,22 @@ fn default_padding() -> usize {
     100
 }
 
-impl<K: SignatureKey> From<ValidatorConfigFile<K>> for ValidatorConfig<K> {
-    fn from(val: ValidatorConfigFile<K>) -> Self {
+impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
+    fn from(val: ValidatorConfigFile) -> Self {
+        let validator_config = ValidatorConfig::generated_from_seed_indexed(
+            val.seed,
+            val.node_id,
+            val.stake_value,
+        );
         ValidatorConfig {
-            public_key: val.public_key,
-            private_key: val.private_key,
-            stake_value: val.stake_value,
+            public_key: validator_config.public_key,
+            private_key: validator_config.private_key,
+            stake_value: validator_config.stake_value,
         }
     }
 }
-impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile<KEY>> for HotShotConfig<KEY, E> {
-    fn from(value: ValidatorConfigFile<KEY>) -> Self {
+impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile> for HotShotConfig<KEY, E> {
+    fn from(value: ValidatorConfigFile) -> Self {
         let mut config: HotShotConfig<KEY, E> = HotShotConfigFile::default().into();
         config.my_own_validator_config = value.into();
         config
