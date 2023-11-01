@@ -2,16 +2,16 @@ use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
+use std::fs;
 use std::{
+    env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     num::NonZeroUsize,
-    time::Duration,
-    env,
     path::PathBuf,
+    time::Duration,
 };
-use tracing::error;
 use toml;
-use std::fs;
+use tracing::error;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Libp2pConfig {
     pub bootstrap_nodes: Vec<(SocketAddr, Vec<u8>)>,
@@ -241,7 +241,7 @@ impl ValidatorConfigFile {
             }
         };
         let filename = current_working_dir.into_os_string().into_string().unwrap()
-             + "/../../config/ValidatorConfigFile.toml";
+            + "/../../config/ValidatorConfigFile.toml";
         match fs::read_to_string(filename.clone()) {
             // If successful return the files text as `contents`.
             Ok(contents) => {
@@ -303,11 +303,8 @@ fn default_padding() -> usize {
 
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {
-        let validator_config = ValidatorConfig::generated_from_seed_indexed(
-            val.seed,
-            val.node_id,
-            val.stake_value,
-        );
+        let validator_config =
+            ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, val.stake_value);
         ValidatorConfig {
             public_key: validator_config.public_key,
             private_key: validator_config.private_key,

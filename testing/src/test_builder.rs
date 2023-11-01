@@ -204,18 +204,19 @@ impl TestMetadata {
         // We assign known_nodes' public key and stake value here rather than read from config file since it's a test.
         let known_nodes_with_stake = (0..total_nodes)
             .map(|node_id| {
-                let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> = 
+                let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> =
                     ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id as u64, 1);
-                
-                cur_validator_config.public_key.get_stake_table_entry(cur_validator_config.stake_value)   
-            } )
+
+                cur_validator_config
+                    .public_key
+                    .get_stake_table_entry(cur_validator_config.stake_value)
+            })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
         let mut my_own_validator_config =
             ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
         if node_id == 0 {
-            my_own_validator_config = 
-                ValidatorConfig::from(ValidatorConfigFile::from_file());
+            my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file());
         }
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
