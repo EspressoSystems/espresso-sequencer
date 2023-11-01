@@ -133,6 +133,7 @@ impl Options {
         // the two cases differently.
         let (handle, node_index, update_task) = if let Some(query) = self.query {
             type StateType<N> = Arc<RwLock<AppState<N>>>;
+            dbg!("attemtping to run query server");
 
             let storage_path = Path::new(&query.storage_path);
             let query_state = {
@@ -154,6 +155,7 @@ impl Options {
                     }),
                 );
             }
+            dbg!("attemtping to run query server2");
 
             let metrics: Box<dyn Metrics> = query_state.metrics();
 
@@ -172,6 +174,7 @@ impl Options {
                 query_state,
                 blocks_by_time,
             }));
+            dbg!("attemtping to run query server3");
 
             let mut app = App::<_, hotshot_query_service::Error>::with_state(state.clone());
 
@@ -192,6 +195,7 @@ impl Options {
             let status_api = status::define_api::<StateType<N>>(&Default::default())
                 .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
+            dbg!("attemtping to run query server4");
             availability_api
                 .get("getnamespaceproof", |req, state| {
                     async move {
@@ -213,6 +217,19 @@ impl Options {
                             proof,
                             header: block.block().header(),
                         })
+                    }
+                    .boxed()
+                })
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                .get("getheader", |req, state| {
+                    async move {
+                        let height: u64 = req.integer_param("height")?;
+                        let block = state
+                            .get_nth_block_iter(height as usize)
+                            .next()
+                            .ok_or(AvailabilityError::InvalidLeafHeight { height })?
+                            .ok_or(AvailabilityError::MissingBlock { height })?;
+                        Ok(block.block().header())
                     }
                     .boxed()
                 })
@@ -314,9 +331,11 @@ impl Options {
                 )
                 .0
             });
+            dbg!("attemtping to run query server6");
 
             (handle, node_index, task)
         } else {
+            dbg!("not attemtping to run query server");
             let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
             let mut app =
                 App::<_, hotshot_query_service::Error>::with_state(RwLock::new(handle.clone()));

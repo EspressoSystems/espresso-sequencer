@@ -58,3 +58,22 @@ where a `Header` has the schema:
 
 All timestamps are denominated in an integer number of seconds.
 """
+
+[route.getheader]
+PATH = ["headers/window/:height"]
+":height" = "Integer"
+DOC = """
+If the header at the provided height is available, returns
+
+```json
+{
+    "timestamp": "integer",
+    "l1_block": {
+        "timestamp": "integer",
+        "number": "integer",
+    },
+    "transactions_root": {
+        "root": ["integer"]
+    }
+}
+"""
