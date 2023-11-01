@@ -5,9 +5,14 @@ use ark_poly::EvaluationDomain;
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode},
-    types::U256,
+    prelude::{EthAbiCodec, EthAbiType},
+    types::{Bytes, H256, U256},
 };
-use jf_plonk::testing_apis::Verifier;
+use jf_plonk::{
+    constants::KECCAK256_STATE_SIZE,
+    testing_apis::Verifier,
+    transcript::{PlonkTranscript, SolidityTranscript},
+};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -31,6 +36,8 @@ enum Action {
     EvalDomainElements,
     /// Get some poly evals during jf_plonk::prepare_pcs_info()
     EvalDataGen,
+    /// Get jf_plonk::Transcript::append_message()
+    TranscriptAppendMsg,
     /// Test only logic
     TestOnly,
 }
@@ -86,10 +93,30 @@ fn main() {
             );
             println!("{}", res.encode_hex());
         }
+        Action::TranscriptAppendMsg => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=message");
+            let t_parsed = {
+                let parsed: (ParsedTranscript,) = AbiDecode::decode_hex(arg1).unwrap();
+                parsed.0
+            };
+            let msg = {
+                let parsed: Bytes = AbiDecode::decode_hex(arg2).unwrap();
+                parsed.0.to_vec()
+            };
+
+            let mut t: SolidityTranscript = t_parsed.into();
+            <SolidityTranscript as PlonkTranscript<Fr>>::append_message(&mut t, &[], &msg).unwrap();
+            let res: ParsedTranscript = t.into();
+            println!("{}", (res,).encode_hex());
+        }
         Action::TestOnly => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=array");
-            let array: Vec<U256> = AbiDecode::decode_hex(arg1).unwrap();
-            println!("rust side: {:?}", array);
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let t_parsed = {
+                let parsed: (ParsedTranscript,) = AbiDecode::decode_hex(arg1).unwrap();
+                parsed.0
+            };
+            println!("{}", (t_parsed,).encode_hex());
         }
     };
 }
@@ -105,4 +132,33 @@ fn u256_to_field<F: PrimeField>(x: U256) -> F {
     let mut bytes = [0u8; 32];
     x.to_little_endian(&mut bytes);
     F::from_le_bytes_mod_order(&bytes)
+}
+
+/// an intermediate representation of the transcript parsed from abi.encode(transcript) from Solidity.
+#[derive(Clone, EthAbiType, EthAbiCodec)]
+struct ParsedTranscript {
+    pub(crate) transcript: Bytes,
+    pub(crate) state: [H256; 2],
+}
+
+impl From<SolidityTranscript> for ParsedTranscript {
+    fn from(t: SolidityTranscript) -> Self {
+        let (transcript, state) = t.internal();
+        Self {
+            transcript: transcript.into(),
+            state: [
+                H256::from_slice(&state[..32]),
+                H256::from_slice(&state[32..]),
+            ],
+        }
+    }
+}
+
+impl From<ParsedTranscript> for SolidityTranscript {
+    fn from(t: ParsedTranscript) -> Self {
+        let mut state = [0u8; KECCAK256_STATE_SIZE];
+        state[..32].copy_from_slice(&t.state[0].to_fixed_bytes());
+        state[32..].copy_from_slice(&t.state[1].to_fixed_bytes());
+        Self::from_internal(t.transcript.to_vec(), state)
+    }
 }
