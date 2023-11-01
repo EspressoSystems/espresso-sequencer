@@ -60,7 +60,7 @@ All timestamps are denominated in an integer number of seconds.
 """
 
 [route.getheader]
-PATH = ["headers/window/:height"]
+PATH = ["header/:height"]
 ":height" = "Integer"
 DOC = """
 If the header at the provided height is available, returns
