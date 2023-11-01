@@ -8,7 +8,7 @@ use commit::Commitment;
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::Voteable,
+    simple_vote::{Voteable, YesData},
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -17,10 +17,11 @@ use crate::{
 };
 
 /// A certificate which can be created by aggregating many simple votes on the commitment.
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, MEMBERSHIP: Membership<TYPES>> {
-    /// commitment to previous leaf
+    /// commitment to previous leaf which all the votes in this certificate are voting on
     pub leaf_commitment: VOTEABLE,
-    /// commitment of all the voetes this should be signed over
+    /// commitment of all the votes this cert should be signed over
     pub vote_commitment: Commitment<VOTEABLE>,
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
@@ -35,12 +36,12 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, MEMBERSHIP: Me
 impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
     Certificate2<TYPES> for SimpleCertificate<TYPES, VOTEABLE, MEMBERSHIP>
 {
-    type Commitment = VOTEABLE;
+    type Voteable = VOTEABLE;
     type Membership = MEMBERSHIP;
 
     fn create_signed_certificate(
         vote_commitment: Commitment<VOTEABLE>,
-        data: Self::Commitment,
+        data: Self::Voteable,
         sig: <TYPES::SignatureKey as SignatureKey>::QCType,
         view: TYPES::Time,
     ) -> Self {
@@ -77,10 +78,13 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES
     fn threshold(membership: &MEMBERSHIP) -> u64 {
         membership.success_threshold().into()
     }
-    fn get_data(&self) -> &Self::Commitment {
+    fn get_data(&self) -> &Self::Voteable {
         &self.leaf_commitment
     }
-    fn get_data_commitment(&self) -> Commitment<Self::Commitment> {
+    fn get_data_commitment(&self) -> Commitment<Self::Voteable> {
         self.vote_commitment
     }
 }
+
+// Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
+pub type QuorumCertificate2<TYPES, LEAF, M> = SimpleCertificate<TYPES, YesData<LEAF>, M>;

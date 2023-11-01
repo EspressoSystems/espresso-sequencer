@@ -21,17 +21,22 @@ use hotshot_types::{
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
+    simple_certificate::QuorumCertificate2,
+    simple_vote::{YesData, YesVote},
     traits::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType, QuorumEx, TimeoutEx},
+        node_implementation::{
+            CommitteeEx, NodeImplementation, NodeType, QuorumEx, QuorumMembership, TimeoutEx,
+        },
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
     vote::{QuorumVote, QuorumVoteAccumulator, TimeoutVoteAccumulator, VoteType},
+    vote2::{HasViewNumber, VoteAccumulator2},
 };
 
 use tracing::warn;
@@ -167,13 +172,12 @@ pub struct VoteCollectionTaskState<
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        <QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>> as SignedCertificate<
+        VoteAccumulator2<
             TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Commitment<Leaf<TYPES>>,
-        >>::VoteAccumulator,
-        QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
+            YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+            QuorumCertificate2<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        >,
+        QuorumCertificate2<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
     >,
 
     /// Accumulator for votes
@@ -241,57 +245,49 @@ where
     >,
 {
     match event {
-        HotShotEvent::QuorumVoteRecv(vote) => match vote.clone() {
-            QuorumVote::Yes(vote_internal) => {
-                // For the case where we receive votes after we've made a certificate
-                if state.accumulator.is_right() {
+        HotShotEvent::QuorumVoteRecv(vote) => {
+            // For the case where we receive votes after we've made a certificate
+            if state.accumulator.is_right() {
+                return (None, state);
+            }
+
+            if vote.get_view_number() != state.cur_view {
+                error!(
+                    "Vote view does not match! vote view is {} current view is {}",
+                    *vote.get_view_number(),
+                    *state.cur_view
+                );
+                return (None, state);
+            }
+
+            let accumulator = state.accumulator.left().unwrap();
+
+            match accumulator.accumulate(&vote, state.quorum_exchange.membership()) {
+                Either::Left(acc) => {
+                    state.accumulator = Either::Left(acc);
                     return (None, state);
                 }
+                Either::Right(qc) => {
+                    debug!("QCFormed! {:?}", qc.view_number);
+                    state
+                        .event_stream
+                        .publish(HotShotEvent::QCFormed(either::Left(qc.clone())))
+                        .await;
+                    state.accumulator = Either::Right(qc.clone());
 
-                if vote_internal.current_view != state.cur_view {
-                    error!(
-                        "Vote view does not match! vote view is {} current view is {}",
-                        *vote_internal.current_view, *state.cur_view
-                    );
-                    return (None, state);
-                }
+                    // No longer need to poll for votes
+                    state
+                        .quorum_exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
 
-                let accumulator = state.accumulator.left().unwrap();
-
-                match state.quorum_exchange.accumulate_vote(
-                    accumulator,
-                    &vote,
-                    &vote_internal.leaf_commitment,
-                ) {
-                    Either::Left(acc) => {
-                        state.accumulator = Either::Left(acc);
-                        return (None, state);
-                    }
-                    Either::Right(qc) => {
-                        debug!("QCFormed! {:?}", qc.view_number);
-                        state
-                            .event_stream
-                            .publish(HotShotEvent::QCFormed(either::Left(qc.clone())))
-                            .await;
-                        state.accumulator = Either::Right(qc.clone());
-
-                        // No longer need to poll for votes
-                        state
-                            .quorum_exchange
-                            .network()
-                            .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                                *qc.view_number,
-                            ))
-                            .await;
-
-                        return (Some(HotShotTaskCompleted::ShutDown), state);
-                    }
+                    return (Some(HotShotTaskCompleted::ShutDown), state);
                 }
             }
-            QuorumVote::No(_) => {
-                error!("The next leader has received an unexpected vote!");
-            }
-        },
+        }
         // TODO: Code below is redundant of code above; can be fixed
         // during exchange refactor
         // https://github.com/EspressoSystems/HotShot/issues/1799
@@ -458,19 +454,19 @@ where
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
                         };
-
-                        let message: GeneralConsensusMessage<TYPES, I> =
-                            self.quorum_exchange.create_yes_message(
-                                proposal.justify_qc.commit(),
-                                leaf.commit(),
+                        let vote =
+                            YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                YesData { leaf_commit: leaf.commit() },
                                 view,
-                                vote_token,
+                                &self.quorum_exchange.public_key(),
+                                &self.quorum_exchange.private_key(),
                             );
+                        let message = GeneralConsensusMessage::<TYPES, I>::Vote(vote);
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
                             debug!(
                                 "Sending vote to next quorum leader {:?}",
-                                vote.get_view() + 1
+                                vote.get_view_number() + 1
                             );
                             self.event_stream
                                 .publish(HotShotEvent::QuorumVoteSend(vote))
@@ -528,30 +524,34 @@ where
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
                         };
-                        let message: GeneralConsensusMessage<TYPES, I>=
+
                         // Validate the DAC.
-                        if self
-                            .committee_exchange
-                            .is_valid_cert(cert)
-                        {
+                        let message = if self.committee_exchange.is_valid_cert(cert) {
                             // Validate the block commitment for non-genesis DAC.
-                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_commitment {
+                            if !cert.is_genesis()
+                                && cert.leaf_commitment() != proposal.block_commitment
+                            {
                                 error!("Block commitment does not equal parent commitment");
                                 return false;
                             }
-                            self.quorum_exchange.create_yes_message(
-                                proposal.justify_qc.commit(),
-                                leaf.commit(),
-                                cert.view_number,
-                                vote_token)
+                            let vote =
+                            YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                YesData { leaf_commit: leaf.commit() },
+                                view,
+                                &self.quorum_exchange.public_key(),
+                                &self.quorum_exchange.private_key(),
+                            );
+                            GeneralConsensusMessage::<TYPES, I>::Vote(vote)
                         } else {
                             error!("Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}", cert, self.cur_view );
                             return false;
-
                         };
 
                         if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!("Sending vote to next quorum leader {:?}", vote.get_view());
+                            debug!(
+                                "Sending vote to next quorum leader {:?}",
+                                vote.get_view_number()
+                            );
                             self.event_stream
                                 .publish(HotShotEvent::QuorumVoteSend(vote))
                                 .await;
@@ -988,115 +988,97 @@ where
                 }
             }
             HotShotEvent::QuorumVoteRecv(vote) => {
-                debug!("Received quroum vote: {:?}", vote.get_view());
+                debug!("Received quroum vote: {:?}", vote.get_view_number());
 
-                if !self.quorum_exchange.is_leader(vote.get_view() + 1) {
+                if !self.quorum_exchange.is_leader(vote.get_view_number() + 1) {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
-                        *vote.get_view() + 1,
-                        self.quorum_exchange.is_leader(vote.get_view() + 2)
+                        *vote.get_view_number() + 1,
+                        self.quorum_exchange.is_leader(vote.get_view_number() + 2)
                     );
                     return;
                 }
 
-                match vote.clone() {
-                    QuorumVote::Yes(vote_internal) => {
-                        let handle_event = HandleEvent(Arc::new(move |event, state| {
-                            async move { vote_handle(state, event).await }.boxed()
-                        }));
-                        let collection_view = if let Some((collection_view, collection_task, _)) =
-                            &self.vote_collector
-                        {
-                            if vote_internal.current_view > *collection_view {
-                                // ED I think we'd want to let that task timeout to avoid a griefing vector
-                                self.registry.shutdown_task(*collection_task).await;
-                            }
-                            *collection_view
-                        } else {
-                            TYPES::Time::new(0)
-                        };
-
-                        // Todo check if we are the leader
-                        let new_accumulator = QuorumVoteAccumulator {
-                            total_vote_outcomes: HashMap::new(),
-                            yes_vote_outcomes: HashMap::new(),
-                            no_vote_outcomes: HashMap::new(),
-
-                            success_threshold: self.quorum_exchange.success_threshold(),
-                            failure_threshold: self.quorum_exchange.failure_threshold(),
-
-                            sig_lists: Vec::new(),
-                            signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                            phantom: PhantomData,
-                        };
-
-                        let accumulator = self.quorum_exchange.accumulate_vote(
-                            new_accumulator,
-                            &vote,
-                            &vote_internal.clone().leaf_commitment,
-                        );
-
-                        // TODO Create default functions for accumulators
-                        // https://github.com/EspressoSystems/HotShot/issues/1797
-                        let timeout_accumulator = TimeoutVoteAccumulator {
-                            da_vote_outcomes: HashMap::new(),
-                            success_threshold: self.timeout_exchange.success_threshold(),
-                            sig_lists: Vec::new(),
-                            signers: bitvec![0; self.timeout_exchange.total_nodes()],
-                            phantom: PhantomData,
-                        };
-
-                        if vote_internal.current_view > collection_view {
-                            let state = VoteCollectionTaskState {
-                                quorum_exchange: self.quorum_exchange.clone(),
-                                timeout_exchange: self.timeout_exchange.clone(),
-                                accumulator,
-                                timeout_accumulator: either::Left(timeout_accumulator),
-                                cur_view: vote_internal.current_view,
-                                event_stream: self.event_stream.clone(),
-                                id: self.id,
-                            };
-                            let name = "Quorum Vote Collection";
-                            let filter = FilterEvent(Arc::new(|event| {
-                                matches!(
-                                    event,
-                                    HotShotEvent::QuorumVoteRecv(_)
-                                        | HotShotEvent::TimeoutVoteRecv(_)
-                                )
-                            }));
-
-                            let builder =
-                                TaskBuilder::<VoteCollectionTypes<TYPES, I>>::new(name.to_string())
-                                    .register_event_stream(self.event_stream.clone(), filter)
-                                    .await
-                                    .register_registry(&mut self.registry.clone())
-                                    .await
-                                    .register_state(state)
-                                    .register_event_handler(handle_event);
-                            let id = builder.get_task_id().unwrap();
-                            let stream_id = builder.get_stream_id().unwrap();
-
-                            self.vote_collector = Some((vote_internal.current_view, id, stream_id));
-
-                            let _task = async_spawn(async move {
-                                VoteCollectionTypes::build(builder).launch().await;
-                            });
-                            debug!(
-                                "Starting vote handle for view {:?}",
-                                vote_internal.current_view
-                            );
-                        } else if let Some((_, _, stream_id)) = self.vote_collector {
-                            self.event_stream
-                                .direct_message(
-                                    stream_id,
-                                    HotShotEvent::QuorumVoteRecv(QuorumVote::Yes(vote_internal)),
-                                )
-                                .await;
+                let handle_event = HandleEvent(Arc::new(move |event, state| {
+                    async move { vote_handle(state, event).await }.boxed()
+                }));
+                let collection_view =
+                    if let Some((collection_view, collection_task, _)) = &self.vote_collector {
+                        if vote.get_view_number() > *collection_view {
+                            // ED I think we'd want to let that task timeout to avoid a griefing vector
+                            self.registry.shutdown_task(*collection_task).await;
                         }
-                    }
-                    QuorumVote::No(_) => {
-                        error!("The next leader has received an unexpected vote!");
-                    }
+                        *collection_view
+                    } else {
+                        TYPES::Time::new(0)
+                    };
+
+                // Todo check if we are the leader
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                let accumulator =
+                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+
+                // TODO Create default functions for accumulators
+                // https://github.com/EspressoSystems/HotShot/issues/1797
+                let timeout_accumulator = TimeoutVoteAccumulator {
+                    da_vote_outcomes: HashMap::new(),
+                    success_threshold: self.timeout_exchange.success_threshold(),
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                if vote.get_view_number() > collection_view {
+                    let state = VoteCollectionTaskState {
+                        quorum_exchange: self.quorum_exchange.clone(),
+                        timeout_exchange: self.timeout_exchange.clone(),
+                        accumulator,
+                        timeout_accumulator: either::Left(timeout_accumulator),
+                        cur_view: vote.get_view_number(),
+                        event_stream: self.event_stream.clone(),
+                        id: self.id,
+                    };
+                    let name = "Quorum Vote Collection";
+                    let filter = FilterEvent(Arc::new(|event| {
+                        matches!(
+                            event,
+                            HotShotEvent::QuorumVoteRecv(_) | HotShotEvent::TimeoutVoteRecv(_)
+                        )
+                    }));
+
+                    let builder =
+                        TaskBuilder::<VoteCollectionTypes<TYPES, I>>::new(name.to_string())
+                            .register_event_stream(self.event_stream.clone(), filter)
+                            .await
+                            .register_registry(&mut self.registry.clone())
+                            .await
+                            .register_state(state)
+                            .register_event_handler(handle_event);
+                    let id = builder.get_task_id().unwrap();
+                    let stream_id = builder.get_stream_id().unwrap();
+
+                    self.vote_collector = Some((vote.get_view_number(), id, stream_id));
+
+                    let _task = async_spawn(async move {
+                        VoteCollectionTypes::build(builder).launch().await;
+                    });
+                    debug!(
+                        "Starting vote handle for view {:?}",
+                        vote.get_view_number()
+                    );
+                } else if let Some((_, _, stream_id)) = self.vote_collector {
+                    self.event_stream
+                        .direct_message(
+                            stream_id,
+                            HotShotEvent::QuorumVoteRecv(vote),
+                        )
+                        .await;
                 }
             }
             HotShotEvent::TimeoutVoteRecv(vote) => {

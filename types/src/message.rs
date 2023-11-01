@@ -3,13 +3,16 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
+use crate::vote2::HasViewNumber;
 use crate::{
     certificate::{DACertificate, VIDCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
+    simple_vote::YesVote,
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
-            ExchangesType, NodeImplementation, NodeType, QuorumProposalType, ViewSyncProposalType,
+            ExchangesType, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
+            ViewSyncProposalType,
         },
         signature_key::EncodedSignature,
     },
@@ -148,7 +151,10 @@ where
     /// Message with a quorum proposal.
     Proposal(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, Commitment<I::Leaf>>, TYPES::SignatureKey),
+    Vote(
+        YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        TYPES::SignatureKey,
+    ),
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),
     /// Message with a view sync certificate.
@@ -303,7 +309,7 @@ impl<
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to both validating and sequencing consensus.
 pub enum GeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
@@ -314,7 +320,7 @@ where
     Proposal(Proposal<QuorumProposalType<TYPES, I>>),
 
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, Commitment<I::Leaf>>),
+    Vote(YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
 
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),
@@ -383,7 +389,7 @@ pub trait SequencingMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>>:
 }
 
 /// Messages for sequencing consensus.
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct SequencingMessage<
     TYPES: NodeType,
@@ -409,7 +415,7 @@ impl<
                         // this should match replica upon receipt
                         p.data.get_view_number()
                     }
-                    GeneralConsensusMessage::Vote(vote_message) => vote_message.get_view(),
+                    GeneralConsensusMessage::Vote(vote_message) => vote_message.get_view_number(),
                     GeneralConsensusMessage::InternalTrigger(trigger) => match trigger {
                         InternalTrigger::Timeout(time) => *time,
                     },

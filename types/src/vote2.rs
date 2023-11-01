@@ -56,12 +56,12 @@ pub trait Certificate2<TYPES: NodeType> {
     /// Type that defines membership for voters on the certificate
     type Membership: Membership<TYPES>;
     /// The data commitment this certificate certifies.
-    type Commitment: Voteable;
+    type Voteable: Voteable;
 
     /// Build a certificate from the data commitment and the quorum of signers
     fn create_signed_certificate(
-        vote_commitment: Commitment<Self::Commitment>,
-        data: Self::Commitment,
+        vote_commitment: Commitment<Self::Voteable>,
+        data: Self::Voteable,
         sig: <TYPES::SignatureKey as SignatureKey>::QCType,
         view: TYPES::Time,
     ) -> Self;
@@ -69,23 +69,23 @@ pub trait Certificate2<TYPES: NodeType> {
     /// Checks if the cert is valid
     fn is_valid_cert(
         &self,
-        vote_commitment: Commitment<Self::Commitment>,
+        vote_commitment: Commitment<Self::Voteable>,
         membership: &Self::Membership,
     ) -> bool;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
     fn threshold(membership: &Self::Membership) -> u64;
     /// Get the commitment which was voted on
-    fn get_data(&self) -> &Self::Commitment;
+    fn get_data(&self) -> &Self::Voteable;
     /// Get the vote commitment which the votes commit to
-    fn get_data_commitment(&self) -> Commitment<Self::Commitment>;
+    fn get_data_commitment(&self) -> Commitment<Self::Voteable>;
 }
 
 /// Accumulates votes until a certificate is formed.  This implementation works for all simple vote and certificate pairs
 pub struct VoteAccumulator2<
     TYPES: NodeType,
     VOTE: Vote2<TYPES>,
-    CERT: Certificate2<TYPES, Commitment = VOTE::Commitment>,
+    CERT: Certificate2<TYPES, Voteable = VOTE::Commitment>,
 > {
     /// Map of all signatures accumlated so far
     pub vote_outcomes: VoteMap2<Commitment<VOTE::Commitment>>,
@@ -100,13 +100,12 @@ pub struct VoteAccumulator2<
 impl<
         TYPES: NodeType,
         VOTE: Vote2<TYPES>,
-        CERT: Certificate2<TYPES, Commitment = VOTE::Commitment, Membership = VOTE::Membership>,
+        CERT: Certificate2<TYPES, Voteable = VOTE::Commitment, Membership = VOTE::Membership>,
     > VoteAccumulator2<TYPES, VOTE, CERT>
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.
-    #[allow(dead_code)]
-    fn accumulate(mut self, vote: &VOTE, membership: &VOTE::Membership) -> Either<Self, CERT> {
+    pub fn accumulate(mut self, vote: &VOTE, membership: &VOTE::Membership) -> Either<Self, CERT> {
         let key = vote.get_signing_key();
 
         let vote_commitment = vote.get_data_commitment();
