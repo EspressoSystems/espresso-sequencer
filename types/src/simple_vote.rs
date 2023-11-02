@@ -141,13 +141,7 @@ impl<LEAF: Committable> Committable for YesData<LEAF> {
             .finalize()
     }
 }
-impl<LEAF: Committable> Committable for NoData<LEAF> {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("No Vote")
-            .var_size_bytes(self.leaf_commit.as_ref())
-            .finalize()
-    }
-}
+
 impl<BLOCK: Committable> Committable for DAData<BLOCK> {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("DA Vote")

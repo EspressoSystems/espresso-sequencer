@@ -12,6 +12,10 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, key_pair_for_id},
 };
+use hotshot_types::simple_vote::YesData;
+use hotshot_types::simple_vote::YesVote;
+use hotshot_types::traits::node_implementation::QuorumMembership;
+use hotshot_types::vote2::Certificate2;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
@@ -39,7 +43,7 @@ async fn build_vote(
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
-    let parent = if justify_qc.is_genesis() {
+    let parent = if justify_qc.is_genesis {
         let Some(genesis_view) = consensus.state_map.get(&ViewNumber::new(0)) else {
             panic!("Couldn't find genesis view in state map.");
         };
@@ -53,7 +57,7 @@ async fn build_vote(
     } else {
         consensus
             .saved_leaves
-            .get(&justify_qc.leaf_commitment())
+            .get(&justify_qc.get_data().leaf_commit)
             .cloned()
             .unwrap()
     };
@@ -70,13 +74,14 @@ async fn build_vote(
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),
     };
-
-    quorum_exchange.create_yes_message(
-        proposal.justify_qc.commit(),
-        leaf.commit(),
+    let vote =
+    YesVote::<TestTypes, Leaf<TestTypes>, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+        YesData { leaf_commit: leaf.commit() },
         view,
-        vote_token,
-    )
+        &quorum_exchange.public_key(),
+        &quorum_exchange.private_key(),
+    );
+    GeneralConsensusMessage::<TestTypes, MemoryImpl>::Vote(vote)
 }
 
 #[cfg(test)]
@@ -89,7 +94,7 @@ async fn build_vote(
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::certificate::QuorumCertificate;
+    use hotshot_types::{certificate::QuorumCertificate, simple_certificate::QuorumCertificate2};
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -101,7 +106,7 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate::<TestTypes, Commitment<Leaf<TestTypes>>>::genesis();
+    let qc = QuorumCertificate2::<TestTypes, Leaf<TestTypes>>::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));
