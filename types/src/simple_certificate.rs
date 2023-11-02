@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-#![allow(clippy::missing_docs_in_private_items)]
-#![allow(missing_docs)]
+//! Implementations of the simple certificate type.  Used for Quorum, DA, and Timeout Certificates
 
 use std::{
     fmt::{self, Debug, Display, Formatter},
@@ -109,6 +107,8 @@ impl<
         LEAF: Committable + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq + 'static,
     > SimpleCertificate<TYPES, YesData<LEAF>>
 {
+    #[must_use]
+    /// Creat the Genisis certificate
     pub fn genesis() -> Self {
         let data = YesData {
             leaf_commit: Commitment::<LEAF>::default_commitment_no_preimage(),
@@ -125,5 +125,5 @@ impl<
     }
 }
 
-// Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
+/// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `YesVotes`
 pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, YesData<LEAF>>;

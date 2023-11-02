@@ -22,7 +22,7 @@ use hotshot_types::{
     event::EventType,
     message::MessageKind,
     traits::{
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
+        election::{ConsensusExchange, QuorumExchangeType},
         node_implementation::{ExchangesType, NodeType},
         state::ConsensusTime,
         storage::Storage,

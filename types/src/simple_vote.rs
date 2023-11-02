@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-#![allow(clippy::missing_docs_in_private_items)]
-#![allow(missing_docs)]
+//! Implementations of the simple vote types.
 
 use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
@@ -15,23 +13,33 @@ use crate::{
     },
     vote2::{HasViewNumber, Vote2},
 };
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a yes vote.
 pub struct YesData<LEAF: Committable> {
+    /// Commitment to the leaf
     pub leaf_commit: Commitment<LEAF>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a DA vote.
 pub struct DAData<BLOCK: Committable> {
+    /// Commitment to a block
     pub block_commit: Commitment<BLOCK>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a timeout vote.
 pub struct TimeoutData<TYPES: NodeType> {
+    /// View the timeout is for
     pub view: TYPES::Time,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a VID vote.
 pub struct VIDData<BLOCK: Committable> {
+    /// Commitment to the block the VID vote is on.
     pub block_commit: Commitment<BLOCK>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Pre Commit vote.
 pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: EncodedPublicKey,
@@ -39,6 +47,7 @@ pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     pub round: TYPES::Time,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Commit vote.
 pub struct ViewSyncCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: EncodedPublicKey,
@@ -46,6 +55,7 @@ pub struct ViewSyncCommitData<TYPES: NodeType> {
     pub round: TYPES::Time,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Finalize vote.
 pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: EncodedPublicKey,
@@ -53,7 +63,9 @@ pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     pub round: TYPES::Time,
 }
 
-/// Marker trait for data or commitments that can be voted on.  
+/// Marker trait for data or commitments that can be voted on.
+/// Only structs in this file can implement voteable.  This is enforced with the `Sealed` trait
+/// Sealing this trait prevents creating new vote types outside this file.
 pub trait Voteable:
     sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq
 {
@@ -65,6 +77,7 @@ pub trait Voteable:
 mod sealed {
     use commit::Committable;
 
+    /// Only structs in this file can impl `Sealed`
     pub trait Sealed {}
 
     // TODO: Does the implement for things outside this file that are commitable?
@@ -118,6 +131,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>> V
 impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
     SimpleVote<TYPES, DATA, MEMBERSHIP>
 {
+    /// Creates and signs a simple vote
     pub fn create_signed_vote(
         data: DATA,
         view: TYPES::Time,
@@ -157,6 +171,7 @@ impl<BLOCK: Committable> Committable for VIDData<BLOCK> {
     }
 }
 
+/// This implements commit for all the types which contain a view and relay public key.
 fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     view: TYPES::Time,
     relay: &EncodedPublicKey,
@@ -194,10 +209,17 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 }
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
+/// Yes vote Alias
 pub type YesVote<TYPES, LEAF, M> = SimpleVote<TYPES, YesData<LEAF>, M>;
+/// DA vote type alias
 pub type DAVote<TYPES, BLOCK, M> = SimpleVote<TYPES, DAData<BLOCK>, M>;
+/// VID vote type alias
 pub type VIDVote<TYPES, BLOCK, M> = SimpleVote<TYPES, VIDData<BLOCK>, M>;
+/// Timeout Vote type alias
 pub type TimeoutVote<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;
+/// View Sync Commit Vote type alias
 pub type ViewSyncCommitVote<TYPES, M> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>, M>;
+/// View Sync Pre Commit Vote type alias
 pub type ViewSyncPreCommitVote<TYPES, M> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>, M>;
+/// View Sync Finalize Vote type alias
 pub type ViewSyncFinalizeVote<TYPES, M> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>, M>;

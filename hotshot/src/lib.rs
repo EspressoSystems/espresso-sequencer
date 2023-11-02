@@ -72,7 +72,7 @@ use hotshot_types::{
     },
     traits::{
         consensus_api::{ConsensusApi, ConsensusSharedApi},
-        election::{ConsensusExchange, Membership, SignedCertificate},
+        election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, NetworkError},
         node_implementation::{
             ChannelMaps, CommitteeEx, ExchangesType, NodeType, QuorumEx, SendToTasks, VIDEx,

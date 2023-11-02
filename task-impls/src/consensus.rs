@@ -461,8 +461,8 @@ where
                             YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
                                 YesData { leaf_commit: leaf.commit() },
                                 view,
-                                &self.quorum_exchange.public_key(),
-                                &self.quorum_exchange.private_key(),
+                                self.quorum_exchange.public_key(),
+                                self.quorum_exchange.private_key(),
                             );
                         let message = GeneralConsensusMessage::<TYPES, I>::Vote(vote);
 
@@ -542,8 +542,8 @@ where
                             YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
                                 YesData { leaf_commit: leaf.commit() },
                                 view,
-                                &self.quorum_exchange.public_key(),
-                                &self.quorum_exchange.private_key(),
+                                self.quorum_exchange.public_key(),
+                                self.quorum_exchange.private_key(),
                             );
                             GeneralConsensusMessage::<TYPES, I>::Vote(vote)
                         } else {

@@ -101,6 +101,9 @@ impl<
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.
+    ///
+    /// # Panics
+    /// Panics if the vote comes from a node not in the stake table
     pub fn accumulate(mut self, vote: &VOTE, membership: &VOTE::Membership) -> Either<Self, CERT> {
         let key = vote.get_signing_key();
 

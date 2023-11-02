@@ -19,7 +19,7 @@ use hotshot_types::{
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
-        election::{ConsensusExchange, Membership, SignedCertificate},
+        election::{ConsensusExchange, Membership},
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},

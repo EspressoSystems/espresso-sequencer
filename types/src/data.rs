@@ -781,7 +781,7 @@ pub fn serialize_signature2<TYPES: NodeType>(
     let mut signatures_bytes = vec![];
     signatures_bytes.extend("Yes".as_bytes());
 
-    let (sig, proof) = TYPES::SignatureKey::get_sig_proof(&signatures);
+    let (sig, proof) = TYPES::SignatureKey::get_sig_proof(signatures);
     let proof_bytes = bincode_opts()
         .serialize(&proof.as_bitslice())
         .expect("This serialization shouldn't be able to fail");

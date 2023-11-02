@@ -12,7 +12,7 @@ use derivative::Derivative;
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     block_impl::{BlockPayloadError, VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    data::{fake_commitment, LeafType, ViewNumber},
+    data::{fake_commitment, ViewNumber},
     traits::{
         election::Membership,
         node_implementation::NodeType,

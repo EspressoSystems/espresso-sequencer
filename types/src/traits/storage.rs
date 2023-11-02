@@ -2,9 +2,7 @@
 
 use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use crate::{
-    data::LeafType,
-    simple_certificate::QuorumCertificate2,
-    traits::{election::SignedCertificate, BlockPayload},
+    data::LeafType, simple_certificate::QuorumCertificate2, traits::BlockPayload,
     vote2::HasViewNumber,
 };
 use async_trait::async_trait;
