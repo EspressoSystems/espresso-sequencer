@@ -232,7 +232,7 @@ fn get_current_working_dir() -> std::io::Result<PathBuf> {
 }
 
 impl ValidatorConfigFile {
-    pub fn from_file() -> Self {
+    pub fn from_file(dir_str: &str) -> Self {
         let current_working_dir = match get_current_working_dir() {
             Ok(dir) => dir,
             Err(e) => {
@@ -241,7 +241,7 @@ impl ValidatorConfigFile {
             }
         };
         let filename = current_working_dir.into_os_string().into_string().unwrap()
-            + "/../../config/ValidatorConfigFile.toml";
+            + "/../../" + dir_str;
         match fs::read_to_string(filename.clone()) {
             // If successful return the files text as `contents`.
             Ok(contents) => {
