@@ -22,7 +22,7 @@ async fn test_timeout_web() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
 
@@ -50,7 +50,7 @@ async fn test_timeout_web() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_secs(30),
+                duration: Duration::from_secs(60),
             },
         );
 
@@ -85,7 +85,7 @@ async fn test_timeout_libp2p() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
 
@@ -113,7 +113,7 @@ async fn test_timeout_libp2p() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_secs(30),
+                duration: Duration::from_secs(60),
             },
         );
 

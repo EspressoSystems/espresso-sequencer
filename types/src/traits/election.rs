@@ -787,19 +787,6 @@ impl<
 pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
-    /// Create a message with a positive vote on validating or commitment proposal.
-    // TODO ED This returns just a general message type, it's not even bound to a proposal, and this is just a function on the QC.  Make proprosal doesn't really apply to all cert types.
-    // fn create_yes_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
-    //     &self,
-    //     justify_qc_commitment: Commitment<Self::Certificate>,
-    //     leaf_commitment: Commitment<LEAF>,
-    //     current_view: TYPES::Time,
-    //     vote_token: TYPES::VoteTokenType,
-    // ) -> GeneralConsensusMessage<TYPES, I>
-    // where
-    //     <Self as ConsensusExchange<TYPES, M>>::Certificate: commit::Committable,
-    //     I::Exchanges: ExchangesType<TYPES, LEAF, Message<TYPES, I>>;
-
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
