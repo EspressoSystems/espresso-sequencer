@@ -35,8 +35,8 @@ pub struct DACertificate<TYPES: NodeType> {
     /// This value is covered by the threshold signature.
     pub view_number: TYPES::Time,
 
-    /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    /// committment to the block payload
+    pub payload_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -50,8 +50,8 @@ pub struct VIDCertificate<TYPES: NodeType> {
     /// The view number this VID certificate was generated during
     pub view_number: TYPES::Time,
 
-    /// committment to the block
-    pub block_commitment: Commitment<TYPES::BlockType>,
+    /// Committment to the block payload
+    pub payload_commitment: Commitment<TYPES::BlockPayload>,
 
     /// Assembled signature for certificate aggregation
     pub signatures: AssembledSignature<TYPES>,
@@ -260,17 +260,17 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockPayload>>
     for DACertificate<TYPES>
 {
     type Vote = DAVote<TYPES>;
-    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+    type VoteAccumulator = DAVoteAccumulator<TYPES, Commitment<TYPES::BlockPayload>, Self::Vote>;
 
     fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         DACertificate {
             view_number: vote.get_view(),
             signatures,
-            block_commitment: vote.block_commitment,
+            payload_commitment: vote.payload_commitment,
         }
     }
 
@@ -282,8 +282,8 @@ impl<TYPES: NodeType>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
-        self.block_commitment
+    fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
+        self.payload_commitment
     }
 
     fn is_genesis(&self) -> bool {
@@ -298,17 +298,17 @@ impl<TYPES: NodeType>
 }
 
 impl<TYPES: NodeType>
-    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockType>>
+    SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Commitment<TYPES::BlockPayload>>
     for VIDCertificate<TYPES>
 {
     type Vote = VIDVote<TYPES>;
-    type VoteAccumulator = VIDVoteAccumulator<TYPES, Commitment<TYPES::BlockType>, Self::Vote>;
+    type VoteAccumulator = VIDVoteAccumulator<TYPES, Commitment<TYPES::BlockPayload>, Self::Vote>;
 
     fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         VIDCertificate {
             view_number: vote.get_view(),
             signatures,
-            block_commitment: vote.block_commitment,
+            payload_commitment: vote.payload_commitment,
         }
     }
 
@@ -320,8 +320,8 @@ impl<TYPES: NodeType>
         self.signatures.clone()
     }
 
-    fn leaf_commitment(&self) -> Commitment<TYPES::BlockType> {
-        self.block_commitment
+    fn leaf_commitment(&self) -> Commitment<TYPES::BlockPayload> {
+        self.payload_commitment
     }
 
     fn is_genesis(&self) -> bool {

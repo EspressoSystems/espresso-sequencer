@@ -48,7 +48,7 @@ pub struct DATaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// The state's api
@@ -84,7 +84,7 @@ pub struct DAVoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// the committee exchange
@@ -96,7 +96,7 @@ pub struct DAVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Commitment<TYPES::BlockType>,
+            Commitment<TYPES::BlockPayload>,
         >>::VoteAccumulator,
         DACertificate<TYPES>,
     >,
@@ -115,7 +115,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }
@@ -133,7 +133,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     match event {
@@ -152,7 +152,7 @@ where
             match state.committee_exchange.accumulate_vote(
                 accumulator,
                 &vote,
-                &vote.block_commitment,
+                &vote.payload_commitment,
             ) {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
@@ -204,7 +204,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// main task event handler
@@ -236,9 +236,9 @@ where
 
                 debug!(
                     "Got a DA block with {} transactions!",
-                    proposal.data.deltas.contained_transactions().len()
+                    proposal.data.block_payload.transaction_commitments().len()
                 );
-                let block_commitment = proposal.data.deltas.commit();
+                let payload_commitment = proposal.data.block_payload.commit();
 
                 // ED Is this the right leader?
                 let view_leader_key = self.committee_exchange.get_leader(view);
@@ -247,7 +247,7 @@ where
                     return None;
                 }
 
-                if !view_leader_key.validate(&proposal.signature, block_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, payload_commitment.as_ref()) {
                     error!("Could not verify proposal.");
                     return None;
                 }
@@ -263,7 +263,7 @@ where
                     Ok(Some(vote_token)) => {
                         // Generate and send vote
                         let vote = self.committee_exchange.create_da_message(
-                            block_commitment,
+                            payload_commitment,
                             view,
                             vote_token,
                         );
@@ -282,21 +282,19 @@ where
                         // contains strictly more information.
                         consensus.state_map.entry(view).or_insert(View {
                             view_inner: ViewInner::DA {
-                                block: block_commitment,
+                                block: payload_commitment,
                             },
                         });
 
-                        // Record the block we have promised to make available.
-                        consensus.saved_blocks.insert(proposal.data.deltas);
+                        // Record the block payload we have promised to make available.
+                        consensus
+                            .saved_block_payloads
+                            .insert(proposal.data.block_payload);
                     }
                 }
             }
             HotShotEvent::DAVoteRecv(vote) => {
-                // warn!(
-                //     "DA vote recv, Main Task {:?}, key: {:?}",
-                //     vote.current_view,
-                //     self.committee_exchange.public_key()
-                // );
+                debug!("DA vote recv, Main Task {:?}", vote.current_view,);
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.current_view;
                 if !self.committee_exchange.is_leader(view) {
@@ -330,7 +328,7 @@ where
                 let accumulator = self.committee_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
-                    &vote.clone().block_commitment,
+                    &vote.clone().payload_commitment,
                 );
 
                 if view > collection_view {
@@ -424,9 +422,12 @@ where
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let signature = self.committee_exchange.sign_da_proposal(&block.commit());
+                let payload_commitment = block.commit();
+                let signature = self
+                    .committee_exchange
+                    .sign_da_proposal(&payload_commitment);
                 let data: DAProposal<TYPES> = DAProposal {
-                    deltas: block.clone(),
+                    block_payload: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number: view,
                 };
@@ -435,7 +436,7 @@ where
                 let message = Proposal { data, signature };
 
                 self.event_stream
-                    .publish(HotShotEvent::SendDABlockData(block.clone()))
+                    .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))
                     .await;
                 self.event_stream
                     .publish(HotShotEvent::DAProposalSend(
@@ -492,7 +493,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }

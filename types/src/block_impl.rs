@@ -6,7 +6,11 @@ use std::{
 
 use crate::{
     data::{test_srs, VidScheme, VidSchemeTrait},
-    traits::{block_contents::Transaction, state::TestableBlock, BlockPayload},
+    traits::{
+        block_contents::{BlockHeader, Transaction},
+        state::TestableBlock,
+        BlockPayload,
+    },
 };
 use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
@@ -16,10 +20,10 @@ use snafu::Snafu;
 
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of storage nodes for VID initiation.
-pub const NUM_STORAGE_NODES: usize = 10;
+pub const NUM_STORAGE_NODES: usize = 8;
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of chunks for VID initiation.
-pub const NUM_CHUNKS: usize = 5;
+pub const NUM_CHUNKS: usize = 8;
 
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -61,8 +65,8 @@ pub enum BlockPayloadError {
 pub struct VIDBlockPayload {
     /// List of transactions.
     pub transactions: Vec<VIDTransaction>,
-    /// VID commitment.
-    pub commitment: <VidScheme as VidSchemeTrait>::Commit,
+    /// VID commitment to the block payload.
+    pub payload_commitment: <VidScheme as VidSchemeTrait>::Commit,
 }
 
 impl VIDBlockPayload {
@@ -82,14 +86,14 @@ impl VIDBlockPayload {
         let vid_disperse = vid.disperse(&txn).unwrap();
         VIDBlockPayload {
             transactions: vec![VIDTransaction(txn)],
-            commitment: vid_disperse.commit,
+            payload_commitment: vid_disperse.commit,
         }
     }
 }
 
 impl Committable for VIDBlockPayload {
     fn commit(&self) -> Commitment<Self> {
-        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.commitment)
+        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.payload_commitment)
             .expect("conversion from VidScheme::Commit to Commitment should succeed")
     }
 
@@ -119,10 +123,45 @@ impl BlockPayload for VIDBlockPayload {
 
     type Transaction = VIDTransaction;
 
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
+    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
             .collect()
+    }
+}
+
+/// A [`BlockHeader`] that commits to [`VIDBlockPayload`].
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Deserialize, Serialize)]
+pub struct VIDBlockHeader {
+    /// Block number.
+    pub block_number: u64,
+    /// VID commitment to the payload.
+    pub payload_commitment: Commitment<VIDBlockPayload>,
+}
+
+impl BlockHeader for VIDBlockHeader {
+    type Payload = VIDBlockPayload;
+
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self {
+        Self {
+            block_number: parent_header.block_number + 1,
+            payload_commitment,
+        }
+    }
+
+    fn genesis(payload: Self::Payload) -> Self {
+        Self {
+            block_number: 0,
+            payload_commitment: payload.commit(),
+        }
+    }
+
+    fn block_number(&self) -> u64 {
+        self.block_number
+    }
+
+    fn payload_commitment(&self) -> Commitment<Self::Payload> {
+        self.payload_commitment
     }
 }

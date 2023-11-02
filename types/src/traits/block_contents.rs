@@ -1,7 +1,7 @@
 //! Abstraction over the contents of a block
 //!
-//! This module provides the [`BlockPayload`] and [`BlockHeader`] traits, which describe the
-//! behaviors that a block is expected to have.
+//! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
+//! describe the behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
@@ -12,6 +12,14 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
+/// Abstraction over any type of transaction. Used by [`BlockPayload`].
+pub trait Transaction:
+    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+{
+}
 
 // TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
 // <https://github.com/EspressoSystems/HotShot/issues/1815>
@@ -42,24 +50,40 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
+    // type Header: BlockHeader;
+
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
+    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
-/// Abstraction over any type of transaction. Used by [`BlockPayload`].
-pub trait Transaction:
-    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+/// Header of a block, which commits to a [`BlockPayload`].
+pub trait BlockHeader:
+    Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned
 {
+    /// Block payload associated with the commitment.
+    type Payload: BlockPayload;
+
+    /// Build a header with the payload commitment and parent header.
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self;
+
+    /// Build a genesis header with the genesis payload.
+    fn genesis(payload: Self::Payload) -> Self;
+
+    /// Get the block number.
+    fn block_number(&self) -> u64;
+
+    /// Get the payload commitment.
+    fn payload_commitment(&self) -> Commitment<Self::Payload>;
 }
 
 /// Dummy implementation of `BlockPayload` for unit tests
 pub mod dummy {
     use std::fmt::Display;
 
-    use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
+    use super::{
+        BlockHeader, BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize,
+    };
     use rand::Rng;
     use serde::Deserialize;
 
@@ -120,12 +144,34 @@ pub mod dummy {
         }
     }
 
+    impl BlockHeader for DummyBlock {
+        type Payload = Self;
+
+        fn new(_payload_commitment: Commitment<Self>, _parent_header: &Self) -> Self {
+            Self { nonce: 0 }
+        }
+
+        fn genesis(_payload: Self::Payload) -> Self {
+            Self { nonce: 0 }
+        }
+
+        fn block_number(&self) -> u64 {
+            0
+        }
+
+        fn payload_commitment(&self) -> commit::Commitment<Self> {
+            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
+                .u64_field("Nonce", self.nonce)
+                .finalize()
+        }
+    }
+
     impl BlockPayload for DummyBlock {
         type Error = DummyError;
 
         type Transaction = DummyTransaction;
 
-        fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
+        fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
             HashSet::new()
         }
     }

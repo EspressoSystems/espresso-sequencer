@@ -149,7 +149,8 @@ mod test {
 
     impl NodeType for DummyTypes {
         type Time = ViewNumber;
-        type BlockType = DummyBlock;
+        type BlockHeader = DummyBlock;
+        type BlockPayload = DummyBlock;
         type SignatureKey = BLSPubKey;
         type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
         type Transaction = <DummyBlock as BlockPayload>::Transaction;
@@ -171,7 +172,6 @@ mod test {
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
             QuorumCertificate2 {
-                // block_commitment: dummy_block_commit,
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
                 leaf_commitment: data,
                 vote_commitment: commit,
@@ -180,8 +180,8 @@ mod test {
                 _pd: PhantomData,
             },
             DummyBlock::random(rng),
+            Some(DummyBlock::random(rng)),
             DummyState::random(rng),
-            rng.next_u64(),
             dummy_leaf_commit,
             Vec::new(),
             genesis_proposer_id(),

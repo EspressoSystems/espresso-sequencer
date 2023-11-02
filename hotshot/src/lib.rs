@@ -61,10 +61,10 @@ use hotshot_types::{
 };
 
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, ViewSyncCertificate},
-    consensus::{BlockStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{DAProposal, DeltasType, Leaf, LeafType, QuorumProposal},
+    consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
+    data::{DAProposal, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -205,10 +205,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let mut saved_leaves = HashMap::new();
-        let mut saved_blocks = BlockStore::default();
+        let mut saved_block_payloads = BlockPayloadStore::default();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
-        if let Ok(block) = anchored_leaf.get_deltas().try_resolve() {
-            saved_blocks.insert(block);
+        if let Some(payload) = anchored_leaf.get_block_payload() {
+            saved_block_payloads.insert(payload);
         }
 
         let start_view = anchored_leaf.get_view_number();
@@ -218,7 +218,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
-            saved_blocks,
+            saved_block_payloads,
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),
@@ -629,7 +629,11 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+        TYPES: NodeType<
+            BlockHeader = VIDBlockHeader,
+            BlockPayload = VIDBlockPayload,
+            Transaction = VIDTransaction,
+        >,
         I: NodeImplementation<
             TYPES,
             Leaf = Leaf<TYPES>,
@@ -651,7 +655,7 @@ where
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
             Certificate = DACertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockType>,
+            Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ConsensusExchange<
@@ -667,7 +671,7 @@ where
             Message<TYPES, I>,
             Proposal = VidDisperse<TYPES>,
             Certificate = VIDCertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockType>,
+            Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     TimeoutEx<TYPES, I>: ConsensusExchange<
@@ -1014,17 +1018,13 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(genesis_block: TYPES::BlockType) -> Result<Self, HotShotError<TYPES>> {
-        let state = TYPES::StateType::default()
-            .append(&genesis_block, &TYPES::Time::new(0))
-            .map_err(|err| HotShotError::Misc {
-                context: err.to_string(),
-            })?;
+    pub fn from_genesis(genesis_payload: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
+        let state = TYPES::StateType::initialize();
         let time = TYPES::Time::genesis();
         let justify_qc = QuorumCertificate2::<TYPES, LEAF>::genesis();
 
         Ok(Self {
-            inner: LEAF::new(time, justify_qc, genesis_block, state),
+            inner: LEAF::new(time, justify_qc, genesis_payload, state),
         })
     }
 

@@ -3,7 +3,6 @@ use crate::{
     test_builder::TestMetadata,
 };
 use commit::Committable;
-use either::Right;
 use hotshot::{
     certificate::QuorumCertificate,
     traits::{NodeImplementation, TestableNodeImplementation},
@@ -13,12 +12,13 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
+    block_impl::{VIDBlockHeader, VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
     simple_certificate::QuorumCertificate2,
     traits::{
+        block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership, SignedCertificate},
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
@@ -112,26 +112,26 @@ async fn build_quorum_proposal_and_signature(
         panic!("Failed to find high QC parent.");
     };
     let parent_leaf = leaf.clone();
+    let parent_header = parent_leaf.block_header.clone();
 
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
+    let payload_commitment = block.commit();
+    let block_header = VIDBlockHeader::new(payload_commitment, &parent_header);
     let leaf = Leaf {
         view_number: ViewNumber::new(view),
-        height: parent_leaf.height + 1,
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
-        // Use the block commitment rather than the block, so that the replica can construct
-        // the same leaf with the commitment.
-        deltas: Right(block.commit()),
+        block_header: block_header.clone(),
+        block_payload: None,
         rejected: vec![],
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
     let proposal = QuorumProposal::<TestTypes, Leaf<TestTypes>> {
-        block_commitment: block.commit(),
+        block_header,
         view_number: ViewNumber::new(view),
-        height: 1,
         justify_qc: QuorumCertificate2::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,

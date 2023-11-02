@@ -41,15 +41,15 @@ async fn test_da_task() {
     let vid = vid_init();
     let txn = vec![0u8];
     let vid_disperse = vid.disperse(&txn).unwrap();
-    let block_commitment = vid_disperse.commit;
+    let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions: vec![VIDTransaction(txn)],
-        commitment: block_commitment,
+        payload_commitment,
     };
 
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
-        deltas: block.clone(),
+        block_payload: block.clone(),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -57,7 +57,7 @@ async fn test_da_task() {
         signature,
     };
 
-    // TODO for now reuse the same block commitment and signature as DA committee
+    // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
 
     // Every event input is seen on the event stream in the output.
@@ -77,7 +77,7 @@ async fn test_da_task() {
         HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
         1,
     );
-    output.insert(HotShotEvent::SendDABlockData(block.clone()), 1);
+    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let vote_token = committee_exchange
         .make_vote_token(ViewNumber::new(2))

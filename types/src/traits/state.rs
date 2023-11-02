@@ -15,11 +15,13 @@ use std::{
     ops::{Deref, Sub},
 };
 
+use super::block_contents::BlockHeader;
+
 /// Abstraction over the state that blocks modify
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
-///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockType))
+///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
 ///   * The ability to validate that a block is actually a valid extension of this state
 ///     ([`validate_block`](State::validate_block))
 ///   * The ability to produce a new state, with the modifications from the block applied
@@ -39,22 +41,27 @@ pub trait State:
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
-    /// The type of block this state is associated with
-    type BlockType: BlockPayload;
+    /// The type of block header this state is associated with
+    type BlockHeader: BlockHeader;
+    /// The type of block payload this state is associated with
+    type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
-    /// Returns true if and only if the provided block is valid and can extend this state
-    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool;
+    /// Returns true if and only if the provided block header is valid and can extend this state
+    fn validate_block(&self, block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool;
 
-    /// Appends the given block to this state, returning an new state
+    /// Initialize the state.
+    fn initialize() -> Self;
+
+    /// Appends the given block header to this state, returning an new state
     ///
     /// # Errors
     ///
-    /// Should produce and error if appending this block would lead to an invalid state
+    /// Should produce and error if appending this block header would lead to an invalid state
     fn append(
         &self,
-        block: &Self::BlockType,
+        block_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
 
@@ -97,7 +104,7 @@ pub trait ConsensusTime:
 /// extra functions required on state to be usable by hotshot-testing
 pub trait TestableState: State
 where
-    <Self as State>::BlockType: TestableBlock,
+    <Self as State>::BlockPayload: TestableBlock,
 {
     /// Creates random transaction if possible
     /// otherwise panics
@@ -106,7 +113,7 @@ where
         state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as BlockPayload>::Transaction;
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction;
 }
 
 /// extra functions required on block to be usable by hotshot-testing
@@ -158,17 +165,27 @@ pub mod dummy {
 
     impl State for DummyState {
         type Error = DummyError;
-
-        type BlockType = DummyBlock;
+        type BlockHeader = DummyBlock;
+        type BlockPayload = DummyBlock;
         type Time = ViewNumber;
 
-        fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
+        fn validate_block(
+            &self,
+            _block_header: &Self::BlockHeader,
+            _view_number: &Self::Time,
+        ) -> bool {
             false
+        }
+
+        fn initialize() -> Self {
+            let mut state = Self::default();
+            state.nonce += 1;
+            state
         }
 
         fn append(
             &self,
-            _block: &Self::BlockType,
+            _block_header: &Self::BlockHeader,
             _view_number: &Self::Time,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
