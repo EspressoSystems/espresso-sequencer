@@ -8,12 +8,11 @@
 use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
-use either::Either;
+
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
-    certificate::{AssembledSignature, QuorumCertificate},
-    data::{fake_commitment, genesis_proposer_id, random_commitment, Leaf, LeafType, ViewNumber},
+    data::{fake_commitment, LeafType, ViewNumber},
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -21,7 +20,7 @@ use hotshot_types::{
         BlockPayload, State,
     },
 };
-use rand::Rng;
+
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 

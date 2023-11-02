@@ -1,7 +1,7 @@
 //! Provides an event-streaming handle for a [`HotShot`] running in the background
 
 use crate::QuorumCertificate2;
-use crate::{traits::NodeImplementation, types::Event, Message, QuorumCertificate, SystemContext};
+use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
 use async_lock::RwLock;
 use commit::Committable;
@@ -20,10 +20,10 @@ use hotshot_types::{
     data::LeafType,
     error::HotShotError,
     event::EventType,
-    message::{GeneralConsensusMessage, MessageKind},
+    message::MessageKind,
     traits::{
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
-        node_implementation::{ExchangesType, NodeType, QuorumEx},
+        node_implementation::{ExchangesType, NodeType},
         state::ConsensusTime,
         storage::Storage,
     },

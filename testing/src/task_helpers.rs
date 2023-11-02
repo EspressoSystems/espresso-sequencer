@@ -17,6 +17,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
+    simple_certificate::QuorumCertificate2,
     traits::{
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership, SignedCertificate},
@@ -24,7 +25,7 @@ use hotshot_types::{
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
     },
-    vote2::HasViewNumber, simple_certificate::QuorumCertificate2,
+    vote2::HasViewNumber,
 };
 
 pub async fn build_system_handle(

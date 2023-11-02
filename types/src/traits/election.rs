@@ -29,7 +29,7 @@ use crate::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType, YesOrNoVote},
+    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType},
 };
 use bincode::Options;
 use commit::{Commitment, CommitmentBounds, Committable};

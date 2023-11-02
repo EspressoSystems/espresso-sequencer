@@ -1,7 +1,6 @@
 //! Contains the [`ConsensusApi`] trait.
 
 use crate::{
-    certificate::QuorumCertificate,
     data::LeafType,
     error::HotShotError,
     event::{Event, EventType},
@@ -15,7 +14,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use commit::Commitment;
+
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 /// The API that [`HotStuff`] needs to talk to the system, implemented for both validating and

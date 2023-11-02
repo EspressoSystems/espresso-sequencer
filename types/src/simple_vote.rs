@@ -20,10 +20,6 @@ pub struct YesData<LEAF: Committable> {
     pub leaf_commit: Commitment<LEAF>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
-pub struct NoData<LEAF: Committable> {
-    pub leaf_commit: Commitment<LEAF>,
-}
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct DAData<BLOCK: Committable> {
     pub block_commit: Commitment<BLOCK>,
 }
@@ -205,7 +201,6 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
 pub type YesVote<TYPES, LEAF, M> = SimpleVote<TYPES, YesData<LEAF>, M>;
-pub type NoVote<TYPES, LEAF, M> = SimpleVote<TYPES, NoData<LEAF>, M>;
 pub type DAVote<TYPES, BLOCK, M> = SimpleVote<TYPES, DAData<BLOCK>, M>;
 pub type VIDVote<TYPES, BLOCK, M> = SimpleVote<TYPES, VIDData<BLOCK>, M>;
 pub type TimeoutVote<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;

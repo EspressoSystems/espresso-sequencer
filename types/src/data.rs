@@ -4,13 +4,9 @@
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
 use crate::{
-    certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate,
-        ViewSyncCertificate,
-    },
+    certificate::{AssembledSignature, DACertificate, TimeoutCertificate, ViewSyncCertificate},
     simple_certificate::QuorumCertificate2,
     traits::{
-        election::Membership,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},

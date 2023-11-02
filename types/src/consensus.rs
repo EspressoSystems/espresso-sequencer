@@ -11,7 +11,6 @@ use crate::{
     error::HotShotError,
     simple_certificate::QuorumCertificate2,
     traits::{
-        election::Membership,
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
     },

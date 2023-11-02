@@ -490,7 +490,7 @@ where
                     Ok(None) => {
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
-                    Ok(Some(vote_token)) => {
+                    Ok(Some(_vote_token)) => {
                         let justify_qc = proposal.justify_qc.clone();
                         let parent = if justify_qc.is_genesis {
                             self.genesis_leaf().await

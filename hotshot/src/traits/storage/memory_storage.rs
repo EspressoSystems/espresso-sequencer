@@ -120,7 +120,6 @@ mod test {
     use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
-        certificate::{AssembledSignature, QuorumCertificate},
         data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
         simple_certificate::QuorumCertificate2,
         traits::{

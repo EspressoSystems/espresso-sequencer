@@ -1,8 +1,8 @@
 use crate::view_sync::ViewSyncPhase;
-use commit::Commitment;
+
 use either::Either;
 use hotshot_types::{
-    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
+    certificate::{DACertificate, TimeoutCertificate, VIDCertificate},
     data::{DAProposal, VidDisperse},
     message::Proposal,
     simple_certificate::QuorumCertificate2,

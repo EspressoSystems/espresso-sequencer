@@ -16,9 +16,9 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncVote, VoteType},
+    vote::{DAVote, TimeoutVote, VIDVote, ViewSyncVote, VoteType},
 };
-use commit::Commitment;
+
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
 use serde::{Deserialize, Serialize};
