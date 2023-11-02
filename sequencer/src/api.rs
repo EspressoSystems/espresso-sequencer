@@ -217,6 +217,19 @@ impl Options {
                     .boxed()
                 })
                 .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                .get("getheader", |req, state| {
+                    async move {
+                        let height: u64 = req.integer_param("height")?;
+                        let block = state
+                            .get_nth_block_iter(height as usize)
+                            .next()
+                            .ok_or(AvailabilityError::InvalidLeafHeight { height })?
+                            .ok_or(AvailabilityError::MissingBlock { height })?;
+                        Ok(block.block().header())
+                    }
+                    .boxed()
+                })
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
                 .get("gettimestampwindow", |req, state| {
                     async move {
                         let first_block = if let Some(height) = req.opt_integer_param("height")? {
