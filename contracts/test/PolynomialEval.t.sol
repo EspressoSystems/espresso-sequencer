@@ -75,10 +75,9 @@ contract PolynomialEval_domainElements_Test is Test {
 }
 
 contract PolynomialEval_evalDataGen_Test is Test {
-    // FIXME: (alex) this test is failing
     /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
     /// poly are correct.
-    /// forge-config: default.fuzz.runs = 1
+    /// forge-config: default.fuzz.runs = 10
     function testFuzz_evalDataGen_matches(uint8 logSize, uint256 zeta, uint256[] memory publicInput)
         external
     {
@@ -100,7 +99,7 @@ contract PolynomialEval_evalDataGen_Test is Test {
         cmds[3] = "diff-test";
         cmds[4] = "eval-data-gen";
         cmds[5] = vm.toString(logSize);
-        cmds[6] = vm.toString(zeta);
+        cmds[6] = vm.toString(bytes32(zeta));
         cmds[7] = vm.toString(abi.encode(publicInput));
 
         bytes memory result = vm.ffi(cmds);

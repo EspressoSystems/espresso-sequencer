@@ -29,10 +29,8 @@ hex = "0.4.3"
 # in this workspace. However not pinning any revision currently breaks
 # dependency resolution.
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test_apis"], branch = "more-test-apis" }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-    "std",
-] }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "483fb97324d42724720f9155f200973a3b83a7b4" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", branch = "more-test-apis" }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.8", default-features = false }
 

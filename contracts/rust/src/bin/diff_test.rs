@@ -1,11 +1,15 @@
-use ark_bn254::{Bn254, Fr};
+use std::str::FromStr;
+
+use ark_bn254::{Bn254, Fr, G1Affine};
+use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
+use ark_ec::AffineRepr;
 use ark_ff::{BigInteger, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode},
-    prelude::{EthAbiCodec, EthAbiType},
+    prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
 use jf_plonk::{
@@ -13,6 +17,7 @@ use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
+use jf_primitives::pcs::prelude::Commitment;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -38,6 +43,12 @@ enum Action {
     EvalDataGen,
     /// Get jf_plonk::Transcript::append_message()
     TranscriptAppendMsg,
+    /// Get jf_plonk::Transcript::append_challenge()
+    TranscriptAppendField,
+    /// Get jf_plonk::Transcript::append_commitment()
+    TranscriptAppendGroup,
+    /// Get jf_plonk::Transcript::get_and_append_challenge()
+    TranscriptGetChal,
     /// Test only logic
     TestOnly,
 }
@@ -96,10 +107,7 @@ fn main() {
         Action::TranscriptAppendMsg => {
             let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
             let arg2 = cli.arg2.as_ref().expect("Should provide arg2=message");
-            let t_parsed = {
-                let parsed: (ParsedTranscript,) = AbiDecode::decode_hex(arg1).unwrap();
-                parsed.0
-            };
+            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
             let msg = {
                 let parsed: Bytes = AbiDecode::decode_hex(arg2).unwrap();
                 parsed.0.to_vec()
@@ -109,6 +117,40 @@ fn main() {
             <SolidityTranscript as PlonkTranscript<Fr>>::append_message(&mut t, &[], &msg).unwrap();
             let res: ParsedTranscript = t.into();
             println!("{}", (res,).encode_hex());
+        }
+        Action::TranscriptAppendField => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=fieldElement");
+            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            let field = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
+
+            let mut t: SolidityTranscript = t_parsed.into();
+            t.append_challenge::<Bn254>(&[], &field).unwrap();
+            let res: ParsedTranscript = t.into();
+            println!("{}", (res,).encode_hex());
+        }
+        Action::TranscriptAppendGroup => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=groupElement");
+            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            let point: G1Affine = arg2.parse::<ParsedG1Point>().unwrap().into();
+
+            let mut t: SolidityTranscript = t_parsed.into();
+            t.append_commitment::<Bn254, ark_bn254::g1::Config>(&[], &Commitment::from(point))
+                .unwrap();
+            let res: ParsedTranscript = t.into();
+            println!("{}", (res,).encode_hex());
+        }
+        Action::TranscriptGetChal => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+
+            let mut t: SolidityTranscript = t_parsed.into();
+            let chal = t.get_and_append_challenge::<Bn254>(&[]).unwrap();
+
+            let updated_t: ParsedTranscript = t.into();
+            let res = (updated_t, field_to_u256(chal));
+            println!("{}", res.encode_hex());
         }
         Action::TestOnly => {
             let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
@@ -120,6 +162,9 @@ fn main() {
         }
     };
 }
+
+// ------- Helper functions and structs --------
+// ---------------------------------------------
 
 fn field_to_u256<F: PrimeField>(f: F) -> U256 {
     if F::MODULUS_BIT_SIZE > 256 {
@@ -141,6 +186,14 @@ struct ParsedTranscript {
     pub(crate) state: [H256; 2],
 }
 
+impl FromStr for ParsedTranscript {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (ParsedTranscript,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
 impl From<SolidityTranscript> for ParsedTranscript {
     fn from(t: SolidityTranscript) -> Self {
         let (transcript, state) = t.internal();
@@ -160,5 +213,44 @@ impl From<ParsedTranscript> for SolidityTranscript {
         state[..32].copy_from_slice(&t.state[0].to_fixed_bytes());
         state[32..].copy_from_slice(&t.state[1].to_fixed_bytes());
         Self::from_internal(t.transcript.to_vec(), state)
+    }
+}
+
+/// an intermediate representation of `BN254.G1Point` in solidity.
+#[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
+struct ParsedG1Point {
+    x: U256,
+    y: U256,
+}
+
+impl FromStr for ParsedG1Point {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
+impl<P: SWCurveConfig> From<Affine<P>> for ParsedG1Point
+where
+    P::BaseField: PrimeField,
+{
+    fn from(p: Affine<P>) -> Self {
+        Self {
+            x: field_to_u256::<P::BaseField>(*p.x().unwrap()),
+            y: field_to_u256::<P::BaseField>(*p.y().unwrap()),
+        }
+    }
+}
+
+impl<P: SWCurveConfig> From<ParsedG1Point> for Affine<P>
+where
+    P::BaseField: PrimeField,
+{
+    fn from(p: ParsedG1Point) -> Self {
+        Self::new(
+            u256_to_field::<P::BaseField>(p.x),
+            u256_to_field::<P::BaseField>(p.y),
+        )
     }
 }

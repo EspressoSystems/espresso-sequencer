@@ -3742,8 +3742,8 @@ dependencies = [
  "ethers-solc",
  "hex",
  "jf-plonk",
- "jf-primitives 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish)",
- "jf-utils 0.3.0",
+ "jf-primitives 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?branch=more-test-apis)",
+ "jf-utils 0.4.0-pre.0 (git+https://github.com/EspressoSystems/jellyfish?branch=more-test-apis)",
  "sequencer-utils",
  "sha3",
 ]
@@ -4341,21 +4341,6 @@ dependencies = [
  "num-bigint",
  "rand_chacha 0.3.1",
  "rayon",
-]
-
-[[package]]
-name = "jf-utils"
-version = "0.3.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?rev=483fb97324d42724720f9155f200973a3b83a7b4#483fb97324d42724720f9155f200973a3b83a7b4"
-dependencies = [
- "ark-ec 0.4.2",
- "ark-ff 0.4.2",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
- "digest 0.10.7",
- "serde",
- "sha2 0.10.8",
- "tagged-base64 0.3.0",
 ]
 
 [[package]]
@@ -7949,20 +7934,6 @@ dependencies = [
 
 [[package]]
 name = "tagged-base64"
-version = "0.3.0"
-source = "git+https://github.com/espressosystems/tagged-base64?tag=0.3.0#19381b3f14b1f94269c8c783288a63694b6dd12a"
-dependencies = [
- "ark-serialize 0.4.2",
- "base64 0.13.1",
- "crc-any",
- "serde",
- "snafu",
- "tagged-base64-macros 0.3.0",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "tagged-base64"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50189d4e81e3a3850799299cc908f28fb15740adccf8bd620f855be396e6e730"
@@ -7983,15 +7954,6 @@ version = "0.2.0"
 source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.2.4#9b9a5fae1e2fd41db8573657cfe169e8284eb6c9"
 dependencies = [
  "ark-std 0.3.0",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "tagged-base64-macros"
-version = "0.3.0"
-source = "git+https://github.com/espressosystems/tagged-base64?tag=0.3.0#19381b3f14b1f94269c8c783288a63694b6dd12a"
-dependencies = [
  "quote",
  "syn 1.0.109",
 ]
