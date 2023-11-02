@@ -231,7 +231,7 @@ where
 
                 // TODO move all VID stuff to a new VID task
                 // details here: https://github.com/EspressoSystems/HotShot/issues/1817#issuecomment-1747143528
-                let num_storage_nodes = self.quorum_exchange.membership().total_nodes();
+                let num_storage_nodes = 8;
                 debug!("Prepare VID shares for {} storage nodes", num_storage_nodes);
 
                 // TODO Secure SRS for VID

@@ -20,10 +20,10 @@ use snafu::Snafu;
 
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of storage nodes for VID initiation.
-pub const NUM_STORAGE_NODES: usize = 10;
+pub const NUM_STORAGE_NODES: usize = 8;
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of chunks for VID initiation.
-pub const NUM_CHUNKS: usize = 5;
+pub const NUM_CHUNKS: usize = 8;
 
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
