@@ -240,7 +240,7 @@ where
 
                 // TODO proper source for VID erasure code rate
                 // https://github.com/EspressoSystems/HotShot/issues/1734
-                let num_chunks = num_storage_nodes / 2;
+                let num_chunks = 8;
 
                 let vid = VidScheme::new(num_chunks, num_storage_nodes, &srs).unwrap();
 
