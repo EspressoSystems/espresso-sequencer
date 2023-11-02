@@ -20,7 +20,6 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::{
-    certificate::QuorumCertificate,
     data::{LeafBlockPayload, LeafType},
     error::RoundTimedoutState,
     event::{Event, EventType},

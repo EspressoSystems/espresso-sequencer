@@ -4,7 +4,6 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    certificate::QuorumCertificate,
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, SystemContext,

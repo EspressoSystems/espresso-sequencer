@@ -1,4 +1,4 @@
-use commit::Commitment;
+
 use commit::Committable;
 use hotshot::{
     tasks::add_consensus_task,
@@ -19,7 +19,7 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
     traits::{
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
+        election::{ConsensusExchange, SignedCertificate},
         node_implementation::ExchangesType,
         state::ConsensusTime,
     },
@@ -38,7 +38,7 @@ async fn build_vote(
         inner: handle.hotshot.inner.clone(),
     };
     let quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
-    let vote_token = quorum_exchange.make_vote_token(view).unwrap().unwrap();
+    let _vote_token = quorum_exchange.make_vote_token(view).unwrap().unwrap();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
@@ -93,7 +93,7 @@ async fn build_vote(
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{certificate::QuorumCertificate, simple_certificate::QuorumCertificate2};
+    use hotshot_types::{simple_certificate::QuorumCertificate2};
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
