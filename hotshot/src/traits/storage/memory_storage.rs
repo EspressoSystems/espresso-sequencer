@@ -117,10 +117,12 @@ mod test {
     use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 
     use super::*;
+    use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
         certificate::{AssembledSignature, QuorumCertificate},
         data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
+        simple_certificate::QuorumCertificate2,
         traits::{
             block_contents::dummy::{DummyBlock, DummyState},
             node_implementation::NodeType,
@@ -128,7 +130,7 @@ mod test {
             BlockPayload,
         },
     };
-    use std::{fmt::Debug, hash::Hash};
+    use std::{fmt::Debug, hash::Hash, marker::PhantomData};
     use tracing::instrument;
 
     #[derive(
@@ -164,13 +166,19 @@ mod test {
         // TODO is it okay to be using genesis here?
         let _dummy_block_commit = fake_commitment::<DummyBlock>();
         let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
+        let data = hotshot_types::simple_vote::YesData {
+            leaf_commit: dummy_leaf_commit,
+        };
+        let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate {
+            QuorumCertificate2 {
                 // block_commitment: dummy_block_commit,
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
-                leaf_commitment: dummy_leaf_commit,
-                signatures: AssembledSignature::Genesis(),
+                leaf_commitment: data,
+                vote_commitment: commit,
+                signatures: None,
                 view_number,
+                _pd: PhantomData,
             },
             DummyBlock::random(rng),
             DummyState::random(rng),

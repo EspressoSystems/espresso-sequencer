@@ -22,7 +22,7 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         election::{CommitteeExchangeType, ConsensusExchange, Membership, SignedCertificate},
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType},
+        node_implementation::{CommitteeEx, NodeImplementation, NodeType, QuorumMembership},
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,

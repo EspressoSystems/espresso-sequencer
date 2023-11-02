@@ -23,7 +23,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, VIDExchangeType},
-        node_implementation::{NodeImplementation, NodeType, VIDEx},
+        node_implementation::{NodeImplementation, NodeType, QuorumMembership, VIDEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
     },

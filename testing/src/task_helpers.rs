@@ -24,6 +24,7 @@ use hotshot_types::{
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
     },
+    vote2::HasViewNumber, simple_certificate::QuorumCertificate2,
 };
 
 pub async fn build_system_handle(
@@ -99,7 +100,7 @@ async fn build_quorum_proposal_and_signature(
     };
     let _quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
 
-    let parent_view_number = &consensus.high_qc.view_number();
+    let parent_view_number = &consensus.high_qc.get_view_number();
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
@@ -130,7 +131,7 @@ async fn build_quorum_proposal_and_signature(
         block_commitment: block.commit(),
         view_number: ViewNumber::new(view),
         height: 1,
-        justify_qc: QuorumCertificate::genesis(),
+        justify_qc: QuorumCertificate2::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
         dac: None,

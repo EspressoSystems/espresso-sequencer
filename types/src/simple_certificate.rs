@@ -2,9 +2,13 @@
 #![allow(clippy::missing_docs_in_private_items)]
 #![allow(missing_docs)]
 
-use std::marker::PhantomData;
+use std::{
+    fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
+    marker::PhantomData,
+};
 
-use commit::Commitment;
+use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
@@ -13,12 +17,14 @@ use crate::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote2::Certificate2,
+    vote2::{Certificate2, HasViewNumber},
 };
 
+use serde::{Deserialize, Serialize};
+
 /// A certificate which can be created by aggregating many simple votes on the commitment.
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, MEMBERSHIP: Membership<TYPES>> {
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
+pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
     /// commitment to previous leaf which all the votes in this certificate are voting on
     pub leaf_commitment: VOTEABLE,
     /// commitment of all the votes this cert should be signed over
@@ -26,18 +32,18 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, MEMBERSHIP: Me
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
-    pub signatures: <TYPES::SignatureKey as SignatureKey>::QCType,
+    pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType>,
     /// If this QC is for the genesis block
     pub is_genesis: bool,
     /// phantom data for `MEMBERSHIP` and `TYPES`
-    _pd: PhantomData<(TYPES, MEMBERSHIP)>,
+    pub _pd: PhantomData<TYPES>,
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
-    Certificate2<TYPES> for SimpleCertificate<TYPES, VOTEABLE, MEMBERSHIP>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
+    for SimpleCertificate<TYPES, VOTEABLE>
 {
     type Voteable = VOTEABLE;
-    type Membership = MEMBERSHIP;
+    // type Membership = MEMBERSHIP;
 
     fn create_signed_certificate(
         vote_commitment: Commitment<VOTEABLE>,
@@ -49,19 +55,12 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES
             leaf_commitment: data,
             vote_commitment,
             view_number: view,
-            signatures: sig,
+            signatures: Some(sig),
             is_genesis: false,
             _pd: PhantomData,
         }
     }
-    fn is_valid_cert(
-        &self,
-        vote_commitment: Commitment<VOTEABLE>,
-        membership: &MEMBERSHIP,
-    ) -> bool {
-        if vote_commitment != self.vote_commitment {
-            return false;
-        }
+    fn is_valid_cert<MEMBERSHIP: Membership<TYPES>>(&self, membership: &MEMBERSHIP) -> bool {
         if self.is_genesis && self.view_number == TYPES::Time::genesis() {
             return true;
         }
@@ -71,11 +70,11 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES
         );
         <TYPES::SignatureKey as SignatureKey>::check(
             &real_qc_pp,
-            vote_commitment.as_ref(),
-            &self.signatures,
+            self.vote_commitment.as_ref(),
+            self.signatures.as_ref().unwrap(),
         )
     }
-    fn threshold(membership: &MEMBERSHIP) -> u64 {
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
         membership.success_threshold().into()
     }
     fn get_data(&self) -> &Self::Voteable {
@@ -86,5 +85,45 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, MEMBERSHIP: Membership<TYPES
     }
 }
 
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> HasViewNumber<TYPES>
+    for SimpleCertificate<TYPES, VOTEABLE>
+{
+    fn get_view_number(&self) -> TYPES::Time {
+        self.view_number
+    }
+}
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
+    for QuorumCertificate2<TYPES, VOTEABLE>
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "view: {:?}, is_genesis: {:?}",
+            self.view_number, self.is_genesis
+        )
+    }
+}
+
+impl<
+        TYPES: NodeType,
+        LEAF: Committable + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq + 'static,
+    > SimpleCertificate<TYPES, YesData<LEAF>>
+{
+    pub fn genesis() -> Self {
+        let data = YesData {
+            leaf_commit: Commitment::<LEAF>::default_commitment_no_preimage(),
+        };
+        let commit = data.commit();
+        Self {
+            leaf_commitment: data,
+            vote_commitment: commit,
+            view_number: <TYPES::Time as ConsensusTime>::genesis(),
+            signatures: None,
+            is_genesis: true,
+            _pd: PhantomData,
+        }
+    }
+}
+
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
-pub type QuorumCertificate2<TYPES, LEAF, M> = SimpleCertificate<TYPES, YesData<LEAF>, M>;
+pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, YesData<LEAF>>;

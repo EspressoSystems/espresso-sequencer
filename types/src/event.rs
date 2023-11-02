@@ -2,7 +2,7 @@
 
 use crate::{
     certificate::QuorumCertificate, data::LeafType, error::HotShotError,
-    traits::node_implementation::NodeType,
+    simple_certificate::QuorumCertificate2, traits::node_implementation::NodeType,
 };
 use commit::Commitment;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ pub enum EventType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
         ///
         /// Note that the QC for each additional leaf in the chain can be obtained from the leaf
         /// before it using
-        qc: Arc<QuorumCertificate<TYPES, Commitment<LEAF>>>,
+        qc: Arc<QuorumCertificate2<TYPES, LEAF>>,
         /// Optional information of the number of transactions in the block, for logging purposes.
         block_size: Option<u64>,
     },

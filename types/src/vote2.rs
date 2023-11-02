@@ -52,9 +52,9 @@ The certificate formed from the collection of signatures a committee.
 The committee is defined by the `Membership` associated type.
 The votes all must be over the `Commitment` associated type.
 */
-pub trait Certificate2<TYPES: NodeType> {
+pub trait Certificate2<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// Type that defines membership for voters on the certificate
-    type Membership: Membership<TYPES>;
+    // type Membership: Membership<TYPES>;
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
 
@@ -67,14 +67,10 @@ pub trait Certificate2<TYPES: NodeType> {
     ) -> Self;
 
     /// Checks if the cert is valid
-    fn is_valid_cert(
-        &self,
-        vote_commitment: Commitment<Self::Voteable>,
-        membership: &Self::Membership,
-    ) -> bool;
+    fn is_valid_cert<MEMBERSHIP: Membership<TYPES>>(&self, membership: &MEMBERSHIP) -> bool;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
-    fn threshold(membership: &Self::Membership) -> u64;
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64;
     /// Get the commitment which was voted on
     fn get_data(&self) -> &Self::Voteable;
     /// Get the vote commitment which the votes commit to
@@ -100,7 +96,7 @@ pub struct VoteAccumulator2<
 impl<
         TYPES: NodeType,
         VOTE: Vote2<TYPES>,
-        CERT: Certificate2<TYPES, Voteable = VOTE::Commitment, Membership = VOTE::Membership>,
+        CERT: Certificate2<TYPES, Voteable = VOTE::Commitment>,
     > VoteAccumulator2<TYPES, VOTE, CERT>
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
@@ -160,10 +156,11 @@ impl<
 
         if *total_stake_casted >= CERT::threshold(membership) {
             // Assemble QC
-            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                stake_table.clone(),
-                U256::from(CERT::threshold(membership)),
-            );
+            let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QCParams =
+                <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+                    stake_table.clone(),
+                    U256::from(CERT::threshold(membership)),
+                );
 
             let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
                 &real_qc_pp,

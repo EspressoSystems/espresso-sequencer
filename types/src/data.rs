@@ -8,13 +8,16 @@ use crate::{
         AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate,
         ViewSyncCertificate,
     },
+    simple_certificate::QuorumCertificate2,
     traits::{
+        election::Membership,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
         BlockPayload, State,
     },
+    vote2::Certificate2,
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -116,45 +119,6 @@ pub type Transaction<STATE> = <<STATE as State>::BlockType as BlockPayload>::Tra
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 
-/// subset of state that we stick into a leaf.
-/// original hotstuff proposal
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Derivative, Eq)]
-#[serde(bound(deserialize = ""))]
-#[derivative(PartialEq, Hash)]
-pub struct ValidatingProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
-where
-    LEAF: Committable,
-{
-    ///  current view's block commitment
-    pub block_commitment: Commitment<TYPES::BlockType>,
-
-    /// CurView from leader when proposing leaf
-    pub view_number: TYPES::Time,
-
-    /// Height from leader when proposing leaf
-    pub height: u64,
-
-    /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
-
-    /// The hash of the parent `Leaf`
-    /// So we can ask if it extends
-    #[debug(skip)]
-    pub parent_commitment: Commitment<LEAF>,
-
-    /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockType,
-
-    /// What the state should be after applying `self.deltas`
-    pub state_commitment: Commitment<TYPES::StateType>,
-
-    /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockType as BlockPayload>::Transaction>,
-
-    /// the propser id
-    pub proposer_id: EncodedPublicKey,
-}
-
 /// A proposal to start providing data availability for a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
@@ -216,7 +180,7 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
+    pub justify_qc: QuorumCertificate2<TYPES, LEAF>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
     pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
@@ -227,15 +191,6 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// Data availibity certificate
     // TODO We should be able to remove this
     pub dac: Option<DACertificate<TYPES>>,
-}
-
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ProposalType
-    for ValidatingProposal<TYPES, LEAF>
-{
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
-        self.view_number
-    }
 }
 
 impl<TYPES: NodeType> ProposalType for DAProposal<TYPES> {
@@ -445,7 +400,7 @@ pub trait LeafType:
     /// Create a new leaf from its components.
     fn new(
         view_number: LeafTime<Self>,
-        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
+        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
         deltas: LeafBlock<Self>,
         state: LeafState<Self>,
     ) -> Self;
@@ -458,7 +413,7 @@ pub trait LeafType:
     /// Change the height of this leaf.
     fn set_height(&mut self, height: u64);
     /// The QC linking this leaf to its parent in the chain.
-    fn get_justify_qc(&self) -> QuorumCertificate<Self::NodeType, Commitment<Self>>;
+    fn get_justify_qc(&self) -> QuorumCertificate2<Self::NodeType, Self>;
     /// Commitment to this leaf's parent.
     fn get_parent_commitment(&self) -> Commitment<Self>;
     /// The block contained in this leaf.
@@ -532,7 +487,7 @@ pub struct ValidatingLeaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
+    pub justify_qc: QuorumCertificate2<TYPES, Self>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -571,7 +526,7 @@ pub struct Leaf<TYPES: NodeType> {
     pub height: u64,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate<TYPES, Commitment<Self>>,
+    pub justify_qc: QuorumCertificate2<TYPES, Self>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -645,7 +600,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
+        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -674,7 +629,7 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
+    fn get_justify_qc(&self) -> QuorumCertificate2<TYPES, Self> {
         self.justify_qc.clone()
     }
 
@@ -762,7 +717,7 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
 
     fn new(
         view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate<Self::NodeType, Commitment<Self>>,
+        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
         deltas: <Self::NodeType as NodeType>::BlockType,
         _state: <Self::NodeType as NodeType>::StateType,
     ) -> Self {
@@ -790,7 +745,7 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
         self.height = height;
     }
 
-    fn get_justify_qc(&self) -> QuorumCertificate<TYPES, Commitment<Self>> {
+    fn get_justify_qc(&self) -> QuorumCertificate2<TYPES, Self> {
         self.justify_qc.clone()
     }
 
@@ -873,6 +828,7 @@ pub fn random_commitment<S: Committable>(rng: &mut dyn rand::RngCore) -> Commitm
 /// Serialization for the QC assembled signature
 /// # Panics
 /// if serialization fails
+// TODO: Remove after new QC is integrated
 pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES>) -> Vec<u8> {
     let mut signatures_bytes = vec![];
     let signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType> = match &signature {
@@ -929,9 +885,37 @@ pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES
     signatures_bytes
 }
 
+/// Serialization for the QC assembled signature
+/// # Panics
+/// if serialization fails
+pub fn serialize_signature2<TYPES: NodeType>(
+    signatures: &<TYPES::SignatureKey as SignatureKey>::QCType,
+) -> Vec<u8> {
+    let mut signatures_bytes = vec![];
+    signatures_bytes.extend("Yes".as_bytes());
+
+    let (sig, proof) = TYPES::SignatureKey::get_sig_proof(&signatures);
+    let proof_bytes = bincode_opts()
+        .serialize(&proof.as_bitslice())
+        .expect("This serialization shouldn't be able to fail");
+    signatures_bytes.extend("bitvec proof".as_bytes());
+    signatures_bytes.extend(proof_bytes.as_slice());
+    let sig_bytes = bincode_opts()
+        .serialize(&sig)
+        .expect("This serialization shouldn't be able to fail");
+    signatures_bytes.extend("aggregated signature".as_bytes());
+    signatures_bytes.extend(sig_bytes.as_slice());
+    signatures_bytes
+}
 impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
-        let signatures_bytes = serialize_signature(&self.justify_qc.signatures);
+        let signatures_bytes = if self.justify_qc.is_genesis {
+            let mut bytes = vec![];
+            bytes.extend("genesis".as_bytes());
+            bytes
+        } else {
+            serialize_signature2::<TYPES>(self.justify_qc.signatures.as_ref().unwrap())
+        };
 
         commit::RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)
@@ -943,7 +927,7 @@ impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment,
+                self.justify_qc.get_data().leaf_commit,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
@@ -964,7 +948,13 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
             Either::Right(commitment) => *commitment,
         };
 
-        let signatures_bytes = serialize_signature(&self.justify_qc.signatures);
+        let signatures_bytes = if self.justify_qc.is_genesis {
+            let mut bytes = vec![];
+            bytes.extend("genesis".as_bytes());
+            bytes
+        } else {
+            serialize_signature2::<TYPES>(self.justify_qc.signatures.as_ref().unwrap())
+        };
 
         commit::RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)
@@ -975,29 +965,11 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
             .u64(*self.justify_qc.view_number)
             .field(
                 "justify_qc leaf commitment",
-                self.justify_qc.leaf_commitment,
+                self.justify_qc.get_data().leaf_commit,
             )
             .constant_str("justify_qc signatures")
             .var_size_bytes(&signatures_bytes)
             .finalize()
-    }
-}
-
-impl<TYPES: NodeType> From<ValidatingLeaf<TYPES>>
-    for ValidatingProposal<TYPES, ValidatingLeaf<TYPES>>
-{
-    fn from(leaf: ValidatingLeaf<TYPES>) -> Self {
-        Self {
-            view_number: leaf.view_number,
-            height: leaf.height,
-            justify_qc: leaf.justify_qc,
-            parent_commitment: leaf.parent_commitment,
-            deltas: leaf.deltas.clone(),
-            state_commitment: leaf.state.commit(),
-            rejected: leaf.rejected,
-            proposer_id: leaf.proposer_id,
-            block_commitment: leaf.deltas.commit(),
-        }
     }
 }
 

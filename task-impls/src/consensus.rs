@@ -35,8 +35,8 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{QuorumVote, QuorumVoteAccumulator, TimeoutVoteAccumulator, VoteType},
-    vote2::{HasViewNumber, VoteAccumulator2},
+    vote::{TimeoutVoteAccumulator, VoteType},
+    vote2::{Certificate2, HasViewNumber, VoteAccumulator2},
 };
 
 use tracing::warn;
@@ -175,9 +175,9 @@ pub struct VoteCollectionTaskState<
         VoteAccumulator2<
             TYPES,
             YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
-            QuorumCertificate2<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+            QuorumCertificate2<TYPES, I::Leaf>,
         >,
-        QuorumCertificate2<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        QuorumCertificate2<TYPES, I::Leaf>,
     >,
 
     /// Accumulator for votes
@@ -407,7 +407,7 @@ where
     async fn vote_if_able(&self) -> bool {
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
-            if proposal.justify_qc.is_genesis() && proposal.view_number == TYPES::Time::new(1) {
+            if proposal.justify_qc.is_genesis && proposal.view_number == TYPES::Time::new(1) {
                 // warn!("Proposal is genesis!");
 
                 let view = TYPES::Time::new(*proposal.view_number);
@@ -420,16 +420,16 @@ where
                     Ok(None) => {
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
-                    Ok(Some(vote_token)) => {
+                    Ok(Some(_vote_token)) => {
                         let justify_qc = proposal.justify_qc.clone();
-                        let parent = if justify_qc.is_genesis() {
+                        let parent = if justify_qc.is_genesis {
                             self.genesis_leaf().await
                         } else {
                             self.consensus
                                 .read()
                                 .await
                                 .saved_leaves
-                                .get(&justify_qc.leaf_commitment())
+                                .get(&justify_qc.get_data().leaf_commit)
                                 .cloned()
                         };
 
@@ -437,7 +437,7 @@ where
                         let Some(parent) = parent else {
                             error!(
                                 "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
-                                justify_qc.leaf_commitment(),
+                                justify_qc.get_data().leaf_commit,
                                 proposal.view_number,
                             );
                             return false;
@@ -492,14 +492,14 @@ where
                     }
                     Ok(Some(vote_token)) => {
                         let justify_qc = proposal.justify_qc.clone();
-                        let parent = if justify_qc.is_genesis() {
+                        let parent = if justify_qc.is_genesis {
                             self.genesis_leaf().await
                         } else {
                             self.consensus
                                 .read()
                                 .await
                                 .saved_leaves
-                                .get(&justify_qc.leaf_commitment())
+                                .get(&justify_qc.get_data().leaf_commit)
                                 .cloned()
                         };
 
@@ -507,7 +507,7 @@ where
                         let Some(parent) = parent else {
                             error!(
                                 "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
-                                justify_qc.leaf_commitment(),
+                                justify_qc.get_data().leaf_commit,
                                 proposal.view_number,
                             );
                             return false;
@@ -677,7 +677,7 @@ where
                 }
 
                 // Verify a timeout certificate exists and is valid
-                if proposal.data.justify_qc.view_number() != view - 1 {
+                if proposal.data.justify_qc.get_view_number() != view - 1 {
                     let Some(timeout_cert) = proposal.data.timeout_certificate.clone() else {
                         warn!(
                             "Quorum proposal for view {} needed a timeout certificate but did not have one",
@@ -701,7 +701,7 @@ where
 
                 let justify_qc = proposal.data.justify_qc.clone();
 
-                if !self.quorum_exchange.is_valid_cert(&justify_qc) {
+                if !justify_qc.is_valid_cert(self.quorum_exchange.membership()) {
                     error!("Invalid justify_qc in proposal for view {}", *view);
                     let consensus = self.consensus.write().await;
                     consensus.metrics.invalid_qc.update(1);
@@ -716,12 +716,12 @@ where
                 let consensus = self.consensus.upgradable_read().await;
 
                 // Construct the leaf.
-                let parent = if justify_qc.is_genesis() {
+                let parent = if justify_qc.is_genesis {
                     self.genesis_leaf().await
                 } else {
                     consensus
                         .saved_leaves
-                        .get(&justify_qc.leaf_commitment())
+                        .get(&justify_qc.get_data().leaf_commit)
                         .cloned()
                 };
 
@@ -731,13 +731,13 @@ where
                     // If no parent then just update our state map and return.  We will not vote.
                     error!(
                         "Proposal's parent missing from storage with commitment: {:?}",
-                        justify_qc.leaf_commitment()
+                        justify_qc.get_data().leaf_commit
                     );
                     let leaf = Leaf {
                         view_number: view,
                         height: proposal.data.height,
                         justify_qc: justify_qc.clone(),
-                        parent_commitment: justify_qc.leaf_commitment(),
+                        parent_commitment: justify_qc.get_data().leaf_commit,
                         deltas: Right(proposal.data.block_commitment),
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
@@ -790,12 +790,12 @@ where
                 // passes.
 
                 // Liveness check.
-                let liveness_check = justify_qc.view_number > consensus.locked_view;
+                let liveness_check = justify_qc.get_view_number() > consensus.locked_view;
 
                 // Safety check.
                 // Check if proposal extends from the locked leaf.
                 let outcome = consensus.visit_leaf_ancestors(
-                    justify_qc.view_number,
+                    justify_qc.get_view_number(),
                     Terminator::Inclusive(consensus.locked_view),
                     false,
                     |leaf| {
@@ -826,7 +826,7 @@ where
                 let mut leaf_views = Vec::new();
                 let mut included_txns = HashSet::new();
                 let old_anchor_view = consensus.last_decided_view;
-                let parent_view = leaf.justify_qc.view_number;
+                let parent_view = leaf.justify_qc.get_view_number();
                 let mut current_chain_length = 0usize;
                 if parent_view + 1 == view {
                     current_chain_length += 1;
@@ -1068,16 +1068,10 @@ where
                     let _task = async_spawn(async move {
                         VoteCollectionTypes::build(builder).launch().await;
                     });
-                    debug!(
-                        "Starting vote handle for view {:?}",
-                        vote.get_view_number()
-                    );
+                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
-                        .direct_message(
-                            stream_id,
-                            HotShotEvent::QuorumVoteRecv(vote),
-                        )
+                        .direct_message(stream_id, HotShotEvent::QuorumVoteRecv(vote))
                         .await;
                 }
             }
@@ -1122,14 +1116,8 @@ where
                     &vote.get_view().commit(),
                 );
 
-                let quorum_accumulator = QuorumVoteAccumulator {
-                    total_vote_outcomes: HashMap::new(),
-                    yes_vote_outcomes: HashMap::new(),
-                    no_vote_outcomes: HashMap::new(),
-
-                    success_threshold: self.quorum_exchange.success_threshold(),
-                    failure_threshold: self.quorum_exchange.failure_threshold(),
-
+                let quorum_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.quorum_exchange.total_nodes()],
                     phantom: PhantomData,
@@ -1303,7 +1291,7 @@ where
     /// Sends a proposal if possible from the high qc we have
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
+        _qc: QuorumCertificate2<TYPES, I::Leaf>,
         view: TYPES::Time,
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
@@ -1316,7 +1304,7 @@ where
         }
 
         let consensus = self.consensus.read().await;
-        let parent_view_number = &consensus.high_qc.view_number();
+        let parent_view_number = &consensus.high_qc.get_view_number();
         let mut reached_decided = false;
 
         let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
@@ -1333,12 +1321,12 @@ where
             );
             return false;
         };
-        if leaf_commitment != consensus.high_qc.leaf_commitment() {
+        if leaf_commitment != consensus.high_qc.get_data().leaf_commit {
             // NOTE: This happens on the genesis block
             debug!(
                 "They don't equal: {:?}   {:?}",
                 leaf_commitment,
-                consensus.high_qc.leaf_commitment()
+                consensus.high_qc.get_data().leaf_commit
             );
         }
         let Some(leaf) = consensus.saved_leaves.get(&leaf_commitment) else {

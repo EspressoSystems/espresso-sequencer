@@ -56,6 +56,7 @@ use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
     certificate::{TimeoutCertificate, VIDCertificate},
     data::VidDisperse,
+    simple_certificate::QuorumCertificate2,
     traits::node_implementation::TimeoutEx,
 };
 
@@ -249,7 +250,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.inner
             .internal_event_stream
             .publish(HotShotEvent::QCFormed(either::Left(
-                QuorumCertificate::genesis(),
+                QuorumCertificate2::genesis(),
             )))
             .await;
     }
@@ -1020,7 +1021,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES
                 context: err.to_string(),
             })?;
         let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate::<TYPES, Commitment<LEAF>>::genesis();
+        let justify_qc = QuorumCertificate2::<TYPES, LEAF>::genesis();
 
         Ok(Self {
             inner: LEAF::new(time, justify_qc, genesis_block, state),

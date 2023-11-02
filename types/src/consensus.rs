@@ -7,10 +7,11 @@ pub use crate::{
 use displaydoc::Display;
 
 use crate::{
-    certificate::QuorumCertificate,
     data::LeafType,
     error::HotShotError,
+    simple_certificate::QuorumCertificate2,
     traits::{
+        election::Membership,
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
     },
@@ -56,7 +57,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
+    pub high_qc: QuorumCertificate2<TYPES, LEAF>,
 
     /// A reference to the metrics trait
     #[debug(skip)]

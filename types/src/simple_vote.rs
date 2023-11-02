@@ -2,7 +2,7 @@
 #![allow(clippy::missing_docs_in_private_items)]
 #![allow(missing_docs)]
 
-use std::{clone, fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};

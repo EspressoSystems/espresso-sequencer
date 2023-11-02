@@ -22,7 +22,7 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, Membership, QuorumExchangeType},
-        node_implementation::{NodeImplementation, NodeType, QuorumEx},
+        node_implementation::{NodeImplementation, NodeType, QuorumEx, QuorumMembership},
         BlockPayload,
     },
 };
