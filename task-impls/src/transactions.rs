@@ -20,7 +20,7 @@ use hotshot_types::{
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, Membership, QuorumExchangeType},
+        election::{ConsensusExchange, QuorumExchangeType},
         node_implementation::{NodeImplementation, NodeType, QuorumEx},
         BlockPayload,
     },
