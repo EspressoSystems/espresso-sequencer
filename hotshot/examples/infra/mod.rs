@@ -94,38 +94,14 @@ pub struct OrchestratorArgs {
 /// Reads a network configuration from a given filepath
 pub fn load_config_from_file<TYPES: NodeType>(
     config_file: String,
-) -> NetworkConfig<
-    TYPES::SignatureKey,
-    <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-    TYPES::ElectionConfigType,
-> {
+) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
     let config_file_as_string: String = fs::read_to_string(config_file.as_str())
         .unwrap_or_else(|_| panic!("Could not read config file located at {config_file}"));
-    let config_toml: NetworkConfigFile =
-        toml::from_str::<NetworkConfigFile>(&config_file_as_string)
+    let config_toml: NetworkConfigFile<TYPES::SignatureKey> =
+        toml::from_str::<NetworkConfigFile<TYPES::SignatureKey>>(&config_file_as_string)
             .expect("Unable to convert config file to TOML");
 
-    let mut config: NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    > = config_toml.into();
-
-    // Generate network's public keys
-    let known_nodes: Vec<_> = (0..config.config.total_nodes.get())
-        .map(|node_id| {
-            TYPES::SignatureKey::generated_from_seed_indexed(
-                config.seed,
-                node_id.try_into().unwrap(),
-            )
-            .0
-        })
-        .collect();
-
-    config.config.known_nodes_with_stake = (0..config.config.total_nodes.get())
-        .map(|node_id| known_nodes[node_id].get_stake_table_entry(1u64))
-        .collect();
-
+    let config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> = config_toml.into();
     config
 }
 
@@ -238,11 +214,7 @@ pub trait RunDA<
 {
     /// Initializes networking, returns self
     async fn initialize_networking(
-        config: NetworkConfig<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     ) -> Self;
 
     /// Initializes the genesis state and HotShot instance; does not start HotShot consensus
@@ -258,8 +230,8 @@ pub trait RunDA<
         let config = self.get_config();
 
         // Get KeyPair for certificate Aggregation
-        let (pk, sk) =
-            TYPES::SignatureKey::generated_from_seed_indexed(config.seed, config.node_index);
+        let pk = config.config.my_own_validator_config.public_key.clone();
+        let sk = config.config.my_own_validator_config.private_key.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
         let entry = pk.get_stake_table_entry(1u64);
 
@@ -426,13 +398,7 @@ pub trait RunDA<
     fn get_vid_network(&self) -> VIDNETWORK;
 
     /// Returns the config for this run
-    fn get_config(
-        &self,
-    ) -> NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >;
+    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>;
 }
 
 // WEB SERVER
@@ -443,11 +409,7 @@ pub struct WebServerDARun<
     I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 > {
-    config: NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >,
+    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     quorum_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
     da_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
     view_sync_network: WebCommChannel<TYPES, I, MEMBERSHIP>,
@@ -516,18 +478,10 @@ where
     Self: Sync,
 {
     async fn initialize_networking(
-        config: NetworkConfig<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
-        // Generate our own key
-        let (pub_key, _priv_key) =
-            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
-                config.seed,
-                config.node_index,
-            );
+        // Get our own key
+        let pub_key = config.config.my_own_validator_config.public_key.clone();
 
         // Get the configuration for the web server
         let WebServerConfig {
@@ -599,13 +553,7 @@ where
         self.vid_network.clone()
     }
 
-    fn get_config(
-        &self,
-    ) -> NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    > {
+    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
         self.config.clone()
     }
 }
@@ -615,11 +563,7 @@ where
 /// Represents a libp2p-based run
 pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
 {
-    config: NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >,
+    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     quorum_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
     da_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
     view_sync_network: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
@@ -688,17 +632,9 @@ where
     Self: Sync,
 {
     async fn initialize_networking(
-        config: NetworkConfig<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
-        let (pubkey, _privkey) =
-            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
-                config.seed,
-                config.node_index,
-            );
+        let pubkey = config.config.my_own_validator_config.public_key.clone();
         let mut config = config;
         let libp2p_config = config
             .libp2p_config
@@ -779,8 +715,13 @@ where
         let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
         for i in 0..config.config.total_nodes.get() as u64 {
-            let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
-            let pubkey = TYPES::SignatureKey::from_private(&privkey);
+            let pubkey = <<TYPES as NodeType>::SignatureKey>::get_public_key(
+                config
+                    .config
+                    .known_nodes_with_stake
+                    .get(i as usize)
+                    .expect("node_id should be within the range of known_nodes"),
+            );
             if i < config.config.da_committee_size as u64 {
                 da_keys.insert(pubkey.clone());
             }
@@ -848,13 +789,7 @@ where
         self.vid_network.clone()
     }
 
-    fn get_config(
-        &self,
-    ) -> NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    > {
+    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
         self.config.clone()
     }
 }

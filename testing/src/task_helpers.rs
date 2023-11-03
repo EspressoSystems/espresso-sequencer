@@ -34,7 +34,7 @@ pub async fn build_system_handle(
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 
-    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>();
+    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 
     let networks = (launcher.resource_generator.channel_generator)(node_id);
     let storage = (launcher.resource_generator.storage)(node_id);
@@ -49,9 +49,8 @@ pub async fn build_system_handle(
     .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
-    let private_key =
-        <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0u8; 32], node_id).1;
-    let public_key = <TestTypes as NodeType>::SignatureKey::from_private(&private_key);
+    let private_key = config.my_own_validator_config.private_key.clone();
+    let public_key = config.my_own_validator_config.public_key;
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
         <QuorumEx<TestTypes, MemoryImpl> as ConsensusExchange<
             TestTypes,
