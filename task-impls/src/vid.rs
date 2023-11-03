@@ -309,7 +309,7 @@ where
                 // `self.cur_view` should be at least 1 since there is a view change before getting
                 // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
                 // cause an overflow error.
-                if *self.cur_view == 0 || view < self.cur_view - 1 {
+                if view + 1 < self.cur_view {
                     warn!("Throwing away VID disperse data that is more than one view older");
                     return None;
                 }
