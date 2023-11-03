@@ -24,13 +24,11 @@ ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
-
-# This crate requires a newer version than 0.1.2-patch.1 that's used elsewhere
-# in this workspace. However not pinning any revision currently breaks
-# dependency resolution.
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test_apis"], branch = "more-test-apis" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", branch = "more-test-apis" }
+num-bigint = { version = "0.4", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 sequencer-utils = { path = "../../utils" }
 sha3 = { version = "0.10.8", default-features = false }
 

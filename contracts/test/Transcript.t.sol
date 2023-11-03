@@ -8,6 +8,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
+import { VkTest } from "./stubs/Transfer1In2Out24DepthVk.sol";
 
 // Target contract
 import { Transcript as T } from "../src/libraries/Transcript.sol";
@@ -130,35 +131,48 @@ contract Transcript_getAndAppendChallenge_Test is Test {
     }
 }
 
-// contract Transcript_appendVkAndPubInput_Test is Test {
-//     // TODO:
-// }
+contract Transcript_appendVkAndPubInput_Test is Test {
+    using T for T.TranscriptData;
+
+    /// forge-config: default.fuzz.runs = 5
+    /// @dev Test if `appendVkAndPubInput` matches that of Jellyfish
+    function testFuzz_appendVkAndPubInput_matches(
+        T.TranscriptData memory transcript,
+        uint256[] memory publicInput
+    ) external {
+        for (uint256 i = 0; i < publicInput.length; i++) {
+            publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
+            BN254.validateScalarField(publicInput[i]);
+        }
+        IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
+
+        string[] memory cmds = new string[](8);
+        cmds[0] = "cargo";
+        cmds[1] = "run";
+        cmds[2] = "--bin";
+        cmds[3] = "diff-test";
+        cmds[4] = "transcript-append-vk-and-pi";
+        cmds[5] = vm.toString(abi.encode(transcript));
+        cmds[6] = vm.toString(abi.encode(vk));
+        cmds[7] = vm.toString(abi.encode(publicInput));
+
+        bytes memory result = vm.ffi(cmds);
+        (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
+
+        transcript.appendVkAndPubInput(vk, publicInput);
+
+        assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
+        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
+        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
+    }
+}
 
 // contract Transcript_appendProofEvaluations_Test is Test {
 //     // TODO:
 // }
 
-contract WhateverTest is Test {
-    function test_whatever() external {
-        T.TranscriptData memory transcript;
-        transcript.transcript = "\x03\x04";
-        transcript.state[0] = "a";
-        transcript.state[1] = "b";
-
-        // bytes memory message = "hi";
-
-        string[] memory cmds = new string[](6);
-        // string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "test-only";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        // cmds[6] = vm.toString(message);
-
-        bytes memory result = vm.ffi(cmds);
-        (T.TranscriptData memory recv) = abi.decode(result, (T.TranscriptData));
-        assertEq(recv.transcript, transcript.transcript);
-    }
-}
+// contract WhateverTest is Test {
+//     function test_whatever() external {
+//         return;
+//     }
+// }

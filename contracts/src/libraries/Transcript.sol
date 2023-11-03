@@ -74,11 +74,11 @@ library Transcript {
         IPlonkVerifier.VerifyingKey memory verifyingKey,
         uint256[] memory publicInput
     ) internal pure {
-        uint64 sizeInBits = 254;
+        uint32 sizeInBits = 254;
 
         // Fr field size in bits
         appendMessage(
-            self, BytesLib.slice(abi.encodePacked(Utils.reverseEndianness(sizeInBits)), 0, 8)
+            self, BytesLib.slice(abi.encodePacked(Utils.reverseEndianness(sizeInBits)), 0, 4)
         );
 
         // domain size
