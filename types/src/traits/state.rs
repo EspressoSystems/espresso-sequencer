@@ -129,11 +129,23 @@ pub trait TestableBlock: BlockPayload + Debug {
 pub mod dummy {
     use super::{tag, Committable, Debug, Hash, Serialize, State, TestableState};
     use crate::{
+        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         data::ViewNumber,
-        traits::block_contents::dummy::{DummyBlock, DummyError, DummyTransaction},
     };
     use rand::Rng;
     use serde::Deserialize;
+
+    /// Dummy error
+    #[derive(Debug)]
+    pub struct DummyError;
+
+    impl std::error::Error for DummyError {}
+
+    impl std::fmt::Display for DummyError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("A bad thing happened")
+        }
+    }
 
     /// The dummy state
     #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,8 +177,8 @@ pub mod dummy {
 
     impl State for DummyState {
         type Error = DummyError;
-        type BlockHeader = DummyBlock;
-        type BlockPayload = DummyBlock;
+        type BlockHeader = VIDBlockHeader;
+        type BlockPayload = VIDBlockPayload;
         type Time = ViewNumber;
 
         fn validate_block(
@@ -201,8 +213,8 @@ pub mod dummy {
             _state: Option<&Self>,
             _: &mut dyn rand::RngCore,
             _: u64,
-        ) -> DummyTransaction {
-            DummyTransaction::Dummy
+        ) -> VIDTransaction {
+            VIDTransaction(vec![0u8])
         }
     }
 }

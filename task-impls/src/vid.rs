@@ -40,7 +40,7 @@ use tracing::{debug, error, instrument, warn};
 /// Error type for consensus tasks
 pub struct ConsensusTaskError {}
 
-/// Tracks state of a DA task
+/// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
@@ -77,7 +77,7 @@ pub struct VIDTaskState<
     pub id: u64,
 }
 
-/// Struct to maintain DA Vote Collection task state
+/// Struct to maintain VID Vote Collection task state
 pub struct VIDVoteCollectionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
@@ -209,7 +209,7 @@ where
     >,
 {
     /// main task event handler
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
         event: HotShotEvent<TYPES, I>,
@@ -304,11 +304,10 @@ where
                 // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
                 let view = disperse.data.get_view_number();
 
-                // Allow a DA proposal that is one view older, in case we have voted on a quorum
-                // proposal and updated the view.
-                // `self.cur_view` should be at least 1 since there is a view change before getting
-                // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
-                // cause an overflow error.
+                // Allow VID disperse date that is one view older, in case we have updated the
+                // view.
+                // Adding `+ 1` on the LHS rather tahn `- 1` on the RHS, to avoid the overflow
+                // error due to subtracting the genesis view number.
                 if view + 1 < self.cur_view {
                     warn!("Throwing away VID disperse data that is more than one view older");
                     return None;
