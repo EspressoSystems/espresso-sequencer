@@ -216,7 +216,9 @@ impl TestMetadata {
         let mut my_own_validator_config =
             ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
         if node_id == 0 {
-            my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file("config/ValidatorConfigFile.toml"));
+            my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file(
+                "config/ValidatorConfigFile.toml",
+            ));
         }
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {

@@ -206,7 +206,7 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
 }
 
 /// Holds configuration for a validator node
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 #[serde(bound(deserialize = ""))]
 pub struct ValidatorConfigFile {
     /// The validator's seed
@@ -215,15 +215,6 @@ pub struct ValidatorConfigFile {
     pub node_id: u64,
     // The validator's stake, commented for now
     // pub stake_value: u64,
-}
-
-impl Default for ValidatorConfigFile {
-    fn default() -> Self {
-        Self {
-            seed: [0u8; 32],
-            node_id: 0,
-        }
-    }
 }
 
 impl ValidatorConfigFile {
@@ -235,8 +226,8 @@ impl ValidatorConfigFile {
                 PathBuf::from("")
             }
         };
-        let filename = current_working_dir.into_os_string().into_string().unwrap()
-            + "/../../" + dir_str;
+        let filename =
+            current_working_dir.into_os_string().into_string().unwrap() + "/../../" + dir_str;
         match fs::read_to_string(filename.clone()) {
             // If successful return the files text as `contents`.
             Ok(contents) => {

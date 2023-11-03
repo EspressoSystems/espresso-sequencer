@@ -9,8 +9,8 @@
 )]
 #![allow(clippy::module_name_repetitions)]
 
-use std::{num::NonZeroUsize, time::Duration};
 use displaydoc::Display;
+use std::{num::NonZeroUsize, time::Duration};
 use traits::{election::ElectionConfig, signature_key::SignatureKey};
 pub mod block_impl;
 pub mod certificate;
