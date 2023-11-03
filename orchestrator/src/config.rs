@@ -213,8 +213,8 @@ pub struct ValidatorConfigFile {
     pub seed: [u8; 32],
     /// The validator's index, which can be treated as another input to the seed
     pub node_id: u64,
-    /// The validator's stake
-    pub stake_value: u64,
+    // The validator's stake, commented for now
+    // pub stake_value: u64,
 }
 
 impl Default for ValidatorConfigFile {
@@ -222,18 +222,13 @@ impl Default for ValidatorConfigFile {
         Self {
             seed: [0u8; 32],
             node_id: 0,
-            stake_value: 1,
         }
     }
 }
 
-fn get_current_working_dir() -> std::io::Result<PathBuf> {
-    env::current_dir()
-}
-
 impl ValidatorConfigFile {
     pub fn from_file(dir_str: &str) -> Self {
-        let current_working_dir = match get_current_working_dir() {
+        let current_working_dir = match env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
                 error!("get_current_working_dir error: {:?}", e);
@@ -303,8 +298,9 @@ fn default_padding() -> usize {
 
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {
+        // here stake_value is set to 1, since we don't input stake_value from ValidatorConfigFile for now
         let validator_config =
-            ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, val.stake_value);
+            ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1);
         ValidatorConfig {
             public_key: validator_config.public_key,
             private_key: validator_config.private_key,
