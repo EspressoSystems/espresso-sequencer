@@ -27,7 +27,6 @@ use std::collections::HashMap;
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     proposal: QuorumProposal<TestTypes, Leaf<TestTypes>>,
-    view: ViewNumber,
 ) -> GeneralConsensusMessage<TestTypes, MemoryImpl> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
@@ -161,9 +160,7 @@ async fn test_consensus_vote() {
         1,
     );
     let proposal = proposal.data;
-    if let GeneralConsensusMessage::Vote(vote) =
-        build_vote(&handle, proposal, ViewNumber::new(1)).await
-    {
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
         input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
         output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
