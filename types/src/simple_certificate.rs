@@ -41,7 +41,6 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
     for SimpleCertificate<TYPES, VOTEABLE>
 {
     type Voteable = VOTEABLE;
-    // type Membership = MEMBERSHIP;
 
     fn create_signed_certificate(
         vote_commitment: Commitment<VOTEABLE>,
