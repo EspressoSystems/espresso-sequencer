@@ -16,7 +16,7 @@ pub(crate) type Digest = FixedLengthRescueCRHF<FieldType, TREE_BRANCH, 1>;
 impl ToFields<FieldType> for FieldType {
     const SIZE: usize = 1;
     fn to_fields(&self) -> Vec<FieldType> {
-        vec![FieldType::default()]
+        vec![*self]
     }
 }
 

@@ -512,7 +512,6 @@ impl<K: Key> PersistentMerkleNode<K> {
 /// Traverse using post-order: children from left to right, finally visit the current.
 pub struct IntoIter<K: Key> {
     unvisited: Vec<Arc<PersistentMerkleNode<K>>>,
-    num_visited: usize,
 }
 
 impl<K: Key> IntoIter<K> {
@@ -522,47 +521,42 @@ impl<K: Key> IntoIter<K> {
     pub(crate) fn new(root: Arc<PersistentMerkleNode<K>>) -> Self {
         Self {
             unvisited: vec![root],
-            num_visited: 0,
         }
     }
 }
 
 impl<K: Key> Iterator for IntoIter<K> {
-    type Item = (K, U256);
+    type Item = (K, U256, ());
     fn next(&mut self) -> Option<Self::Item> {
         if self.unvisited.is_empty() {
             return None;
         }
 
-        let visiting = (**self.unvisited.last()?).clone();
+        // This unwrap always succeed because `unvisited` is nonempty
+        let visiting = (*self.unvisited.pop().unwrap()).clone();
         match visiting {
             PersistentMerkleNode::Empty => None,
-            PersistentMerkleNode::Leaf {
-                comm: _,
-                key,
-                value,
-            } => {
-                self.unvisited.pop();
-                self.num_visited += 1;
-                Some((key, value))
-            }
             PersistentMerkleNode::Branch {
                 comm: _,
                 children,
                 num_keys: _,
                 total_stakes: _,
             } => {
-                self.unvisited.pop();
                 // put the left-most child to the last, so it is visited first.
                 self.unvisited.extend(children.into_iter().rev());
                 self.next()
             }
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key,
+                value,
+            } => Some((key, value, ())),
         }
     }
 }
 
 impl<K: Key> IntoIterator for PersistentMerkleNode<K> {
-    type Item = (K, U256);
+    type Item = (K, U256, ());
     type IntoIter = self::IntoIter<K>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -738,7 +732,7 @@ mod tests {
                     .register(height as usize, &paths[i], &keys[i], amounts[i])
                     .unwrap();
             }
-            for (i, (k, v)) in (*root).clone().into_iter().enumerate() {
+            for (i, (k, v, _)) in (*root).clone().into_iter().enumerate() {
                 assert_eq!((k, v), (keys[i], amounts[i]));
             }
         }

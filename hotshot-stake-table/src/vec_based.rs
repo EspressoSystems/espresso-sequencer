@@ -4,74 +4,111 @@ use crate::utils::{u256_to_field, ToFields};
 use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
-use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
-use jf_primitives::rescue::{sponge::RescueCRHF, RescueParameter};
+use hotshot_types::traits::stake_table::{
+    SnapshotVersion, StakeTableError, StakeTableScheme, STAKE_TABLE_CAPACITY,
+};
+use jf_primitives::{
+    crhf::{VariableLengthRescueCRHF, CRHF},
+    rescue::RescueParameter,
+};
 use serde::{Deserialize, Serialize};
 
 pub mod config;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct StakeTableSnapshot<K1, K2> {
+    pub bls_keys: Vec<K1>,
+    pub schnorr_keys: Vec<K2>,
+    pub stake_amount: Vec<U256>,
+}
+
+impl<K1, K2> Default for StakeTableSnapshot<K1, K2> {
+    fn default() -> Self {
+        Self {
+            bls_keys: vec![],
+            schnorr_keys: vec![],
+            stake_amount: vec![],
+        }
+    }
+}
 
 /// Locally maintained stake table, generic over public key type `K`.
 /// Whose commitment is a rescue hash of all key-value pairs over field `F`.
 /// NOTE: the commitment is only available for the finalized versions, and is
 /// computed only once when it's finalized.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StakeTable<K: Eq + Hash + Clone + ToFields<F>, F: RescueParameter> {
+pub struct StakeTable<K1, K2, F>
+where
+    K1: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + ToFields<F>,
+    F: RescueParameter,
+{
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
-    head: Vec<(K, U256)>,
+    head: StakeTableSnapshot<K1, K2>,
     /// The snapshot of stake table at the beginning of the current epoch
-    epoch_start: Vec<(K, U256)>,
+    epoch_start: StakeTableSnapshot<K1, K2>,
     /// The stake table used for leader election.
-    last_epoch_start: Vec<(K, U256)>,
+    last_epoch_start: StakeTableSnapshot<K1, K2>,
 
     /// Total stakes for different versions
     head_total_stake: U256,
     epoch_start_total_stake: U256,
     last_epoch_start_total_stake: U256,
 
-    /// Commitment for finalized versions
-    epoch_start_comm: F,
-    last_epoch_start_comm: F,
+    /// We only support committing the finalized versions.
+    /// Commitment for a finalized version is a triple where
+    ///  - First item is the rescue hash of the bls keys
+    ///  - Second item is the rescue hash of the Schnorr keys
+    ///  - Third item is the rescue hash of all the stake amounts
+    epoch_start_comm: (F, F, F),
+    last_epoch_start_comm: (F, F, F),
 
     /// The mapping from public keys to their location in the Merkle tree.
     #[serde(skip)]
-    mapping: HashMap<K, usize>,
+    bls_mapping: HashMap<K1, usize>,
 }
 
-impl<K, F> StakeTableScheme for StakeTable<K, F>
+impl<K1, K2, F> StakeTableScheme for StakeTable<K1, K2, F>
 where
-    K: Eq + Hash + Clone + ToFields<F>,
+    K1: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + ToFields<F>,
     F: RescueParameter,
 {
-    type Key = K;
+    /// The stake table is indexed by BLS key
+    type Key = K1;
+    /// The auxiliary information is the associated Schnorr key
+    type Aux = K2;
     type Amount = U256;
-    type Commitment = F;
+    type Commitment = (F, F, F);
     type LookupProof = ();
     // TODO(Chengyu): Can we make it references?
-    type IntoIter = <Vec<(K, U256)> as ark_std::iter::IntoIterator>::IntoIter;
-    // type IntoIter = ark_std::slice::Iter<'a, &'a (K, U256)>;
+    type IntoIter = <Vec<(K1, U256, K2)> as ark_std::iter::IntoIterator>::IntoIter;
 
     fn register(
         &mut self,
-        new_key: &Self::Key,
+        new_key: Self::Key,
         amount: Self::Amount,
+        aux: Self::Aux,
     ) -> Result<(), StakeTableError> {
-        match self.mapping.get(new_key) {
+        match self.bls_mapping.get(&new_key) {
             Some(_) => Err(StakeTableError::ExistingKey),
             None => {
-                let pos = self.mapping.len();
-                self.head.push((new_key.clone(), amount));
+                let pos = self.bls_mapping.len();
+                self.head.bls_keys.push(new_key.clone());
+                self.head.schnorr_keys.push(aux);
+                self.head.stake_amount.push(amount);
                 self.head_total_stake += amount;
-                self.mapping.insert(new_key.clone(), pos);
+                self.bls_mapping.insert(new_key, pos);
                 Ok(())
             }
         }
     }
 
     fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), StakeTableError> {
-        match self.mapping.get(existing_key) {
+        match self.bls_mapping.get(existing_key) {
             Some(pos) => {
-                self.head_total_stake -= self.head[*pos].1;
-                self.head[*pos].1 = U256::zero();
+                self.head_total_stake -= self.head.stake_amount[*pos];
+                self.head.stake_amount[*pos] = U256::zero();
                 Ok(())
             }
             None => Err(StakeTableError::KeyNotFound),
@@ -98,83 +135,47 @@ where
     }
 
     fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
-        match version {
-            SnapshotVersion::Head => Ok(self.head.len()),
-            SnapshotVersion::EpochStart => Ok(self.epoch_start.len()),
-            SnapshotVersion::LastEpochStart => Ok(self.last_epoch_start.len()),
-            SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
-        }
+        Ok(self.get_version(version)?.bls_keys.len())
     }
 
     fn contains_key(&self, key: &Self::Key) -> bool {
-        self.mapping.contains_key(key)
+        self.bls_mapping.contains_key(key)
     }
 
     fn lookup(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError> {
-        match self.mapping.get(key) {
-            Some(&pos) => match version {
-                SnapshotVersion::Head => {
-                    if pos >= self.head.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok((self.head[pos].1, ()))
-                    }
-                }
-                SnapshotVersion::EpochStart => {
-                    if pos >= self.epoch_start.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok((self.epoch_start[pos].1, ()))
-                    }
-                }
-                SnapshotVersion::LastEpochStart => {
-                    if pos >= self.last_epoch_start.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok((self.last_epoch_start[pos].1, ()))
-                    }
-                }
-                SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
-            },
-            None => Err(StakeTableError::KeyNotFound),
+    ) -> Result<Self::Amount, StakeTableError> {
+        let table = self.get_version(version)?;
+        let pos = self.lookup_pos(key)?;
+        if pos >= table.bls_keys.len() {
+            Err(StakeTableError::KeyNotFound)
+        } else {
+            Ok(table.stake_amount[pos])
         }
     }
 
-    fn simple_lookup(
+    fn lookup_with_proof(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<Self::Amount, StakeTableError> {
-        match self.mapping.get(key) {
-            Some(&pos) => match version {
-                SnapshotVersion::Head => {
-                    if pos >= self.head.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok(self.head[pos].1)
-                    }
-                }
-                SnapshotVersion::EpochStart => {
-                    if pos >= self.epoch_start.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok(self.epoch_start[pos].1)
-                    }
-                }
-                SnapshotVersion::LastEpochStart => {
-                    if pos >= self.last_epoch_start.len() {
-                        Err(StakeTableError::KeyNotFound)
-                    } else {
-                        Ok(self.last_epoch_start[pos].1)
-                    }
-                }
-                SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
-            },
-            None => Err(StakeTableError::KeyNotFound),
+    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError> {
+        let amount = self.lookup(version, key)?;
+        Ok((amount, ()))
+    }
+
+    fn lookup_with_aux_and_proof(
+        &self,
+        version: SnapshotVersion,
+        key: &Self::Key,
+    ) -> Result<(Self::Amount, Self::Aux, Self::LookupProof), StakeTableError> {
+        let table = self.get_version(version)?;
+        let pos = self.lookup_pos(key)?;
+        if pos >= table.bls_keys.len() {
+            Err(StakeTableError::KeyNotFound)
+        } else {
+            Ok((table.stake_amount[pos], table.schnorr_keys[pos].clone(), ()))
         }
     }
 
@@ -184,22 +185,18 @@ where
         delta: Self::Amount,
         negative: bool,
     ) -> Result<Self::Amount, StakeTableError> {
-        match self.mapping.get(key) {
-            Some(&pos) => {
-                if negative {
-                    if delta > self.head[pos].1 {
-                        return Err(StakeTableError::InsufficientFund);
-                    }
-                    self.head_total_stake -= delta;
-                    self.head[pos].1 -= delta;
-                } else {
-                    self.head_total_stake += delta;
-                    self.head[pos].1 += delta;
-                }
-                Ok(self.head[pos].1)
+        let pos = self.lookup_pos(key)?;
+        if negative {
+            if delta > self.head.stake_amount[pos] {
+                return Err(StakeTableError::InsufficientFund);
             }
-            None => Err(StakeTableError::KeyNotFound),
+            self.head_total_stake -= delta;
+            self.head.stake_amount[pos] -= delta;
+        } else {
+            self.head_total_stake += delta;
+            self.head.stake_amount[pos] += delta;
         }
+        Ok(self.head.stake_amount[pos])
     }
 
     fn sample(
@@ -212,41 +209,58 @@ where
         let m = U512::from(self.last_epoch_start_total_stake);
         let mut pos: U256 = (r % m).try_into().unwrap(); // won't fail
         let idx = 0;
-        while pos > self.last_epoch_start[idx].1 {
-            pos -= self.last_epoch_start[idx].1;
+        while pos > self.last_epoch_start.stake_amount[idx] {
+            pos -= self.last_epoch_start.stake_amount[idx];
         }
-        Some((&self.last_epoch_start[idx].0, &self.last_epoch_start[idx].1))
+        Some((
+            &self.last_epoch_start.bls_keys[idx],
+            &self.last_epoch_start.stake_amount[idx],
+        ))
     }
 
     fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
-        match version {
-            SnapshotVersion::Head => Ok(self.head.clone().into_iter()),
-            SnapshotVersion::EpochStart => Ok(self.epoch_start.clone().into_iter()),
-            SnapshotVersion::LastEpochStart => Ok(self.last_epoch_start.clone().into_iter()),
-            SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
-        }
+        let table = self.get_version(version)?;
+        let owned = (0..table.bls_keys.len())
+            .map(|i| {
+                (
+                    table.bls_keys[i].clone(),
+                    table.stake_amount[i],
+                    table.schnorr_keys[i].clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        Ok(owned.into_iter())
     }
 }
 
-impl<K, F> StakeTable<K, F>
+impl<K1, K2, F> StakeTable<K1, K2, F>
 where
-    K: Eq + Hash + Clone + ToFields<F>,
+    K1: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + ToFields<F>,
     F: RescueParameter,
 {
     /// Initiating an empty stake table.
-    /// Overall capacity is `TREE_BRANCH.pow(height)`.
     pub fn new() -> Self {
-        let comm = RescueCRHF::sponge_with_zero_padding(&[], 1)[0];
+        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE];
+        let default_bls_comm =
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
+        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE];
+        let default_schnorr_comm =
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
+        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY];
+        let default_stake_comm =
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
+        let default_comm = (default_bls_comm, default_schnorr_comm, default_stake_comm);
         Self {
-            head: vec![],
-            epoch_start: vec![],
-            last_epoch_start: vec![],
+            head: StakeTableSnapshot::default(),
+            epoch_start: StakeTableSnapshot::default(),
+            last_epoch_start: StakeTableSnapshot::default(),
             head_total_stake: U256::zero(),
             epoch_start_total_stake: U256::zero(),
             last_epoch_start_total_stake: U256::zero(),
-            mapping: HashMap::new(),
-            epoch_start_comm: comm,
-            last_epoch_start_comm: comm,
+            bls_mapping: HashMap::new(),
+            epoch_start_comm: default_comm,
+            last_epoch_start_comm: default_comm,
         }
     }
 
@@ -263,11 +277,11 @@ where
 
     /// Set the stake withheld by `key` to be `value`.
     /// Return the previous stake if succeed.
-    pub fn set_value(&mut self, key: &K, value: U256) -> Result<U256, StakeTableError> {
-        match self.mapping.get(key) {
+    pub fn set_value(&mut self, key: &K1, value: U256) -> Result<U256, StakeTableError> {
+        match self.bls_mapping.get(key) {
             Some(pos) => {
-                let old_value = self.head[*pos].1;
-                self.head[*pos].1 = value;
+                let old_value = self.head.stake_amount[*pos];
+                self.head.stake_amount[*pos] = value;
                 self.head_total_stake -= old_value;
                 self.head_total_stake += value;
                 Ok(old_value)
@@ -277,37 +291,73 @@ where
     }
 
     /// Helper function to recompute the stake table commitment for head version
-    fn compute_head_comm(&mut self) -> F {
-        if self.head.is_empty() {
-            return RescueCRHF::sponge_with_zero_padding(&[], 1)[0];
+    fn compute_head_comm(&mut self) -> (F, F, F) {
+        // Compute rescue hash for bls keys
+        let mut to_be_hashed = self
+            .head
+            .bls_keys
+            .iter()
+            .map(|key| key.to_fields())
+            .collect::<Vec<_>>()
+            .concat();
+        to_be_hashed.resize(
+            STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE,
+            F::default(),
+        );
+        let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+
+        // Compute rescue hash for Schnorr keys
+        let mut to_be_hashed = self
+            .head
+            .schnorr_keys
+            .iter()
+            .map(|key| key.to_fields())
+            .collect::<Vec<_>>()
+            .concat();
+        to_be_hashed.resize(
+            STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE,
+            F::default(),
+        );
+        let schnorr_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+
+        // Compute rescue hash for stake amounts
+        let mut to_be_hashed = self
+            .head
+            .stake_amount
+            .iter()
+            .map(|x| u256_to_field(x))
+            .collect::<Vec<_>>();
+        to_be_hashed.resize(STAKE_TABLE_CAPACITY, F::default());
+        let stake_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+        (bls_comm, schnorr_comm, stake_comm)
+    }
+
+    /// Return the index of a given key.
+    /// Err if the key doesn't exists
+    fn lookup_pos(&self, key: &K1) -> Result<usize, StakeTableError> {
+        match self.bls_mapping.get(key) {
+            Some(pos) => Ok(*pos),
+            None => Err(StakeTableError::KeyNotFound),
         }
-        let mut to_be_hashed = vec![];
-        self.head.iter().for_each(|(key, amount)| {
-            to_be_hashed.extend(key.to_fields());
-            to_be_hashed.push(u256_to_field(amount));
-        });
-        let mut comm = to_be_hashed[0];
-        for i in (1..self.head.len()).step_by(2) {
-            comm = RescueCRHF::sponge_with_zero_padding(
-                &[
-                    comm,
-                    to_be_hashed[i],
-                    if i + 1 < to_be_hashed.len() {
-                        to_be_hashed[i + 1]
-                    } else {
-                        F::zero()
-                    },
-                ],
-                1,
-            )[0];
+    }
+
+    fn get_version(
+        &self,
+        version: SnapshotVersion,
+    ) -> Result<&StakeTableSnapshot<K1, K2>, StakeTableError> {
+        match version {
+            SnapshotVersion::Head => Ok(&self.head),
+            SnapshotVersion::EpochStart => Ok(&self.epoch_start),
+            SnapshotVersion::LastEpochStart => Ok(&self.last_epoch_start),
+            SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
         }
-        comm
     }
 }
 
-impl<K, F> Default for StakeTable<K, F>
+impl<K1, K2, F> Default for StakeTable<K1, K2, F>
 where
-    K: Eq + Hash + Clone + ToFields<F>,
+    K1: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + ToFields<F>,
     F: RescueParameter,
 {
     fn default() -> Self {
@@ -317,7 +367,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::config::{FieldType as F, KeyType as Key};
+    use super::config::{BLSVerKey, FieldType as F, SchnorrVerKey};
     use super::StakeTable;
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
@@ -327,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_stake_table() -> Result<(), StakeTableError> {
-        let mut st = StakeTable::<Key, F>::new();
+        let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
         let mut prng = jf_utils::test_rng();
         let keys = (0..10)
             .map(|_| {
@@ -344,7 +394,7 @@ mod tests {
         // Registering keys
         keys.iter()
             .take(4)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key.0, U256::from(100), key.1.clone()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(400));
         assert_eq!(st.total_stake(SnapshotVersion::EpochStart)?, U256::from(0));
         assert_eq!(
@@ -353,14 +403,14 @@ mod tests {
         );
         // set to zero for futher sampling test
         assert_eq!(
-            st.set_value(&keys[1], U256::from(0)).unwrap(),
+            st.set_value(&keys[1].0, U256::from(0)).unwrap(),
             U256::from(100)
         );
         st.advance();
         keys.iter()
             .skip(4)
             .take(3)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key.0, U256::from(100), key.1.clone()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(600));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -373,7 +423,7 @@ mod tests {
         st.advance();
         keys.iter()
             .skip(7)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(key.0, U256::from(100), key.1.clone()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(900));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -385,19 +435,23 @@ mod tests {
         );
 
         // No duplicate register
-        assert!(st.register(&keys[0], U256::from(100)).is_err());
+        assert!(st
+            .register(keys[0].0, U256::from(100), keys[0].1.clone())
+            .is_err());
         // The 9-th key is still in head stake table
-        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
-        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
+        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9].0).is_err());
+        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5].0).is_ok());
         // The 6-th key is still frozen
         assert!(st
-            .lookup(SnapshotVersion::LastEpochStart, &keys[6])
+            .lookup(SnapshotVersion::LastEpochStart, &keys[6].0)
             .is_err());
-        assert!(st.lookup(SnapshotVersion::LastEpochStart, &keys[2]).is_ok());
+        assert!(st
+            .lookup(SnapshotVersion::LastEpochStart, &keys[2].0)
+            .is_ok());
 
         // Set value shall return the old value
         assert_eq!(
-            st.set_value(&keys[0], U256::from(101)).unwrap(),
+            st.set_value(&keys[0].0, U256::from(101)).unwrap(),
             U256::from(100)
         );
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(901));
@@ -407,14 +461,14 @@ mod tests {
         );
 
         // Update that results in a negative stake
-        assert!(st.update(&keys[0], U256::from(1000), true).is_err());
+        assert!(st.update(&keys[0].0, U256::from(1000), true).is_err());
         // Update should return the updated stake
         assert_eq!(
-            st.update(&keys[0], U256::from(1), true).unwrap(),
+            st.update(&keys[0].0, U256::from(1), true).unwrap(),
             U256::from(100)
         );
         assert_eq!(
-            st.update(&keys[0], U256::from(100), false).unwrap(),
+            st.update(&keys[0].0, U256::from(100), false).unwrap(),
             U256::from(200)
         );
 
