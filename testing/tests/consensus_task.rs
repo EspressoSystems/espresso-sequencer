@@ -1,4 +1,3 @@
-use commit::Commitment;
 use commit::Committable;
 use hotshot::{
     tasks::add_consensus_task,
@@ -11,13 +10,15 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, key_pair_for_id},
 };
+use hotshot_types::simple_vote::QuorumData;
+use hotshot_types::simple_vote::QuorumVote;
+use hotshot_types::traits::node_implementation::QuorumMembership;
+use hotshot_types::vote2::Certificate2;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
     traits::{
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
-        node_implementation::ExchangesType,
-        state::ConsensusTime,
+        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
 
@@ -26,7 +27,6 @@ use std::collections::HashMap;
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     proposal: QuorumProposal<TestTypes, Leaf<TestTypes>>,
-    view: ViewNumber,
 ) -> GeneralConsensusMessage<TestTypes, MemoryImpl> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
@@ -34,11 +34,10 @@ async fn build_vote(
         inner: handle.hotshot.inner.clone(),
     };
     let quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
-    let vote_token = quorum_exchange.make_vote_token(view).unwrap().unwrap();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
-    let parent = if justify_qc.is_genesis() {
+    let parent = if justify_qc.is_genesis {
         let Some(genesis_view) = consensus.state_map.get(&ViewNumber::new(0)) else {
             panic!("Couldn't find genesis view in state map.");
         };
@@ -52,7 +51,7 @@ async fn build_vote(
     } else {
         consensus
             .saved_leaves
-            .get(&justify_qc.leaf_commitment())
+            .get(&justify_qc.get_data().leaf_commit)
             .cloned()
             .unwrap()
     };
@@ -69,13 +68,14 @@ async fn build_vote(
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),
     };
-
-    quorum_exchange.create_yes_message(
-        proposal.justify_qc.commit(),
-        leaf.commit(),
+    let vote =
+    QuorumVote::<TestTypes, Leaf<TestTypes>, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+        QuorumData { leaf_commit: leaf.commit() },
         view,
-        vote_token,
-    )
+        quorum_exchange.public_key(),
+        quorum_exchange.private_key(),
+    );
+    GeneralConsensusMessage::<TestTypes, MemoryImpl>::Vote(vote)
 }
 
 #[cfg(test)]
@@ -88,7 +88,7 @@ async fn build_vote(
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::certificate::QuorumCertificate;
+    use hotshot_types::simple_certificate::QuorumCertificate2;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -100,7 +100,7 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate::<TestTypes, Commitment<Leaf<TestTypes>>>::genesis();
+    let qc = QuorumCertificate2::<TestTypes, Leaf<TestTypes>>::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));
@@ -160,9 +160,7 @@ async fn test_consensus_vote() {
         1,
     );
     let proposal = proposal.data;
-    if let GeneralConsensusMessage::Vote(vote) =
-        build_vote(&handle, proposal, ViewNumber::new(1)).await
-    {
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
         input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
         output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);

@@ -121,11 +121,11 @@ mod test {
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        certificate::{AssembledSignature, QuorumCertificate},
         data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
+        simple_certificate::QuorumCertificate2,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
-    use std::{fmt::Debug, hash::Hash};
+    use std::{fmt::Debug, hash::Hash, marker::PhantomData};
     use tracing::instrument;
 
     #[derive(
@@ -165,12 +165,18 @@ mod test {
             payload_commitment: payload.commit(),
         };
         let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
+        let data = hotshot_types::simple_vote::QuorumData {
+            leaf_commit: dummy_leaf_commit,
+        };
+        let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate {
+            QuorumCertificate2 {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
-                leaf_commitment: dummy_leaf_commit,
-                signatures: AssembledSignature::Genesis(),
+                data,
+                vote_commitment: commit,
+                signatures: None,
                 view_number,
+                _pd: PhantomData,
             },
             header,
             Some(payload),

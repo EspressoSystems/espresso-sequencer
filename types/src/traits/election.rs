@@ -29,7 +29,7 @@ use crate::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType, YesOrNoVote},
+    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType},
 };
 use bincode::Options;
 use commit::{Commitment, CommitmentBounds, Committable};
@@ -206,7 +206,7 @@ where
 
 /// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>:
-    Clone + Debug + Eq + PartialEq + Send + Sync + 'static
+    Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
 {
     /// generate a default election configuration
     fn default_election_config(num_nodes: u64) -> TYPES::ElectionConfigType;
@@ -787,19 +787,6 @@ impl<
 pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
-    /// Create a message with a positive vote on validating or commitment proposal.
-    // TODO ED This returns just a general message type, it's not even bound to a proposal, and this is just a function on the QC.  Make proprosal doesn't really apply to all cert types.
-    fn create_yes_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
-        &self,
-        justify_qc_commitment: Commitment<Self::Certificate>,
-        leaf_commitment: Commitment<LEAF>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        <Self as ConsensusExchange<TYPES, M>>::Certificate: commit::Committable,
-        I::Exchanges: ExchangesType<TYPES, LEAF, Message<TYPES, I>>;
-
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
@@ -822,27 +809,6 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
         &self,
         leaf_commitment: Commitment<LEAF>,
     ) -> (EncodedPublicKey, EncodedSignature);
-
-    /// Sign a neagtive vote on validating or commitment proposal.
-    ///
-    /// The leaf commitment and the type of the vote (no) are signed, which is the minimum amount
-    /// of information necessary for any user of the subsequently constructed QC to check that this
-    /// node voted `No` on that leaf.
-    fn sign_no_vote(
-        &self,
-        leaf_commitment: Commitment<LEAF>,
-    ) -> (EncodedPublicKey, EncodedSignature);
-
-    /// Create a message with a negative vote on validating or commitment proposal.
-    fn create_no_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
-        &self,
-        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, Commitment<LEAF>>>,
-        leaf_commitment: Commitment<LEAF>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>;
 }
 
 /// Standard implementation of [`QuroumExchangeType`] based on Hot Stuff consensus.
@@ -881,27 +847,6 @@ impl<
     > QuorumExchangeType<TYPES, LEAF, M>
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
-    /// Create a message with a positive vote on validating or commitment proposal.
-    fn create_yes_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
-        &self,
-        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, Commitment<LEAF>>>,
-        leaf_commitment: Commitment<LEAF>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<TYPES, LEAF, Message<TYPES, I>>,
-    {
-        let signature = self.sign_yes_vote(leaf_commitment);
-        GeneralConsensusMessage::<TYPES, I>::Vote(QuorumVote::Yes(YesOrNoVote {
-            justify_qc_commitment,
-            signature,
-            leaf_commitment,
-            current_view,
-            vote_token,
-            vote_data: VoteData::Yes(leaf_commitment),
-        }))
-    }
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
@@ -935,45 +880,6 @@ impl<
             VoteData::Yes(leaf_commitment).commit().as_ref(),
         );
         (self.public_key.to_bytes(), signature)
-    }
-
-    /// Sign a neagtive vote on validating or commitment proposal.
-    ///
-    /// The leaf commitment and the type of the vote (no) are signed, which is the minimum amount
-    /// of information necessary for any user of the subsequently constructed QC to check that this
-    /// node voted `No` on that leaf.
-    /// TODO GG: why return the pubkey? Some other `sign_xxx` methods do not return the pubkey.
-    fn sign_no_vote(
-        &self,
-        leaf_commitment: Commitment<LEAF>,
-    ) -> (EncodedPublicKey, EncodedSignature) {
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            VoteData::No(leaf_commitment).commit().as_ref(),
-        );
-        (self.public_key.to_bytes(), signature)
-    }
-
-    /// Create a message with a negative vote on validating or commitment proposal.
-    fn create_no_message<I: NodeImplementation<TYPES, Leaf = LEAF>>(
-        &self,
-        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, Commitment<LEAF>>>,
-        leaf_commitment: Commitment<LEAF>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<TYPES, LEAF, Message<TYPES, I>>,
-    {
-        let signature = self.sign_no_vote(leaf_commitment);
-        GeneralConsensusMessage::<TYPES, I>::Vote(QuorumVote::No(YesOrNoVote {
-            justify_qc_commitment,
-            signature,
-            leaf_commitment,
-            current_view,
-            vote_token,
-            vote_data: VoteData::No(leaf_commitment),
-        }))
     }
 }
 

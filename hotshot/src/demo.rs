@@ -8,11 +8,11 @@
 use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
+
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     block_impl::{BlockPayloadError, VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::{AssembledSignature, QuorumCertificate},
-    data::{fake_commitment, random_commitment, LeafType, ViewNumber},
+    data::{fake_commitment, ViewNumber},
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -20,7 +20,7 @@ use hotshot_types::{
         BlockPayload, State,
     },
 };
-use rand::Rng;
+
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -174,17 +174,5 @@ where
 {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Provides a random [`QuorumCertificate`]
-pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>(
-    rng: &mut dyn rand::RngCore,
-) -> QuorumCertificate<TYPES, Commitment<LEAF>> {
-    QuorumCertificate {
-        leaf_commitment: random_commitment(rng),
-        view_number: TYPES::Time::new(rng.gen()),
-        signatures: AssembledSignature::Genesis(),
-        is_genesis: rng.gen(),
     }
 }

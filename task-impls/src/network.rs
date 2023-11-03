@@ -18,6 +18,7 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
     },
     vote::VoteType,
+    vote2::{HasViewNumber, Vote2},
 };
 use snafu::Snafu;
 use std::{marker::PhantomData, sync::Arc};
@@ -206,12 +207,12 @@ impl<
 
             // ED Each network task is subscribed to all these message types.  Need filters per network task
             HotShotEvent::QuorumVoteSend(vote) => (
-                vote.signature_key(),
+                vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::Vote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view() + 1)),
+                Some(membership.get_leader(vote.get_view_number() + 1)),
             ),
             HotShotEvent::VidDisperseSend(proposal, sender) => (
                 sender,

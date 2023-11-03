@@ -2,9 +2,8 @@
 
 use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use crate::{
-    certificate::QuorumCertificate,
-    data::LeafType,
-    traits::{election::SignedCertificate, BlockPayload},
+    data::LeafType, simple_certificate::QuorumCertificate2, traits::BlockPayload,
+    vote2::HasViewNumber,
 };
 use async_trait::async_trait;
 use commit::Commitment;
@@ -130,7 +129,7 @@ pub struct StoredView<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// The parent of this view
     pub parent: Commitment<LEAF>,
     /// The justify QC of this view. See the hotstuff paper for more information on this.
-    pub justify_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
+    pub justify_qc: QuorumCertificate2<TYPES, LEAF>,
     /// The state of this view
     pub state: LEAF::MaybeState,
     /// Block header.
@@ -159,7 +158,7 @@ where
     /// Note that this will set the `parent` to `LeafHash::default()`, so this will not have a
     /// parent.
     pub fn from_qc_block_and_state(
-        qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
+        qc: QuorumCertificate2<TYPES, LEAF>,
         block_header: TYPES::BlockHeader,
         block_payload: Option<TYPES::BlockPayload>,
         state: LEAF::MaybeState,
@@ -168,7 +167,7 @@ where
         proposer_id: EncodedPublicKey,
     ) -> Self {
         Self {
-            view_number: qc.view_number(),
+            view_number: qc.get_view_number(),
             parent: parent_commitment,
             justify_qc: qc,
             state,

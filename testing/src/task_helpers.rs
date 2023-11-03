@@ -4,7 +4,6 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    certificate::QuorumCertificate,
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, SystemContext,
@@ -16,14 +15,16 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
+    simple_certificate::QuorumCertificate2,
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
-        election::{ConsensusExchange, Membership, SignedCertificate},
+        election::{ConsensusExchange, Membership},
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
     },
+    vote2::HasViewNumber,
 };
 
 pub async fn build_system_handle(
@@ -99,7 +100,7 @@ async fn build_quorum_proposal_and_signature(
     };
     let _quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
 
-    let parent_view_number = &consensus.high_qc.view_number();
+    let parent_view_number = &consensus.high_qc.get_view_number();
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
     };
@@ -130,7 +131,7 @@ async fn build_quorum_proposal_and_signature(
     let proposal = QuorumProposal::<TestTypes, Leaf<TestTypes>> {
         block_header,
         view_number: ViewNumber::new(view),
-        justify_qc: QuorumCertificate::genesis(),
+        justify_qc: QuorumCertificate2::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
         dac: None,

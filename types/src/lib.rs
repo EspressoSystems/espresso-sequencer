@@ -18,6 +18,8 @@ pub mod data;
 pub mod error;
 pub mod event;
 pub mod message;
+pub mod simple_certificate;
+pub mod simple_vote;
 pub mod traits;
 pub mod utils;
 pub mod vote;

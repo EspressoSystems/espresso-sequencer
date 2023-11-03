@@ -1,11 +1,11 @@
 //! Contains the [`ConsensusApi`] trait.
 
 use crate::{
-    certificate::QuorumCertificate,
     data::LeafType,
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
+    simple_certificate::QuorumCertificate2,
     traits::{
         network::NetworkError,
         node_implementation::{NodeImplementation, NodeType},
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use commit::Commitment;
+
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 /// The API that [`HotStuff`] needs to talk to the system, implemented for both validating and
@@ -97,7 +97,7 @@ pub trait ConsensusSharedApi<
         &self,
         view_number: TYPES::Time,
         leaf_views: Vec<LEAF>,
-        decide_qc: QuorumCertificate<TYPES, Commitment<LEAF>>,
+        decide_qc: QuorumCertificate2<TYPES, LEAF>,
     ) {
         self.send_event(Event {
             view_number,
