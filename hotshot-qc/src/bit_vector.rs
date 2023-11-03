@@ -219,9 +219,12 @@ mod tests {
             let key_pair3 = KeyPair::generate(&mut rng);
 
             let mut st = ST::new(3);
-            st.register(key_pair1.ver_key(), U256::from(3u8)).unwrap();
-            st.register(key_pair2.ver_key(), U256::from(5u8)).unwrap();
-            st.register(key_pair3.ver_key(), U256::from(7u8)).unwrap();
+            st.register(key_pair1.ver_key(), U256::from(3u8), ())
+                .unwrap();
+            st.register(key_pair2.ver_key(), U256::from(5u8), ())
+                .unwrap();
+            st.register(key_pair3.ver_key(), U256::from(7u8), ())
+                .unwrap();
             st.advance();
             st.advance();
 
