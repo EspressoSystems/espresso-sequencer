@@ -10,8 +10,8 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, key_pair_for_id},
 };
-use hotshot_types::simple_vote::YesData;
-use hotshot_types::simple_vote::YesVote;
+use hotshot_types::simple_vote::QuorumData;
+use hotshot_types::simple_vote::QuorumVote;
 use hotshot_types::traits::node_implementation::QuorumMembership;
 use hotshot_types::vote2::Certificate2;
 use hotshot_types::{
@@ -71,8 +71,8 @@ async fn build_vote(
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),
     };
     let vote =
-    YesVote::<TestTypes, Leaf<TestTypes>, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
-        YesData { leaf_commit: leaf.commit() },
+    QuorumVote::<TestTypes, Leaf<TestTypes>, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+        QuorumData { leaf_commit: leaf.commit() },
         view,
         quorum_exchange.public_key(),
         quorum_exchange.private_key(),

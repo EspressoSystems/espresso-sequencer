@@ -109,8 +109,7 @@ impl<
 
         let vote_commitment = vote.get_data_commitment();
         if !key.validate(&vote.get_signature(), vote_commitment.as_ref()) {
-            error!("Vote data is {:?}", vote.get_data_commitment());
-            error!("Invalid vote! Data");
+            error!("Invalid vote! Vote Data {:?}", vote.get_data());
             return Either::Left(self);
         }
 

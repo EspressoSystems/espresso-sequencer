@@ -23,7 +23,7 @@ use hotshot_types::{
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     simple_certificate::QuorumCertificate2,
-    simple_vote::{YesData, YesVote},
+    simple_vote::{QuorumData, QuorumVote},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
@@ -176,7 +176,7 @@ pub struct VoteCollectionTaskState<
     pub accumulator: Either<
         VoteAccumulator2<
             TYPES,
-            YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+            QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
             QuorumCertificate2<TYPES, I::Leaf>,
         >,
         QuorumCertificate2<TYPES, I::Leaf>,
@@ -458,8 +458,8 @@ where
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
                         };
                         let vote =
-                            YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
-                                YesData { leaf_commit: leaf.commit() },
+                            QuorumVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                QuorumData { leaf_commit: leaf.commit() },
                                 view,
                                 self.quorum_exchange.public_key(),
                                 self.quorum_exchange.private_key(),
@@ -539,8 +539,8 @@ where
                                 return false;
                             }
                             let vote =
-                            YesVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
-                                YesData { leaf_commit: leaf.commit() },
+                            QuorumVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                QuorumData { leaf_commit: leaf.commit() },
                                 view,
                                 self.quorum_exchange.public_key(),
                                 self.quorum_exchange.private_key(),

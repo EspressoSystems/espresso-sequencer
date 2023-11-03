@@ -166,14 +166,14 @@ mod test {
         // TODO is it okay to be using genesis here?
         let _dummy_block_commit = fake_commitment::<DummyBlock>();
         let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
-        let data = hotshot_types::simple_vote::YesData {
+        let data = hotshot_types::simple_vote::QuorumData {
             leaf_commit: dummy_leaf_commit,
         };
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
             QuorumCertificate2 {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
-                leaf_commitment: data,
+                data,
                 vote_commitment: commit,
                 signatures: None,
                 view_number,

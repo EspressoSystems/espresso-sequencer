@@ -7,7 +7,7 @@ use crate::vote2::HasViewNumber;
 use crate::{
     certificate::{DACertificate, VIDCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
-    simple_vote::YesVote,
+    simple_vote::QuorumVote,
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
@@ -152,7 +152,7 @@ where
     Proposal(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
     Vote(
-        YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
         TYPES::SignatureKey,
     ),
     /// Message with a view sync vote.
@@ -320,7 +320,7 @@ where
     Proposal(Proposal<QuorumProposalType<TYPES, I>>),
 
     /// Message with a quorum vote.
-    Vote(YesVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
+    Vote(QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
 
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),

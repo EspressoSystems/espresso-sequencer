@@ -16,15 +16,15 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.
-pub struct YesData<LEAF: Committable> {
+pub struct QuorumData<LEAF: Committable> {
     /// Commitment to the leaf
     pub leaf_commit: Commitment<LEAF>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
-pub struct DAData<BLOCK: Committable> {
-    /// Commitment to a block
-    pub block_commit: Commitment<BLOCK>,
+pub struct DAData<PAYLOAD: Committable> {
+    /// Commitment to a block payload
+    pub payload_commit: Commitment<PAYLOAD>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a timeout vote.
@@ -34,9 +34,9 @@ pub struct TimeoutData<TYPES: NodeType> {
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a VID vote.
-pub struct VIDData<BLOCK: Committable> {
-    /// Commitment to the block the VID vote is on.
-    pub block_commit: Commitment<BLOCK>,
+pub struct VIDData<PAYLOAD: Committable> {
+    /// Commitment to the block payload the VID vote is on.
+    pub payload_commit: Commitment<PAYLOAD>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Pre Commit vote.
@@ -92,7 +92,7 @@ pub struct SimpleVote<TYPES: NodeType, DATA: Voteable, MEMBERSHIP: Membership<TY
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
-    pub current_view: TYPES::Time,
+    pub view_number: TYPES::Time,
     /// phantom data for `MEMBERSHIP`
     _pd: PhantomData<MEMBERSHIP>,
 }
@@ -101,7 +101,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>> H
     for SimpleVote<TYPES, DATA, MEMBERSHIP>
 {
     fn get_view_number(&self) -> <TYPES as NodeType>::Time {
-        self.current_view
+        self.view_number
     }
 }
 
@@ -142,13 +142,13 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
         Self {
             signature: (pub_key.to_bytes(), signature),
             data,
-            current_view: view,
+            view_number: view,
             _pd: PhantomData,
         }
     }
 }
 
-impl<LEAF: Committable> Committable for YesData<LEAF> {
+impl<LEAF: Committable> Committable for QuorumData<LEAF> {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Yes Vote")
             .var_size_bytes(self.leaf_commit.as_ref())
@@ -156,17 +156,17 @@ impl<LEAF: Committable> Committable for YesData<LEAF> {
     }
 }
 
-impl<BLOCK: Committable> Committable for DAData<BLOCK> {
+impl<PAYLOAD: Committable> Committable for DAData<PAYLOAD> {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("DA Vote")
-            .var_size_bytes(self.block_commit.as_ref())
+            .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }
 }
-impl<BLOCK: Committable> Committable for VIDData<BLOCK> {
+impl<PAYLOAD: Committable> Committable for VIDData<PAYLOAD> {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("DA Vote")
-            .var_size_bytes(self.block_commit.as_ref())
+        commit::RawCommitmentBuilder::new("VID Vote")
+            .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }
 }
@@ -210,11 +210,11 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
 /// Yes vote Alias
-pub type YesVote<TYPES, LEAF, M> = SimpleVote<TYPES, YesData<LEAF>, M>;
+pub type QuorumVote<TYPES, LEAF, M> = SimpleVote<TYPES, QuorumData<LEAF>, M>;
 /// DA vote type alias
-pub type DAVote<TYPES, BLOCK, M> = SimpleVote<TYPES, DAData<BLOCK>, M>;
+pub type DAVote<TYPES, PAYLOAD, M> = SimpleVote<TYPES, DAData<PAYLOAD>, M>;
 /// VID vote type alias
-pub type VIDVote<TYPES, BLOCK, M> = SimpleVote<TYPES, VIDData<BLOCK>, M>;
+pub type VIDVote<TYPES, PAYLOAD, M> = SimpleVote<TYPES, VIDData<PAYLOAD>, M>;
 /// Timeout Vote type alias
 pub type TimeoutVote<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;
 /// View Sync Commit Vote type alias

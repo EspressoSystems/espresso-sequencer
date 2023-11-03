@@ -10,7 +10,7 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::{Voteable, YesData},
+    simple_vote::{QuorumData, Voteable},
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 /// A certificate which can be created by aggregating many simple votes on the commitment.
 #[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
 pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
-    /// commitment to previous leaf which all the votes in this certificate are voting on
-    pub leaf_commitment: VOTEABLE,
+    /// The data this certificate is for.  I.e the thing that was voted on to create this Certificate
+    pub data: VOTEABLE,
     /// commitment of all the votes this cert should be signed over
     pub vote_commitment: Commitment<VOTEABLE>,
     /// Which view this QC relates to
@@ -50,7 +50,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
         view: TYPES::Time,
     ) -> Self {
         SimpleCertificate {
-            leaf_commitment: data,
+            data,
             vote_commitment,
             view_number: view,
             signatures: Some(sig),
@@ -76,7 +76,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
         membership.success_threshold().into()
     }
     fn get_data(&self) -> &Self::Voteable {
-        &self.leaf_commitment
+        &self.data
     }
     fn get_data_commitment(&self) -> Commitment<Self::Voteable> {
         self.vote_commitment
@@ -105,17 +105,17 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
 impl<
         TYPES: NodeType,
         LEAF: Committable + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq + 'static,
-    > SimpleCertificate<TYPES, YesData<LEAF>>
+    > QuorumCertificate2<TYPES, LEAF>
 {
     #[must_use]
     /// Creat the Genisis certificate
     pub fn genesis() -> Self {
-        let data = YesData {
+        let data = QuorumData {
             leaf_commit: Commitment::<LEAF>::default_commitment_no_preimage(),
         };
         let commit = data.commit();
         Self {
-            leaf_commitment: data,
+            data,
             vote_commitment: commit,
             view_number: <TYPES::Time as ConsensusTime>::genesis(),
             signatures: None,
@@ -125,5 +125,5 @@ impl<
     }
 }
 
-/// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `YesVotes`
-pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, YesData<LEAF>>;
+/// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
+pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, QuorumData<LEAF>>;

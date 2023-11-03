@@ -14,7 +14,7 @@ use hotshot_task::{
     BoxSyncFuture,
 };
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_types::simple_vote::YesData;
+use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::Consensus,
     data::LeafType,
@@ -192,7 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
             if anchor_leaf.view_number == TYPES::Time::genesis() {
                 let leaf: I::Leaf = I::Leaf::from_stored_view(anchor_leaf);
                 let mut qc = QuorumCertificate2::<TYPES, I::Leaf>::genesis();
-                qc.leaf_commitment = YesData {
+                qc.data = QuorumData {
                     leaf_commit: leaf.commit(),
                 };
                 let event = Event {
