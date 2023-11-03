@@ -35,7 +35,6 @@ async fn build_vote(
         inner: handle.hotshot.inner.clone(),
     };
     let quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
-    let _vote_token = quorum_exchange.make_vote_token(view).unwrap().unwrap();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
