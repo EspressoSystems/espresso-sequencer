@@ -24,16 +24,14 @@ impl ToFields<FieldType> for SchnorrVerKey {
 }
 
 impl ToFields<FieldType> for BLSVerKey {
-    const SIZE: usize = 5;
+    const SIZE: usize = 2;
 
     fn to_fields(&self) -> Vec<FieldType> {
         let bytes = to_bytes!(&self.to_affine()).unwrap();
         vec![
             FieldType::from_le_bytes_mod_order(&bytes[..31]),
             FieldType::from_le_bytes_mod_order(&bytes[31..62]),
-            FieldType::from_le_bytes_mod_order(&bytes[62..93]),
-            FieldType::from_le_bytes_mod_order(&bytes[93..124]),
-            FieldType::from_le_bytes_mod_order(&bytes[124..]),
+            FieldType::from_le_bytes_mod_order(&bytes[62..]),
         ]
     }
 }

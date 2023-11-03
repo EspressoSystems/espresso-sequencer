@@ -485,6 +485,11 @@ mod tests {
             assert!(value > &U256::from(0));
         }
 
+        // Test for try_iter
+        for (i, (k1, _, k2)) in st.try_iter(SnapshotVersion::Head).unwrap().enumerate() {
+            assert_eq!((k1, k2), keys[i]);
+        }
+
         Ok(())
     }
 }
