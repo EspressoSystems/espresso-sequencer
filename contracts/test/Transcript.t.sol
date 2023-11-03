@@ -167,12 +167,28 @@ contract Transcript_appendVkAndPubInput_Test is Test {
     }
 }
 
-// contract Transcript_appendProofEvaluations_Test is Test {
-//     // TODO:
-// }
+contract Transcript_appendProofEvaluations_Test is Test {
+    using T for T.TranscriptData;
 
-// contract WhateverTest is Test {
-//     function test_whatever() external {
-//         return;
-//     }
-// }
+    /// forge-config: default.fuzz.runs = 5
+    /// @dev Test if `appendProofEvaluations` matches that of Jellyfish
+    function testFuzz_appendProofEvaluations_matches(T.TranscriptData memory transcript) external {
+        string[] memory cmds = new string[](6);
+        cmds[0] = "cargo";
+        cmds[1] = "run";
+        cmds[2] = "--bin";
+        cmds[3] = "diff-test";
+        cmds[4] = "transcript-append-proof-evals";
+        cmds[5] = vm.toString(abi.encode(transcript));
+
+        bytes memory result = vm.ffi(cmds);
+        (T.TranscriptData memory updated, IPlonkVerifier.PlonkProof memory proof) =
+            abi.decode(result, (T.TranscriptData, IPlonkVerifier.PlonkProof));
+
+        transcript.appendProofEvaluations(proof);
+
+        assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
+        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
+        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
+    }
+}

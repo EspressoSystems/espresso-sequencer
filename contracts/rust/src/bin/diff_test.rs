@@ -1,18 +1,19 @@
 use std::str::FromStr;
 
-use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
+use ark_bn254::{g1, Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
+use ark_std::{rand::Rng, UniformRand};
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
-use jf_plonk::proof_system::structs::{OpenKey, VerifyingKey};
+use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
 use jf_plonk::{
     constants::KECCAK256_STATE_SIZE,
     testing_apis::Verifier,
@@ -54,6 +55,8 @@ enum Action {
     TranscriptGetChal,
     /// Get jf_plonk::Transcript::append_vk_and_pub_input()
     TranscriptAppendVkAndPi,
+    /// Get jf_plonk::Transcript::append_proof_evaluations()
+    TranscriptAppendProofEvals,
     /// Return the Plonk Verifier related constants
     PlonkConstants,
     /// Test only logic
@@ -176,16 +179,35 @@ fn main() {
             let res: ParsedTranscript = t.into();
             println!("{}", (res,).encode_hex());
         }
+        Action::TranscriptAppendProofEvals => {
+            let mut rng = jf_utils::test_rng();
+
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
+            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            let proof_parsed = ParsedPlonkProof::dummy_with_rand_proof_evals(&mut rng);
+            let proof: Proof<Bn254> = proof_parsed.clone().into();
+
+            let mut t: SolidityTranscript = t_parsed.into();
+            <SolidityTranscript as PlonkTranscript<Fr>>::append_proof_evaluations::<Bn254>(
+                &mut t,
+                &proof.poly_evals,
+            )
+            .unwrap();
+
+            let t_updated: ParsedTranscript = t.into();
+            let res = (t_updated, proof_parsed);
+            println!("{}", res.encode_hex());
+        }
         Action::PlonkConstants => {
             unimplemented!()
         }
         Action::TestOnly => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let vk_parsed = arg1.parse::<ParsedVerifyingKey>().unwrap();
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=proof");
+            let proof_parsed = arg1.parse::<ParsedPlonkProof>().unwrap();
 
-            let vk: VerifyingKey<Bn254> = vk_parsed.into();
+            let proof: Proof<Bn254> = proof_parsed.into();
 
-            let res: ParsedVerifyingKey = vk.into();
+            let res: ParsedPlonkProof = proof.into();
             println!("{}", (res,).encode_hex());
         }
     };
@@ -365,6 +387,13 @@ struct ParsedG1Point {
     y: U256,
 }
 
+impl Default for ParsedG1Point {
+    fn default() -> Self {
+        let point = Affine::<g1::Config>::new_unchecked(MontFp!("1"), MontFp!("2"));
+        point.into()
+    }
+}
+
 impl FromStr for ParsedG1Point {
     type Err = AbiError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -492,6 +521,146 @@ impl From<ParsedVerifyingKey> for VerifyingKey<Bn254> {
             open_key: open_key(),
             is_merged: false,
             plookup_vk: None,
+        }
+    }
+}
+
+/// intermediate representation of `PlonkProof` in solidity
+#[derive(Clone, Debug, Default, EthAbiType, EthAbiCodec)]
+struct ParsedPlonkProof {
+    // commitments
+    wire_0: ParsedG1Point,
+    wire_1: ParsedG1Point,
+    wire_2: ParsedG1Point,
+    wire_3: ParsedG1Point,
+    wire_4: ParsedG1Point,
+    prod_perm: ParsedG1Point,
+    split_0: ParsedG1Point,
+    split_1: ParsedG1Point,
+    split_2: ParsedG1Point,
+    split_3: ParsedG1Point,
+    split_4: ParsedG1Point,
+    zeta: ParsedG1Point,
+    zeta_omega: ParsedG1Point,
+    // proof evals
+    wire_eval_0: U256,
+    wire_eval_1: U256,
+    wire_eval_2: U256,
+    wire_eval_3: U256,
+    wire_eval_4: U256,
+    sigma_eval_0: U256,
+    sigma_eval_1: U256,
+    sigma_eval_2: U256,
+    sigma_eval_3: U256,
+    prod_perm_zeta_omega_eval: U256,
+}
+
+impl FromStr for ParsedPlonkProof {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
+impl From<Proof<Bn254>> for ParsedPlonkProof {
+    fn from(proof: Proof<Bn254>) -> Self {
+        Self {
+            wire_0: proof.wires_poly_comms[0].0.into(),
+            wire_1: proof.wires_poly_comms[1].0.into(),
+            wire_2: proof.wires_poly_comms[2].0.into(),
+            wire_3: proof.wires_poly_comms[3].0.into(),
+            wire_4: proof.wires_poly_comms[4].0.into(),
+            prod_perm: proof.prod_perm_poly_comm.0.into(),
+            split_0: proof.split_quot_poly_comms[0].0.into(),
+            split_1: proof.split_quot_poly_comms[1].0.into(),
+            split_2: proof.split_quot_poly_comms[2].0.into(),
+            split_3: proof.split_quot_poly_comms[3].0.into(),
+            split_4: proof.split_quot_poly_comms[4].0.into(),
+            zeta: proof.opening_proof.0.into(),
+            zeta_omega: proof.shifted_opening_proof.0.into(),
+            wire_eval_0: field_to_u256(proof.poly_evals.wires_evals[0]),
+            wire_eval_1: field_to_u256(proof.poly_evals.wires_evals[1]),
+            wire_eval_2: field_to_u256(proof.poly_evals.wires_evals[2]),
+            wire_eval_3: field_to_u256(proof.poly_evals.wires_evals[3]),
+            wire_eval_4: field_to_u256(proof.poly_evals.wires_evals[4]),
+            sigma_eval_0: field_to_u256(proof.poly_evals.wire_sigma_evals[0]),
+            sigma_eval_1: field_to_u256(proof.poly_evals.wire_sigma_evals[1]),
+            sigma_eval_2: field_to_u256(proof.poly_evals.wire_sigma_evals[2]),
+            sigma_eval_3: field_to_u256(proof.poly_evals.wire_sigma_evals[3]),
+            prod_perm_zeta_omega_eval: field_to_u256(proof.poly_evals.perm_next_eval),
+        }
+    }
+}
+
+impl From<ParsedPlonkProof> for Proof<Bn254> {
+    fn from(proof: ParsedPlonkProof) -> Self {
+        let wires_poly_comms = vec![
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.wire_0)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.wire_1)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.wire_2)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.wire_3)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.wire_4)),
+        ];
+        let split_quot_poly_comms = vec![
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.split_0)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.split_1)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.split_2)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.split_3)),
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.split_4)),
+        ];
+        let prod_perm_poly_comm =
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.prod_perm));
+        let opening_proof = Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.zeta));
+        let shifted_opening_proof =
+            Commitment::from(<ParsedG1Point as Into<G1Affine>>::into(proof.zeta_omega));
+
+        let wires_evals = vec![
+            u256_to_field(proof.wire_eval_0),
+            u256_to_field(proof.wire_eval_1),
+            u256_to_field(proof.wire_eval_2),
+            u256_to_field(proof.wire_eval_3),
+            u256_to_field(proof.wire_eval_4),
+        ];
+        let wire_sigma_evals = vec![
+            u256_to_field(proof.sigma_eval_0),
+            u256_to_field(proof.sigma_eval_1),
+            u256_to_field(proof.sigma_eval_2),
+            u256_to_field(proof.sigma_eval_3),
+        ];
+        let perm_next_eval = u256_to_field(proof.prod_perm_zeta_omega_eval);
+
+        Self {
+            wires_poly_comms,
+            prod_perm_poly_comm,
+            split_quot_poly_comms,
+            opening_proof,
+            shifted_opening_proof,
+            poly_evals: ProofEvaluations {
+                wires_evals,
+                wire_sigma_evals,
+                perm_next_eval,
+            },
+            plookup_proof: None,
+        }
+    }
+}
+
+impl ParsedPlonkProof {
+    // return a dummy proof instance with random ProofEvaluations fields.
+    fn dummy_with_rand_proof_evals<R: Rng>(rng: &mut R) -> Self {
+        Self {
+            wire_eval_0: field_to_u256(Fr::rand(rng)),
+            wire_eval_1: field_to_u256(Fr::rand(rng)),
+            wire_eval_2: field_to_u256(Fr::rand(rng)),
+            wire_eval_3: field_to_u256(Fr::rand(rng)),
+            wire_eval_4: field_to_u256(Fr::rand(rng)),
+            sigma_eval_0: field_to_u256(Fr::rand(rng)),
+            sigma_eval_1: field_to_u256(Fr::rand(rng)),
+            sigma_eval_2: field_to_u256(Fr::rand(rng)),
+            sigma_eval_3: field_to_u256(Fr::rand(rng)),
+            prod_perm_zeta_omega_eval: field_to_u256(Fr::rand(rng)),
+            ..Default::default()
         }
     }
 }
