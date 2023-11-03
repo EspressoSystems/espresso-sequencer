@@ -6,7 +6,7 @@ use async_std::task::JoinHandle;
 use bitvec::prelude::*;
 use commit::{Commitment, Committable};
 use core::time::Duration;
-use either::{Either, Left, Right};
+use either::Either;
 use futures::FutureExt;
 use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{
@@ -16,12 +16,14 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
+    block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     traits::{
+        block_contents::BlockHeader,
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -53,7 +55,7 @@ pub struct ConsensusTaskError {}
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
 pub struct ConsensusTaskState<
-    TYPES: NodeType,
+    TYPES: NodeType<Transaction = VIDTransaction>,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
@@ -68,7 +70,7 @@ pub struct ConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -87,8 +89,8 @@ pub struct ConsensusTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// Current block submitted to DA
-    pub block: Option<TYPES::BlockType>,
+    /// The commitment to the current block payload submitted to DA
+    pub payload_commitment: Option<Commitment<TYPES::BlockPayload>>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
@@ -353,7 +355,7 @@ where
 }
 
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
         I: NodeImplementation<
             TYPES,
             Leaf = Leaf<TYPES>,
@@ -362,6 +364,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > ConsensusTaskState<TYPES, I, A>
 where
+    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
@@ -373,7 +376,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -450,10 +453,10 @@ where
 
                         let leaf: Leaf<_> = Leaf {
                             view_number: view,
-                            height: proposal.height,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_commitment),
+                            block_header: proposal.block_header.clone(),
+                            block_payload: None,
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -520,10 +523,10 @@ where
 
                         let leaf: Leaf<_> = Leaf {
                             view_number: view,
-                            height: proposal.height,
                             justify_qc: proposal.justify_qc.clone(),
                             parent_commitment,
-                            deltas: Right(proposal.block_commitment),
+                            block_header: proposal.block_header.clone(),
+                            block_payload: None,
                             rejected: Vec::new(),
                             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
@@ -534,9 +537,9 @@ where
                             .committee_exchange
                             .is_valid_cert(cert)
                         {
-                            // Validate the block commitment for non-genesis DAC.
-                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_commitment {
-                                error!("Block commitment does not equal parent commitment");
+                            // Validate the block payload commitment for non-genesis DAC.
+                            if !cert.is_genesis() && cert.leaf_commitment() != proposal.block_header.payload_commitment() {
+                                error!("Block payload commitment does not equal parent commitment");
                                 return false;
                             }
                             self.quorum_exchange.create_yes_message(
@@ -735,10 +738,10 @@ where
                     );
                     let leaf = Leaf {
                         view_number: view,
-                        height: proposal.data.height,
                         justify_qc: justify_qc.clone(),
                         parent_commitment: justify_qc.leaf_commitment(),
-                        deltas: Right(proposal.data.block_commitment),
+                        block_header: proposal.data.block_header,
+                        block_payload: None,
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                         proposer_id: sender.to_bytes(),
@@ -760,29 +763,18 @@ where
                 let parent_commitment = parent.commit();
                 let leaf: Leaf<_> = Leaf {
                     view_number: view,
-                    height: proposal.data.height,
                     justify_qc: justify_qc.clone(),
                     parent_commitment,
-                    deltas: Right(proposal.data.block_commitment),
+                    block_header: proposal.data.block_header,
+                    block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: sender.to_bytes(),
                 };
                 let leaf_commitment = leaf.commit();
 
-                // Validate the `height`
-                // TODO Remove height from proposal validation; view number is sufficient
-                // https://github.com/EspressoSystems/HotShot/issues/1796
-                if leaf.height != parent.height + 1 {
-                    error!(
-                        "Incorrect height in proposal (expected {}, got {})",
-                        parent.height + 1,
-                        leaf.height
-                    );
-                    return;
-                }
                 // Validate the signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
-                else if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, leaf_commitment.as_ref()) {
                     error!(?proposal.signature, "Could not verify proposal.");
                     return;
                 }
@@ -831,68 +823,69 @@ where
                 if parent_view + 1 == view {
                     current_chain_length += 1;
                     if let Err(e) = consensus.visit_leaf_ancestors(
-                            parent_view,
-                            Terminator::Exclusive(old_anchor_view),
-                            true,
-                            |leaf| {
-                                if !new_decide_reached {
-                                    if last_view_number_visited == leaf.view_number + 1 {
-                                        last_view_number_visited = leaf.view_number;
-                                        current_chain_length += 1;
-                                        if current_chain_length == 2 {
-                                            new_locked_view = leaf.view_number;
-                                            new_commit_reached = true;
-                                            // The next leaf in the chain, if there is one, is decided, so this
-                                            // leaf's justify_qc would become the QC for the decided chain.
-                                            new_decide_qc = Some(leaf.justify_qc.clone());
-                                        } else if current_chain_length == 3 {
-                                            new_anchor_view = leaf.view_number;
-                                            new_decide_reached = true;
-                                        }
-                                    } else {
-                                        // nothing more to do here... we don't have a new chain extension
-                                        return false;
+                        parent_view,
+                        Terminator::Exclusive(old_anchor_view),
+                        true,
+                        |leaf| {
+                            if !new_decide_reached {
+                                if last_view_number_visited == leaf.view_number + 1 {
+                                    last_view_number_visited = leaf.view_number;
+                                    current_chain_length += 1;
+                                    if current_chain_length == 2 {
+                                        new_locked_view = leaf.view_number;
+                                        new_commit_reached = true;
+                                        // The next leaf in the chain, if there is one, is decided, so this
+                                        // leaf's justify_qc would become the QC for the decided chain.
+                                        new_decide_qc = Some(leaf.justify_qc.clone());
+                                    } else if current_chain_length == 3 {
+                                        new_anchor_view = leaf.view_number;
+                                        new_decide_reached = true;
                                     }
-                                }
-                                // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
-                                if new_decide_reached {
-                                    let mut leaf = leaf.clone();
-                                    consensus
-                                    .metrics
-                                    .last_synced_block_height
-                                    .set(usize::try_from(leaf.height).unwrap_or(0));
-
-                                            // If the full block is available for this leaf, include it in the leaf
-                                            // chain that we send to the client.
-                                            if let Some(block) =
-                                                consensus.saved_blocks.get(leaf.get_deltas_commitment())
-                                            {
-                                                if let Err(err) = leaf.fill_deltas(block.clone()) {
-                                                    error!("unable to fill leaf {} with block {}, block will not be available: {}",
-                                                        leaf.commit(), block.commit(), err);
-                                                }
-                                            }
-
-                                    leaf_views.push(leaf.clone());
-                                    match &leaf.deltas {
-                                        Left(block) => {
-                                            let txns = block.contained_transactions();
-                                            for txn in txns {
-                                                included_txns.insert(txn);
-                                            }
-                                        }
-                                        Right(_) => {}
+                                } else {
+                                    // nothing more to do here... we don't have a new chain extension
+                                    return false;
                                 }
                             }
-                                true
-                            },
-                        ) {
-                            error!("publishing view error");
-                            self.output_event_stream.publish(Event {
+                            // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
+                            if new_decide_reached {
+                                let mut leaf = leaf.clone();
+                                consensus
+                                    .metrics
+                                    .last_synced_block_height
+                                    .set(usize::try_from(leaf.get_height()).unwrap_or(0));
+
+                                // If the block payload is available for this leaf, include it in
+                                // the leaf chain that we send to the client.
+                                if let Some(payload) = consensus
+                                    .saved_block_payloads
+                                    .get(leaf.get_payload_commitment())
+                                {
+                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
+                                        error!(
+                                            "Saved block payload and commitment don't match: {:?}",
+                                            e
+                                        );
+                                    }
+                                }
+
+                                leaf_views.push(leaf.clone());
+                                if let Some(payload) = leaf.block_payload {
+                                    for txn in payload.transaction_commitments() {
+                                        included_txns.insert(txn);
+                                    }
+                                }
+                            }
+                            true
+                        },
+                    ) {
+                        error!("publishing view error");
+                        self.output_event_stream
+                            .publish(Event {
                                 view_number: view,
                                 event: EventType::Error { error: e.into() },
-                            }).await;
-                        }
+                            })
+                            .await;
+                    }
                 }
 
                 let included_txns_set: HashSet<_> = if new_decide_reached {
@@ -1251,11 +1244,9 @@ where
                 let view = cert.view_number;
                 self.vid_certs.insert(view, cert);
 
-                // TODO Make sure we aren't voting for an arbitrarily old round for no reason
-                if self.vote_if_able().await {
-                    self.current_proposal = None;
-                }
+                // RM TODO: VOTING
             }
+
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {}", *new_view);
 
@@ -1311,14 +1302,15 @@ where
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
-            HotShotEvent::SendDABlockData(block) => {
-                self.block = Some(block);
+            HotShotEvent::SendPayloadCommitment(payload_commitment) => {
+                self.payload_commitment = Some(payload_commitment);
             }
             _ => {}
         }
     }
 
     /// Sends a proposal if possible from the high qc we have
+    #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
         _qc: QuorumCertificate<TYPES, Commitment<I::Leaf>>,
@@ -1368,6 +1360,7 @@ where
         }
 
         let parent_leaf = leaf.clone();
+        let parent_header = parent_leaf.block_header.clone();
 
         let original_parent_hash = parent_leaf.commit();
 
@@ -1386,18 +1379,13 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        // let block_commitment = Some(self.block.commit());
-        if let Some(block) = &self.block {
-            let block_commitment = block.commit();
-
+        if let Some(payload_commitment) = &self.payload_commitment {
             let leaf = Leaf {
                 view_number: view,
-                height: parent_leaf.height + 1,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
-                // Use the block commitment rather than the block, so that the replica can construct
-                // the same leaf with the commitment.
-                deltas: Right(block_commitment),
+                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
+                block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                 proposer_id: self.api.public_key().to_bytes(),
@@ -1408,9 +1396,8 @@ where
                 .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_commitment,
+                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
                 view_number: leaf.view_number,
-                height: leaf.height,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
                 proposer_id: leaf.proposer_id,
@@ -1425,14 +1412,13 @@ where
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
-
             self.event_stream
                 .publish(HotShotEvent::QuorumProposalSend(
                     message,
                     self.quorum_exchange.public_key().clone(),
                 ))
                 .await;
-            self.block = None;
+            self.payload_commitment = None;
             return true;
         }
         debug!("Self block was None");
@@ -1441,7 +1427,7 @@ where
 }
 
 impl<
-        TYPES: NodeType,
+        TYPES: NodeType<Transaction = VIDTransaction>,
         I: NodeImplementation<
             TYPES,
             Leaf = Leaf<TYPES>,
@@ -1461,7 +1447,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -1491,7 +1477,7 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
-    TYPES: NodeType,
+    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 >(
@@ -1502,6 +1488,7 @@ pub async fn sequencing_consensus_handle<
     ConsensusTaskState<TYPES, I, A>,
 )
 where
+    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
@@ -1513,7 +1500,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -1541,9 +1528,8 @@ pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             | HotShotEvent::QuorumVoteRecv(_)
             | HotShotEvent::QCFormed(_)
             | HotShotEvent::DACRecv(_)
-            | HotShotEvent::VidCertRecv(_)
             | HotShotEvent::ViewChange(_)
-            | HotShotEvent::SendDABlockData(_)
+            | HotShotEvent::SendPayloadCommitment(_)
             | HotShotEvent::Timeout(_)
             | HotShotEvent::TimeoutVoteRecv(_)
             | HotShotEvent::Shutdown,

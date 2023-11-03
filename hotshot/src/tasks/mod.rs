@@ -4,7 +4,7 @@ use crate::{
     async_spawn, types::SystemContextHandle, DACertificate, HotShotConsensusApi, QuorumCertificate,
 };
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, CommitmentBounds};
+use commit::{Commitment, CommitmentBounds, Committable};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -243,7 +243,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType<BlockType = VIDBlockPayload>,
+    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
@@ -263,7 +263,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
@@ -284,7 +284,7 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        block: Some(VIDBlockPayload::genesis()),
+        payload_commitment: Some(VIDBlockPayload::genesis().commit()),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
@@ -363,7 +363,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     // build the vid task
@@ -429,7 +429,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     // build the da task
@@ -481,7 +481,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType<Transaction = VIDTransaction, BlockType = VIDBlockPayload>,
+    TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,

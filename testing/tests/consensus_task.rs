@@ -1,6 +1,5 @@
 use commit::Commitment;
 use commit::Committable;
-use either::Right;
 use hotshot::{
     tasks::add_consensus_task,
     types::{SignatureKey, SystemContextHandle},
@@ -62,10 +61,10 @@ async fn build_vote(
 
     let leaf: Leaf<_> = Leaf {
         view_number: view,
-        height: proposal.height,
         justify_qc: proposal.justify_qc.clone(),
         parent_commitment,
-        deltas: Right(proposal.block_commitment),
+        block_header: proposal.block_header,
+        block_payload: None,
         rejected: Vec::new(),
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),

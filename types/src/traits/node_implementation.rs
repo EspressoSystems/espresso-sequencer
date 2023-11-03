@@ -4,7 +4,7 @@
 //! describing the overall behavior of a node, as a composition of implementations of the node trait.
 
 use super::{
-    block_contents::Transaction,
+    block_contents::{BlockHeader, Transaction},
     election::{
         CommitteeExchangeType, ConsensusExchange, ElectionConfig, QuorumExchangeType,
         TimeoutExchange, TimeoutExchangeType, VIDExchangeType, ViewSyncExchangeType, VoteToken,
@@ -481,7 +481,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         state: Option<&TYPES::StateType>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as BlockPayload>::Transaction;
+    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
 
     /// Creates random transaction if possible
     /// otherwise panics
@@ -490,13 +490,13 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         leaf: &Self::Leaf,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as BlockPayload>::Transaction;
+    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
 
     /// generate a genesis block
-    fn block_genesis() -> TYPES::BlockType;
+    fn block_genesis() -> TYPES::BlockPayload;
 
     /// the number of transactions in a block
-    fn txn_count(block: &TYPES::BlockType) -> u64;
+    fn txn_count(block: &TYPES::BlockPayload) -> u64;
 
     /// Create ephemeral storage
     /// Will be deleted/lost immediately after storage is dropped
@@ -535,7 +535,7 @@ where
         QuorumNetwork<TYPES, I>,
     >,
     TYPES::StateType: TestableState,
-    TYPES::BlockType: TestableBlock,
+    TYPES::BlockPayload: TestableBlock,
     I::Storage: TestableStorage<TYPES, I::Leaf>,
     I::Leaf: TestableLeaf<NodeType = TYPES>,
 {
@@ -550,7 +550,7 @@ where
         state: Option<&TYPES::StateType>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as BlockPayload>::Transaction {
+    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
         <TYPES::StateType as TestableState>::create_random_transaction(state, rng, padding)
     }
 
@@ -558,16 +558,16 @@ where
         leaf: &Self::Leaf,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockType as BlockPayload>::Transaction {
+    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
         <Self::Leaf as TestableLeaf>::create_random_transaction(leaf, rng, padding)
     }
 
-    fn block_genesis() -> TYPES::BlockType {
-        <TYPES::BlockType as TestableBlock>::genesis()
+    fn block_genesis() -> TYPES::BlockPayload {
+        <TYPES::BlockPayload as TestableBlock>::genesis()
     }
 
-    fn txn_count(block: &TYPES::BlockType) -> u64 {
-        <TYPES::BlockType as TestableBlock>::txn_count(block)
+    fn txn_count(block: &TYPES::BlockPayload) -> u64 {
+        <TYPES::BlockPayload as TestableBlock>::txn_count(block)
     }
 
     fn construct_tmp_storage() -> Result<Self::Storage, StorageError> {
@@ -668,10 +668,12 @@ pub trait NodeType:
     ///
     /// This should be the same `Time` that `StateType::Time` is using.
     type Time: ConsensusTime;
+    /// The block header type that this hotshot setup is using.
+    type BlockHeader: BlockHeader<Payload = Self::BlockPayload>;
     /// The block type that this hotshot setup is using.
     ///
-    /// This should be the same block that `StateType::BlockType` is using.
-    type BlockType: BlockPayload<Transaction = Self::Transaction>;
+    /// This should be the same block that `StateType::BlockPayload` is using.
+    type BlockPayload: BlockPayload<Transaction = Self::Transaction>;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
     /// The vote token that this hotshot setup is using.
@@ -684,5 +686,5 @@ pub trait NodeType:
     type ElectionConfigType: ElectionConfig;
 
     /// The state type that this hotshot setup is using.
-    type StateType: State<BlockType = Self::BlockType, Time = Self::Time>;
+    type StateType: State<BlockPayload = Self::BlockPayload, Time = Self::Time>;
 }

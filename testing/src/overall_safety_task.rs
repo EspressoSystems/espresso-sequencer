@@ -21,7 +21,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     certificate::QuorumCertificate,
-    data::{DeltasType, LeafBlock, LeafType},
+    data::{LeafBlockPayload, LeafType},
     error::RoundTimedoutState,
     event::{Event, EventType},
     traits::node_implementation::NodeType,
@@ -109,7 +109,7 @@ pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub leaf_map: HashMap<LEAF, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<LeafBlock<LEAF>>, usize>,
+    pub block_map: HashMap<Commitment<LeafBlockPayload<LEAF>>, usize>,
 
     /// state -> # entries decided on that state
     pub state_map: HashMap<<LEAF as LeafType>::MaybeState, usize>,
@@ -205,7 +205,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                 }
             }
 
-            let (state, block) = (leaf.get_state(), leaf.get_deltas());
+            let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
 
             match self.state_map.entry(state.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -215,7 +215,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                     v.insert(1);
                 }
             }
-            match self.block_map.entry(block.clone().block_commitment()) {
+            match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
@@ -291,7 +291,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
             // if neither, continue through
 
             let state_key = key.get_state();
-            let block_key = key.get_deltas().block_commitment();
+            let block_key = key.get_payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
                 && *self.state_map.get(&state_key).unwrap() == threshold

@@ -13,7 +13,7 @@ use hotshot::traits::implementations::{
 use hotshot::traits::NodeImplementation;
 use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
-use hotshot_types::block_impl::{VIDBlockPayload, VIDTransaction};
+use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
 use hotshot_types::certificate::ViewSyncCertificate;
 use hotshot_types::data::{DAProposal, Leaf, QuorumProposal};
 use hotshot_types::message::{Message, SequencingMessage};
@@ -53,7 +53,8 @@ pub struct Test;
 
 impl NodeType for Test {
     type Time = ViewNumber;
-    type BlockType = VIDBlockPayload;
+    type BlockHeader = VIDBlockHeader;
+    type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;

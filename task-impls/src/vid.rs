@@ -12,7 +12,8 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::vote::VoteType;
+use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
     certificate::VIDCertificate, traits::election::SignedCertificate, vote::VIDVoteAccumulator,
 };
@@ -39,7 +40,7 @@ use tracing::{debug, error, instrument, warn};
 /// Error type for consensus tasks
 pub struct ConsensusTaskError {}
 
-/// Tracks state of a DA task
+/// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
@@ -49,7 +50,7 @@ pub struct VIDTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// The state's api
@@ -76,7 +77,7 @@ pub struct VIDTaskState<
     pub id: u64,
 }
 
-/// Struct to maintain DA Vote Collection task state
+/// Struct to maintain VID Vote Collection task state
 pub struct VIDVoteCollectionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
@@ -85,7 +86,7 @@ pub struct VIDVoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// the vid exchange
@@ -97,7 +98,7 @@ pub struct VIDVoteCollectionTaskState<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
-            Commitment<TYPES::BlockType>,
+            Commitment<TYPES::BlockPayload>,
         >>::VoteAccumulator,
         VIDCertificate<TYPES>,
     >,
@@ -116,7 +117,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }
@@ -136,21 +137,24 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
-            // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
+            debug!("VID vote recv, collection task {:?}", vote.current_view);
+            // panic!("Vote handle received VID vote for view {}", *vote.current_view);
 
-            debug!("VID vote recv, collection task {:?}", vote.get_view());
-            // panic!("Vote handle received DA vote for view {}", *vote.current_view);
+            // For the case where we receive votes after we've made a certificate
+            if state.accumulator.is_right() {
+                debug!("VID accumulator finished view: {:?}", state.cur_view);
+                return (None, state);
+            }
 
             let accumulator = state.accumulator.left().unwrap();
-
             match state
                 .vid_exchange
-                .accumulate_vote(accumulator, &vote, &vote.block_commitment)
+                .accumulate_vote(accumulator, &vote, &vote.payload_commitment)
             {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
@@ -167,13 +171,19 @@ where
                         .await;
 
                     state.accumulator = Right(vid_cert.clone());
+                    state
+                        .vid_exchange
+                        .network()
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDVotes(
+                            *vid_cert.view_number,
+                        ))
+                        .await;
 
                     // Return completed at this point
                     return (Some(HotShotTaskCompleted::ShutDown), state);
                 }
             }
         }
-        HotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
         _ => {
             error!("unexpected event {:?}", event);
         }
@@ -195,23 +205,21 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
     /// main task event handler
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
         event: HotShotEvent<TYPES, I>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::VidVoteRecv(vote) => {
-                // TODO copy-pasted from DAVoteRecv https://github.com/EspressoSystems/HotShot/issues/1690
-
                 // warn!(
                 //     "VID vote recv, Main Task {:?}, key: {:?}",
                 //     vote.current_view,
-                //     self.vid_exchange.public_key()
+                //     self.committee_exchange.public_key()
                 // );
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.current_view;
@@ -250,7 +258,7 @@ where
                 let accumulator = self.vid_exchange.accumulate_vote(
                     new_accumulator,
                     &vote,
-                    &vote.clone().block_commitment,
+                    &vote.clone().payload_commitment,
                 );
 
                 if view > collection_view {
@@ -296,18 +304,17 @@ where
                 // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
                 let view = disperse.data.get_view_number();
 
-                // Allow a DA proposal that is one view older, in case we have voted on a quorum
-                // proposal and updated the view.
-                // `self.cur_view` should be at least 1 since there is a view change before getting
-                // the `DAProposalRecv` event. Otherewise, the view number subtraction below will
-                // cause an overflow error.
-                if view < self.cur_view - 1 {
+                // Allow VID disperse date that is one view older, in case we have updated the
+                // view.
+                // Adding `+ 1` on the LHS rather tahn `- 1` on the RHS, to avoid the overflow
+                // error due to subtracting the genesis view number.
+                if view + 1 < self.cur_view {
                     warn!("Throwing away VID disperse data that is more than one view older");
                     return None;
                 }
 
                 debug!("VID disperse data is fresh.");
-                let block_commitment = disperse.data.commitment;
+                let payload_commitment = disperse.data.payload_commitment;
 
                 // ED Is this the right leader?
                 let view_leader_key = self.vid_exchange.get_leader(view);
@@ -316,7 +323,7 @@ where
                     return None;
                 }
 
-                if !view_leader_key.validate(&disperse.signature, block_commitment.as_ref()) {
+                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
                     error!("Could not verify VID proposal sig.");
                     return None;
                 }
@@ -332,7 +339,7 @@ where
                     Ok(Some(vote_token)) => {
                         // Generate and send vote
                         let vote = self.vid_exchange.create_vid_message(
-                            block_commitment,
+                            payload_commitment,
                             view,
                             vote_token,
                         );
@@ -351,15 +358,18 @@ where
                         // contains strictly more information.
                         consensus.state_map.entry(view).or_insert(View {
                             view_inner: ViewInner::DA {
-                                block: block_commitment,
+                                block: payload_commitment,
                             },
                         });
 
                         // Record the block we have promised to make available.
                         // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                        // consensus.saved_blocks.insert(proposal.data.deltas);
+                        // consensus.saved_block_payloads.insert(proposal.data.block_payload);
                     }
                 }
+            }
+            HotShotEvent::VidCertRecv(_) => {
+                // RM TODO
             }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
@@ -370,6 +380,35 @@ where
                     error!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
+
+                // Start polling for VID disperse for the new view
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDDisperse(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
+
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDCertificate(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
+
+                // If we are not the next leader, we should exit
+                if !self.vid_exchange.is_leader(self.cur_view + 1) {
+                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
+                    return None;
+                }
+
+                // Start polling for VID votes for the "next view"
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDVotes(
+                        *self.cur_view + 1,
+                    ))
+                    .await;
 
                 return None;
             }
@@ -384,13 +423,14 @@ where
         None
     }
 
-    /// Filter the DA event.
+    /// Filter the VID event.
     pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
             HotShotEvent::Shutdown
                 | HotShotEvent::VidDisperseRecv(_, _)
                 | HotShotEvent::VidVoteRecv(_)
+                | HotShotEvent::VidCertRecv(_)
                 | HotShotEvent::ViewChange(_)
         )
     }
@@ -411,7 +451,7 @@ where
         TYPES,
         Message<TYPES, I>,
         Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockType>,
+        Commitment = Commitment<TYPES::BlockPayload>,
     >,
 {
 }

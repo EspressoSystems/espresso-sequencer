@@ -44,26 +44,26 @@ async fn test_network_task() {
     let vid = vid_init();
     let txn = vec![0u8];
     let vid_disperse = vid.disperse(&txn).unwrap();
-    let block_commitment = vid_disperse.commit;
+    let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions: vec![VIDTransaction(txn)],
-        commitment: block_commitment,
+        payload_commitment,
     };
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let da_proposal = Proposal {
         data: DAProposal {
-            deltas: block.clone(),
+            block_payload: block.clone(),
             view_number: ViewNumber::new(2),
         },
         signature,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
-    // TODO for now reuse the same block commitment and signature as DA committee
+    // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
         data: VidDisperse {
             view_number: da_proposal.data.view_number,
-            commitment: block.commit(),
+            payload_commitment: block.commit(),
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },
@@ -117,7 +117,7 @@ async fn test_network_task() {
         HotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,
     );
-    output.insert(HotShotEvent::SendDABlockData(block), 1);
+    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
     output.insert(
         HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),

@@ -21,6 +21,7 @@ pub mod message;
 pub mod traits;
 pub mod utils;
 pub mod vote;
+pub mod vote2;
 /// the type of consensus to run. Either:
 /// wait for a signal to start a view,
 /// or constantly run
