@@ -86,6 +86,7 @@ contract PolynomialEval_evalDataGen_Test is Test {
     ) external {
         logSize = bound(logSize, 14, 17);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
+        vm.assume(zeta != 0); // otherwise divisor of lagrange_one_poly would be zero
         BN254.validateScalarField(zeta);
         vm.assume(publicInput.length > 0);
         // Since these user-provided `publicInputs` were checked outside before passing in via
