@@ -16,16 +16,12 @@ use crate::{
     vote::{TimeoutVote, VIDVote},
 };
 
-use crate::{
-    message::{GeneralConsensusMessage, Message},
-    vote::ViewSyncVoteInternal,
-};
+use crate::{message::GeneralConsensusMessage, vote::ViewSyncVoteInternal};
 
 use crate::{
     data::LeafType,
     traits::{
         network::{CommunicationChannel, NetworkMsg},
-        node_implementation::ExchangesType,
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
@@ -1254,49 +1250,7 @@ impl<
 }
 
 /// Trait defining functiosn for a `TimeoutExchange`
-pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
-    /// Create and sign a timeout message
-    fn create_timeout_message<I: NodeImplementation<TYPES>>(
-        &self,
-        view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
-    {
-        let signature = TYPES::SignatureKey::sign(
-            self.private_key(),
-            VoteData::<Commitment<TYPES::Time>>::Timeout(view.commit())
-                .commit()
-                .as_ref(),
-        );
-
-        GeneralConsensusMessage::<TYPES, I>::TimeoutVote(TimeoutVote {
-            signature: (self.public_key().to_bytes(), signature),
-            current_view: view,
-            vote_token,
-        })
-    }
-
-    /// Validate a timeout certificate.
-    /// This is separate from other certificate verification functions because we also need to
-    /// verify the certificate is signed over the view we expect
-    fn is_valid_timeout_cert(&self, qc: &Self::Certificate, view_number: TYPES::Time) -> bool {
-        let comparison_commitment = view_number.commit();
-
-        if let AssembledSignature::Timeout(qc) = qc.signatures() {
-            let real_commit = VoteData::Timeout(comparison_commitment).commit();
-            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                self.membership().get_committee_qc_stake_table(),
-                U256::from(self.membership().success_threshold().get()),
-            );
-            <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-        } else {
-            error!("Expected TimeoutCertificate, received another certificate variant");
-            false
-        }
-    }
-}
+pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {}
 
 impl<
         TYPES: NodeType,

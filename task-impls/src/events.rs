@@ -3,16 +3,16 @@ use crate::view_sync::ViewSyncPhase;
 use commit::Commitment;
 use either::Either;
 use hotshot_types::{
-    certificate::{TimeoutCertificate, VIDCertificate},
+    certificate::VIDCertificate,
     data::{DAProposal, VidDisperse},
     message::Proposal,
-    simple_certificate::{DACertificate2, QuorumCertificate2},
-    simple_vote::{DAVote2, QuorumVote},
+    simple_certificate::{DACertificate2, QuorumCertificate2, TimeoutCertificate2},
+    simple_vote::{DAVote2, QuorumVote, TimeoutVote2},
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
         ViewSyncProposalType,
     },
-    vote::{TimeoutVote, VIDVote, ViewSyncVote},
+    vote::{VIDVote, ViewSyncVote},
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
@@ -25,9 +25,9 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// A quorum vote has been received from the network; handled by the consensus task
     QuorumVoteRecv(QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
     /// A timeout vote recevied from the network; handled by consensus task
-    TimeoutVoteRecv(TimeoutVote<TYPES>),
+    TimeoutVoteRecv(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
-    TimeoutVoteSend(TimeoutVote<TYPES>),
+    TimeoutVoteSend(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
     /// A DA proposal has been received from the network; handled by the DA task
     DAProposalRecv(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
@@ -43,7 +43,7 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
     DAVoteSend(DAVote2<TYPES, CommitteeMembership<TYPES, I>>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
-    QCFormed(Either<QuorumCertificate2<TYPES, I::Leaf>, TimeoutCertificate<TYPES>>),
+    QCFormed(Either<QuorumCertificate2<TYPES, I::Leaf>, TimeoutCertificate2<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DACSend(DACertificate2<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks

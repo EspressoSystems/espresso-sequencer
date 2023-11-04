@@ -283,12 +283,12 @@ impl<
                 )
             }
             HotShotEvent::TimeoutVoteSend(vote) => (
-                vote.get_key(),
+                vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::TimeoutVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view() + 1)),
+                Some(membership.get_leader(vote.get_view_number() + 1)),
             ),
             HotShotEvent::ViewChange(view) => {
                 self.view = view;

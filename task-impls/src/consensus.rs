@@ -22,12 +22,12 @@ use hotshot_types::{
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
-    simple_certificate::{DACertificate2, QuorumCertificate2},
-    simple_vote::{QuorumData, QuorumVote},
+    simple_certificate::{DACertificate2, QuorumCertificate2, TimeoutCertificate2},
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate, TimeoutExchangeType},
+        election::{ConsensusExchange, QuorumExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{
             CommitteeEx, NodeImplementation, NodeType, QuorumEx, QuorumMembership, TimeoutEx,
@@ -37,7 +37,6 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{TimeoutVoteAccumulator, VoteType},
     vote2::{Certificate2, HasViewNumber, VoteAccumulator2},
 };
 
@@ -185,13 +184,12 @@ pub struct VoteCollectionTaskState<
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
     pub timeout_accumulator: Either<
-        <TimeoutCertificate<TYPES> as SignedCertificate<
+        VoteAccumulator2<
             TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Commitment<TYPES::Time>,
-        >>::VoteAccumulator,
-        TimeoutCertificate<TYPES>,
+            TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>,
+            TimeoutCertificate2<TYPES>,
+        >,
+        TimeoutCertificate2<TYPES>,
     >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
@@ -294,15 +292,15 @@ where
         // during exchange refactor
         // https://github.com/EspressoSystems/HotShot/issues/1799
         HotShotEvent::TimeoutVoteRecv(vote) => {
-            debug!("Received timeout vote for view {}", *vote.get_view());
+            debug!("Received timeout vote for view {}", *vote.get_view_number());
             if state.timeout_accumulator.is_right() {
                 return (None, state);
             }
 
-            if vote.get_view() != state.cur_view {
+            if vote.get_view_number() != state.cur_view {
                 error!(
                     "Vote view does not match! vote view is {} current view is {}",
-                    *vote.get_view(),
+                    *vote.get_view_number(),
                     *state.cur_view
                 );
                 return (None, state);
@@ -310,11 +308,7 @@ where
 
             let accumulator = state.timeout_accumulator.left().unwrap();
 
-            match state.timeout_exchange.accumulate_vote(
-                accumulator,
-                &vote,
-                &vote.get_view().commit(),
-            ) {
+            match accumulator.accumulate(&vote, state.quorum_exchange.membership()) {
                 Either::Left(acc) => {
                     state.timeout_accumulator = Either::Left(acc);
                     return (None, state);
@@ -689,15 +683,12 @@ where
                         return;
                     };
 
-                    if timeout_cert.view_number != view - 1 {
+                    if timeout_cert.get_data().view != view - 1 {
                         warn!("Timeout certificate for view {} was not for the immediately preceding view", *view);
                         return;
                     }
 
-                    if !self
-                        .timeout_exchange
-                        .is_valid_timeout_cert(&timeout_cert.clone(), view - 1)
-                    {
+                    if !timeout_cert.is_valid_cert(self.timeout_exchange.membership()) {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;
                     }
@@ -1020,9 +1011,8 @@ where
 
                 // TODO Create default functions for accumulators
                 // https://github.com/EspressoSystems/HotShot/issues/1797
-                let timeout_accumulator = TimeoutVoteAccumulator {
-                    da_vote_outcomes: HashMap::new(),
-                    success_threshold: self.timeout_exchange.success_threshold(),
+                let timeout_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.timeout_exchange.total_nodes()],
                     phantom: PhantomData,
@@ -1070,11 +1060,11 @@ where
                 }
             }
             HotShotEvent::TimeoutVoteRecv(vote) => {
-                if !self.timeout_exchange.is_leader(vote.get_view() + 1) {
+                if !self.timeout_exchange.is_leader(vote.get_view_number() + 1) {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
-                        *vote.get_view() + 1,
-                        self.timeout_exchange.is_leader(vote.get_view() + 2)
+                        *vote.get_view_number() + 1,
+                        self.timeout_exchange.is_leader(vote.get_view_number() + 2)
                     );
                     return;
                 }
@@ -1084,7 +1074,7 @@ where
                 }));
                 let collection_view =
                     if let Some((collection_view, collection_task, _)) = &self.vote_collector {
-                        if vote.get_view() > *collection_view {
+                        if vote.get_view_number() > *collection_view {
                             // ED I think we'd want to let that task timeout to avoid a griefing vector
                             self.registry.shutdown_task(*collection_task).await;
                         }
@@ -1094,21 +1084,15 @@ where
                     };
 
                 //         // Todo check if we are the leader
-                let new_accumulator = TimeoutVoteAccumulator {
-                    da_vote_outcomes: HashMap::new(),
-
-                    success_threshold: self.timeout_exchange.success_threshold(),
-
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.timeout_exchange.total_nodes()],
                     phantom: PhantomData,
                 };
 
-                let timeout_accumulator = self.timeout_exchange.accumulate_vote(
-                    new_accumulator,
-                    &vote,
-                    &vote.get_view().commit(),
-                );
+                let timeout_accumulator =
+                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
 
                 let quorum_accumulator = VoteAccumulator2 {
                     vote_outcomes: HashMap::new(),
@@ -1119,13 +1103,13 @@ where
 
                 // self.timeout_accumulator = accumulator;
 
-                if vote.get_view() > collection_view {
+                if vote.get_view_number() > collection_view {
                     let state = VoteCollectionTaskState {
                         quorum_exchange: self.quorum_exchange.clone(),
                         timeout_exchange: self.timeout_exchange.clone(),
                         accumulator: either::Left(quorum_accumulator),
                         timeout_accumulator,
-                        cur_view: vote.get_view(),
+                        cur_view: vote.get_view_number(),
                         event_stream: self.event_stream.clone(),
                         id: self.id,
                     };
@@ -1148,12 +1132,12 @@ where
                     let id = builder.get_task_id().unwrap();
                     let stream_id = builder.get_stream_id().unwrap();
 
-                    self.vote_collector = Some((vote.get_view(), id, stream_id));
+                    self.vote_collector = Some((vote.get_view_number(), id, stream_id));
 
                     let _task = async_spawn(async move {
                         VoteCollectionTypes::build(builder).launch().await;
                     });
-                    debug!("Starting vote handle for view {:?}", vote.get_view());
+                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
                         .direct_message(stream_id, HotShotEvent::TimeoutVoteRecv(vote))
@@ -1253,17 +1237,17 @@ where
                     Ok(None) => {
                         debug!("We were not chosen for consensus committee on {:?}", view);
                     }
-                    Ok(Some(vote_token)) => {
-                        let message = self
-                            .timeout_exchange
-                            .create_timeout_message::<I>(view, vote_token);
+                    Ok(Some(_vote_token)) => {
+                        let vote = TimeoutVote2::create_signed_vote(
+                            TimeoutData { view },
+                            view,
+                            self.timeout_exchange.public_key(),
+                            self.timeout_exchange.private_key(),
+                        );
 
-                        debug!("Sending timeout vote for view {}", *view);
-                        if let GeneralConsensusMessage::TimeoutVote(vote) = message {
-                            self.event_stream
-                                .publish(HotShotEvent::TimeoutVoteSend(vote))
-                                .await;
-                        }
+                        self.event_stream
+                            .publish(HotShotEvent::TimeoutVoteSend(vote))
+                            .await;
                     }
                 }
                 debug!(
@@ -1286,7 +1270,7 @@ where
         &mut self,
         _qc: QuorumCertificate2<TYPES, I::Leaf>,
         view: TYPES::Time,
-        timeout_certificate: Option<TimeoutCertificate<TYPES>>,
+        timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
     ) -> bool {
         if !self.quorum_exchange.is_leader(view) {
             error!(
