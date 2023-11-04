@@ -9,7 +9,8 @@ use super::{
 };
 use crate::{
     certificate::{
-        AssembledSignature, DACertificate, TimeoutCertificate, VIDCertificate, ViewSyncCertificate, QuorumCertificate,
+        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
+        ViewSyncCertificate,
     },
     data::{DAProposal, ProposalType, VidDisperse},
     vote::{TimeoutVote, VIDVote},

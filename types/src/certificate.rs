@@ -23,7 +23,6 @@ use std::{
     hash::Hash,
     marker::PhantomData,
 };
-use tracing::debug;
 
 /// A `DACertificate` is a threshold signature that some data is available.
 /// It is signed by the members of the DA committee, not the entire network. It is used
