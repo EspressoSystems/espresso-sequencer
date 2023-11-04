@@ -4,7 +4,7 @@
 //! can send, and vote accumulator that converts votes into certificates.
 
 use crate::{
-    certificate::{AssembledSignature, QuorumCertificate},
+    certificate::AssembledSignature,
     traits::{
         election::{VoteData, VoteToken},
         node_implementation::NodeType,
@@ -79,10 +79,6 @@ pub struct VIDVote<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct YesOrNoVote<TYPES: NodeType, COMMITMENT: CommitmentBounds> {
-    /// TODO we should remove this
-    /// this is correct, but highly inefficient
-    /// we should check a cache, and if that fails request the qc
-    pub justify_qc_commitment: Commitment<QuorumCertificate<TYPES, COMMITMENT>>,
     /// The signature share associated with this vote
     pub signature: (EncodedPublicKey, EncodedSignature),
     /// The leaf commitment being voted on.

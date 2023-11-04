@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
+    marker::PhantomData,
 };
 use tracing::debug;
 
@@ -57,33 +58,21 @@ pub struct VIDCertificate<TYPES: NodeType> {
     pub signatures: AssembledSignature<TYPES>,
 }
 
-/// The type used for Quorum Certificates
-///
-/// A Quorum Certificate is a threshold signature of the `Leaf` being proposed, as well as some
-/// metadata, such as the `Stage` of consensus the quorum certificate was generated during.
+/// Depricated type for QC
+
+// TODO:remove this struct https://github.com/EspressoSystems/HotShot/issues/1995
 #[derive(custom_debug::Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct QuorumCertificate<TYPES: NodeType, COMMITMENT: CommitmentBounds> {
-    /// commitment to previous leaf
-    #[debug(skip)]
-    pub leaf_commitment: COMMITMENT,
-    /// Which view this QC relates to
-    pub view_number: TYPES::Time,
-    /// assembled signature for certificate aggregation
-    pub signatures: AssembledSignature<TYPES>,
-    /// If this QC is for the genesis block
-    pub is_genesis: bool,
+    /// phantom data
+    _pd: PhantomData<(TYPES, COMMITMENT)>,
 }
 
 impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Display
     for QuorumCertificate<TYPES, COMMITMENT>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "view: {:?}, is_genesis: {:?}",
-            self.view_number, self.is_genesis
-        )
+        write!(f, "",)
     }
 }
 
@@ -198,45 +187,28 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds>
     type Vote = QuorumVote<TYPES, COMMITMENT>;
     type VoteAccumulator = QuorumVoteAccumulator<TYPES, COMMITMENT, Self::Vote>;
 
-    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
-        let leaf_commitment = match vote.clone() {
-            QuorumVote::Yes(vote_internal) | QuorumVote::No(vote_internal) => {
-                vote_internal.leaf_commitment
-            }
-        };
-        let qc = QuorumCertificate {
-            leaf_commitment,
-            view_number: vote.get_view(),
-            signatures,
-            is_genesis: false,
-        };
-        debug!("QC commitment when formed is {:?}", qc.leaf_commitment);
-        qc
+    fn create_certificate(_signatures: AssembledSignature<TYPES>, _vote: Self::Vote) -> Self {
+        Self { _pd: PhantomData }
     }
 
     fn view_number(&self) -> TYPES::Time {
-        self.view_number
+        TYPES::Time::new(1)
     }
 
     fn signatures(&self) -> AssembledSignature<TYPES> {
-        self.signatures.clone()
+        AssembledSignature::Genesis()
     }
 
     fn leaf_commitment(&self) -> COMMITMENT {
-        self.leaf_commitment
+        COMMITMENT::default_commitment_no_preimage()
     }
 
     fn is_genesis(&self) -> bool {
-        self.is_genesis
+        true
     }
 
     fn genesis() -> Self {
-        Self {
-            leaf_commitment: COMMITMENT::default_commitment_no_preimage(),
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: AssembledSignature::Genesis(),
-            is_genesis: true,
-        }
+        Self { _pd: PhantomData }
     }
 }
 
@@ -244,18 +216,9 @@ impl<TYPES: NodeType, COMMITMENT: CommitmentBounds> Committable
     for QuorumCertificate<TYPES, COMMITMENT>
 {
     fn commit(&self) -> Commitment<Self> {
-        let signatures_bytes = serialize_signature(&self.signatures);
-
         commit::RawCommitmentBuilder::new("Quorum Certificate Commitment")
-            .var_size_field("leaf commitment", self.leaf_commitment.as_ref())
-            .u64_field("view number", *self.view_number)
-            .constant_str("justify_qc signatures")
-            .var_size_bytes(&signatures_bytes)
+            .u64_field("view number", 1)
             .finalize()
-    }
-
-    fn tag() -> String {
-        tag::QC.to_string()
     }
 }
 

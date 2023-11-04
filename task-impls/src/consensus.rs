@@ -17,7 +17,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
+    certificate::{DACertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
@@ -68,7 +68,6 @@ pub struct ConsensusTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -141,9 +140,6 @@ pub struct ConsensusTaskState<
     // ED Should replace this with config information since we need it anyway
     /// The node's id
     pub id: u64,
-
-    /// The most Recent QC we've formed from votes, if we've formed it.
-    pub qc: Option<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
@@ -155,7 +151,6 @@ pub struct VoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
@@ -208,7 +203,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
@@ -235,7 +229,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
@@ -365,7 +358,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -1411,7 +1403,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -1464,7 +1455,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<

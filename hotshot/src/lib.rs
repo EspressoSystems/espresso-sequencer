@@ -31,7 +31,6 @@ pub mod types;
 pub mod tasks;
 
 use crate::{
-    certificate::QuorumCertificate,
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
         add_transaction_task, add_view_sync_task,
@@ -646,7 +645,6 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
             Commitment = Commitment<Leaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,

@@ -9,8 +9,7 @@ use super::{
 };
 use crate::{
     certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
-        ViewSyncCertificate,
+        AssembledSignature, DACertificate, TimeoutCertificate, VIDCertificate, ViewSyncCertificate, QuorumCertificate,
     },
     data::{DAProposal, ProposalType, VidDisperse},
     vote::{TimeoutVote, VIDVote},
@@ -895,6 +894,7 @@ impl<
 {
     type Proposal = PROPOSAL;
     type Vote = QuorumVote<TYPES, Commitment<LEAF>>;
+    // TODO: remove this https://github.com/EspressoSystems/HotShot/issues/1995
     type Certificate = QuorumCertificate<TYPES, Commitment<LEAF>>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;

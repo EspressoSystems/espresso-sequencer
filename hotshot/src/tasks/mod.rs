@@ -1,8 +1,6 @@
 //! Provides a number of tasks that run continuously on a [`HotShot`]
 
-use crate::{
-    async_spawn, types::SystemContextHandle, DACertificate, HotShotConsensusApi, QuorumCertificate,
-};
+use crate::{async_spawn, types::SystemContextHandle, DACertificate, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
 use commit::{Commitment, CommitmentBounds, Committable};
 use futures::FutureExt;
@@ -256,7 +254,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>: ConsensusExchange<
@@ -298,7 +295,6 @@ where
         vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
-        qc: None,
     };
     consensus_state
         .quorum_exchange
@@ -490,11 +486,7 @@ pub async fn add_transaction_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
     // build the transactions task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {

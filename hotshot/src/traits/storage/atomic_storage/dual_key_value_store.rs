@@ -6,7 +6,7 @@ use async_std::sync::RwLock;
 use atomic_store::{load_store::BincodeLoadStore, AppendLog, AtomicStoreLoader};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::{Leaf, QuorumCertificate, ViewNumber},
+    data::{Leaf, ViewNumber},
     traits::{
         storage::{AtomicStoreSnafu, InconsistencySnafu, StorageError},
         StateContents,
@@ -180,7 +180,7 @@ pub trait DualKeyValue: Serialize + DeserializeOwned + Clone {
     fn key_2(&self) -> Self::Key2;
 }
 
-impl<STATE: StateContents> DualKeyValue for QuorumCertificate<STATE> {
+impl<STATE: StateContents> DualKeyValue for QuorumCertificate2<STATE> {
     type Key1 = Commitment<STATE::BlockPayload>;
     type Key2 = ViewNumber;
 
