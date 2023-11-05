@@ -19,7 +19,7 @@ use typenum::U32;
 
 /// Public key type for an bn254 [`SignatureKey`] pair
 ///
-/// This type makes use of noise for non-determinisitc signatures.
+/// This type makes use of noise for non-deterministic signatures.
 #[derive(Clone, PartialEq, Eq, Hash, Copy, Serialize, Deserialize, Debug)]
 
 pub struct BLSPubKey {
