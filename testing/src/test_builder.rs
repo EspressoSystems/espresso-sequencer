@@ -2,7 +2,7 @@ use hotshot::types::SignatureKey;
 use hotshot_types::traits::election::{ConsensusExchange, Membership};
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
+use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
 use hotshot_types::message::{Message, SequencingMessage};
 
 use hotshot_types::{
@@ -61,6 +61,8 @@ pub struct TestMetadata {
     pub min_transactions: usize,
     /// timing data
     pub timing_data: TimingData,
+    /// byzantine node metadata
+    pub byzantine_metadata: Option<Box<dyn NetworkReliability>>,
 }
 
 impl Default for TimingData {
@@ -173,6 +175,7 @@ impl Default for TestMetadata {
                     duration: Duration::from_millis(10000),
                 },
             ),
+            byzantine_metadata: None,
         }
     }
 }
@@ -197,6 +200,7 @@ impl TestMetadata {
             completion_task_description,
             overall_safety_properties,
             spinning_properties,
+            byzantine_metadata,
             ..
         } = self.clone();
 
@@ -261,7 +265,7 @@ impl TestMetadata {
         let spinning_task_generator = spinning_properties.build();
         TestLauncher {
             resource_generator: ResourceGenerators {
-                channel_generator: <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<_, _, _>>::gen_comm_channels(total_nodes, num_bootstrap_nodes, da_committee_size),
+                channel_generator: <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<_, _, _>>::gen_comm_channels(total_nodes, num_bootstrap_nodes, da_committee_size, byzantine_metadata),
                 storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
                 config,
             },

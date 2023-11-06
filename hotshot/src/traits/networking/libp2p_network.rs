@@ -20,8 +20,8 @@ use hotshot_types::{
         election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
-            NetworkError, NetworkMsg, TestableChannelImplementation,
-            TestableNetworkingImplementation, TransmitType, ViewMessage, NetworkReliability,
+            NetworkError, NetworkMsg, NetworkReliability, TestableChannelImplementation,
+            TestableNetworkingImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -114,7 +114,7 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// haven't made that atomic yet and we prefer lock-free
     latest_seen_view: Arc<AtomicU64>,
     /// reliability_config
-    reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>
+    reliability_config: Option<Box<dyn NetworkReliability>>,
 }
 
 /// Networking implementation that uses libp2p
@@ -146,6 +146,7 @@ where
         network_id: usize,
         da_committee_size: usize,
         _is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         assert!(
             da_committee_size <= expected_node_count,
@@ -225,6 +226,11 @@ where
                 let bootstrap_addrs_ref = bootstrap_addrs.clone();
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
+                // let reliability_config_dup = match &reliability_config {
+                //     Some(ref config) => Some(config),
+                //     None => todo!(),
+                // };
+                let relaibility_config_dup = reliability_config.clone();
                 async_block_on(async move {
                     Libp2pNetwork::new(
                         NetworkingMetricsValue::new(),
@@ -235,7 +241,7 @@ where
                         node_id as usize,
                         keys,
                         da,
-                        None,
+                        relaibility_config_dup,
                     )
                     .await
                     .unwrap()
@@ -284,7 +290,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         // HACK
         committee_pks: BTreeSet<K>,
         da_pks: BTreeSet<K>,
-        reliability_config: Option<Arc<RwLock<dyn 'static + NetworkReliability>>>,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
         let network_handle = Arc::new(
@@ -340,8 +346,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // proposals on". We need this because to have consensus info injected we need a working
                 // network already. In the worst case, we send a few lookups we don't need.
                 latest_seen_view: Arc::new(AtomicU64::new(0)),
-                reliability_config
-
+                reliability_config,
             }),
         };
 
@@ -606,11 +611,13 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         // ask during pair programming
         // or maybe channels would be better?
         let metrics = self.inner.metrics.clone();
-        if let Some(config) = &self.inner.reliability_config {
+        if let Some(ref config) = &self.inner.reliability_config {
             let handle = self.inner.handle.clone();
 
-            let serialized_msg = bincode_opts().serialize(&message).context(FailedToSerializeSnafu)?;
-            let fut = config.read().await.chaos_send_msg(
+            let serialized_msg = bincode_opts()
+                .serialize(&message)
+                .context(FailedToSerializeSnafu)?;
+            let fut = config.clone().chaos_send_msg(
                 serialized_msg,
                 Arc::new(move |msg: Vec<u8>| {
                     let topic_2 = topic.clone();
@@ -620,16 +627,16 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                         match handle_2.gossip_no_serialize(topic_2, msg).await {
                             Err(e) => {
                                 metrics_2.message_failed_to_send.add(1);
-                                warn!("Failed to broadcast to libp2p: {:?}", e)
-                            },
-                            Ok(_) => {
-                               metrics_2.outgoing_direct_message_count.add(1);
-
+                                warn!("Failed to broadcast to libp2p: {:?}", e);
+                            }
+                            Ok(()) => {
+                                metrics_2.outgoing_direct_message_count.add(1);
                             }
                         }
                     })
-                }));
-            async_spawn(async move {fut.await});
+                }),
+            );
+            async_spawn(fut);
             return Ok(());
         }
 
@@ -685,11 +692,13 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         // ask during pair programming
         // or maybe channels would be better?
         let metrics = self.inner.metrics.clone();
-        if let Some(config) = &self.inner.reliability_config {
+        if let Some(ref config) = &self.inner.reliability_config {
             let handle = self.inner.handle.clone();
 
-            let serialized_msg = bincode_opts().serialize(&message).context(FailedToSerializeSnafu)?;
-            let fut = config.read().await.chaos_send_msg(
+            let serialized_msg = bincode_opts()
+                .serialize(&message)
+                .context(FailedToSerializeSnafu)?;
+            let fut = config.clone().chaos_send_msg(
                 serialized_msg,
                 Arc::new(move |msg: Vec<u8>| {
                     let handle_2 = handle.clone();
@@ -698,26 +707,22 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                         match handle_2.direct_request_no_serialize(pid, msg).await {
                             Err(e) => {
                                 metrics_2.message_failed_to_send.add(1);
-                                warn!("Failed to broadcast to libp2p: {:?}", e)
-                            },
-                            Ok(_) => {
-                               metrics_2.outgoing_direct_message_count.add(1);
-
+                                warn!("Failed to broadcast to libp2p: {:?}", e);
+                            }
+                            Ok(()) => {
+                                metrics_2.outgoing_direct_message_count.add(1);
                             }
                         }
                     })
-                }));
-            async_spawn(async move {fut.await});
+                }),
+            );
+            async_spawn(fut);
             return Ok(());
         }
 
         match self.inner.handle.direct_request(pid, &message).await {
-            Ok(()) => {
-                Ok(())
-            }
-            Err(e) => {
-                Err(e.into())
-            }
+            Ok(()) => Ok(()),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -843,6 +848,7 @@ where
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <Libp2pNetwork<
             Message<TYPES, I>,
@@ -852,7 +858,8 @@ where
             num_bootstrap,
             network_id,
             da_committee_size,
-            is_da
+            is_da,
+            reliability_config
         );
         Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
     }

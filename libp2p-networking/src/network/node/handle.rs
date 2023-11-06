@@ -455,6 +455,10 @@ impl<S> NetworkNodeHandle<S> {
         self.direct_request_no_serialize(pid, serialized_msg).await
     }
 
+    /// Make a direct request to `peer_id` containing `msg` without serializing
+    /// # Errors
+    /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
+    /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize `msg`
     pub async fn direct_request_no_serialize(
         &self,
         pid: PeerId,
@@ -507,7 +511,15 @@ impl<S> NetworkNodeHandle<S> {
         self.gossip_no_serialize(topic, serialized_msg).await
     }
 
-    pub async fn gossip_no_serialize(&self, topic: String, msg: Vec<u8>) -> Result<(), NetworkNodeHandleError>{
+    /// Gossip a message to peers without serializing
+    /// # Errors
+    /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
+    /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize `msg`
+    pub async fn gossip_no_serialize(
+        &self,
+        topic: String,
+        msg: Vec<u8>,
+    ) -> Result<(), NetworkNodeHandleError> {
         let req = ClientRequest::GossipMsg(topic, msg);
         self.send_request(req).await
     }

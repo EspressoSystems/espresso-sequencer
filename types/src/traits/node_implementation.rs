@@ -9,7 +9,9 @@ use super::{
         CommitteeExchangeType, ConsensusExchange, ElectionConfig, QuorumExchangeType,
         TimeoutExchange, TimeoutExchangeType, ViewSyncExchangeType, VoteToken,
     },
-    network::{CommunicationChannel, NetworkMsg, TestableNetworkingImplementation},
+    network::{
+        CommunicationChannel, NetworkMsg, NetworkReliability, TestableNetworkingImplementation,
+    },
     state::{ConsensusTime, TestableBlock, TestableState},
     storage::{StorageError, StorageState, TestableStorage},
     State,
@@ -209,6 +211,7 @@ pub trait TestableExchange<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, ME
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
+        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,

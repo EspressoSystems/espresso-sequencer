@@ -29,7 +29,7 @@ use hotshot_web_server::{self, config};
 use rand::random;
 use serde::{Deserialize, Serialize};
 
-use hotshot_types::traits::network::ViewMessage;
+use hotshot_types::traits::network::{NetworkReliability, ViewMessage};
 use std::{
     collections::{hash_map::Entry, BTreeSet, HashMap},
     marker::PhantomData,
@@ -1070,6 +1070,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         _network_id: usize,
         _da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
@@ -1120,6 +1121,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
         network_id: usize,
         da_committee_size: usize,
         is_da: bool,
+        _reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <WebServerNetwork<
             Message<TYPES, I>,
@@ -1131,6 +1133,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
             network_id,
             da_committee_size,
             is_da,
+            // unsupported
+            None,
         );
         Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
     }
