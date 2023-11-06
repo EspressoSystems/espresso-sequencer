@@ -53,8 +53,6 @@ The committee is defined by the `Membership` associated type.
 The votes all must be over the `Commitment` associated type.
 */
 pub trait Certificate2<TYPES: NodeType>: HasViewNumber<TYPES> {
-    /// Type that defines membership for voters on the certificate
-    // type Membership: Membership<TYPES>;
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
 
