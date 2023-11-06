@@ -25,13 +25,13 @@ library PlonkVerifier {
     using Transcript for Transcript.TranscriptData;
 
     // _COSET_K0 = 1, has no effect during multiplication, thus avoid declaring it here.
-    uint256 private constant COSET_K1 =
+    uint256 internal constant COSET_K1 =
         0x2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a;
-    uint256 private constant COSET_K2 =
+    uint256 internal constant COSET_K2 =
         0x1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025;
-    uint256 private constant COSET_K3 =
+    uint256 internal constant COSET_K3 =
         0x2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a;
-    uint256 private constant COSET_K4 =
+    uint256 internal constant COSET_K4 =
         0x2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881;
 
     // Parsed from Aztec's Ignition CRS,
@@ -39,17 +39,17 @@ library PlonkVerifier {
     // See parsing code: https://github.com/alxiong/crs
     // @dev since library cannot have constant value of custom type, we break it
     // into individual field values.
-    uint256 private constant BETA_H_X0 =
+    uint256 internal constant BETA_H_X0 =
         0x260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1;
-    uint256 private constant BETA_H_X1 =
+    uint256 internal constant BETA_H_X1 =
         0x0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0;
-    uint256 private constant BETA_H_Y0 =
+    uint256 internal constant BETA_H_Y0 =
         0x04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4;
-    uint256 private constant BETA_H_Y1 =
+    uint256 internal constant BETA_H_Y1 =
         0x22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55;
 
     /// The number of wire types of the circuit, TurboPlonk has 5.
-    uint256 private constant NUM_WIRE_TYPES = 5;
+    uint256 internal constant NUM_WIRE_TYPES = 5;
 
     /// @dev polynomial commitment evaluation info.
     struct PcsInfo {
@@ -233,6 +233,37 @@ library PlonkVerifier {
         }
     }
 
+    /// @dev Compute components in [E]1 and [F]1 used for PolyComm opening verification
+    /// equivalent of JF's
+    /// https://github.com/EspressoSystems/jellyfish/blob/main/plonk/src/proof_system/verifier.rs#L154-L170
+    /// caller allocates the memory fr commScalars and commBases
+    /// requires Arrays of size 30.
+    /// @param verifyingKey A verifier key
+    /// @param evalData A polynomial evaluation
+    /// @param proof A Plonk proof
+    /// @param chal A set of challenges
+    /// @param commScalars Common scalars
+    /// @param commBases Common bases
+    // The returned commitment is a generalization of
+    // `[F]1` described in Sec 8.4, step 10 of https://eprint.iacr.org/2019/953.pdf
+    // Returned evaluation is the scalar in `[E]1` described in Sec 8.4, step 11 of
+    // https://eprint.iacr.org/2019/953.pdf
+    function _prepareOpeningProof(
+        IPlonkVerifier.VerifyingKey memory verifyingKey,
+        Poly.EvalData memory evalData,
+        IPlonkVerifier.PlonkProof memory proof,
+        Challenges memory chal,
+        uint256[] memory commScalars,
+        BN254.G1Point[] memory commBases
+    ) internal pure returns (uint256 eval) {
+        // compute the constant term of the linearization polynomial
+        uint256 linPolyConstant = _computeLinPolyConstantTerm(chal, proof, evalData);
+
+        _preparePolyCommitments(verifyingKey, chal, evalData, proof, commScalars, commBases);
+
+        eval = _prepareEvaluations(linPolyConstant, proof, commScalars);
+    }
+
     /// @dev Compute the constant term of the linearization polynomial.
     /// ```
     /// r_plonk = PI - L1(x) * alpha^2 - alpha * \prod_i=1..m-1 (w_i + beta * sigma_i + gamma) *
@@ -289,37 +320,6 @@ library PlonkVerifier {
             res := addmod(piEval, sub(p, mulmod(alpha2, lagrangeOneEval, p)), p)
             res := addmod(res, sub(p, mulmod(alpha, perm, p)), p)
         }
-    }
-
-    /// @dev Compute components in [E]1 and [F]1 used for PolyComm opening verification
-    /// equivalent of JF's
-    /// https://github.com/EspressoSystems/jellyfish/blob/main/plonk/src/proof_system/verifier.rs#L154-L170
-    /// caller allocates the memory fr commScalars and commBases
-    /// requires Arrays of size 30.
-    /// @param verifyingKey A verifier key
-    /// @param evalData A polynomial evaluation
-    /// @param proof A Plonk proof
-    /// @param chal A set of challenges
-    /// @param commScalars Common scalars
-    /// @param commBases Common bases
-    // The returned commitment is a generalization of
-    // `[F]1` described in Sec 8.4, step 10 of https://eprint.iacr.org/2019/953.pdf
-    // Returned evaluation is the scalar in `[E]1` described in Sec 8.4, step 11 of
-    // https://eprint.iacr.org/2019/953.pdf
-    function _prepareOpeningProof(
-        IPlonkVerifier.VerifyingKey memory verifyingKey,
-        Poly.EvalData memory evalData,
-        IPlonkVerifier.PlonkProof memory proof,
-        Challenges memory chal,
-        uint256[] memory commScalars,
-        BN254.G1Point[] memory commBases
-    ) internal pure returns (uint256 eval) {
-        // compute the constant term of the linearization polynomial
-        uint256 linPolyConstant = _computeLinPolyConstantTerm(chal, proof, evalData);
-
-        _preparePolyCommitments(verifyingKey, chal, evalData, proof, commScalars, commBases);
-
-        eval = _prepareEvaluations(linPolyConstant, proof, commScalars);
     }
 
     /// @dev Similar to `aggregate_poly_commitments()` in Jellyfish, but we are not aggregating

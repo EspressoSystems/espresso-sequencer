@@ -3,9 +3,11 @@ use std::str::FromStr;
 use ark_bn254::{g1, Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::AffineRepr;
-use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
+use ark_ff::{BigInteger, Field, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
+use ark_std::rand::rngs::StdRng;
+use ark_std::rand::SeedableRng;
 use ark_std::{rand::Rng, UniformRand};
 use clap::{Parser, ValueEnum};
 use ethers::{
@@ -14,6 +16,7 @@ use ethers::{
     types::{Bytes, H256, U256},
 };
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
+use jf_plonk::testing_apis::Challenges;
 use jf_plonk::{
     constants::KECCAK256_STATE_SIZE,
     testing_apis::Verifier,
@@ -35,6 +38,8 @@ struct Cli {
     arg2: Option<String>,
     /// Optional 3rd argument for the `action`
     arg3: Option<String>,
+    /// Optional 4th argument for the `action`
+    arg4: Option<String>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -59,6 +64,10 @@ enum Action {
     TranscriptAppendProofEvals,
     /// Return the Plonk Verifier related constants
     PlonkConstants,
+    /// Get jf_plonk::Verifier::compute_challenges()
+    PlonkComputeChal,
+    /// Get a random, dummy proof with correct format
+    DummyProof,
     /// Test only logic
     TestOnly,
 }
@@ -199,7 +208,59 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::PlonkConstants => {
-            unimplemented!()
+            let coset_k = coset_k();
+            let open_key = open_key();
+
+            let res = (
+                field_to_u256::<Fr>(coset_k[1]),
+                field_to_u256::<Fr>(coset_k[2]),
+                field_to_u256::<Fr>(coset_k[3]),
+                field_to_u256::<Fr>(coset_k[4]),
+                field_to_u256::<Fq>(open_key.beta_h.x().unwrap().c0),
+                field_to_u256::<Fq>(open_key.beta_h.x().unwrap().c1),
+                field_to_u256::<Fq>(open_key.beta_h.y().unwrap().c0),
+                field_to_u256::<Fq>(open_key.beta_h.y().unwrap().c1),
+            );
+            println!("{}", res.encode_hex());
+        }
+        Action::PlonkComputeChal => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=verifyingKey");
+            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=publicInput");
+            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=proof");
+            let arg4 = cli
+                .arg4
+                .as_ref()
+                .expect("Should provide arg3=extraTranscriptInitMsg");
+
+            let vk = arg1.parse::<ParsedVerifyingKey>().unwrap().into();
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg2).unwrap();
+            let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
+            let proof: Proof<Bn254> = arg3.parse::<ParsedPlonkProof>().unwrap().into();
+            let msg = {
+                let parsed: Bytes = AbiDecode::decode_hex(arg4).unwrap();
+                parsed.0.to_vec()
+            };
+
+            let chal: ParsedChallenges =
+                Verifier::<Bn254>::compute_challenges::<SolidityTranscript>(
+                    &[&vk],
+                    &[&pi],
+                    &proof.into(),
+                    &Some(msg),
+                )
+                .unwrap()
+                .into();
+            println!("{}", (chal,).encode_hex());
+        }
+        Action::DummyProof => {
+            let mut rng = jf_utils::test_rng();
+            if let Some(arg1) = cli.arg1.as_ref() {
+                let seed = arg1.parse::<u64>().unwrap();
+                rng = StdRng::seed_from_u64(seed);
+            }
+
+            let proof = ParsedPlonkProof::dummy(&mut rng);
+            println!("{}", (proof,).encode_hex());
         }
         Action::TestOnly => {
             let arg1 = cli.arg1.as_ref().expect("Should provide arg1=proof");
@@ -218,6 +279,7 @@ fn main() {
 
 // constant in hex string copied from hardcoded constants from solidity contracts
 
+// TODO: (alex) further test these with output from Jellyfish directly!
 // TODO: (alex) change to simply using `MontFp!("0x..")` after
 // <https://github.com/arkworks-rs/algebra/pull/635> is on a tag release
 // Return cosets coefficients for circuits over BN254.
@@ -661,6 +723,76 @@ impl ParsedPlonkProof {
             sigma_eval_3: field_to_u256(Fr::rand(rng)),
             prod_perm_zeta_omega_eval: field_to_u256(Fr::rand(rng)),
             ..Default::default()
+        }
+    }
+
+    /// return a dummy proof instance with all random fields
+    fn dummy<R: Rng>(rng: &mut R) -> Self {
+        let mut proof = Self::dummy_with_rand_proof_evals(rng);
+        proof.wire_0 = G1Affine::rand(rng).into();
+        proof.wire_1 = G1Affine::rand(rng).into();
+        proof.wire_2 = G1Affine::rand(rng).into();
+        proof.wire_3 = G1Affine::rand(rng).into();
+        proof.wire_4 = G1Affine::rand(rng).into();
+        proof.prod_perm = G1Affine::rand(rng).into();
+        proof.split_0 = G1Affine::rand(rng).into();
+        proof.split_1 = G1Affine::rand(rng).into();
+        proof.split_2 = G1Affine::rand(rng).into();
+        proof.split_3 = G1Affine::rand(rng).into();
+        proof.split_4 = G1Affine::rand(rng).into();
+        proof.zeta = G1Affine::rand(rng).into();
+        proof.zeta_omega = G1Affine::rand(rng).into();
+        proof
+    }
+}
+
+/// intermediate representation of `Challenges` in solidity
+#[derive(Clone, Debug, Default, EthAbiType, EthAbiCodec)]
+struct ParsedChallenges {
+    alpha: U256,
+    alpha_2: U256,
+    alpha_3: U256,
+    beta: U256,
+    gamma: U256,
+    zeta: U256,
+    v: U256,
+    u: U256,
+}
+
+impl FromStr for ParsedChallenges {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
+impl From<Challenges<Fr>> for ParsedChallenges {
+    fn from(c: Challenges<Fr>) -> Self {
+        let alpha_2 = c.alpha.double();
+        Self {
+            alpha: field_to_u256::<Fr>(c.alpha),
+            alpha_2: field_to_u256::<Fr>(alpha_2),
+            alpha_3: field_to_u256::<Fr>(c.alpha * alpha_2),
+            beta: field_to_u256::<Fr>(c.beta),
+            gamma: field_to_u256::<Fr>(c.gamma),
+            zeta: field_to_u256::<Fr>(c.zeta),
+            v: field_to_u256::<Fr>(c.v),
+            u: field_to_u256::<Fr>(c.u),
+        }
+    }
+}
+
+impl From<ParsedChallenges> for Challenges<Fr> {
+    fn from(c: ParsedChallenges) -> Self {
+        Self {
+            tau: Fr::from(0u32),
+            alpha: u256_to_field(c.alpha),
+            beta: u256_to_field(c.beta),
+            gamma: u256_to_field(c.gamma),
+            zeta: u256_to_field(c.zeta),
+            v: u256_to_field(c.v),
+            u: u256_to_field(c.u),
         }
     }
 }
