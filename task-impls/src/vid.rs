@@ -12,23 +12,25 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::network::CommunicationChannel;
-use hotshot_types::traits::network::ConsensusIntentEvent;
-use hotshot_types::{
-    certificate::VIDCertificate, traits::election::SignedCertificate, vote::VIDVoteAccumulator,
-};
+use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
 use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, ProposalType},
     message::{Message, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, VIDExchangeType},
+        election::ConsensusExchange,
         node_implementation::{NodeImplementation, NodeType, VIDEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
     utils::ViewInner,
+};
+use hotshot_types::{
+    simple_certificate::VIDCertificate2,
+    simple_vote::{VIDData, VIDVote2},
+    traits::network::CommunicationChannel,
+    vote2::{HasViewNumber, VoteAccumulator2},
 };
 
 use snafu::Snafu;
@@ -46,12 +48,8 @@ pub struct VIDTaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// The state's api
     pub api: A,
@@ -82,25 +80,16 @@ pub struct VIDVoteCollectionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
 > where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// the vid exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulates VID votes
     pub accumulator: Either<
-        <VIDCertificate<TYPES> as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Commitment<TYPES::BlockPayload>,
-        >>::VoteAccumulator,
-        VIDCertificate<TYPES>,
+        VoteAccumulator2<TYPES, VIDVote2<TYPES, VIDMembership<TYPES, I>>, VIDCertificate2<TYPES>>,
+        VIDCertificate2<TYPES>,
     >,
     /// the current view
     pub cur_view: TYPES::Time,
@@ -113,12 +102,8 @@ pub struct VIDVoteCollectionTaskState<
 impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
     for VIDVoteCollectionTaskState<TYPES, I>
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 
@@ -133,16 +118,15 @@ async fn vote_handle<TYPES, I>(
 where
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
-            debug!("VID vote recv, collection task {:?}", vote.current_view);
+            debug!(
+                "VID vote recv, collection task {:?}",
+                vote.get_view_number()
+            );
             // panic!("Vote handle received VID vote for view {}", *vote.current_view);
 
             // For the case where we receive votes after we've made a certificate
@@ -152,10 +136,7 @@ where
             }
 
             let accumulator = state.accumulator.left().unwrap();
-            match state
-                .vid_exchange
-                .accumulate_vote(accumulator, &vote, &vote.payload_commitment)
-            {
+            match accumulator.accumulate(&vote, state.vid_exchange.membership()) {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
                 }
@@ -201,12 +182,8 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > VIDTaskState<TYPES, I, A>
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
@@ -222,7 +199,7 @@ where
                 //     self.committee_exchange.public_key()
                 // );
                 // Check if we are the leader and the vote is from the sender.
-                let view = vote.current_view;
+                let view = vote.get_view_number();
                 if !self.vid_exchange.is_leader(view) {
                     error!(
                         "We are not the VID leader for view {} are we leader for next view? {}",
@@ -247,19 +224,14 @@ where
                         TYPES::Time::new(0)
                     };
 
-                let new_accumulator = VIDVoteAccumulator {
-                    vid_vote_outcomes: HashMap::new(),
-                    success_threshold: self.vid_exchange.success_threshold(),
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.vid_exchange.total_nodes()],
                     phantom: PhantomData,
                 };
 
-                let accumulator = self.vid_exchange.accumulate_vote(
-                    new_accumulator,
-                    &vote,
-                    &vote.clone().payload_commitment,
-                );
+                let accumulator = new_accumulator.accumulate(&vote, self.vid_exchange.membership());
 
                 if view > collection_view {
                     let state = VIDVoteCollectionTaskState {
@@ -336,18 +308,24 @@ where
                     Ok(None) => {
                         debug!("We were not chosen for VID quorum on {:?}", view);
                     }
-                    Ok(Some(vote_token)) => {
+                    Ok(Some(_vote_token)) => {
                         // Generate and send vote
-                        let vote = self.vid_exchange.create_vid_message(
-                            payload_commitment,
+                        let vote = VIDVote2::create_signed_vote(
+                            VIDData {
+                                payload_commit: payload_commitment,
+                            },
                             view,
-                            vote_token,
+                            self.vid_exchange.public_key(),
+                            self.vid_exchange.private_key(),
                         );
 
                         // ED Don't think this is necessary?
                         // self.cur_view = view;
 
-                        debug!("Sending vote to the VID leader {:?}", vote.current_view);
+                        debug!(
+                            "Sending vote to the VID leader {:?}",
+                            vote.get_view_number()
+                        );
                         self.event_stream
                             .publish(HotShotEvent::VidVoteSend(vote))
                             .await;
@@ -447,12 +425,8 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for VIDTaskState<TYPES, I, A>
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 

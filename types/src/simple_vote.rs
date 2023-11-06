@@ -214,7 +214,7 @@ pub type QuorumVote<TYPES, LEAF, M> = SimpleVote<TYPES, QuorumData<LEAF>, M>;
 /// DA vote type alias
 pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;
 /// VID vote type alias
-pub type VIDVote<TYPES, M> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>, M>;
+pub type VIDVote2<TYPES, M> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>, M>;
 /// Timeout Vote type alias
 pub type TimeoutVote<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;
 /// View Sync Commit Vote type alias

@@ -28,7 +28,7 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{TimeoutCertificate, VIDCertificate, ViewSyncCertificate},
+    certificate::{TimeoutCertificate, ViewSyncCertificate},
     data::{Leaf, ProposalType, QuorumProposal},
     event::Event,
     message::{Message, Messages, SequencingMessage},
@@ -359,12 +359,8 @@ pub async fn add_vid_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = VIDCertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     // build the vid task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
