@@ -218,7 +218,7 @@ pub trait TestableExchange<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, ME
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
-        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+        unreliable_network: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,

@@ -61,8 +61,8 @@ pub struct TestMetadata {
     pub min_transactions: usize,
     /// timing data
     pub timing_data: TimingData,
-    /// byzantine node metadata
-    pub byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+    /// unrelabile networking metadata
+    pub unreliable_network: Option<Box<dyn NetworkReliability>>,
 }
 
 impl Default for TimingData {
@@ -175,7 +175,7 @@ impl Default for TestMetadata {
                     duration: Duration::from_millis(10000),
                 },
             ),
-            byzantine_metadata: None,
+            unreliable_network: None,
         }
     }
 }
@@ -200,7 +200,7 @@ impl TestMetadata {
             completion_task_description,
             overall_safety_properties,
             spinning_properties,
-            byzantine_metadata,
+            unreliable_network,
             ..
         } = self.clone();
 
@@ -272,7 +272,7 @@ impl TestMetadata {
                             _,
                             _,
                         >>::gen_comm_channels(
-                            total_nodes, num_bootstrap_nodes, da_committee_size, byzantine_metadata
+                            total_nodes, num_bootstrap_nodes, da_committee_size, unreliable_network
                         ),
                     storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
                     config,

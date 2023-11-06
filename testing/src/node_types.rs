@@ -155,7 +155,7 @@ impl
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
-        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+        unreliable_network: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,
@@ -190,7 +190,7 @@ impl
             0,
             da_committee_size,
             false,
-            byzantine_metadata,
+            unreliable_network,
         ));
 
         Box::new(move |id| {
@@ -264,7 +264,7 @@ impl
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
-        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+        unreliable_network: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,
@@ -299,7 +299,7 @@ impl
             0,
             da_committee_size,
             false,
-            byzantine_metadata.clone(),
+            unreliable_network.clone(),
         ));
         let network_da_generator = Arc::new(<MemoryNetwork<
             Message<TestTypes, MemoryImpl>,
@@ -313,7 +313,7 @@ impl
             1,
             da_committee_size,
             true,
-            byzantine_metadata,
+            unreliable_network,
         ));
         Box::new(move |id| {
             let network = Arc::new(network_generator(id));
@@ -406,7 +406,7 @@ impl
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
-        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+        unreliable_network: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,
@@ -443,7 +443,7 @@ impl
             0,
             da_committee_size,
             false,
-            byzantine_metadata.clone(),
+            unreliable_network.clone(),
         ));
         let network_da_generator = Arc::new(<WebServerNetwork<
             Message<TestTypes, WebImpl>,
@@ -458,7 +458,7 @@ impl
             1,
             da_committee_size,
             true,
-            byzantine_metadata.clone(),
+            unreliable_network.clone(),
         ));
         Box::new(move |id| {
             let network = Arc::new(network_generator(id));
@@ -575,7 +575,7 @@ impl
         expected_node_count: usize,
         num_bootstrap: usize,
         da_committee_size: usize,
-        byzantine_metadata: Option<Box<dyn NetworkReliability>>,
+        unreliable_network: Option<Box<dyn NetworkReliability>>,
     ) -> Box<
         dyn Fn(
                 u64,
@@ -611,7 +611,7 @@ impl
             0,
             da_committee_size,
             false,
-            byzantine_metadata.clone(),
+            unreliable_network.clone(),
         ));
 
         let web_server_network_da_generator = Arc::new(<WebServerNetwork<
@@ -627,7 +627,7 @@ impl
             1,
             da_committee_size,
             true,
-            byzantine_metadata.clone(),
+            unreliable_network.clone(),
         ));
 
         let libp2p_network_generator = Arc::new(<Libp2pNetwork<
@@ -642,7 +642,7 @@ impl
             2,
             da_committee_size,
             true,
-            byzantine_metadata,
+            unreliable_network,
         ));
 
         // libp2p

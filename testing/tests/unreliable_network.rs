@@ -32,7 +32,7 @@ async fn libp2p_network_sync() {
                 duration: Duration::new(240, 0),
             },
         ),
-        byzantine_metadata: Some(Box::new(SynchronousNetwork {
+        unreliable_network: Some(Box::new(SynchronousNetwork {
             timeout_ms: 30,
             delay_low_ms: 4,
         })),
@@ -69,7 +69,7 @@ async fn test_memory_network_sync() {
                 duration: Duration::from_secs(240),
             },
         ),
-        byzantine_metadata: Some(Box::new(SynchronousNetwork {
+        unreliable_network: Some(Box::new(SynchronousNetwork {
             timeout_ms: 30,
             delay_low_ms: 4,
         })),
@@ -101,7 +101,7 @@ async fn libp2p_network_async() {
                 duration: Duration::new(240, 0),
             },
         ),
-        byzantine_metadata: Some(Box::new(AsynchronousNetwork {
+        unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 8,
             keep_denominator: 10,
             delay_low_ms: 4,
@@ -140,7 +140,7 @@ async fn test_memory_network_async() {
                 duration: Duration::from_secs(240),
             },
         ),
-        byzantine_metadata: Some(Box::new(AsynchronousNetwork {
+        unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 8,
             keep_denominator: 10,
             delay_low_ms: 4,
@@ -178,7 +178,7 @@ async fn test_memory_network_partially_sync() {
                 duration: Duration::from_secs(240),
             },
         ),
-        byzantine_metadata: Some(Box::new(PartiallySynchronousNetwork {
+        unreliable_network: Some(Box::new(PartiallySynchronousNetwork {
             asynchronous: AsynchronousNetwork {
                 keep_numerator: 8,
                 keep_denominator: 10,
@@ -220,7 +220,7 @@ async fn libp2p_network_partially_sync() {
                 duration: Duration::new(240, 0),
             },
         ),
-        byzantine_metadata: Some(Box::new(PartiallySynchronousNetwork {
+        unreliable_network: Some(Box::new(PartiallySynchronousNetwork {
             asynchronous: AsynchronousNetwork {
                 keep_numerator: 8,
                 keep_denominator: 10,
@@ -267,7 +267,7 @@ async fn test_memory_network_chaos() {
                 duration: Duration::from_secs(240),
             },
         ),
-        byzantine_metadata: Some(Box::new(ChaosNetwork {
+        unreliable_network: Some(Box::new(ChaosNetwork {
             keep_numerator: 8,
             keep_denominator: 10,
             delay_low_ms: 4,
@@ -303,7 +303,7 @@ async fn libp2p_network_chaos() {
                 duration: Duration::new(240, 0),
             },
         ),
-        byzantine_metadata: Some(Box::new(ChaosNetwork {
+        unreliable_network: Some(Box::new(ChaosNetwork {
             keep_numerator: 8,
             keep_denominator: 10,
             delay_low_ms: 4,
