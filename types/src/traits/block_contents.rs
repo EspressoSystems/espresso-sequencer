@@ -1,7 +1,7 @@
 //! Abstraction over the contents of a block
 //!
-//! This module provides the [`BlockPayload`] and [`BlockHeader`] traits, which describe the
-//! behaviors that a block is expected to have.
+//! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
+//! describe the behaviors that a block is expected to have.
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
@@ -12,6 +12,14 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
+// <https://github.com/EspressoSystems/HotShot/issues/1815>
+/// Abstraction over any type of transaction. Used by [`BlockPayload`].
+pub trait Transaction:
+    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+{
+}
 
 // TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
 // <https://github.com/EspressoSystems/HotShot/issues/1815>
@@ -42,113 +50,29 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
+    // type Header: BlockHeader;
+
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>>;
+    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>>;
 }
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
-/// Abstraction over any type of transaction. Used by [`BlockPayload`].
-pub trait Transaction:
-    Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
+/// Header of a block, which commits to a [`BlockPayload`].
+pub trait BlockHeader:
+    Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned
 {
-}
+    /// Block payload associated with the commitment.
+    type Payload: BlockPayload;
 
-/// Dummy implementation of `BlockPayload` for unit tests
-pub mod dummy {
-    use std::fmt::Display;
+    /// Build a header with the payload commitment and parent header.
+    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self;
 
-    use super::{BlockPayload, Commitment, Committable, Debug, Hash, HashSet, Serialize};
-    use rand::Rng;
-    use serde::Deserialize;
+    /// Build a genesis header with the genesis payload.
+    fn genesis(payload: Self::Payload) -> Self;
 
-    pub use crate::traits::state::dummy::DummyState;
-    use crate::traits::state::TestableBlock;
+    /// Get the block number.
+    fn block_number(&self) -> u64;
 
-    // TODO (Keyao) Investigate the use of DummyBlock.
-    // <https://github.com/EspressoSystems/HotShot/issues/1763>
-    /// The dummy block
-    #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct DummyBlock {
-        /// Some dummy data
-        pub nonce: u64,
-    }
-
-    impl DummyBlock {
-        /// Generate a random `DummyBlock`
-        pub fn random(rng: &mut dyn rand::RngCore) -> Self {
-            Self { nonce: rng.gen() }
-        }
-    }
-
-    /// Dummy error
-    #[derive(Debug)]
-    pub struct DummyError;
-
-    /// dummy transaction. No functionality
-    #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Hash)]
-    pub enum DummyTransaction {
-        /// the only variant. Dummy.
-        Dummy,
-    }
-
-    impl Committable for DummyTransaction {
-        fn commit(&self) -> commit::Commitment<Self> {
-            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
-                .u64_field("Dummy Field", 0)
-                .finalize()
-        }
-
-        fn tag() -> String {
-            "DUMMY_TXN".to_string()
-        }
-    }
-    impl super::Transaction for DummyTransaction {}
-
-    impl std::error::Error for DummyError {}
-
-    impl std::fmt::Display for DummyError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("A bad thing happened")
-        }
-    }
-
-    impl Display for DummyBlock {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{self:#?}")
-        }
-    }
-
-    impl BlockPayload for DummyBlock {
-        type Error = DummyError;
-
-        type Transaction = DummyTransaction;
-
-        fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-            HashSet::new()
-        }
-    }
-
-    impl TestableBlock for DummyBlock {
-        fn genesis() -> Self {
-            Self { nonce: 0 }
-        }
-
-        fn txn_count(&self) -> u64 {
-            1
-        }
-    }
-
-    impl Committable for DummyBlock {
-        fn commit(&self) -> commit::Commitment<Self> {
-            commit::RawCommitmentBuilder::new("Dummy BlockPayload Comm")
-                .u64_field("Nonce", self.nonce)
-                .finalize()
-        }
-
-        fn tag() -> String {
-            "DUMMY_BLOCK".to_string()
-        }
-    }
+    /// Get the payload commitment.
+    fn payload_commitment(&self) -> Commitment<Self::Payload>;
 }

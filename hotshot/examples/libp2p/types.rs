@@ -1,4 +1,4 @@
-use crate::infra_da::Libp2pDARun;
+use crate::infra::Libp2pDARun;
 use hotshot::{
     demo::DemoTypes,
     traits::{
@@ -8,11 +8,11 @@ use hotshot::{
 };
 use hotshot_types::{
     certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf},
+    data::{DAProposal, Leaf, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
-        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, NodeImplementation, NodeType, SequencingExchanges},
+        election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
+        node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
     },
     vote::{DAVote, QuorumVote, ViewSyncVote},
 };
@@ -22,10 +22,11 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = SequencingLeaf<DemoTypes>;
+pub type ThisLeaf = Leaf<DemoTypes>;
 pub type ThisMembership =
     GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
 pub type DANetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
+pub type VIDNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type QuorumNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 
@@ -40,8 +41,8 @@ pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
-    type Leaf = SequencingLeaf<DemoTypes>;
-    type Exchanges = SequencingExchanges<
+    type Leaf = Leaf<DemoTypes>;
+    type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,
         QuorumExchange<
@@ -60,6 +61,7 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
             ViewSyncNetwork,
             Message<DemoTypes, Self>,
         >,
+        VIDExchange<DemoTypes, ThisMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 

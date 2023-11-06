@@ -122,6 +122,15 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
     /// Task map for quorum votes.
     vote_task_map:
         Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for vid votes
+    vid_vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for VID certs
+    vid_cert_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for VID disperse data
+    vid_disperse_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for DACs.
     dac_task_map:
         Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
@@ -169,7 +178,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
                 MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
                 MessagePurpose::VidVote => config::get_vid_vote_route(view_number, vote_index), // like `Vote`
-                MessagePurpose::VidCert => config::get_vid_cert_route(view_number), // like `DAC`
+                MessagePurpose::VidCert => config::get_vid_certificate_route(view_number), // like `DAC`
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -351,8 +360,10 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                         // TODO ED Should add extra error checking here to make sure we are intending to cancel a task
                         ConsensusIntentEvent::CancelPollForVotes(event_view)
                         | ConsensusIntentEvent::CancelPollForProposal(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDVotes(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDCertificate(event_view)
                         | ConsensusIntentEvent::CancelPollForDAC(event_view)
-                        | ConsensusIntentEvent::CancelPollForViewSyncCertificate(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDDisperse(event_view)
                         | ConsensusIntentEvent::CancelPollForViewSyncVotes(event_view) => {
                             if view_number == event_view {
                                 debug!("Shutting down polling task for view {}", event_view);
@@ -371,7 +382,9 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                             }
                         }
 
-                        _ => unimplemented!(),
+                        _ => {
+                            unimplemented!()
+                        }
                     }
                 }
                 // Nothing on receiving channel
@@ -528,6 +541,9 @@ impl<
             tx_index: Arc::default(),
             proposal_task_map: Arc::default(),
             vote_task_map: Arc::default(),
+            vid_vote_task_map: Arc::default(),
+            vid_cert_task_map: Arc::default(),
+            vid_disperse_task_map: Arc::default(),
             dac_task_map: Arc::default(),
             view_sync_cert_task_map: Arc::default(),
             view_sync_vote_task_map: Arc::default(),
@@ -562,7 +578,7 @@ impl<
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
             MessagePurpose::VidVote => config::post_vid_vote_route(*view_number),
             MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
-            MessagePurpose::VidCert => config::post_vid_cert_route(*view_number),
+            MessagePurpose::VidCert => config::post_vid_certificate_route(*view_number),
         };
 
         let network_msg: SendMsg<M> = SendMsg {
@@ -822,6 +838,46 @@ impl<
                         .await;
                 }
             }
+            ConsensusIntentEvent::PollForVIDDisperse(view_number) => {
+                // Check if we already have a task for this (we shouldn't)
+
+                // Going to do a write lock since mostly likely we will need it - can change to upgradable read in the future
+                let mut task_map = self.inner.vid_disperse_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidDisperse, view_number)
+                                .await
+                            {
+                                error!(
+                                    "Background receive VID disperse polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                if let Some((_, sender)) = task_map.remove_entry(&view_number.wrapping_sub(2)) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
             ConsensusIntentEvent::PollForCurrentProposal => {
                 // create new task
                 let (_, receiver) = unbounded();
@@ -878,6 +934,44 @@ impl<
                         .await;
                 }
             }
+            ConsensusIntentEvent::PollForVIDVotes(view_number) => {
+                let mut task_map = self.inner.vid_vote_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidVote, view_number)
+                                .await
+                            {
+                                error!(
+                                    "Background receive proposal polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                // TODO ED This won't work for vote collection, last task is more than 2 view ago depending on size of network, will need to rely on cancel task from consensus
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDVotes(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
+
             ConsensusIntentEvent::PollForDAC(view_number) => {
                 let mut task_map = self.inner.dac_task_map.write().await;
                 if let Entry::Vacant(e) = task_map.entry(view_number) {
@@ -914,6 +1008,43 @@ impl<
                         .await;
                 }
             }
+
+            ConsensusIntentEvent::PollForVIDCertificate(view_number) => {
+                let mut task_map = self.inner.vid_cert_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidCert, view_number)
+                                .await
+                            {
+                                error!(
+                                    "Background receive proposal polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDCertificate(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
             ConsensusIntentEvent::CancelPollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;
 
@@ -923,6 +1054,19 @@ impl<
                     // If task already exited we expect an error
                     let _res = sender
                         .send(ConsensusIntentEvent::CancelPollForVotes(view_number))
+                        .await;
+                }
+            }
+
+            ConsensusIntentEvent::CancelPollForVIDVotes(view_number) => {
+                let mut task_map = self.inner.vid_vote_task_map.write().await;
+
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number)) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDVotes(view_number))
                         .await;
                 }
             }

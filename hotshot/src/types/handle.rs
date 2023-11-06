@@ -1,6 +1,7 @@
 //! Provides an event-streaming handle for a [`HotShot`] running in the background
 
-use crate::{traits::NodeImplementation, types::Event, Message, QuorumCertificate, SystemContext};
+use crate::QuorumCertificate2;
+use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
 use async_lock::RwLock;
 use commit::Committable;
@@ -12,21 +13,21 @@ use hotshot_task::{
     task::FilterEvent,
     BoxSyncFuture,
 };
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot_task_impls::events::HotShotEvent;
+use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::Consensus,
     data::LeafType,
     error::HotShotError,
     event::EventType,
-    message::{GeneralConsensusMessage, MessageKind},
+    message::MessageKind,
     traits::{
-        election::{ConsensusExchange, QuorumExchangeType, SignedCertificate},
-        node_implementation::{ExchangesType, NodeType, QuorumEx},
+        election::{ConsensusExchange, QuorumExchangeType},
+        node_implementation::{ExchangesType, NodeType},
         state::ConsensusTime,
         storage::Storage,
     },
 };
-
 use std::sync::Arc;
 use tracing::error;
 
@@ -47,7 +48,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// method is needed to generate new receivers to expose to the user
     pub(crate) output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
     /// access to the internal ev ent stream, in case we need to, say, shut something down
-    pub(crate) internal_event_stream: ChannelStream<SequencingHotShotEvent<TYPES, I>>,
+    pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// registry for controlling tasks
     pub(crate) registry: GlobalRegistry,
 
@@ -147,8 +148,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// NOTE: this is only used for sanity checks in our tests
     pub async fn get_internal_event_stream_known_impl(
         &mut self,
-        filter: FilterEvent<SequencingHotShotEvent<TYPES, I>>,
-    ) -> (UnboundedStream<SequencingHotShotEvent<TYPES, I>>, StreamId) {
+        filter: FilterEvent<HotShotEvent<TYPES, I>>,
+    ) -> (UnboundedStream<HotShotEvent<TYPES, I>>, StreamId) {
         self.internal_event_stream.subscribe(filter).await
     }
 
@@ -190,8 +191,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         if let Ok(anchor_leaf) = self.storage().get_anchored_view().await {
             if anchor_leaf.view_number == TYPES::Time::genesis() {
                 let leaf: I::Leaf = I::Leaf::from_stored_view(anchor_leaf);
-                let mut qc = QuorumCertificate::<TYPES, Commitment<I::Leaf>>::genesis();
-                qc.leaf_commitment = leaf.commit();
+                let mut qc = QuorumCertificate2::<TYPES, I::Leaf>::genesis();
+                qc.data = QuorumData {
+                    leaf_commit: leaf.commit(),
+                };
                 let event = Event {
                     view_number: TYPES::Time::genesis(),
                     event: EventType::Decide {
@@ -327,31 +330,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
             .exchanges
             .quorum_exchange()
             .sign_validating_or_commitment_proposal::<I>(leaf_commitment)
-    }
-
-    /// create a yes message
-    #[cfg(feature = "hotshot-testing")]
-    pub fn create_yes_message(
-        &self,
-        justify_qc_commitment: Commitment<QuorumCertificate<TYPES, Commitment<I::Leaf>>>,
-        leaf_commitment: Commitment<I::Leaf>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        QuorumEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-        >,
-    {
-        let inner = self.hotshot.inner.clone();
-        inner.exchanges.quorum_exchange().create_yes_message(
-            justify_qc_commitment,
-            leaf_commitment,
-            current_view,
-            vote_token,
-        )
     }
 
     /// Wrapper around `HotShotConsensusApi`'s `send_broadcast_consensus_message` function

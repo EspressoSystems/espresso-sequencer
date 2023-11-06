@@ -8,15 +8,11 @@
 use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
-use either::Either;
+
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
-    block_impl::{BlockPayloadError, VIDBlockPayload, VIDTransaction},
-    certificate::{AssembledSignature, QuorumCertificate},
-    data::{
-        fake_commitment, genesis_proposer_id, random_commitment, LeafType, SequencingLeaf,
-        ViewNumber,
-    },
+    block_impl::{BlockPayloadError, VIDBlockHeader, VIDBlockPayload, VIDTransaction},
+    data::{fake_commitment, ViewNumber},
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -24,13 +20,13 @@ use hotshot_types::{
         BlockPayload, State,
     },
 };
-use rand::Rng;
+
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
 /// sequencing demo entry state
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct SDemoState {
+pub struct DemoState {
     /// the block height
     block_height: u64,
     /// the view number
@@ -39,9 +35,9 @@ pub struct SDemoState {
     prev_state_commitment: Commitment<Self>,
 }
 
-impl Committable for SDemoState {
+impl Committable for DemoState {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("SDemo State Commit")
+        commit::RawCommitmentBuilder::new("Demo State Commit")
             .u64_field("block_height", self.block_height)
             .u64_field("view_number", *self.view_number)
             .field("prev_state_commitment", self.prev_state_commitment)
@@ -53,7 +49,7 @@ impl Committable for SDemoState {
     }
 }
 
-impl Default for SDemoState {
+impl Default for DemoState {
     fn default() -> Self {
         Self {
             block_height: 0,
@@ -63,14 +59,16 @@ impl Default for SDemoState {
     }
 }
 
-impl State for SDemoState {
+impl State for DemoState {
     type Error = BlockPayloadError;
 
-    type BlockType = VIDBlockPayload;
+    type BlockHeader = VIDBlockHeader;
+
+    type BlockPayload = VIDBlockPayload;
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block: &Self::BlockType, view_number: &Self::Time) -> bool {
+    fn validate_block(&self, _block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
         if view_number == &ViewNumber::genesis() {
             &self.view_number == view_number
         } else {
@@ -78,16 +76,22 @@ impl State for SDemoState {
         }
     }
 
+    fn initialize() -> Self {
+        let mut state = Self::default();
+        state.block_height += 1;
+        state
+    }
+
     fn append(
         &self,
-        block: &Self::BlockType,
+        block_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        if !self.validate_block(block, view_number) {
+        if !self.validate_block(block_header, view_number) {
             return Err(BlockPayloadError::InvalidBlock);
         }
 
-        Ok(SDemoState {
+        Ok(DemoState {
             block_height: self.block_height + 1,
             view_number: *view_number,
             prev_state_commitment: self.commit(),
@@ -97,12 +101,12 @@ impl State for SDemoState {
     fn on_commit(&self) {}
 }
 
-impl TestableState for SDemoState {
+impl TestableState for DemoState {
     fn create_random_transaction(
         _state: Option<&Self>,
         _rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as BlockPayload>::Transaction {
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
         VIDTransaction(vec![0; RANDOM_TX_BASE_SIZE + (padding as usize)])
@@ -126,82 +130,49 @@ pub struct DemoTypes;
 
 impl NodeType for DemoTypes {
     type Time = ViewNumber;
-    type BlockType = VIDBlockPayload;
+    type BlockHeader = VIDBlockHeader;
+    type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
     type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = SDemoState;
+    type StateType = DemoState;
 }
 
 /// The node implementation for the sequencing demo
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""))]
-pub struct SDemoNode<MEMBERSHIP>(PhantomData<MEMBERSHIP>)
+pub struct DemoNode<MEMBERSHIP>(PhantomData<MEMBERSHIP>)
 where
     MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug;
 
-impl<MEMBERSHIP> SDemoNode<MEMBERSHIP>
+impl<MEMBERSHIP> DemoNode<MEMBERSHIP>
 where
     MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
-    /// Create a new `SDemoNode`
+    /// Create a new `DemoNode`
     #[must_use]
     pub fn new() -> Self {
-        SDemoNode(PhantomData)
+        DemoNode(PhantomData)
     }
 }
 
-impl<MEMBERSHIP> Debug for SDemoNode<MEMBERSHIP>
+impl<MEMBERSHIP> Debug for DemoNode<MEMBERSHIP>
 where
     MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SDemoNode")
+        f.debug_struct("DemoNode")
             .field("_phantom", &"phantom")
             .finish()
     }
 }
 
-impl<MEMBERSHIP> Default for SDemoNode<MEMBERSHIP>
+impl<MEMBERSHIP> Default for DemoNode<MEMBERSHIP>
 where
     MEMBERSHIP: Membership<DemoTypes> + std::fmt::Debug,
 {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Provides a random [`QuorumCertificate`]
-pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>(
-    rng: &mut dyn rand::RngCore,
-) -> QuorumCertificate<TYPES, Commitment<LEAF>> {
-    QuorumCertificate {
-        // block_commitment: random_commitment(rng),
-        leaf_commitment: random_commitment(rng),
-        view_number: TYPES::Time::new(rng.gen()),
-        signatures: AssembledSignature::Genesis(),
-        is_genesis: rng.gen(),
-    }
-}
-
-/// Provides a random [`SequencingLeaf`]
-pub fn random_sequencing_leaf<TYPES: NodeType>(
-    deltas: Either<TYPES::BlockType, Commitment<TYPES::BlockType>>,
-    rng: &mut dyn rand::RngCore,
-) -> SequencingLeaf<TYPES> {
-    let justify_qc = random_quorum_certificate(rng);
-    // let state = TYPES::StateType::default()
-    //     .append(&deltas, &TYPES::Time::new(42))
-    //     .unwrap_or_default();
-    SequencingLeaf {
-        view_number: justify_qc.view_number,
-        height: rng.next_u64(),
-        justify_qc,
-        parent_commitment: random_commitment(rng),
-        deltas,
-        rejected: Vec::new(),
-        timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-        proposer_id: genesis_proposer_id(),
     }
 }

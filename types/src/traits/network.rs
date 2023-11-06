@@ -140,12 +140,18 @@ pub enum NetworkError {
 pub enum ConsensusIntentEvent<K: SignatureKey> {
     /// Poll for votes for a particular view
     PollForVotes(u64),
+    /// Poll for VID votes for a particular view
+    PollForVIDVotes(u64),
     /// Poll for a proposal for a particular view
     PollForProposal(u64),
+    /// Poll for VID disperse data for a particular view
+    PollForVIDDisperse(u64),
     /// Poll for the most recent proposal the webserver has
     PollForCurrentProposal,
     /// Poll for a DAC for a particular view
     PollForDAC(u64),
+    /// Poll for a VID certificate for a certain view
+    PollForVIDCertificate(u64),
     /// Poll for view sync votes starting at a particular view
     PollForViewSyncVotes(u64),
     /// Poll for view sync proposals (certificates) for a particular view
@@ -156,14 +162,20 @@ pub enum ConsensusIntentEvent<K: SignatureKey> {
     PollFutureLeader(u64, K),
     /// Cancel polling for votes
     CancelPollForVotes(u64),
+    /// Cancel polling for VID votes for a particular view
+    CancelPollForVIDVotes(u64),
     /// Cancel polling for view sync votes.
     CancelPollForViewSyncVotes(u64),
     /// Cancel polling for proposals.
     CancelPollForProposal(u64),
     /// Cancal polling for DAC.
     CancelPollForDAC(u64),
+    /// Cancel polling for VID certificate
+    CancelPollForVIDCertificate(u64),
     /// Cancel polling for view sync certificate.
     CancelPollForViewSyncCertificate(u64),
+    /// Cancel polling for VID disperse data
+    CancelPollForVIDDisperse(u64),
     /// Cancel polling for transactions
     CancelPollForTransactions(u64),
 }
@@ -180,7 +192,13 @@ impl<K: SignatureKey> ConsensusIntentEvent<K> {
             | ConsensusIntentEvent::CancelPollForViewSyncVotes(view_number)
             | ConsensusIntentEvent::CancelPollForVotes(view_number)
             | ConsensusIntentEvent::CancelPollForProposal(view_number)
+            | ConsensusIntentEvent::PollForVIDCertificate(view_number)
+            | ConsensusIntentEvent::PollForVIDVotes(view_number)
+            | ConsensusIntentEvent::PollForVIDDisperse(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDDisperse(view_number)
             | ConsensusIntentEvent::CancelPollForDAC(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDCertificate(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDVotes(view_number)
             | ConsensusIntentEvent::CancelPollForViewSyncCertificate(view_number)
             | ConsensusIntentEvent::PollForViewSyncCertificate(view_number)
             | ConsensusIntentEvent::PollForTransactions(view_number)

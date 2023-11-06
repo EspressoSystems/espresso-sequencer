@@ -44,6 +44,11 @@ pub type Networks<TYPES, I> = (
         <I as NodeImplementation<TYPES>>::Leaf,
         Message<TYPES, I>,
     >>::ViewSyncExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+    <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+        TYPES,
+        <I as NodeImplementation<TYPES>>::Leaf,
+        Message<TYPES, I>,
+    >>::VIDExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
 );
 
 /// Wrapper for a function that takes a `node_id` and returns an instance of `T`.

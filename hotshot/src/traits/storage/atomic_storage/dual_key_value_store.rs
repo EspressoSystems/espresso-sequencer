@@ -184,11 +184,11 @@ impl<STATE: StateContents> DualKeyValue for QuorumCertificate<STATE> {
     type Key1 = Commitment<STATE::BlockPayload>;
     type Key2 = ViewNumber;
 
-    const KEY_1_NAME: &'static str = "block_commitment";
+    const KEY_1_NAME: &'static str = "payload_commitment";
     const KEY_2_NAME: &'static str = "view_number";
 
     fn key_1(&self) -> Self::Key1 {
-        self.block_commitment
+        self.payload_commitment
     }
     fn key_2(&self) -> Self::Key2 {
         self.view_number
@@ -203,7 +203,7 @@ where
     type Key2 = Commitment<STATE::BlockPayload>;
 
     const KEY_1_NAME: &'static str = "leaf_commitment";
-    const KEY_2_NAME: &'static str = "block_commitment";
+    const KEY_2_NAME: &'static str = "payload_commitment";
 
     fn key_1(&self) -> Self::Key1 {
         self.commit()

@@ -1,7 +1,7 @@
 //! Utility functions, type aliases, helper structs and enum definitions.
 
 use crate::{
-    data::{LeafBlock, LeafType},
+    data::{LeafBlockPayload, LeafType},
     traits::node_implementation::NodeType,
 };
 use commit::Commitment;
@@ -17,7 +17,7 @@ pub enum ViewInner<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// leaders repeatedly request availability for blocks that they never propose.
     DA {
         /// Available block.
-        block: Commitment<LeafBlock<LEAF>>,
+        block: Commitment<LeafBlockPayload<LEAF>>,
     },
     /// Undecided view
     Leaf {
@@ -39,9 +39,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ViewInner<TYPES, LEAF> {
         }
     }
 
-    /// return the underlying block hash if it exists
+    /// return the underlying block paylod commitment if it exists
     #[must_use]
-    pub fn get_block_commitment(&self) -> Option<Commitment<LeafBlock<LEAF>>> {
+    pub fn get_payload_commitment(&self) -> Option<Commitment<LeafBlockPayload<LEAF>>> {
         if let Self::DA { block } = self {
             Some(*block)
         } else {

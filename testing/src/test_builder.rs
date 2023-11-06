@@ -264,11 +264,19 @@ impl TestMetadata {
         let overall_safety_task_generator = overall_safety_properties.build();
         let spinning_task_generator = spinning_properties.build();
         TestLauncher {
-            resource_generator: ResourceGenerators {
-                channel_generator: <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<_, _, _>>::gen_comm_channels(total_nodes, num_bootstrap_nodes, da_committee_size, byzantine_metadata),
-                storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
-                config,
-            },
+            resource_generator:
+                ResourceGenerators {
+                    channel_generator:
+                        <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<
+                            _,
+                            _,
+                            _,
+                        >>::gen_comm_channels(
+                            total_nodes, num_bootstrap_nodes, da_committee_size, byzantine_metadata
+                        ),
+                    storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
+                    config,
+                },
             metadata: self,
             txn_task_generator,
             overall_safety_task_generator,

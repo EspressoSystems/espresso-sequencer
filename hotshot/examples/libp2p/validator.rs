@@ -2,6 +2,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot::demo::DemoTypes;
 use tracing::{info, instrument};
+use types::VIDNetwork;
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};
 
@@ -11,8 +12,6 @@ pub mod types;
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
-#[path = "../infra/modDA.rs"]
-pub mod infra_da;
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -28,12 +27,13 @@ async fn main() {
         "connecting to orchestrator at {:?}:{:?}",
         args.host, args.port
     );
-    infra_da::main_entry_point::<
+    infra::main_entry_point::<
         DemoTypes,
         ThisMembership,
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
+        VIDNetwork,
         NodeImpl,
         ThisRun,
     >(args)

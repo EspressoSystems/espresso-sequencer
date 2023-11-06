@@ -38,27 +38,27 @@ pub fn post_vote_route(view_number: u64) -> String {
 }
 
 pub fn get_vid_disperse_route(view_number: u64) -> String {
-    format!("api/vid/disperse/{view_number}")
+    format!("api/vid_disperse/{view_number}")
 }
 
 pub fn post_vid_disperse_route(view_number: u64) -> String {
-    format!("api/vid/disperse/{view_number}")
+    format!("api/vid_disperse/{view_number}")
 }
 
 pub fn get_vid_vote_route(view_number: u64, index: u64) -> String {
-    format!("api/vid/votes/{view_number}/{index}")
+    format!("api/vid_votes/{view_number}/{index}")
 }
 
 pub fn post_vid_vote_route(view_number: u64) -> String {
-    format!("api/vid/votes/{view_number}")
+    format!("api/vid_votes/{view_number}")
 }
 
-pub fn get_vid_cert_route(view_number: u64) -> String {
-    format!("api/vid/cert/{view_number}")
+pub fn get_vid_certificate_route(view_number: u64) -> String {
+    format!("api/vid_certificate/{view_number}")
 }
 
-pub fn post_vid_cert_route(view_number: u64) -> String {
-    format!("api/vid/cert/{view_number}")
+pub fn post_vid_certificate_route(view_number: u64) -> String {
+    format!("api/vid_certificate/{view_number}")
 }
 
 pub fn get_transactions_route(index: u64) -> String {

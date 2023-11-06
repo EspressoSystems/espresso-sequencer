@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-    node_types::{SequencingLibp2pImpl, SequencingTestTypes},
+    node_types::{Libp2pImpl, TestTypes},
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::TestMetadata,
 };
@@ -40,7 +40,7 @@ async fn libp2p_network_sync() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>()
         .launch()
         .run_test()
         .await
@@ -55,7 +55,7 @@ async fn libp2p_network_sync() {
 async fn test_memory_network_sync() {
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -76,7 +76,7 @@ async fn test_memory_network_sync() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -111,7 +111,7 @@ async fn libp2p_network_async() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>()
         .launch()
         .run_test()
         .await
@@ -126,7 +126,7 @@ async fn libp2p_network_async() {
 async fn test_memory_network_async() {
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -149,7 +149,7 @@ async fn test_memory_network_async() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -164,7 +164,7 @@ async fn test_memory_network_async() {
 async fn test_memory_network_partially_sync() {
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -195,7 +195,7 @@ async fn test_memory_network_partially_sync() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -238,7 +238,7 @@ async fn libp2p_network_partially_sync() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>()
         .launch()
         .run_test()
         .await
@@ -253,7 +253,7 @@ async fn libp2p_network_partially_sync() {
 async fn test_memory_network_chaos() {
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
     use std::time::Duration;
@@ -278,7 +278,7 @@ async fn test_memory_network_chaos() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -315,7 +315,7 @@ async fn libp2p_network_chaos() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingLibp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>()
         .launch()
         .run_test()
         .await

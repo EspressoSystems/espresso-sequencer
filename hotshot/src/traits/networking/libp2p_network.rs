@@ -115,6 +115,8 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     latest_seen_view: Arc<AtomicU64>,
     /// reliability_config
     reliability_config: Option<Box<dyn NetworkReliability>>,
+    /// if we're a member of the DA committee or not
+    is_da: bool,
 }
 
 /// Networking implementation that uses libp2p
@@ -226,22 +228,19 @@ where
                 let bootstrap_addrs_ref = bootstrap_addrs.clone();
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
-                // let reliability_config_dup = match &reliability_config {
-                //     Some(ref config) => Some(config),
-                //     None => todo!(),
-                // };
-                let relaibility_config_dup = reliability_config.clone();
+                let reliability_config_dup = reliability_config.clone();
                 async_block_on(async move {
                     Libp2pNetwork::new(
                         NetworkingMetricsValue::new(),
                         config,
-                        pubkey,
+                        pubkey.clone(),
                         bootstrap_addrs_ref,
                         num_bootstrap,
                         node_id as usize,
                         keys,
-                        da,
-                        relaibility_config_dup,
+                        reliability_config_dup,
+                        da.clone(),
+                        da.contains(&pubkey),
                     )
                     .await
                     .unwrap()
@@ -289,8 +288,9 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         id: usize,
         // HACK
         committee_pks: BTreeSet<K>,
-        da_pks: BTreeSet<K>,
         reliability_config: Option<Box<dyn NetworkReliability>>,
+        da_pks: BTreeSet<K>,
+        is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
         let network_handle = Arc::new(
@@ -347,6 +347,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // network already. In the worst case, we send a few lookups we don't need.
                 latest_seen_view: Arc::new(AtomicU64::new(0)),
                 reliability_config,
+                is_da,
             }),
         };
 
@@ -394,6 +395,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         let node_type = self.inner.handle.config().node_type;
         let metrics_connected_peers = self.inner.clone();
+        let is_da = self.inner.is_da;
         async_spawn({
             let is_ready = self.inner.is_ready.clone();
             async move {
@@ -433,7 +435,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 }
 
                 handle.subscribe(QC_TOPIC.to_string()).await.unwrap();
-                handle.subscribe("DA".to_string()).await.unwrap();
+
+                // only subscribe to DA events if we are DA
+                if is_da {
+                    handle.subscribe("DA".to_string()).await.unwrap();
+                }
+
                 // TODO figure out some way of passing in ALL keypairs. That way we can add the
                 // global topic to the topic map
                 // NOTE this wont' work without this change

@@ -9,7 +9,7 @@ async fn test_catchup() {
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
@@ -18,7 +18,7 @@ async fn test_catchup() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
     let mut metadata = TestMetadata::default();
@@ -53,7 +53,7 @@ async fn test_catchup() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -70,7 +70,7 @@ async fn test_catchup_web() {
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingTestTypes, SequencingWebImpl},
+        node_types::{TestTypes, WebImpl},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
@@ -79,7 +79,7 @@ async fn test_catchup_web() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
     let mut metadata = TestMetadata::default();
@@ -108,7 +108,7 @@ async fn test_catchup_web() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingWebImpl>()
+        .gen_launcher::<TestTypes, WebImpl>()
         .launch()
         .run_test()
         .await;
@@ -127,7 +127,7 @@ async fn test_catchup_one_node() {
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
@@ -136,7 +136,7 @@ async fn test_catchup_one_node() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
     let mut metadata = TestMetadata::default();
@@ -167,7 +167,7 @@ async fn test_catchup_one_node() {
     metadata.overall_safety_properties.num_failed_views = 5;
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;
@@ -187,7 +187,7 @@ async fn test_catchup_in_view_sync() {
 
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         overall_safety_task::OverallSafetyPropertiesDescription,
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestMetadata, TimingData},
@@ -196,7 +196,7 @@ async fn test_catchup_in_view_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
-        next_view_timeout: 1000,
+        next_view_timeout: 2000,
         ..Default::default()
     };
     let mut metadata = TestMetadata::default();
@@ -231,7 +231,7 @@ async fn test_catchup_in_view_sync() {
     };
 
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>()
         .launch()
         .run_test()
         .await;

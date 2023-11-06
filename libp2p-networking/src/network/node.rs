@@ -43,12 +43,12 @@ use libp2p::{
         Info as IdentifyInfo,
     },
     identity::Keypair,
-    kad::{store::MemoryStore, Kademlia, KademliaConfig},
+    kad::{store::MemoryStore, Behaviour, Config},
     request_response::{
         Behaviour as RequestResponse, Config as RequestResponseConfig, ProtocolSupport,
     },
-    swarm::{SwarmBuilder, SwarmEvent},
-    Multiaddr, Swarm,
+    swarm::SwarmEvent,
+    Multiaddr, Swarm, SwarmBuilder,
 };
 use libp2p_identity::PeerId;
 use rand::{prelude::SliceRandom, thread_rng};
@@ -236,7 +236,7 @@ impl NetworkNode {
             let identify = IdentifyBehaviour::new(identify_cfg);
 
             // - Build DHT needed for peer discovery
-            let mut kconfig = KademliaConfig::default();
+            let mut kconfig = Config::default();
             // 8 hours by default
             let record_republication_interval = config
                 .republication_interval
@@ -252,7 +252,7 @@ impl NetworkNode {
                 kconfig.set_replication_factor(factor);
             }
 
-            let kadem = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kconfig);
+            let kadem = Behaviour::with_config(peer_id, MemoryStore::new(peer_id), kconfig);
 
             let rrconfig = RequestResponseConfig::default();
 
@@ -275,12 +275,19 @@ impl NetworkNode {
                 identify,
                 DMBehaviour::new(request_response),
             );
-            let executor = Box::new(|fut| {
-                async_spawn(fut);
-            });
 
-            SwarmBuilder::with_executor(transport, network, peer_id, executor)
-                .dial_concurrency_factor(std::num::NonZeroU8::new(1).unwrap())
+            // build swarm
+            let swarm = SwarmBuilder::with_existing_identity(identity.clone());
+            #[cfg(async_executor_impl = "async-std")]
+            let swarm = swarm.with_async_std();
+            #[cfg(async_executor_impl = "tokio")]
+            let swarm = swarm.with_tokio();
+
+            swarm
+                .with_other_transport(|_| transport)
+                .unwrap()
+                .with_behaviour(|_| network)
+                .unwrap()
                 .build()
         };
         for (peer, addr) in &config.to_connect_addrs {

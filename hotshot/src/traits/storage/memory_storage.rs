@@ -117,18 +117,15 @@ mod test {
     use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
 
     use super::*;
+    use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
-        certificate::{AssembledSignature, QuorumCertificate},
+        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
-        traits::{
-            block_contents::dummy::{DummyBlock, DummyState},
-            node_implementation::NodeType,
-            state::ConsensusTime,
-            BlockPayload,
-        },
+        simple_certificate::QuorumCertificate2,
+        traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
-    use std::{fmt::Debug, hash::Hash};
+    use std::{fmt::Debug, hash::Hash, marker::PhantomData};
     use tracing::instrument;
 
     #[derive(
@@ -148,10 +145,11 @@ mod test {
 
     impl NodeType for DummyTypes {
         type Time = ViewNumber;
-        type BlockType = DummyBlock;
+        type BlockHeader = VIDBlockHeader;
+        type BlockPayload = VIDBlockPayload;
         type SignatureKey = BLSPubKey;
         type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
-        type Transaction = <DummyBlock as BlockPayload>::Transaction;
+        type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
     }
@@ -161,20 +159,28 @@ mod test {
         rng: &mut dyn rand::RngCore,
         view_number: <DummyTypes as NodeType>::Time,
     ) -> StoredView<DummyTypes, ValidatingLeaf<DummyTypes>> {
-        // TODO is it okay to be using genesis here?
-        let _dummy_block_commit = fake_commitment::<DummyBlock>();
+        let payload = VIDBlockPayload::genesis();
+        let header = VIDBlockHeader {
+            block_number: 0,
+            payload_commitment: payload.commit(),
+        };
         let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
+        let data = hotshot_types::simple_vote::QuorumData {
+            leaf_commit: dummy_leaf_commit,
+        };
+        let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate {
-                // block_commitment: dummy_block_commit,
+            QuorumCertificate2 {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
-                leaf_commitment: dummy_leaf_commit,
-                signatures: AssembledSignature::Genesis(),
+                data,
+                vote_commitment: commit,
+                signatures: None,
                 view_number,
+                _pd: PhantomData,
             },
-            DummyBlock::random(rng),
+            header,
+            Some(payload),
             DummyState::random(rng),
-            rng.next_u64(),
             dummy_leaf_commit,
             Vec::new(),
             genesis_proposer_id(),

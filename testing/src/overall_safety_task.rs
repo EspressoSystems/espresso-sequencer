@@ -1,7 +1,7 @@
 use commit::Commitment;
 use either::Either;
 use hotshot_task::{event_stream::EventStream, Merge};
-use hotshot_task_impls::events::SequencingHotShotEvent;
+use hotshot_task_impls::events::HotShotEvent;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
@@ -20,10 +20,10 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::{
-    certificate::QuorumCertificate,
-    data::{DeltasType, LeafBlock, LeafType},
+    data::{LeafBlockPayload, LeafType},
     error::RoundTimedoutState,
     event::{Event, EventType},
+    simple_certificate::QuorumCertificate2,
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
@@ -95,7 +95,7 @@ pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// id -> (leaf, qc)
     // TODO GG: isn't it infeasible to store a Vec<LEAF>?
     #[allow(clippy::type_complexity)]
-    success_nodes: HashMap<u64, (Vec<LEAF>, QuorumCertificate<TYPES, Commitment<LEAF>>)>,
+    success_nodes: HashMap<u64, (Vec<LEAF>, QuorumCertificate2<TYPES, LEAF>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
@@ -109,7 +109,7 @@ pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub leaf_map: HashMap<LEAF, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<LeafBlock<LEAF>>, usize>,
+    pub block_map: HashMap<Commitment<LeafBlockPayload<LEAF>>, usize>,
 
     /// state -> # entries decided on that state
     pub state_map: HashMap<<LEAF as LeafType>::MaybeState, usize>,
@@ -189,7 +189,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<LEAF>, QuorumCertificate<TYPES, Commitment<LEAF>>),
+        result: (Vec<LEAF>, QuorumCertificate2<TYPES, LEAF>),
         maybe_block_size: Option<u64>,
     ) -> Option<LEAF> {
         self.success_nodes.insert(idx as u64, result.clone());
@@ -205,7 +205,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                 }
             }
 
-            let (state, block) = (leaf.get_state(), leaf.get_deltas());
+            let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
 
             match self.state_map.entry(state.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -215,7 +215,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                     v.insert(1);
                 }
             }
-            match self.block_map.entry(block.clone().block_commitment()) {
+            match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
@@ -291,7 +291,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
             // if neither, continue through
 
             let state_key = key.get_state();
-            let block_key = key.get_deltas().block_commitment();
+            let block_key = key.get_payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
                 && *self.state_map.get(&state_key).unwrap() == threshold
@@ -600,15 +600,12 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     ChannelStream<GlobalTestEvent>,
     (
         usize,
-        Either<
-            Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>,
-            SequencingHotShotEvent<TYPES, I>,
-        >,
+        Either<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>, HotShotEvent<TYPES, I>>,
     ),
     MergeN<
         Merge<
             UnboundedStream<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
-            UnboundedStream<SequencingHotShotEvent<TYPES, I>>,
+            UnboundedStream<HotShotEvent<TYPES, I>>,
         >,
     >,
     OverallSafetyTask<TYPES, I>,
