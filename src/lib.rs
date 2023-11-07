@@ -155,12 +155,15 @@
 //! ```
 //! # use async_std::sync::RwLock;
 //! # use futures::FutureExt;
-//! # use hotshot_query_service::availability::{self, AvailabilityDataSource, TransactionIndex};
+//! # use hotshot_query_service::availability::{
+//! #   self, AvailabilityDataSource, QueryBlockSnafu, ResourceId, TransactionIndex,
+//! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
 //! # use hotshot_query_service::Error;
+//! # use snafu::ResultExt;
 //! # use std::collections::HashMap;
 //! # use std::path::Path;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
@@ -191,7 +194,8 @@
 //!                 message: format!("no such UTXO {}", utxo_index),
 //!                 status: StatusCode::NotFound,
 //!             })?;
-//!         let block = state.get_nth_block_iter(block_index).next().unwrap().unwrap();
+//!         let id = ResourceId::Number(block_index);
+//!         let block = state.get_block(id).context(QueryBlockSnafu { resource: id.to_string() })?;
 //!         let txn = block.transaction(&txn_index).unwrap();
 //!         let utxo = // Application-specific logic to extract a UTXO from a transaction.
 //! #           todo!();
@@ -245,13 +249,15 @@
 //! ```
 //! # use hotshot_types::traits::signature_key::EncodedPublicKey;
 //! # use hotshot_query_service::availability::{
-//! #   AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
+//! #   AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+//! #   TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
+//! # use std::ops::RangeBounds;
 //! # type AppQueryData = ();
 //! struct AppState {
 //!     hotshot_qs: QueryData<AppTypes, AppNodeImpl, AppQueryData>,
@@ -260,16 +266,18 @@
 //!
 //! // Implement data source trait for availability API.
 //! impl AvailabilityDataSource<AppTypes, AppNodeImpl> for AppState {
-//!     type Error =
+//!     type LeafRange<'a, R> =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::Error;
-//!
-//!     type LeafIterType<'a> =
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafRange<'a, R>
+//!     where
+//!         Self: 'a,
+//!         R: RangeBounds<usize>;
+//!     type BlockRange<'a, R> =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafIterType<'a>;
-//!     type BlockIterType<'a> =
-//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockIterType<'a>;
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockRange<'a, R>
+//!     where
+//!         Self: 'a,
+//!         R: RangeBounds<usize>;
 //!
 //!     type LeafStreamType =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
@@ -278,18 +286,26 @@
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
 //!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockStreamType;
 //!
-//!     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-//!         self.hotshot_qs.get_nth_leaf_iter(n)
+//!     fn get_leaf(
+//!         &self,
+//!         id: LeafId<AppTypes, AppNodeImpl>,
+//!     ) -> QueryResult<LeafQueryData<AppTypes, AppNodeImpl>> {
+//!         self.hotshot_qs.get_leaf(id)
 //!     }
 //!
 //!     // etc
-//! #   fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> { todo!() }
-//! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes, AppNodeImpl>) -> Option<u64> { todo!() }
-//! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
-//! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, TransactionIndex<AppTypes>)> { todo!() }
-//! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
-//! #   fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> { todo!() }
-//! #   fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> { todo!() }
+//! #   fn get_block(&self, id: BlockId<AppTypes>) -> QueryResult<BlockQueryData<AppTypes>> { todo!() }
+//! #   fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> QueryResult<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
+//! #   fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+//! #   where
+//! #       R: RangeBounds<usize> { todo!() }
+//! #   fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+//! #   where
+//! #       R: RangeBounds<usize> { todo!() }
+//! #   fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes, AppNodeImpl>>> { todo!() }
+//! #   fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> { todo!() }
+//! #   fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStreamType> { todo!() }
+//! #   fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStreamType> { todo!() }
 //! }
 //!
 //! // Implement data source trait for status API.
@@ -453,7 +469,8 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
+            AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+            TransactionHash, TransactionIndex,
         },
         status::{MempoolQueryData, StatusDataSource},
         testing::mocks::{MockNodeImpl, MockTypes},
@@ -465,6 +482,7 @@ mod test {
     use hotshot_signature_key::bn254::BN254Pub;
     use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
+    use std::ops::RangeBounds;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
@@ -478,22 +496,6 @@ mod test {
     }
 
     impl AvailabilityDataSource<MockTypes, MockNodeImpl> for CompositeState {
-        type Error = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
-            MockTypes,
-            MockNodeImpl,
-        >>::Error;
-
-        type LeafIterType<'a> =
-            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
-                MockTypes,
-                MockNodeImpl,
-            >>::LeafIterType<'a>;
-        type BlockIterType<'a> =
-            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
-                MockTypes,
-                MockNodeImpl,
-            >>::BlockIterType<'a>;
-
         type LeafStreamType = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
             MockTypes,
             MockNodeImpl,
@@ -503,32 +505,64 @@ mod test {
             MockNodeImpl,
         >>::BlockStreamType;
 
-        fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-            self.hotshot_qs.get_nth_leaf_iter(n)
+        type LeafRange<'a, R> =
+            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+                MockTypes,
+                MockNodeImpl,
+            >>::LeafRange<'a, R>
+        where
+            Self: 'a,
+            R: RangeBounds<usize>;
+        type BlockRange<'a, R> =
+            <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+                MockTypes,
+                MockNodeImpl,
+            >>::BlockRange<'a, R>
+        where
+            Self: 'a,
+            R: RangeBounds<usize>;
+
+        fn get_leaf(
+            &self,
+            id: LeafId<MockTypes, MockNodeImpl>,
+        ) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>> {
+            self.hotshot_qs.get_leaf(id)
         }
-        fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-            self.hotshot_qs.get_nth_block_iter(n)
+        fn get_block(&self, id: BlockId<MockTypes>) -> QueryResult<BlockQueryData<MockTypes>> {
+            self.hotshot_qs.get_block(id)
         }
-        fn get_leaf_index_by_hash(&self, hash: LeafHash<MockTypes, MockNodeImpl>) -> Option<u64> {
-            self.hotshot_qs.get_leaf_index_by_hash(hash)
+        fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+        where
+            R: RangeBounds<usize>,
+        {
+            self.hotshot_qs.get_leaf_range(range)
         }
-        fn get_block_index_by_hash(&self, hash: BlockHash<MockTypes>) -> Option<u64> {
-            self.hotshot_qs.get_block_index_by_hash(hash)
+        fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+        where
+            R: RangeBounds<usize>,
+        {
+            self.hotshot_qs.get_block_range(range)
         }
-        fn get_txn_index_by_hash(
+        fn get_block_with_transaction(
             &self,
             hash: TransactionHash<MockTypes>,
-        ) -> Option<(u64, TransactionIndex<MockTypes>)> {
-            self.hotshot_qs.get_txn_index_by_hash(hash)
+        ) -> QueryResult<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
+            self.hotshot_qs.get_block_with_transaction(hash)
         }
-        fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
-            self.hotshot_qs.get_block_ids_by_proposer_id(id)
+        fn get_proposals(
+            &self,
+            proposer: &EncodedPublicKey,
+            limit: Option<usize>,
+        ) -> QueryResult<Vec<LeafQueryData<MockTypes, MockNodeImpl>>> {
+            self.hotshot_qs.get_proposals(proposer, limit)
         }
-
-        fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
+        fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+            self.hotshot_qs.count_proposals(proposer)
+        }
+        fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStreamType> {
             self.hotshot_qs.subscribe_leaves(height)
         }
-        fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
+        fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStreamType> {
             self.hotshot_qs.subscribe_blocks(height)
         }
     }

@@ -12,7 +12,10 @@
 
 use crate::{
     availability::{
-        data_source::{AvailabilityDataSource, UpdateAvailabilityData},
+        data_source::{
+            AvailabilityDataSource, BlockId, LeafId, MissingSnafu, NotFoundSnafu, QueryResult,
+            ResourceId, UpdateAvailabilityData,
+        },
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
             TransactionIndex,
@@ -34,10 +37,11 @@ use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
-use snafu::Snafu;
+use serde::{de::DeserializeOwned, Serialize};
+use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
 use std::hash::Hash;
-use std::iter::Skip;
+use std::ops::{Bound, RangeBounds};
 use std::path::Path;
 
 pub use crate::ledger_log::Iter;
@@ -260,59 +264,170 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Snafu)]
-#[snafu(display("unable to open stream"))]
-pub struct StreamError;
+pub struct RangeIter<'a, T: Serialize + DeserializeOwned> {
+    iter: Iter<'a, T>,
+    pos: usize,
+    end: Bound<usize>,
+}
+
+impl<'a, T: Serialize + DeserializeOwned + Clone> RangeIter<'a, T> {
+    fn new<R>(mut iter: Iter<'a, T>, range: R) -> Self
+    where
+        R: RangeBounds<usize>,
+    {
+        // Advance the underlying iterator to the start of the range.
+        let pos = match range.start_bound() {
+            Bound::Included(n) => {
+                if *n > 0 {
+                    iter.nth(*n - 1);
+                }
+                *n
+            }
+            Bound::Excluded(n) => {
+                iter.nth(*n);
+                *n + 1
+            }
+            Bound::Unbounded => 0,
+        };
+
+        Self {
+            iter,
+            pos,
+            end: range.end_bound().cloned(),
+        }
+    }
+}
+
+impl<'a, T: Serialize + DeserializeOwned + Clone> Iterator for RangeIter<'a, T> {
+    type Item = QueryResult<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Check if we have reached the end of the range.
+        let reached_end = match self.end {
+            Bound::Included(n) => self.pos > n,
+            Bound::Excluded(n) => self.pos >= n,
+            Bound::Unbounded => false,
+        };
+        if reached_end {
+            return None;
+        }
+        let opt = self.iter.next()?;
+        self.pos += 1;
+        Some(opt.context(MissingSnafu))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // Skip over n-1 objects and then take the next one if possible.
+        if n > 0 {
+            self.iter.nth(n - 1)?;
+            self.pos += n;
+        }
+        self.next()
+    }
+}
 
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
     for QueryData<Types, I, UserData>
 where
     Block<Types>: QueryableBlock,
 {
-    type Error = StreamError;
-
-    type LeafIterType<'a> = Skip<Iter<'a, LeafQueryData<Types, I>>> where UserData: 'a;
-    type BlockIterType<'a> = Skip<Iter<'a, BlockQueryData<Types>>> where UserData: 'a;
-
     type LeafStreamType = BoxStream<'static, LeafQueryData<Types, I>>;
     type BlockStreamType = BoxStream<'static, BlockQueryData<Types>>;
 
-    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-        self.leaf_storage.iter().skip(n)
+    type LeafRange<'a, R> = RangeIter<'a, LeafQueryData<Types, I>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize>;
+    type BlockRange<'a, R> = RangeIter<'a, BlockQueryData<Types>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize>;
+
+    fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>> {
+        let n = match id {
+            ResourceId::Number(n) => n,
+            ResourceId::Hash(h) => {
+                *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
+            }
+        };
+        self.leaf_storage
+            .iter()
+            .nth(n)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
     }
 
-    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-        self.block_storage.iter().skip(n)
+    fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        let n = match id {
+            ResourceId::Number(n) => n,
+            ResourceId::Hash(h) => {
+                *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize
+            }
+        };
+        self.block_storage
+            .iter()
+            .nth(n)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
     }
 
-    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types, I>) -> Option<u64> {
-        self.index_by_leaf_hash.get(&hash).cloned()
+    fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    where
+        R: RangeBounds<usize>,
+    {
+        Ok(RangeIter::new(self.leaf_storage.iter(), range))
     }
 
-    fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64> {
-        self.index_by_block_hash.get(&hash).cloned()
+    fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    where
+        R: RangeBounds<usize>,
+    {
+        Ok(RangeIter::new(self.block_storage.iter(), range))
     }
 
-    fn get_txn_index_by_hash(
+    fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Option<(u64, TransactionIndex<Types>)> {
-        self.index_by_txn_hash.get(&hash).cloned()
+    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+        let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
+        let block = self.get_block(ResourceId::Number(*height as usize))?;
+        Ok((block, ix.clone()))
     }
 
-    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
-        self.index_by_proposer_id
+    fn get_proposals(
+        &self,
+        id: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+        let all_ids = self
+            .index_by_proposer_id
             .get(id)
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let start_from = match limit {
+            Some(count) => all_ids.len().saturating_sub(count),
+            None => 0,
+        };
+        all_ids
+            .into_iter()
+            .skip(start_from)
+            .map(|height| self.get_leaf(ResourceId::Number(height as usize)))
+            .collect()
     }
 
-    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
-        self.leaf_storage.subscribe(height).ok_or(StreamError)
+    fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+        Ok(match self.index_by_proposer_id.get(id) {
+            Some(ids) => ids.len(),
+            None => 0,
+        })
     }
 
-    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
-        self.block_storage.subscribe(height).ok_or(StreamError)
+    fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStreamType> {
+        self.leaf_storage.subscribe(height).context(MissingSnafu)
+    }
+
+    fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStreamType> {
+        self.block_storage.subscribe(height).context(MissingSnafu)
     }
 }
 
@@ -439,7 +554,6 @@ mod test {
     };
     use async_std::sync::RwLock;
     use bincode::Options;
-    use commit::Committable;
     use futures::StreamExt;
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::HashSet;
@@ -452,10 +566,11 @@ mod test {
         BlockQueryData<MockTypes>,
     )> {
         let qd = qd.read().await;
-        qd.get_nth_leaf_iter(0)
-            .zip(qd.get_nth_block_iter(0))
+        qd.get_leaf_range(..)
+            .unwrap()
+            .zip(qd.get_block_range(..).unwrap())
             .filter_map(|entry| match entry {
-                (Some(leaf), Some(block)) if !block.is_empty() => Some((leaf, block)),
+                (Ok(leaf), Ok(block)) if !block.is_empty() => Some((leaf, block)),
                 _ => None,
             })
             .collect()
@@ -468,18 +583,20 @@ mod test {
         // we've seen so we can detect duplicates.
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
-        for (i, leaf) in qd.get_nth_leaf_iter(0).enumerate() {
-            let Some(leaf) = leaf else {
-                continue;
-            };
+        for (i, leaf) in qd.get_leaf_range(..).unwrap().enumerate() {
+            let leaf = leaf.unwrap();
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
-            assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
-            assert!(qd
-                .get_block_ids_by_proposer_id(&leaf.proposer())
-                .contains(&(i as u64)));
 
-            let Some(Some(block)) = qd.get_nth_block_iter(i).next() else {
+            // Check indices.
+            assert_eq!(leaf, qd.get_leaf(ResourceId::Number(i)).unwrap());
+            assert_eq!(leaf, qd.get_leaf(ResourceId::Hash(leaf.hash())).unwrap());
+            assert!(qd
+                .get_proposals(&leaf.proposer(), None)
+                .unwrap()
+                .contains(&leaf));
+
+            let Ok(block) = qd.get_block(ResourceId::Number(i)) else {
                 continue;
             };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -490,10 +607,17 @@ mod test {
                 bincode_opts().serialized_size(block.block()).unwrap()
             );
 
+            // Check indices.
+            assert_eq!(block, qd.get_block(ResourceId::Number(i)).unwrap());
             // We should be able to look up the block by hash unless it is a duplicate. For
             // duplicate blocks, this function returns the index of the first duplicate.
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
-            assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), *ix);
+            assert_eq!(
+                qd.get_block(ResourceId::Hash(block.hash()))
+                    .unwrap()
+                    .height(),
+                *ix
+            );
 
             for (j, txn) in block.block().iter().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -502,26 +626,21 @@ mod test {
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                assert_eq!(qd.get_txn_index_by_hash(txn.commit()).unwrap(), *ix);
+                let (block, pos) = qd.get_block_with_transaction(txn.commit()).unwrap();
+                assert_eq!((block.height(), pos), *ix);
             }
         }
 
         // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
         // ID.
         for proposer in qd
-            .get_nth_leaf_iter(0)
-            .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer()))
+            .get_leaf_range(..)
+            .unwrap()
+            .filter_map(|res| res.ok().map(|leaf| leaf.proposer()))
             .collect::<HashSet<_>>()
         {
-            for leaf_id in qd.get_block_ids_by_proposer_id(&proposer) {
-                assert_eq!(
-                    proposer,
-                    qd.get_nth_leaf_iter(leaf_id as usize)
-                        .next()
-                        .unwrap()
-                        .unwrap()
-                        .proposer()
-                );
+            for leaf in qd.get_proposals(&proposer, None).unwrap() {
+                assert_eq!(proposer, leaf.proposer());
             }
         }
     }
@@ -554,12 +673,7 @@ mod test {
             };
 
             assert_eq!(
-                qd.read()
-                    .await
-                    .get_nth_block_iter(i)
-                    .next()
-                    .unwrap()
-                    .unwrap(),
+                qd.read().await.get_block(ResourceId::Number(i)).unwrap(),
                 block
             );
             validate(&qd).await;

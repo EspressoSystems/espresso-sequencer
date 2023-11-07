@@ -20,37 +20,88 @@ use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
+use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 use std::error::Error;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display, Formatter};
+use std::ops::RangeBounds;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ResourceId<H> {
+    Number(usize),
+    Hash(H),
+}
+
+impl<H: Display> Display for ResourceId<H> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Hash(h) => write!(f, "{h}"),
+        }
+    }
+}
+
+pub type BlockId<Types> = ResourceId<BlockHash<Types>>;
+pub type LeafId<Types, I> = ResourceId<LeafHash<Types, I>>;
+
+#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
+#[snafu(visibility(pub))]
+pub enum QueryError {
+    /// The requested resource does not exist or is not known to this query service.
+    NotFound,
+    /// The requested resource exists but is not currently available.
+    ///
+    /// In most cases a missing resource can be recovered from DA.
+    Missing,
+    /// There was an error while trying to fetch the requested resource.
+    #[snafu(display("Failed to fetch requested resource: {message}"))]
+    Error { message: String },
+}
+
+pub type QueryResult<T> = Result<T, QueryError>;
 
 pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type Error: Error + Debug;
-
-    type LeafIterType<'a>: 'a + Iterator<Item = Option<LeafQueryData<Types, I>>>
-    where
-        Self: 'a;
-    type BlockIterType<'a>: 'a + Iterator<Item = Option<BlockQueryData<Types>>>
-    where
-        Self: 'a;
-
     type LeafStreamType: Stream<Item = LeafQueryData<Types, I>> + Send;
     type BlockStreamType: Stream<Item = BlockQueryData<Types>> + Send;
 
-    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_>;
-    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_>;
-    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types, I>) -> Option<u64>;
-    fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64>;
-    fn get_txn_index_by_hash(
+    type LeafRange<'a, R>: 'a + Iterator<Item = QueryResult<LeafQueryData<Types, I>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize>;
+    type BlockRange<'a, R>: 'a + Iterator<Item = QueryResult<BlockQueryData<Types>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize>;
+
+    fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>>;
+    fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
+
+    fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    where
+        R: RangeBounds<usize>;
+    fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    where
+        R: RangeBounds<usize>;
+
+    /// Returns the block containing a transaction with the given `hash` and the transaction's
+    /// position in the block.
+    fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Option<(u64, TransactionIndex<Types>)>;
-    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64>;
+    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
 
-    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error>;
-    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error>;
+    fn get_proposals(
+        &self,
+        proposer: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types, I>>>;
+    fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
+
+    fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStreamType>;
+    fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStreamType>;
 }
 
 pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
