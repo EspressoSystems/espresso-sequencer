@@ -134,7 +134,6 @@ async fn build_quorum_proposal_and_signature(
         justify_qc: QuorumCertificate2::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
-        dac: None,
     };
 
     (proposal, signature)

@@ -3,9 +3,12 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
+use crate::simple_certificate::DACertificate2;
+use crate::simple_vote::DAVote2;
+use crate::traits::node_implementation::CommitteeMembership;
 use crate::vote2::HasViewNumber;
 use crate::{
-    certificate::{DACertificate, VIDCertificate},
+    certificate::VIDCertificate,
     data::{DAProposal, ProposalType, VidDisperse},
     simple_vote::QuorumVote,
     traits::{
@@ -16,7 +19,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{DAVote, TimeoutVote, VIDVote, ViewSyncVote, VoteType},
+    vote::{TimeoutVote, VIDVote, ViewSyncVote, VoteType},
 };
 
 use derivative::Derivative;
@@ -214,13 +217,16 @@ where
 /// A processed consensus message for the DA committee in sequencing consensus.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(bound(deserialize = ""))]
-pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
+pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Proposal for the DA committee.
     DAProposal(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Vote from the DA committee.
-    DAVote(DAVote<TYPES>, TYPES::SignatureKey),
+    DAVote(
+        DAVote2<TYPES, CommitteeMembership<TYPES, I>>,
+        TYPES::SignatureKey,
+    ),
     /// Certificate for the DA.
-    DACertificate(DACertificate<TYPES>, TYPES::SignatureKey),
+    DACertificate(DACertificate2<TYPES>, TYPES::SignatureKey),
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
@@ -229,10 +235,10 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
 }
 
-impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
-    for CommitteeConsensusMessage<TYPES>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
+    From<ProcessedCommitteeConsensusMessage<TYPES, I>> for CommitteeConsensusMessage<TYPES, I>
 {
-    fn from(value: ProcessedCommitteeConsensusMessage<TYPES>) -> Self {
+    fn from(value: ProcessedCommitteeConsensusMessage<TYPES, I>) -> Self {
         match value {
             ProcessedCommitteeConsensusMessage::DAProposal(p, _) => {
                 CommitteeConsensusMessage::DAProposal(p)
@@ -256,9 +262,9 @@ impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
     }
 }
 
-impl<TYPES: NodeType> ProcessedCommitteeConsensusMessage<TYPES> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ProcessedCommitteeConsensusMessage<TYPES, I> {
     /// Create a [`ProcessedCommitteeConsensusMessage`] from a [`CommitteeConsensusMessage`].
-    pub fn new(value: CommitteeConsensusMessage<TYPES>, sender: TYPES::SignatureKey) -> Self {
+    pub fn new(value: CommitteeConsensusMessage<TYPES, I>, sender: TYPES::SignatureKey) -> Self {
         match value {
             CommitteeConsensusMessage::DAProposal(p) => {
                 ProcessedCommitteeConsensusMessage::DAProposal(p, sender)
@@ -283,8 +289,10 @@ impl<TYPES: NodeType> ProcessedCommitteeConsensusMessage<TYPES> {
 }
 
 /// A processed consensus message for sequencing consensus.
-pub type ProcessedSequencingMessage<TYPES, I> =
-    Either<ProcessedGeneralConsensusMessage<TYPES, I>, ProcessedCommitteeConsensusMessage<TYPES>>;
+pub type ProcessedSequencingMessage<TYPES, I> = Either<
+    ProcessedGeneralConsensusMessage<TYPES, I>,
+    ProcessedCommitteeConsensusMessage<TYPES, I>,
+>;
 
 impl<
         TYPES: NodeType,
@@ -339,15 +347,15 @@ where
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to the sequencing consensus protocol for the DA committee.
-pub enum CommitteeConsensusMessage<TYPES: NodeType> {
+pub enum CommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Proposal for data availability committee
     DAProposal(Proposal<DAProposal<TYPES>>),
 
     /// vote for data availability committee
-    DAVote(DAVote<TYPES>),
+    DAVote(DAVote2<TYPES, CommitteeMembership<TYPES, I>>),
 
     /// Certificate data is available
-    DACertificate(DACertificate<TYPES>),
+    DACertificate(DACertificate2<TYPES>),
 
     /// Initiate VID dispersal.
     ///
@@ -394,7 +402,7 @@ pub trait SequencingMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>>:
 pub struct SequencingMessage<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(pub Either<GeneralConsensusMessage<TYPES, I>, CommitteeConsensusMessage<TYPES>>);
+>(pub Either<GeneralConsensusMessage<TYPES, I>, CommitteeConsensusMessage<TYPES, I>>);
 
 impl<
         TYPES: NodeType,
@@ -433,7 +441,9 @@ impl<
                         // this should match replica upon receipt
                         p.data.get_view_number()
                     }
-                    CommitteeConsensusMessage::DAVote(vote_message) => vote_message.get_view(),
+                    CommitteeConsensusMessage::DAVote(vote_message) => {
+                        vote_message.get_view_number()
+                    }
                     CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
                     CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
                     CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
@@ -475,7 +485,7 @@ impl<
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
     > SequencingMessageType<TYPES, I> for SequencingMessage<TYPES, I>
 {
-    type CommitteeConsensusMessage = CommitteeConsensusMessage<TYPES>;
+    type CommitteeConsensusMessage = CommitteeConsensusMessage<TYPES, I>;
 }
 
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]

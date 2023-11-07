@@ -8,6 +8,7 @@ use hotshot_testing::{
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidSchemeTrait, ViewNumber},
+    simple_vote::{DAData, DAVote2},
     traits::{
         consensus_api::ConsensusSharedApi, election::ConsensusExchange,
         node_implementation::ExchangesType, state::ConsensusTime,
@@ -79,12 +80,14 @@ async fn test_da_task() {
     );
     output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
-    let vote_token = committee_exchange
-        .make_vote_token(ViewNumber::new(2))
-        .unwrap()
-        .unwrap();
-    let da_vote =
-        committee_exchange.create_da_message(block.commit(), ViewNumber::new(2), vote_token);
+    let da_vote = DAVote2::create_signed_vote(
+        DAData {
+            payload_commit: block.commit(),
+        },
+        ViewNumber::new(2),
+        committee_exchange.public_key(),
+        committee_exchange.private_key(),
+    );
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
     output.insert(HotShotEvent::DAProposalRecv(message, pub_key), 1);

@@ -492,23 +492,6 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
         &self,
         payload_commitment: &Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature;
-
-    /// Sign a vote on DA proposal.
-    ///
-    /// The block payload commitment and the type of the vote (DA) are signed, which is the minimum amount
-    /// of information necessary for checking that this node voted on that block.
-    fn sign_da_vote(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature);
-
-    /// Create a message with a vote on DA proposal.
-    fn create_da_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> DAVote<TYPES>;
 }
 
 /// Standard implementation of [`CommitteeExchangeType`] utilizing a DA committee.
@@ -549,36 +532,6 @@ impl<
     ) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
         signature
-    }
-    /// Sign a vote on DA proposal.
-    ///
-    /// The block payload commitment and the type of the vote (DA) are signed, which is the minimum amount
-    /// of information necessary for checking that this node voted on that block.
-    fn sign_da_vote(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature) {
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            VoteData::DA(payload_commitment).commit().as_ref(),
-        );
-        (self.public_key.to_bytes(), signature)
-    }
-    /// Create a message with a vote on DA proposal.
-    fn create_da_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> DAVote<TYPES> {
-        let signature = self.sign_da_vote(payload_commitment);
-        DAVote {
-            signature,
-            payload_commitment,
-            current_view,
-            vote_token,
-            vote_data: VoteData::DA(payload_commitment),
-        }
     }
 }
 
