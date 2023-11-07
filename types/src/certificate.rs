@@ -5,7 +5,7 @@ use crate::{
     traits::{
         election::SignedCertificate, node_implementation::NodeType, signature_key::SignatureKey,
     },
-    vote::{ViewSyncData, ViewSyncVote, ViewSyncVoteAccumulator, VoteType},
+    vote::{ViewSyncData, ViewSyncVote, VoteType},
 };
 use bincode::Options;
 use commit::{Commitment, Committable};
@@ -113,8 +113,7 @@ impl<TYPES: NodeType>
     for ViewSyncCertificate<TYPES>
 {
     type Vote = ViewSyncVote<TYPES>;
-    type VoteAccumulator =
-        ViewSyncVoteAccumulator<TYPES, Commitment<ViewSyncData<TYPES>>, Self::Vote>;
+
     /// Build a QC from the threshold signature and commitment
     fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self {
         let certificate_internal = ViewSyncCertificateInternal {

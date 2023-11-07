@@ -10,10 +10,7 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    traits::{
-        election::{Membership, SignedCertificate},
-        network::ConsensusIntentEvent,
-    },
+    traits::{election::Membership, network::ConsensusIntentEvent},
     vote::ViewSyncVoteAccumulator,
 };
 
@@ -34,7 +31,7 @@ use hotshot_types::{
     vote::{ViewSyncData, ViewSyncVote},
 };
 use snafu::Snafu;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tracing::{debug, error, instrument};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
@@ -211,15 +208,7 @@ pub struct ViewSyncRelayTaskState<
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
     #[allow(clippy::type_complexity)]
-    pub accumulator: Either<
-        <ViewSyncCertificate<TYPES> as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Commitment<ViewSyncData<TYPES>>,
-        >>::VoteAccumulator,
-        ViewSyncCertificate<TYPES>,
-    >,
+    pub accumulator: Either<ViewSyncVoteAccumulator<TYPES>, ViewSyncCertificate<TYPES>>,
     /// Our node id; for logging
     pub id: u64,
 }
@@ -391,7 +380,6 @@ where
 
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],
-                    phantom: PhantomData,
                 };
 
                 let mut relay_state = ViewSyncRelayTaskState {
@@ -1050,7 +1038,6 @@ where
 
                             sig_lists: Vec::new(),
                             signers: bitvec![0; self.exchange.total_nodes()],
-                            phantom: PhantomData,
                         };
                         either::Left(new_accumulator)
                     }

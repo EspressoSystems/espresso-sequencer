@@ -14,7 +14,7 @@ use hotshot_types::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
     },
-    vote::{DAVote, ViewSyncVote},
+    vote::ViewSyncVote,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -31,7 +31,6 @@ pub type QuorumNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 
 pub type ThisDAProposal = DAProposal<DemoTypes>;
-pub type ThisDAVote = DAVote<DemoTypes>;
 
 pub type ThisQuorumProposal = QuorumProposal<DemoTypes, ThisLeaf>;
 

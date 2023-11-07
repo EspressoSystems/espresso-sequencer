@@ -10,6 +10,7 @@ use super::{
 use crate::{
     certificate::{AssembledSignature, ViewSyncCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
+    vote::ViewSyncVoteAccumulator,
 };
 
 use crate::{message::GeneralConsensusMessage, vote::ViewSyncVoteInternal};
@@ -20,7 +21,7 @@ use crate::{
         network::{CommunicationChannel, NetworkMsg},
         signature_key::SignatureKey,
     },
-    vote::{Accumulator, ViewSyncData, ViewSyncVote, VoteType},
+    vote::{ViewSyncData, ViewSyncVote, VoteType},
 };
 use bincode::Options;
 use commit::{Commitment, CommitmentBounds, Committable};
@@ -166,9 +167,6 @@ where
 {
     /// `VoteType` that is used in this certificate
     type Vote: VoteType<TYPES, COMMITMENT>;
-
-    /// `Accumulator` type to accumulate votes.
-    type VoteAccumulator: Accumulator<TYPES, COMMITMENT, Self::Vote>;
 
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function and rework this function parameters
@@ -751,12 +749,7 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
     #[allow(clippy::type_complexity)]
     fn accumulate_vote(
         &self,
-        accumulator: <<Self as ViewSyncExchangeType<TYPES, M>>::Certificate as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Self::Commitment,
-        >>::VoteAccumulator,
+        accumulator: ViewSyncVoteAccumulator<TYPES>,
         vote: &<<Self as ViewSyncExchangeType<TYPES, M>>::Certificate as SignedCertificate<
             TYPES,
             TYPES::Time,
@@ -764,15 +757,16 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
             Self::Commitment,
         >>::Vote,
         _commit: &Self::Commitment,
-    ) -> Either<
-        <<Self as ViewSyncExchangeType<TYPES, M>>::Certificate as SignedCertificate<
+    ) -> Either<ViewSyncVoteAccumulator<TYPES>, Self::Certificate>
+    where
+        <Self as ViewSyncExchangeType<TYPES, M>>::Certificate: SignedCertificate<
             TYPES,
             TYPES::Time,
             TYPES::VoteTokenType,
             Self::Commitment,
-        >>::VoteAccumulator,
-        Self::Certificate,
-    > {
+            Vote = ViewSyncVote<TYPES>,
+        >,
+    {
         if !self.is_valid_vote(
             &vote.get_key(),
             &vote.get_signature(),
@@ -795,7 +789,7 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
 
         // TODO ED Should make append function take a reference to vote
         match accumulator.append(
-            vote.clone(),
+            vote,
             append_node_id,
             self.membership().get_committee_qc_stake_table(),
         ) {
@@ -812,7 +806,7 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
         &self,
         key: &TYPES::SignatureKey,
         encoded_signature: &EncodedSignature,
-        data: &VoteData<Self::Commitment>,
+        data: &VoteData<Commitment<ViewSyncData<TYPES>>>,
         vote_token: &Checked<TYPES::VoteTokenType>,
     ) -> bool {
         let is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
