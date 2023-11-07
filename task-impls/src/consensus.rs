@@ -22,7 +22,7 @@ use hotshot_types::{
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::{DACertificate2, QuorumCertificate2},
     simple_vote::{QuorumData, QuorumVote},
     traits::{
         block_contents::BlockHeader,
@@ -128,7 +128,7 @@ pub struct ConsensusTaskState<
     pub output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
 
     /// All the DA certs we've received for current and future views.
-    pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
+    pub da_certs: HashMap<TYPES::Time, DACertificate2<TYPES>>,
 
     /// All the VID certs we've received for current and future views.
     pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
@@ -521,10 +521,10 @@ where
                         };
 
                         // Validate the DAC.
-                        let message = if self.committee_exchange.is_valid_cert(cert) {
+                        let message = if cert.is_valid_cert(self.committee_exchange.membership()) {
                             // Validate the block payload commitment for non-genesis DAC.
-                            if !cert.is_genesis()
-                                && cert.leaf_commitment()
+                            if !cert.is_genesis
+                                && cert.get_data().payload_commit
                                     != proposal.block_header.payload_commitment()
                             {
                                 error!("Block payload commitment does not equal parent commitment");
@@ -1364,7 +1364,6 @@ where
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
                 proposer_id: leaf.proposer_id,
-                dac: None,
             };
 
             let message = Proposal {
