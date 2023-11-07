@@ -28,7 +28,6 @@ use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
     traits::state::ConsensusTime,
-    vote::QuorumVote,
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
@@ -76,7 +75,6 @@ pub type ThisDAProposal = DAProposal<Test>;
 pub type ThisDAVote = DAVote<Test>;
 
 pub type ThisQuorumProposal = QuorumProposal<Test, ThisLeaf>;
-pub type ThisQuorumVote = QuorumVote<Test, ThisLeaf>;
 
 pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;
