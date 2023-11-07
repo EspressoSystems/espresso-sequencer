@@ -118,10 +118,9 @@ where
     fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, StakeTableError> {
         match version {
             // IMPORTANT: we don't support committing the head version b/c it's not finalized.
-            SnapshotVersion::Head => Err(StakeTableError::SnapshotUnsupported),
             SnapshotVersion::EpochStart => Ok(self.epoch_start_comm),
             SnapshotVersion::LastEpochStart => Ok(self.last_epoch_start_comm),
-            SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
+            _ => Err(StakeTableError::SnapshotUnsupported),
         }
     }
 
@@ -241,15 +240,17 @@ where
 {
     /// Initiating an empty stake table.
     pub fn new() -> Self {
-        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE];
+        let bls_comm_preimage =
+            vec![F::default(); STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE];
         let default_bls_comm =
-            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
-        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE];
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&bls_comm_preimage).unwrap()[0];
+        let schnorr_comm_preimage =
+            vec![F::default(); STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE];
         let default_schnorr_comm =
-            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
-        let to_be_hashed = vec![F::default(); STAKE_TABLE_CAPACITY];
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&schnorr_comm_preimage).unwrap()[0];
+        let stake_comm_preimage = vec![F::default(); STAKE_TABLE_CAPACITY];
         let default_stake_comm =
-            VariableLengthRescueCRHF::<F, 1>::evaluate(&to_be_hashed).unwrap()[0];
+            VariableLengthRescueCRHF::<F, 1>::evaluate(&stake_comm_preimage).unwrap()[0];
         let default_comm = (default_bls_comm, default_schnorr_comm, default_stake_comm);
         Self {
             head: StakeTableSnapshot::default(),
@@ -293,42 +294,44 @@ where
     /// Helper function to recompute the stake table commitment for head version
     fn compute_head_comm(&mut self) -> (F, F, F) {
         // Compute rescue hash for bls keys
-        let mut to_be_hashed = self
+        let mut bls_comm_preimage = self
             .head
             .bls_keys
             .iter()
             .map(|key| key.to_fields())
             .collect::<Vec<_>>()
             .concat();
-        to_be_hashed.resize(
+        bls_comm_preimage.resize(
             STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE,
             F::default(),
         );
-        let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+        let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(bls_comm_preimage).unwrap()[0];
 
         // Compute rescue hash for Schnorr keys
-        let mut to_be_hashed = self
+        let mut schnorr_comm_preimage = self
             .head
             .schnorr_keys
             .iter()
             .map(|key| key.to_fields())
             .collect::<Vec<_>>()
             .concat();
-        to_be_hashed.resize(
+        schnorr_comm_preimage.resize(
             STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE,
             F::default(),
         );
-        let schnorr_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+        let schnorr_comm =
+            VariableLengthRescueCRHF::<F, 1>::evaluate(schnorr_comm_preimage).unwrap()[0];
 
         // Compute rescue hash for stake amounts
-        let mut to_be_hashed = self
+        let mut stake_comm_preimage = self
             .head
             .stake_amount
             .iter()
             .map(|x| u256_to_field(x))
             .collect::<Vec<_>>();
-        to_be_hashed.resize(STAKE_TABLE_CAPACITY, F::default());
-        let stake_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(to_be_hashed).unwrap()[0];
+        stake_comm_preimage.resize(STAKE_TABLE_CAPACITY, F::default());
+        let stake_comm =
+            VariableLengthRescueCRHF::<F, 1>::evaluate(stake_comm_preimage).unwrap()[0];
         (bls_comm, schnorr_comm, stake_comm)
     }
 
