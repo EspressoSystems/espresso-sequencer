@@ -10,7 +10,7 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::{QuorumData, Voteable},
+    simple_vote::{DAData, QuorumData, Voteable},
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -126,3 +126,6 @@ impl<
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
 pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, QuorumData<LEAF>>;
+/// Type alias for a DA certificate over `DAData`
+pub type DACertificate2<TYPES> =
+    SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
