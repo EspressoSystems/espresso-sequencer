@@ -66,7 +66,7 @@ pub struct ViewSyncTaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
 > where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -115,7 +115,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -139,7 +139,7 @@ pub struct ViewSyncReplicaTaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -182,7 +182,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for ViewSyncReplicaTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -253,7 +253,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > ViewSyncTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -627,7 +627,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > ViewSyncReplicaTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,
@@ -959,7 +959,7 @@ impl<
         >,
     > ViewSyncRelayTaskState<TYPES, I>
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,

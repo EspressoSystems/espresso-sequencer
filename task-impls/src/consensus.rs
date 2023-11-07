@@ -21,8 +21,10 @@ use hotshot_types::{
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
-    simple_certificate::{DACertificate2, QuorumCertificate2, TimeoutCertificate2},
-    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2, VIDData, VIDVote2},
+    simple_certificate::{
+        DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
+    },
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
@@ -68,17 +70,12 @@ pub struct ConsensusTaskState<
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -155,7 +152,6 @@ pub struct VoteCollectionTaskState<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -206,7 +202,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -232,7 +227,6 @@ where
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -353,17 +347,12 @@ where
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -1387,17 +1376,12 @@ where
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -1439,17 +1423,12 @@ where
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {

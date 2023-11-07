@@ -13,7 +13,6 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    certificate::DACertificate,
     consensus::{Consensus, View},
     data::{DAProposal, Leaf, ProposalType},
     message::{Message, Proposal, SequencingMessage},
@@ -49,12 +48,8 @@ pub struct DATaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// The state's api
     pub api: A,
@@ -85,12 +80,8 @@ pub struct DAVoteCollectionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
 > where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -115,12 +106,8 @@ pub struct DAVoteCollectionTaskState<
 impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
     for DAVoteCollectionTaskState<TYPES, I>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 
@@ -133,12 +120,8 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<T
     DAVoteCollectionTaskState<TYPES, I>,
 )
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     match event {
         HotShotEvent::DAVoteRecv(vote) => {
@@ -200,12 +183,8 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
@@ -488,12 +467,8 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 

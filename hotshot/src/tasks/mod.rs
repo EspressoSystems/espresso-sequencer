@@ -1,8 +1,8 @@
 //! Provides a number of tasks that run continuously on a [`HotShot`]
 
-use crate::{async_spawn, types::SystemContextHandle, DACertificate, HotShotConsensusApi};
+use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, CommitmentBounds, Committable};
+use commit::{Commitment, Committable};
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -26,12 +26,12 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{TimeoutCertificate, ViewSyncCertificate},
+    certificate::ViewSyncCertificate,
     data::{Leaf, ProposalType, QuorumProposal},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
-        election::{ConsensusExchange, Membership},
+        election::{ConsensusExchange, Membership, ViewSyncExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
             CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, TimeoutEx, VIDEx,
@@ -39,7 +39,7 @@ use hotshot_types::{
         },
         state::ConsensusTime,
     },
-    vote::{ViewSyncData, VoteType},
+    vote::ViewSyncData,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -63,17 +63,10 @@ pub enum GlobalEvent {
 pub async fn add_network_message_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = PROPOSAL,
-            Vote = VOTE,
-            Membership = MEMBERSHIP,
-        > + 'static,
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
+        + 'static,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -169,17 +162,10 @@ where
 pub async fn add_network_event_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    COMMITMENT: CommitmentBounds,
     PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES, COMMITMENT>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = PROPOSAL,
-            Vote = VOTE,
-            Membership = MEMBERSHIP,
-        > + 'static,
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
+        + 'static,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -256,17 +242,12 @@ where
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
         Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Certificate = TimeoutCertificate<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -417,12 +398,8 @@ pub async fn add_da_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = DACertificate<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-    >,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     // build the da task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
@@ -541,7 +518,7 @@ pub async fn add_view_sync_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
         Proposal = ViewSyncCertificate<TYPES>,

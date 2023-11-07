@@ -17,7 +17,6 @@ use hotshot_types::{
         network::{CommunicationChannel, TransmitType},
         node_implementation::{NodeImplementation, NodeType},
     },
-    vote::VoteType,
     vote2::{HasViewNumber, Vote2},
 };
 use snafu::Snafu;
