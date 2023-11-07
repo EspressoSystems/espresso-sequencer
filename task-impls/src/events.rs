@@ -3,16 +3,17 @@ use crate::view_sync::ViewSyncPhase;
 use commit::Commitment;
 use either::Either;
 use hotshot_types::{
-    certificate::VIDCertificate,
     data::{DAProposal, VidDisperse},
     message::Proposal,
-    simple_certificate::{DACertificate2, QuorumCertificate2, TimeoutCertificate2},
-    simple_vote::{DAVote2, QuorumVote, TimeoutVote2},
+    simple_certificate::{
+        DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
+    },
+    simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2},
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-        ViewSyncProposalType,
+        VIDMembership, ViewSyncProposalType,
     },
-    vote::{VIDVote, ViewSyncVote},
+    vote::ViewSyncVote,
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
@@ -86,17 +87,17 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
     ///
     /// Like [`DAVoteSend`]
-    VidVoteSend(VIDVote<TYPES>),
+    VidVoteSend(VIDVote2<TYPES, VIDMembership<TYPES, I>>),
     /// A VID vote has been received by the network; handled by the DA task
     ///
     /// Like [`DAVoteRecv`]
-    VidVoteRecv(VIDVote<TYPES>),
+    VidVoteRecv(VIDVote2<TYPES, VIDMembership<TYPES, I>>),
     /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
     ///
     /// Like [`DACSend`]
-    VidCertSend(VIDCertificate<TYPES>, TYPES::SignatureKey),
+    VidCertSend(VIDCertificate2<TYPES>, TYPES::SignatureKey),
     /// A VID cert has been recieved by the network; handled by the consensus task
     ///
     /// Like [`DACRecv`]
-    VidCertRecv(VIDCertificate<TYPES>),
+    VidCertRecv(VIDCertificate2<TYPES>),
 }

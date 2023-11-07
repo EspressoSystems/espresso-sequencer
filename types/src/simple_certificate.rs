@@ -10,7 +10,7 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::{DAData, QuorumData, TimeoutData, Voteable},
+    simple_vote::{DAData, QuorumData, TimeoutData, VIDData, Voteable},
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -131,3 +131,6 @@ pub type DACertificate2<TYPES> =
     SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
 /// Type alias for a Timeout certificate over a view number
 pub type TimeoutCertificate2<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
+/// type alias for a VID certificate
+pub type VIDCertificate2<TYPES> =
+    SimpleCertificate<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;

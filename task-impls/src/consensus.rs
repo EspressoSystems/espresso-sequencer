@@ -17,13 +17,12 @@ use hotshot_task::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::{DACertificate, TimeoutCertificate, VIDCertificate},
     consensus::{Consensus, View},
     data::{Leaf, LeafType, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     simple_certificate::{DACertificate2, QuorumCertificate2, TimeoutCertificate2},
-    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2},
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2, VIDData, VIDVote2},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
@@ -130,7 +129,7 @@ pub struct ConsensusTaskState<
     pub da_certs: HashMap<TYPES::Time, DACertificate2<TYPES>>,
 
     /// All the VID certs we've received for current and future views.
-    pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
+    pub vid_certs: HashMap<TYPES::Time, VIDCertificate2<TYPES>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -1188,7 +1187,7 @@ where
             HotShotEvent::VidCertRecv(cert) => {
                 debug!("VID cert received for view ! {}", *cert.view_number);
 
-                let view = cert.view_number;
+                let view = cert.get_view_number();
                 self.vid_certs.insert(view, cert);
 
                 // RM TODO: VOTING

@@ -588,20 +588,6 @@ impl<
 
 /// A [`ConsensusExchange`] where participants vote to provide availability for blobs of data.
 pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
-    /// Create a message with a vote on VID disperse data.
-    fn create_vid_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> VIDVote<TYPES>;
-
-    /// Sign a vote on VID disperse
-    fn sign_vid_vote(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature);
-
     /// Sign a VID disperse
     fn sign_vid_disperse(
         &self,
@@ -640,33 +626,6 @@ impl<
         M: NetworkMsg,
     > VIDExchangeType<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    fn create_vid_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: <TYPES as NodeType>::Time,
-        vote_token: <TYPES as NodeType>::VoteTokenType,
-    ) -> VIDVote<TYPES> {
-        let signature = self.sign_vid_vote(payload_commitment);
-        VIDVote {
-            signature,
-            payload_commitment,
-            current_view,
-            vote_token,
-            vote_data: VoteData::VID(payload_commitment),
-        }
-    }
-
-    fn sign_vid_vote(
-        &self,
-        payload_commitment: Commitment<<TYPES as NodeType>::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature) {
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            VoteData::VID(payload_commitment).commit().as_ref(),
-        );
-        (self.public_key.to_bytes(), signature)
-    }
-
     /// Sign a VID proposal.
     fn sign_vid_disperse(
         &self,
