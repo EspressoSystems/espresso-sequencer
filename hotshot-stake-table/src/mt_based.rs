@@ -54,7 +54,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
                     &new_key,
                     amount,
                 )?;
-                self.mapping.insert(new_key.clone(), pos);
+                self.mapping.insert(new_key, pos);
                 Ok(())
             }
         }
