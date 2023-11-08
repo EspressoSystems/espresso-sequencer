@@ -237,6 +237,7 @@ impl<
                 ))),
                 TransmitType::Direct,
                 Some(membership.get_leader(vote.get_view_number())),
+            ),
             HotShotEvent::DAVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
