@@ -12,7 +12,7 @@ ark-ec = { version = "0.4.2" }
 ark-ff = "0.4.2"
 ark-serialize = "0.4.2"
 ark-std = { version = "0.4.0", default-features = false }
-async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.30", features = [
     "logging-utils",
 ] }
 async-std = "1.12.0"

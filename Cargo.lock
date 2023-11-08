@@ -678,6 +678,20 @@ dependencies = [
 [[package]]
 name = "async-compatibility-layer"
 version = "1.0.0"
+source = "git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.30#f5478b9b33b8c5b81bfc029c84de9079fc8a64f7"
+dependencies = [
+ "async-lock",
+ "async-trait",
+ "color-eyre",
+ "futures",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber 0.3.17",
+]
+
+[[package]]
+name = "async-compatibility-layer"
+version = "1.0.0"
 source = "git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1#568122b0ef39648daee91d16546985d41c3b0b15"
 dependencies = [
  "async-channel",
@@ -3415,7 +3429,7 @@ name = "hotshot"
 version = "0.3.3"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -3458,7 +3472,7 @@ name = "hotshot-orchestrator"
 version = "0.1.1"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -3513,7 +3527,7 @@ name = "hotshot-query-service"
 version = "0.0.7"
 source = "git+https://github.com/EspressoSystems/hotshot-query-service#edbb0857e7595312dd042d130f6f21cbaf8a761c"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-std",
  "atomic_store",
  "bincode",
@@ -3564,7 +3578,7 @@ name = "hotshot-task"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -3584,7 +3598,7 @@ name = "hotshot-task-impls"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-stream",
@@ -3615,7 +3629,7 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "ark-bls12-381 0.4.0",
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-std",
  "async-trait",
  "bitvec",
@@ -3647,7 +3661,7 @@ dependencies = [
  "arbitrary",
  "ark-serialize 0.3.0",
  "ark-std 0.4.0",
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -3697,7 +3711,7 @@ version = "0.1.1"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
  "ark-bls12-381 0.4.0",
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -3732,7 +3746,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.30)",
  "async-std",
  "contract-bindings",
  "digest 0.10.7",
@@ -4713,7 +4727,7 @@ name = "libp2p-networking"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
 dependencies = [
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.4.1)",
  "async-lock",
  "async-std",
  "async-trait",
@@ -6938,7 +6952,7 @@ dependencies = [
  "anyhow",
  "ark-bls12-381 0.3.0",
  "ark-serialize 0.4.2",
- "async-compatibility-layer",
+ "async-compatibility-layer 1.0.0 (git+https://github.com/EspressoSystems/async-compatibility-layer?tag=1.30)",
  "async-std",
  "async-trait",
  "bincode",
