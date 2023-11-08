@@ -1,21 +1,25 @@
 use std::str::FromStr;
 
+use anyhow::Result;
 use ark_bn254::{g1, Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
-use ark_ec::AffineRepr;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
-use ark_std::rand::rngs::StdRng;
-use ark_std::rand::SeedableRng;
-use ark_std::{rand::Rng, UniformRand};
+use ark_std::{
+    rand::{rngs::StdRng, Rng, SeedableRng},
+    UniformRand,
+};
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
+use itertools::{izip, multiunzip};
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
+use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 use jf_plonk::testing_apis::Challenges;
 use jf_plonk::{
     constants::KECCAK256_STATE_SIZE,
@@ -23,6 +27,7 @@ use jf_plonk::{
     transcript::{PlonkTranscript, SolidityTranscript},
 };
 use jf_primitives::pcs::prelude::Commitment;
+use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -66,12 +71,19 @@ enum Action {
     PlonkConstants,
     /// Get jf_plonk::Verifier::compute_challenges()
     PlonkComputeChal,
+    /// Get jf_plonk::Verifier::aggregate_evaluations()
+    PlonkPrepareEval,
+    /// Get jf_plonk::Verifier::prepare_pcs_info()
+    PlonkPreparePcsInfo,
+    /// Get jf_plonk::Verifier::batch_verify()
+    PlonkBatchVerify,
     /// Get a random, dummy proof with correct format
     DummyProof,
     /// Test only logic
     TestOnly,
 }
 
+#[allow(clippy::type_complexity)]
 fn main() {
     let cli = Cli::parse();
 
@@ -113,7 +125,7 @@ fn main() {
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
-            let (vanish_eval, lagrange_one, pi_eval) = verifier
+            let (vanish_eval, lagrange_one, _, pi_eval) = verifier
                 .compute_poly_evals_for_pcs_info(&zeta, &pi)
                 .unwrap();
             let res = (
@@ -251,6 +263,115 @@ fn main() {
                 .unwrap()
                 .into();
             println!("{}", (chal,).encode_hex());
+        }
+        Action::PlonkPrepareEval => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=proof");
+            let arg2 = cli
+                .arg2
+                .as_ref()
+                .expect("Should provide arg2=linPolyConstant");
+            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=commScalars");
+
+            let proof: Proof<Bn254> = arg1.parse::<ParsedPlonkProof>().unwrap().into();
+            let lin_poly_constant = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
+            let comm_scalars_u256: Vec<U256> = AbiDecode::decode_hex(arg3).unwrap();
+            // NOTE: only take the last 10 scalars, the first 20 are linearization scalars
+            let comm_scalars: Vec<Fr> = comm_scalars_u256
+                .into_iter()
+                .skip(20)
+                .map(u256_to_field)
+                .collect();
+
+            let eval = Verifier::<Bn254>::aggregate_evaluations(
+                &lin_poly_constant,
+                &[proof.poly_evals],
+                &[None],
+                &comm_scalars,
+            )
+            .unwrap();
+            let res = field_to_u256(eval);
+            println!("{}", (res,).encode_hex());
+        }
+        Action::PlonkPreparePcsInfo => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=verifyingKey");
+            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=publicInput");
+            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=proof");
+            let arg4 = cli
+                .arg4
+                .as_ref()
+                .expect("Should provide arg3=extraTranscriptInitMsg");
+
+            let vk: VerifyingKey<Bn254> = arg1.parse::<ParsedVerifyingKey>().unwrap().into();
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg2).unwrap();
+            let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
+            let proof: Proof<Bn254> = arg3.parse::<ParsedPlonkProof>().unwrap().into();
+            let msg = {
+                let parsed: Bytes = AbiDecode::decode_hex(arg4).unwrap();
+                parsed.0.to_vec()
+            };
+
+            let verifier = Verifier::<Bn254>::new(vk.domain_size).unwrap();
+            let pcs_info = verifier
+                .prepare_pcs_info::<SolidityTranscript>(&[&vk], &[&pi], &proof.into(), &Some(msg))
+                .unwrap();
+
+            let scalars_and_bases_prod: ParsedG1Point = pcs_info
+                .comm_scalars_and_bases
+                .multi_scalar_mul()
+                .into_affine()
+                .into();
+            let opening_proof: ParsedG1Point = pcs_info.opening_proof.0.into();
+            let shifted_opening_proof: ParsedG1Point = pcs_info.shifted_opening_proof.0.into();
+            let res = (
+                field_to_u256(pcs_info.u),
+                field_to_u256(pcs_info.eval_point),
+                field_to_u256(pcs_info.next_eval_point),
+                field_to_u256(pcs_info.eval),
+                scalars_and_bases_prod,
+                opening_proof,
+                shifted_opening_proof,
+            );
+            println!("{}", res.encode_hex());
+        }
+        Action::PlonkBatchVerify => {
+            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=numProof");
+            let num_proof = arg1.parse::<u32>().unwrap();
+            let (proofs, vks, public_inputs, extra_msgs, _): (
+                Vec<Proof<Bn254>>,
+                Vec<VerifyingKey<Bn254>>,
+                Vec<Vec<Fr>>,
+                Vec<Option<Vec<u8>>>,
+                Vec<usize>,
+            ) = multiunzip(gen_plonk_proof_for_test(num_proof as usize).unwrap());
+
+            // ensure they are correct params
+            let proofs_refs: Vec<&Proof<Bn254>> = proofs.iter().collect();
+            let vks_refs: Vec<&VerifyingKey<Bn254>> = vks.iter().collect();
+            let pi_refs: Vec<&[Fr]> = public_inputs
+                .iter()
+                .map(|pub_input| &pub_input[..])
+                .collect();
+            assert!(PlonkKzgSnark::batch_verify::<SolidityTranscript>(
+                &vks_refs,
+                &pi_refs,
+                &proofs_refs,
+                &extra_msgs
+            )
+            .is_ok());
+
+            let vks_parsed: Vec<ParsedVerifyingKey> = vks.into_iter().map(Into::into).collect();
+            let pis_parsed: Vec<Vec<U256>> = public_inputs
+                .into_iter()
+                .map(|pi| pi.into_iter().map(field_to_u256).collect())
+                .collect();
+            let proofs_parsed: Vec<ParsedPlonkProof> = proofs.into_iter().map(Into::into).collect();
+            let msgs_parsed: Vec<Bytes> = extra_msgs
+                .into_iter()
+                .map(|msg| msg.unwrap().into())
+                .collect();
+
+            let res = (vks_parsed, pis_parsed, proofs_parsed, msgs_parsed);
+            println!("{}", res.encode_hex());
         }
         Action::DummyProof => {
             let mut rng = jf_utils::test_rng();
@@ -469,9 +590,17 @@ where
     P::BaseField: PrimeField,
 {
     fn from(p: Affine<P>) -> Self {
-        Self {
-            x: field_to_u256::<P::BaseField>(*p.x().unwrap()),
-            y: field_to_u256::<P::BaseField>(*p.y().unwrap()),
+        if p.is_zero() {
+            // this convention is from the BN precompile
+            Self {
+                x: U256::from(0),
+                y: U256::from(0),
+            }
+        } else {
+            Self {
+                x: field_to_u256::<P::BaseField>(*p.x().unwrap()),
+                y: field_to_u256::<P::BaseField>(*p.y().unwrap()),
+            }
         }
     }
 }
@@ -759,6 +888,25 @@ struct ParsedChallenges {
     u: U256,
 }
 
+impl ParsedChallenges {
+    #[allow(dead_code)]
+    fn dummy<R: Rng>(rng: &mut R) -> Self {
+        let alpha = Fr::rand(rng);
+        let alpha_2 = alpha * alpha;
+        let alpha_3 = alpha * alpha_2;
+        Self {
+            alpha: field_to_u256(alpha),
+            alpha_2: field_to_u256(alpha_2),
+            alpha_3: field_to_u256(alpha_3),
+            beta: field_to_u256(Fr::rand(rng)),
+            gamma: field_to_u256(Fr::rand(rng)),
+            zeta: field_to_u256(Fr::rand(rng)),
+            v: field_to_u256(Fr::rand(rng)),
+            u: field_to_u256(Fr::rand(rng)),
+        }
+    }
+}
+
 impl FromStr for ParsedChallenges {
     type Err = AbiError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -795,4 +943,111 @@ impl From<ParsedChallenges> for Challenges<Fr> {
             u: u256_to_field(c.u),
         }
     }
+}
+
+// modify from <https://github.com/EspressoSystems/cape/blob/main/contracts/rust/src/plonk_verifier/helpers.rs>
+/// return list of (proof, ver_key, public_input, extra_msg, domain_size)
+#[allow(clippy::type_complexity)]
+fn gen_plonk_proof_for_test(
+    num_proof: usize,
+) -> Result<
+    Vec<(
+        Proof<Bn254>,
+        VerifyingKey<Bn254>,
+        Vec<Fr>,
+        Option<Vec<u8>>,
+        usize,
+    )>,
+> {
+    // 1. Simulate universal setup
+    let rng = &mut jf_utils::test_rng();
+    let srs = PlonkKzgSnark::<Bn254>::universal_setup_for_testing(2u64.pow(17) as usize, rng)?;
+
+    // 2. Create circuits
+    let circuits = (0..num_proof)
+        .map(|i| {
+            let m = 2 + i / 3;
+            let a0 = 1 + i % 3;
+            gen_circuit_for_test::<Fr>(m, a0)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let domain_sizes: Vec<usize> = circuits
+        .iter()
+        .map(|c| c.eval_domain_size().unwrap())
+        .collect();
+
+    // 3. Preprocessing
+    let mut prove_keys = vec![];
+    let mut ver_keys = vec![];
+    for c in circuits.iter() {
+        let (pk, vk) = PlonkKzgSnark::<Bn254>::preprocess(&srs, c)?;
+        prove_keys.push(pk);
+        ver_keys.push(vk);
+    }
+
+    // 4. Proving
+    let mut proofs = vec![];
+    let mut extra_msgs = vec![];
+
+    circuits
+        .iter()
+        .zip(prove_keys.iter())
+        .enumerate()
+        .for_each(|(i, (cs, pk))| {
+            let extra_msg = Some(format!("extra message: {}", i).into_bytes());
+            proofs.push(
+                PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
+                    rng,
+                    cs,
+                    pk,
+                    extra_msg.clone(),
+                )
+                .unwrap(),
+            );
+            extra_msgs.push(extra_msg);
+        });
+
+    let public_inputs: Vec<Vec<Fr>> = circuits
+        .iter()
+        .map(|cs| cs.public_input().unwrap())
+        .collect();
+
+    Ok(izip!(proofs, ver_keys, public_inputs, extra_msgs, domain_sizes).collect())
+}
+
+// Different `m`s lead to different circuits.
+// Different `a0`s lead to different witness values.
+// TODO: (alex) change this circuit for easier size counting
+fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkCircuit<F>> {
+    let mut cs: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
+    // Create variables
+    let mut a = vec![];
+    for i in a0..(a0 + 4 * m) {
+        a.push(cs.create_variable(F::from(i as u64))?);
+    }
+    let b = [
+        cs.create_public_variable(F::from(m as u64 * 2))?,
+        cs.create_public_variable(F::from(a0 as u64 * 2 + m as u64 * 4 - 1))?,
+    ];
+    let c = cs.create_public_variable(
+        (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
+    )?;
+
+    // Create gates:
+    // 1. a0 + ... + a_{4*m-1} = b0 * b1
+    // 2. (b1 + a0) * (b1 - a0) = c
+    // 3. b0 = 2 * m
+    let mut acc = cs.zero();
+    a.iter().for_each(|&elem| acc = cs.add(acc, elem).unwrap());
+    let b_mul = cs.mul(b[0], b[1])?;
+    cs.enforce_equal(acc, b_mul)?;
+    let b1_plus_a0 = cs.add(b[1], a[0])?;
+    let b1_minus_a0 = cs.sub(b[1], a[0])?;
+    cs.mul_gate(b1_plus_a0, b1_minus_a0, c)?;
+    cs.enforce_constant(b[0], F::from(m as u64 * 2))?;
+
+    // Finalize the circuit.
+    cs.finalize_for_arithmetization()?;
+
+    Ok(cs)
 }

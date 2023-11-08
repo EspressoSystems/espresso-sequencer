@@ -24,8 +24,10 @@ ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test_apis"], branch = "more-test-apis" }
+itertools = "0.10.3"
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test-apis", "test-srs"], branch = "more-test-apis" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", branch = "more-test-apis" }
 num-bigint = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
