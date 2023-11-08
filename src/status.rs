@@ -93,9 +93,9 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::QueryData,
+        data_source::FileSystemDataSource,
         testing::{
-            consensus::MockNetwork,
+            consensus::{MockDataSource, MockNetwork},
             mocks::{MockNodeImpl, MockTransaction, MockTypes},
             setup_test, sleep,
         },
@@ -117,7 +117,7 @@ mod test {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::<MockDataSource>::init().await;
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
@@ -221,7 +221,8 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_status_extensions").unwrap();
-        let query_data = QueryData::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
+        let query_data =
+            FileSystemDataSource::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
         let extensions = toml! {
             [route.post_ext]
@@ -234,11 +235,12 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api = define_api::<RwLock<QueryData<MockTypes, MockNodeImpl, u64>>>(&Options {
-            extensions: vec![extensions.into()],
-            ..Default::default()
-        })
-        .unwrap();
+        let mut api =
+            define_api::<RwLock<FileSystemDataSource<MockTypes, MockNodeImpl, u64>>>(&Options {
+                extensions: vec![extensions.into()],
+                ..Default::default()
+            })
+            .unwrap();
         api.get("get_ext", |_, state| {
             async move { Ok(*state.as_ref()) }.boxed()
         })

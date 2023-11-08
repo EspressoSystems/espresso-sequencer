@@ -10,8 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::QueryableBlock;
+use crate::{
+    availability::AvailabilityDataSource, data_source::UpdateDataSource, status::StatusDataSource,
+    QueryableBlock,
+};
 use async_std::sync::Arc;
+use async_trait::async_trait;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Display, Index, IndexMut};
 use hotshot::{
@@ -342,4 +346,20 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
     ) {
         (ChannelMaps::new(start_view), None)
     }
+}
+
+#[async_trait]
+pub trait TestableDataSource:
+    AvailabilityDataSource<MockTypes, MockNodeImpl>
+    + StatusDataSource
+    + UpdateDataSource<MockTypes, MockNodeImpl>
+    + Send
+    + Sync
+    + Sized
+    + 'static
+{
+    type TmpData;
+
+    async fn create(node_id: usize) -> (Self, Self::TmpData);
+    async fn commit_version(&mut self);
 }

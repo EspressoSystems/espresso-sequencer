@@ -10,548 +10,46 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{
-    availability::{
-        data_source::{
-            AvailabilityDataSource, BlockId, LeafId, MissingSnafu, NotFoundSnafu, QueryResult,
-            ResourceId, UpdateAvailabilityData,
+//! Persistent storage and sources of data consumed by APIs.
+//!
+//! Naturally, an archival query service such as this is heavily dependent on a persistent storage
+//! implementation. The APIs provided by this query service are generic over the specific type of
+//! the persistence layer, which we call a _data source_. This module provides the following
+//! concrete persistence implementations:
+//! * [`FileSystemDataSource`]
+//!
+//! The user can choose which data source to use when initializing the query service.
+
+pub mod fs;
+mod ledger_log;
+mod update;
+
+pub use fs::FileSystemDataSource;
+pub use update::UpdateDataSource;
+
+/// Generic tests we can instantiate for all the data sources.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod data_source_tests {
+    use crate::{
+        availability::{BlockQueryData, LeafQueryData},
+        status::MempoolQueryData,
+        testing::{
+            consensus::MockNetwork,
+            mocks::{MockNodeImpl, MockTransaction, MockTypes, TestableDataSource},
+            setup_test, sleep,
         },
-        query_data::{
-            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
-            TransactionIndex,
-        },
-    },
-    ledger_log::LedgerLog,
-    metrics::{MetricsError, PrometheusMetrics},
-    status::{
-        data_source::{StatusDataSource, UpdateStatusData},
-        query_data::MempoolQueryData,
-    },
-    Block, Deltas, Resolvable,
-};
-use async_trait::async_trait;
-use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
-use commit::Committable;
-use futures::stream::{self, BoxStream, Stream, StreamExt, TryStreamExt};
-use hotshot_types::traits::{
-    metrics::Metrics,
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
-use serde::{de::DeserializeOwned, Serialize};
-use snafu::OptionExt;
-use std::collections::hash_map::{Entry, HashMap};
-use std::hash::Hash;
-use std::ops::{Bound, RangeBounds};
-use std::path::Path;
-
-pub use crate::ledger_log::Iter;
-pub use crate::update::UpdateDataSource;
-
-const CACHED_LEAVES_COUNT: usize = 100;
-const CACHED_BLOCKS_COUNT: usize = 100;
-
-/// Data used by the APIs provided in this crate, including persistent storage.
-///
-/// [QueryData] is designed to be both extensible (so you can add additional state to the API
-/// modules defined in this crate) and composable (so you can use [QueryData] as one component of a
-/// larger state type for an application with additional modules). Extending [QueryData] is possible
-/// through the `UserData` type parameter -- [QueryData] implements `AsRef<UserData>` and
-/// `AsMut<UserData>`, so your API extensions can always access `UserData` from [QueryData].
-///
-/// Composing [QueryData] with other module states is in principle simple -- just create an
-/// aggregate struct containing both [QueryData] and your additional module states. A complication
-/// arises from how persistent storage is managed: if other modules have their own persistent state,
-/// should the storage of [QueryData] and the other modules be completely independent, or
-/// synchronized under the control of a single [AtomicStore]? [QueryData] supports both patterns:
-/// when you create it with [create](QueryData::create) or [open](QueryData::open), it will open its
-/// own [AtomicStore] and manage the synchronization of its own storage, independent of any other
-/// persistent data it might be composed with. But when you create it with
-/// [create_with_store](QueryData::create_with_store) or
-/// [open_with_store](QueryData::open_with_store), you may ask it to register its persistent data
-/// structures with an existing [AtomicStoreLoader]. If you register other modules' persistent data
-/// structures with the same loader, you can create one [AtomicStore] that synchronizes all the
-/// persistent data. Note, though, that when you choose to use
-/// [create_with_store](QueryData::create_with_store) or
-/// [open_with_store](QueryData::open_with_store), you become responsible for ensuring that calls to
-/// [AtomicStore::commit_version] alternate with calls to [QueryData::commit_version] or
-/// [QueryData::skip_version].
-#[derive(custom_debug::Debug)]
-pub struct QueryData<Types: NodeType, I: NodeImplementation<Types>, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
-    index_by_block_hash: HashMap<BlockHash<Types>, u64>,
-    index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
-    index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
-    #[debug(skip)]
-    top_storage: Option<AtomicStore>,
-    leaf_storage: LedgerLog<LeafQueryData<Types, I>>,
-    block_storage: LedgerLog<BlockQueryData<Types>>,
-    metrics: PrometheusMetrics,
-    user_data: UserData,
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    /// Create a new [QueryData] with storage at `path`.
-    ///
-    /// If there is already data at `path`, it will be archived.
-    ///
-    /// The [QueryData] will manage its own persistence synchronization.
-    pub fn create(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
-        let mut loader = AtomicStoreLoader::create(path, "hotshot_query_data")?;
-        let mut query_data = Self::create_with_store(&mut loader, user_data)?;
-        query_data.top_storage = Some(AtomicStore::open(loader)?);
-        Ok(query_data)
-    }
-
-    /// Open an existing [QueryData] from storage at `path`.
-    ///
-    /// If there is no data at `path`, a new store will be created.
-    ///
-    /// The [QueryData] will manage its own persistence synchronization.
-    pub fn open(path: &Path, user_data: UserData) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
-        let mut loader = AtomicStoreLoader::load(path, "hotshot_query_data")?;
-        let mut query_data = Self::open_with_store(&mut loader, user_data)?;
-        query_data.top_storage = Some(AtomicStore::open(loader)?);
-        Ok(query_data)
-    }
-
-    /// Create a new [QueryData] using a persistent storage loader.
-    ///
-    /// If there is existing data corresponding to the [QueryData] data structures, it will be
-    /// archived.
-    ///
-    /// The [QueryData] will register its persistent data structures with `loader`. The caller is
-    /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
-    /// store.
-    pub fn create_with_store(
-        loader: &mut AtomicStoreLoader,
-        user_data: UserData,
-    ) -> Result<Self, PersistenceError> {
-        Ok(Self {
-            index_by_leaf_hash: Default::default(),
-            index_by_block_hash: Default::default(),
-            index_by_txn_hash: Default::default(),
-            index_by_proposer_id: Default::default(),
-            top_storage: None,
-            leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
-            block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
-            metrics: Default::default(),
-            user_data,
-        })
-    }
-
-    /// Open an existing [QueryData] using a persistent storage loader.
-    ///
-    /// If there is no existing data corresponding to the [QueryData] data structures, a new store
-    /// will be created.
-    ///
-    /// The [QueryData] will register its persistent data structures with `loader`. The caller is
-    /// responsible for creating an [AtomicStore] from `loader` and managing synchronization of the
-    /// store.
-    pub fn open_with_store(
-        loader: &mut AtomicStoreLoader,
-        user_data: UserData,
-    ) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
-        let leaf_storage =
-            LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
-        let block_storage =
-            LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
-
-        let mut index_by_proposer_id = HashMap::new();
-        let mut index_by_block_hash = HashMap::new();
-        let index_by_leaf_hash = leaf_storage
-            .iter()
-            .flatten()
-            .map(|leaf| {
-                index_by_proposer_id
-                    .entry(leaf.proposer())
-                    .or_insert_with(Vec::new)
-                    .push(leaf.height());
-                update_index_by_hash(&mut index_by_block_hash, leaf.block_hash(), leaf.height());
-                (leaf.hash(), leaf.height())
-            })
-            .collect();
-
-        let mut index_by_txn_hash = HashMap::new();
-        for block in block_storage.iter().flatten() {
-            let height = block.height();
-            for (txn_ix, txn) in block.block().enumerate() {
-                update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
-            }
-        }
-
-        Ok(QueryData {
-            index_by_leaf_hash,
-            index_by_block_hash,
-            index_by_txn_hash,
-            index_by_proposer_id,
-            leaf_storage,
-            block_storage,
-            top_storage: None,
-            metrics: Default::default(),
-            user_data,
-        })
-    }
-
-    /// Commit the current state to persistent storage.
-    ///
-    /// If the [QueryData] is managing its own [AtomicStore] (i.e. it was created with
-    /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
-    /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
-    /// this function.
-    pub async fn commit_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.commit_version().await?;
-        self.block_storage.commit_version().await?;
-        if let Some(store) = &mut self.top_storage {
-            store.commit_version()?;
-        }
-        Ok(())
-    }
-
-    /// Advance the version of the persistent store without committing changes to persistent state.
-    ///
-    /// This function is useful when the [AtomicStore] synchronizing storage for this [QueryData] is
-    /// being managed by the caller. The caller may want to persist some changes to other modules
-    /// whose state is managed by the same [AtomicStore]. In order to call
-    /// [AtomicStore::commit_version], the version of this [QueryData] must be advanced, either by
-    /// [commit_version](Self::commit_version) or, if there are no outstanding changes,
-    /// [skip_version](Self::skip_version).
-    pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.skip_version()?;
-        self.block_storage.skip_version()?;
-        if let Some(store) = &mut self.top_storage {
-            store.commit_version()?;
-        }
-        Ok(())
-    }
-
-    /// Revert changes made to persistent storage since the last call to [commit_version](Self::commit_version).
-    pub fn revert_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.revert_version()?;
-        self.block_storage.revert_version()?;
-        Ok(())
-    }
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn as_ref(&self) -> &UserData {
-        &self.user_data
-    }
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsMut<UserData>
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn as_mut(&mut self) -> &mut UserData {
-        &mut self.user_data
-    }
-}
-
-async fn range_stream<T>(
-    mut iter: Iter<'_, T>,
-    range: impl RangeBounds<usize>,
-) -> impl '_ + Stream<Item = QueryResult<T>>
-where
-    T: Clone + Serialize + DeserializeOwned + Sync,
-{
-    let start = range.start_bound().cloned();
-    let end = range.end_bound().cloned();
-
-    // Advance the underlying iterator to the start of the range.
-    let pos = match start {
-        Bound::Included(n) => {
-            if n > 0 {
-                iter.nth(n - 1);
-            }
-            n
-        }
-        Bound::Excluded(n) => {
-            iter.nth(n);
-            n + 1
-        }
-        Bound::Unbounded => 0,
-    };
-
-    stream::unfold((iter, end, pos), |(mut iter, end, pos)| async move {
-        // Check if we have reached the end of the range.
-        let reached_end = match end {
-            Bound::Included(n) => pos > n,
-            Bound::Excluded(n) => pos >= n,
-            Bound::Unbounded => false,
-        };
-        if reached_end {
-            return None;
-        }
-        let opt = iter.next()?;
-        Some((opt.context(MissingSnafu), (iter, end, pos + 1)))
-    })
-}
-
-#[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-    UserData: Send + Sync,
-{
-    type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
-    type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
-
-    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types, I>>>
-    where
-        Self: 'a,
-        R: RangeBounds<usize> + Send;
-    type BlockRange<'a, R> = BoxStream<'a, QueryResult<BlockQueryData<Types>>>
-    where
-        Self: 'a,
-        R: RangeBounds<usize> + Send;
-
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
-    where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
-    {
-        let n = match id.into() {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => {
-                *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
-            }
-        };
-        self.leaf_storage
-            .iter()
-            .nth(n)
-            .context(NotFoundSnafu)?
-            .context(MissingSnafu)
-    }
-
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
-    where
-        ID: Into<BlockId<Types>> + Send + Sync,
-    {
-        let n = match id.into() {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => {
-                *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize
-            }
-        };
-        self.block_storage
-            .iter()
-            .nth(n)
-            .context(NotFoundSnafu)?
-            .context(MissingSnafu)
-    }
-
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
-    where
-        R: RangeBounds<usize> + Send,
-    {
-        Ok(range_stream(self.leaf_storage.iter(), range).await.boxed())
-    }
-
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
-    where
-        R: RangeBounds<usize> + Send,
-    {
-        Ok(range_stream(self.block_storage.iter(), range).await.boxed())
-    }
-
-    async fn get_block_with_transaction(
-        &self,
-        hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
-        let block = self.get_block(*height as usize).await?;
-        Ok((block, ix.clone()))
-    }
-
-    async fn get_proposals(
-        &self,
-        id: &EncodedPublicKey,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
-        let all_ids = self
-            .index_by_proposer_id
-            .get(id)
-            .cloned()
-            .unwrap_or_default();
-        let start_from = match limit {
-            Some(count) => all_ids.len().saturating_sub(count),
-            None => 0,
-        };
-        stream::iter(all_ids)
-            .skip(start_from)
-            .then(|height| self.get_leaf(height as usize))
-            .try_collect()
-            .await
-    }
-
-    async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
-        Ok(match self.index_by_proposer_id.get(id) {
-            Some(ids) => ids.len(),
-            None => 0,
-        })
-    }
-
-    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
-        self.leaf_storage.subscribe(height).context(MissingSnafu)
-    }
-
-    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
-        self.block_storage.subscribe(height).context(MissingSnafu)
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-    UserData: Send,
-{
-    type Error = PersistenceError;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
-        self.leaf_storage
-            .insert(leaf.height() as usize, leaf.clone())?;
-        self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
-        update_index_by_hash(
-            &mut self.index_by_block_hash,
-            leaf.block_hash(),
-            leaf.height(),
-        );
-        self.index_by_proposer_id
-            .entry(leaf.proposer())
-            .or_default()
-            .push(leaf.height());
-        Ok(())
-    }
-
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        self.block_storage
-            .insert(block.height() as usize, block.clone())?;
-        for (txn_ix, txn) in block.block().enumerate() {
-            update_index_by_hash(
-                &mut self.index_by_txn_hash,
-                txn.commit(),
-                (block.height(), txn_ix),
-            );
-        }
-        Ok(())
-    }
-}
-
-/// Update an index mapping hashes of objects to their positions in the ledger.
-///
-/// This function will insert the mapping from `hash` to `pos` into `index`, _unless_ there is
-/// already an entry for `hash` at an earlier position in the ledger.
-fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H, pos: P) {
-    match index.entry(hash) {
-        Entry::Occupied(mut e) => {
-            if &pos < e.get() {
-                // Overwrite the existing entry if the new object was sequenced first.
-                e.insert(pos);
-            }
-        }
-        Entry::Vacant(e) => {
-            e.insert(pos);
-        }
-    }
-}
-
-/// Metric-related functions.
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
-        self.metrics.get_subgroup(["consensus"])
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-    UserData: Sync,
-{
-    type Error = MetricsError;
-
-    async fn block_height(&self) -> Result<usize, Self::Error> {
-        Ok(self.leaf_storage.iter().len())
-    }
-
-    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        Ok(MempoolQueryData {
-            transaction_count: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions")?
-                .get() as u64,
-            memory_footprint: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions_memory_size")?
-                .get() as u64,
-        })
-    }
-
-    async fn success_rate(&self) -> Result<f64, Self::Error> {
-        let total_views = self.consensus_metrics()?.get_gauge("current_view")?.get() as f64;
-        // By definition, a successful view is any which committed a block.
-        Ok(self.block_height().await? as f64 / total_views)
-    }
-
-    async fn export_metrics(&self) -> Result<String, Self::Error> {
-        self.metrics.prometheus()
-    }
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateStatusData
-    for QueryData<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn metrics(&self) -> Box<dyn Metrics> {
-        Box::new(self.metrics.clone())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::testing::{
-        consensus::MockNetwork,
-        mocks::{MockNodeImpl, MockTransaction, MockTypes},
-        setup_test, sleep,
     };
     use async_std::sync::RwLock;
     use bincode::Options;
+    use commit::Committable;
     use futures::StreamExt;
     use hotshot_utils::bincode::bincode_opts;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::time::Duration;
 
-    async fn get_non_empty_blocks<UserData: Send + Sync>(
-        qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>,
+    async fn get_non_empty_blocks(
+        qd: &RwLock<impl TestableDataSource>,
     ) -> Vec<(
         LeafQueryData<MockTypes, MockNodeImpl>,
         BlockQueryData<MockTypes>,
@@ -571,9 +69,7 @@ mod test {
             .await
     }
 
-    async fn validate<UserData: Send + Sync>(
-        qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>,
-    ) {
+    async fn validate(qd: &RwLock<impl TestableDataSource>) {
         let qd = qd.read().await;
 
         // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
@@ -642,10 +138,10 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_update() {
+    pub async fn test_update<D: TestableDataSource>() {
         setup_test();
 
-        let mut network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::<D>::init().await;
         let qd = network.query_data();
 
         network.start().await;
@@ -683,10 +179,10 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_metrics() {
+    pub async fn test_metrics<D: TestableDataSource>() {
         setup_test();
 
-        let mut network = MockNetwork::init(()).await;
+        let mut network = MockNetwork::<D>::init().await;
         let qd = network.query_data();
 
         {
