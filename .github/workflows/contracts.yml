@@ -46,6 +46,9 @@ jobs:
         with:
           prefix-key: v2-rust
 
+      - name: Check forge version
+        run: nix develop --accept-flake-config -c forge --version
+
       - name: Format check
         run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files
 
