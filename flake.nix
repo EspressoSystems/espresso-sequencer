@@ -94,6 +94,11 @@
           export PATH=${pkgs.xdot}/bin:$PATH
           export PATH=''${my_pwd}/bin:$PATH
         '';
+
+        RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+        RUST_BACKTRACE = 1;
+        RUST_LOG = "info";
+        RUSTFLAGS=" --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
       in {
       	checks = {
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
@@ -162,10 +167,7 @@
               rustToolchain
             ] ++ myPython ++ rustDeps;
 
-          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-          RUST_BACKTRACE = 1;
-          RUST_LOG = "info";
-          RUSTFLAGS="--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+          inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS;
         };
         devShells = {
           perfShell = pkgs.mkShell {
@@ -173,9 +175,7 @@
             buildInputs = with pkgs;
               [ nixWithFlakes cargo-llvm-cov rustToolchain protobuf ] ++ rustDeps;
 
-            RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-            RUST_BACKTRACE = 1;
-            RUST_LOG = "info";
+            inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS;
           };
         };
       });
