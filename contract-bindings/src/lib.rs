@@ -11,5 +11,4 @@ pub mod bytes_lib;
 pub mod deploy_hot_shot;
 pub mod hot_shot;
 pub mod shared_types;
-pub mod std_invariant;
 pub mod utils;
