@@ -15,6 +15,7 @@ use super::query_data::{
     TransactionIndex,
 };
 use crate::{Block, Deltas, Resolvable};
+use async_trait::async_trait;
 use futures::stream::Stream;
 use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
@@ -60,57 +61,59 @@ pub enum QueryError {
 
 pub type QueryResult<T> = Result<T, QueryError>;
 
+#[async_trait]
 pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type LeafStreamType: Stream<Item = LeafQueryData<Types, I>> + Send;
-    type BlockStreamType: Stream<Item = BlockQueryData<Types>> + Send;
+    type LeafStream: Stream<Item = LeafQueryData<Types, I>> + Send;
+    type BlockStream: Stream<Item = BlockQueryData<Types>> + Send;
 
-    type LeafRange<'a, R>: 'a + Iterator<Item = QueryResult<LeafQueryData<Types, I>>>
+    type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types, I>>>
     where
         Self: 'a,
-        R: RangeBounds<usize>;
-    type BlockRange<'a, R>: 'a + Iterator<Item = QueryResult<BlockQueryData<Types>>>
+        R: RangeBounds<usize> + Send;
+    type BlockRange<'a, R>: 'a + Stream<Item = QueryResult<BlockQueryData<Types>>>
     where
         Self: 'a,
-        R: RangeBounds<usize>;
+        R: RangeBounds<usize> + Send;
 
-    fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>>;
-    fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
+    async fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>>;
+    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
 
-    fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
     where
-        R: RangeBounds<usize>;
-    fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+        R: RangeBounds<usize> + Send;
+    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
     where
-        R: RangeBounds<usize>;
+        R: RangeBounds<usize> + Send;
 
     /// Returns the block containing a transaction with the given `hash` and the transaction's
     /// position in the block.
-    fn get_block_with_transaction(
+    async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
 
-    fn get_proposals(
+    async fn get_proposals(
         &self,
         proposer: &EncodedPublicKey,
         limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types, I>>>;
-    fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
+    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
 
-    fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStreamType>;
-    fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStreamType>;
+    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream>;
+    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream>;
 }
 
+#[async_trait]
 pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
     type Error: Error + Debug;
-    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>;
-    fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
 }

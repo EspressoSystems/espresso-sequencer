@@ -177,7 +177,7 @@ impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut qd = qd.write().await;
-                    qd.update(&event).unwrap();
+                    qd.update(&event).await.unwrap();
                     qd.commit_version().await.unwrap();
                 }
             });

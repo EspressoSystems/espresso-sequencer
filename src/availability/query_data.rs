@@ -50,7 +50,15 @@ pub trait QueryableBlock: traits::Block {
     /// internally however they want (e.g. by position or by hash). Meanwhile, many high-level
     /// functions for querying transactions by different means can be implemented by returning a
     /// `TransactionIndex` and then finally using it to retrieve the desired transaction.
-    type TransactionIndex: Clone + Debug + PartialEq + Eq + Ord + Serialize + DeserializeOwned;
+    type TransactionIndex: Clone
+        + Debug
+        + PartialEq
+        + Eq
+        + Ord
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync;
 
     /// Enumerate the transactions in this block.
     type Iter<'a>: Iterator<Item = Self::TransactionIndex>

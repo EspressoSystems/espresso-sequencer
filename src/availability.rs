@@ -145,7 +145,7 @@ where
                     Some(height) => ResourceId::Number(height),
                     None => ResourceId::Hash(req.blob_param("hash")?),
                 };
-                state.get_leaf(id).context(QueryLeafSnafu {
+                state.get_leaf(id).await.context(QueryLeafSnafu {
                     resource: id.to_string(),
                 })
             }
@@ -159,6 +159,7 @@ where
                         async move {
                             Ok(state
                                 .subscribe_leaves(height)
+                                .await
                                 .map_err(|err| Error::LeafStream {
                                     height: height as u64,
                                     reason: err.to_string(),
@@ -180,6 +181,7 @@ where
                         async move {
                             Ok(state
                                 .subscribe_blocks(height)
+                                .await
                                 .map_err(|err| Error::LeafStream {
                                     height: height as u64,
                                     reason: err.to_string(),
@@ -199,7 +201,7 @@ where
                     Some(height) => ResourceId::Number(height),
                     None => ResourceId::Hash(req.blob_param("hash")?),
                 };
-                state.get_block(id).context(QueryBlockSnafu {
+                state.get_block(id).await.context(QueryBlockSnafu {
                     resource: id.to_string(),
                 })
             }
@@ -213,6 +215,7 @@ where
                         async move {
                             Ok(state
                                 .subscribe_blocks(height)
+                                .await
                                 .map_err(|err| Error::BlockStream {
                                     height: height as u64,
                                     reason: err.to_string(),
@@ -229,17 +232,15 @@ where
         .get("gettransaction", |req, state| {
             async move {
                 let (block, index) = match req.opt_blob_param("hash")? {
-                    Some(hash) => {
-                        state
-                            .get_block_with_transaction(hash)
-                            .context(QueryTransactionSnafu {
-                                resource: hash.to_string(),
-                            })?
-                    }
+                    Some(hash) => state.get_block_with_transaction(hash).await.context(
+                        QueryTransactionSnafu {
+                            resource: hash.to_string(),
+                        },
+                    )?,
                     None => {
                         let height = req.integer_param("height")?;
                         let id = ResourceId::Number(height);
-                        let block = state.get_block(id).context(QueryBlockSnafu {
+                        let block = state.get_block(id).await.context(QueryBlockSnafu {
                             resource: id.to_string(),
                         })?;
                         let i = req.integer_param("index")?;
@@ -262,6 +263,7 @@ where
                 let proposer = req.blob_param("proposer_id")?;
                 state
                     .count_proposals(&proposer)
+                    .await
                     .context(QueryProposalsSnafu { proposer })
             }
             .boxed()
@@ -272,6 +274,7 @@ where
                 let limit = req.opt_integer_param("count")?;
                 state
                     .get_proposals(&proposer, limit)
+                    .await
                     .context(QueryProposalsSnafu { proposer })
             }
             .boxed()
