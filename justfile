@@ -16,9 +16,6 @@ cli *cmd:
 pull:
     docker compose pull
 
-update-contract-bindings:
-    cargo run --bin gen-bindings
-
 docker-stop-rm:
     docker stop $(docker ps -aq); docker rm $(docker ps -aq)
 
@@ -56,8 +53,6 @@ build-docker-images:
 
 # generate rust bindings for contracts
 gen-bindings:
-    forge bind --crate-name contract-bindings
-    rm -rf ./contract-bindings
-    mv ./contracts/out/bindings ./contract-bindings
+    forge bind --crate-name contract-bindings --force
     cargo fmt --all
     cargo sort -g -w

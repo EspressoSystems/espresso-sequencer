@@ -58,7 +58,7 @@ jobs:
       - name: Enable Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: "${{ matrix.arch }}"
+          key: "v1-${{ matrix.arch }}"
 
       - name: Initialize Nix Environment
         run: |
