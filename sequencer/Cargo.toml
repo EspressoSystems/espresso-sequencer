@@ -61,3 +61,4 @@ typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
 url = "2.3"
+ethers-contract-derive = "2.0.10"
