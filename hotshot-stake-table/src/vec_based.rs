@@ -1,12 +1,13 @@
 //! A vector based stake table implementation. The commitment is the rescue hash of the list of (key, amount) pairs;
 
-use crate::utils::{u256_to_field, ToFields};
+use crate::{
+    config::STAKE_TABLE_CAPACITY,
+    utils::{u256_to_field, ToFields},
+};
 use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
-use hotshot_types::traits::stake_table::{
-    SnapshotVersion, StakeTableError, StakeTableScheme, STAKE_TABLE_CAPACITY,
-};
+use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
 use jf_primitives::{
     crhf::{VariableLengthRescueCRHF, CRHF},
     rescue::RescueParameter,
