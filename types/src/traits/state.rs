@@ -4,6 +4,7 @@
 //! network state, which is modified by the transactions contained within blocks.
 
 use crate::traits::BlockPayload;
+use ark_ff::PrimeField;
 use commit::Committable;
 use espresso_systems_common::hotshot::tag;
 use serde::{de::DeserializeOwned, Serialize};
@@ -217,4 +218,19 @@ pub mod dummy {
             VIDTransaction(vec![0u8])
         }
     }
+}
+
+/// A serialized consensus state for proof generation
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct LightClientState<F: PrimeField> {
+    /// Current view number
+    pub view_number: usize,
+    /// Current block height
+    pub block_height: usize,
+    /// Block commitment
+    pub block_comm: F,
+    /// Commitment for fee ledger
+    pub fee_ledger_comm: F,
+    /// Commitment for the stake table
+    pub stake_table_comm: (F, F, F),
 }
