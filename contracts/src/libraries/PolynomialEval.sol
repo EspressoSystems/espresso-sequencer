@@ -63,6 +63,15 @@ library PolynomialEval {
                 0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5,
                 0x244cf010c43ca87237d8b00bf9dd50c4c01c7f086bd4e8c920e75251d96f0d22
             );
+        } else if (domainSize == 32) {
+            // useful for small-size test, in practice unlikely to be used.
+            return EvalDomain(
+                5,
+                domainSize,
+                0x2ee12bff4a2813286a8dc388cd754d9a3ef2490635eba50cb9c2e5e750800001,
+                0x9c532c6306b93d29678200d47c0b2a99c18d51b838eeb1d3eed4c533bb512d0,
+                0x2724713603bfbd790aeaf3e7df25d8e7ef8f311334905b4d8c99980cf210979d
+            );
         } else {
             revert UnsupportedDegree();
         }

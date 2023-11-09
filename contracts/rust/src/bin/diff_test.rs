@@ -961,6 +961,7 @@ fn gen_plonk_proof_for_test(
 > {
     // 1. Simulate universal setup
     let rng = &mut jf_utils::test_rng();
+    // FIXME: (alex) fix SRS to use Aztec's instead
     let srs = PlonkKzgSnark::<Bn254>::universal_setup_for_testing(2u64.pow(17) as usize, rng)?;
 
     // 2. Create circuits
@@ -1017,7 +1018,6 @@ fn gen_plonk_proof_for_test(
 
 // Different `m`s lead to different circuits.
 // Different `a0`s lead to different witness values.
-// TODO: (alex) change this circuit for easier size counting
 fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkCircuit<F>> {
     let mut cs: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
     // Create variables

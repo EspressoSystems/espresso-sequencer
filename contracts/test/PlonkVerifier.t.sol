@@ -166,6 +166,7 @@ contract PlonkVerifier_batchVerify_Test is Test {
 
     /// @dev Test happy and unhappy path of `batchVerify`.
     function test_batchVerify_succeeds() external {
+        // TODO: change to i<6
         for (uint32 i = 1; i < 2; i++) {
             string[] memory cmds = new string[](6);
             cmds[0] = "cargo";
@@ -190,7 +191,27 @@ contract PlonkVerifier_batchVerify_Test is Test {
             assert(V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
 
             // unhappy path
-            // TODO: (alex)
+            // wrong vk
+            IPlonkVerifier.VerifyingKey[] memory badVks = verifyingKeys;
+            badVks[0].q1 = BN254.negate(verifyingKeys[0].q1);
+            badVks[0].qEcc = BN254.negate(verifyingKeys[0].qEcc);
+            assert(!V.batchVerify(badVks, publicInputs, proofs, extraTranscriptInitMsgs));
+
+            // wrong public inputs
+            uint256[][] memory badPis = publicInputs;
+            badPis[0][0] = 0x1234;
+            assert(!V.batchVerify(verifyingKeys, badPis, proofs, extraTranscriptInitMsgs));
+
+            // wrong proofs
+            IPlonkVerifier.PlonkProof[] memory badProofs;
+            badProofs[0].wireEval0 = 0x12;
+            badProofs[0].sigmaEval0 = 0x34;
+            assert(!V.batchVerify(verifyingKeys, publicInputs, badProofs, extraTranscriptInitMsgs));
+
+            // wrong extraMsgs
+            bytes[] memory badMsgs = extraTranscriptInitMsgs;
+            badMsgs[0] = bytes("hi");
+            assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, badMsgs));
         }
     }
 }

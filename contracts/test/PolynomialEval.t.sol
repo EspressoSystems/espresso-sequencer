@@ -12,22 +12,23 @@ import { BN254 } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
 
 contract PolynomialEval_newEvalDomain_Test is Test {
-    /// @dev diff-test with Rust when `domainSize` is in {2^14, 2^15, 2^16, 2^17}
+    /// @dev diff-test with Rust when `domainSize` is in {2^14, 2^15, 2^16, 2^17, 2^5}
     function test_supportedDomainSize_matches() external {
-        for (uint256 logSize = 14; logSize < 18; logSize++) {
+        uint256[5] memory logSizes = [uint256(5), 14, 15, 16, 17];
+        for (uint256 i = 0; i < 5; i++) {
             string[] memory cmds = new string[](6);
             cmds[0] = "cargo";
             cmds[1] = "run";
             cmds[2] = "--bin";
             cmds[3] = "diff-test";
             cmds[4] = "new-poly-eval-domain";
-            cmds[5] = vm.toString(logSize);
+            cmds[5] = vm.toString(logSizes[i]);
 
             bytes memory result = vm.ffi(cmds);
             (uint256 sizeInv, uint256 groupGen, uint256 groupGenInv) =
                 abi.decode(result, (uint256, uint256, uint256));
 
-            Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
+            Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSizes[i]);
             assertEq(sizeInv, domain.sizeInv);
             assertEq(groupGen, domain.groupGen);
             assertEq(groupGenInv, domain.groupGenInv);
@@ -35,11 +36,11 @@ contract PolynomialEval_newEvalDomain_Test is Test {
     }
 
     /// forge-config: default.fuzz.runs = 20
-    /// @dev Test revert if domainSize is not among {2^14, 2^15, 2^16, 2^17}
+    /// @dev Test revert if domainSize is not among {2^14, 2^15, 2^16, 2^17, 2^5}
     function testFuzz_unsupportedDomainSize_reverts(uint256 domainSize) external {
         vm.assume(
             domainSize != 2 ** 14 && domainSize != 2 ** 15 && domainSize != 2 ** 16
-                && domainSize != 2 ** 17
+                && domainSize != 2 ** 17 && domainSize != 2 ** 5
         );
 
         vm.expectRevert(Poly.UnsupportedDegree.selector);
