@@ -19,6 +19,7 @@ async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-co
 async-std = "1.12.0"
 clap = { version = "^4.4", features = ["derive"] }
 contract-bindings = { path = "../../contract-bindings" }
+crs = { git = "https://github.com/alxiong/crs" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"

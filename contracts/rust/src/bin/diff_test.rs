@@ -26,7 +26,7 @@ use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_primitives::pcs::prelude::Commitment;
+use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -228,10 +228,12 @@ fn main() {
                 field_to_u256::<Fr>(coset_k[2]),
                 field_to_u256::<Fr>(coset_k[3]),
                 field_to_u256::<Fr>(coset_k[4]),
-                field_to_u256::<Fq>(open_key.beta_h.x().unwrap().c0),
+                // NOTE: be EXTRA careful here!! Solidity's BN254.G2Point: Fp2 = x0 * u + x1
+                // whereas in rust: Fp2 = x0 + x1 * u
                 field_to_u256::<Fq>(open_key.beta_h.x().unwrap().c1),
-                field_to_u256::<Fq>(open_key.beta_h.y().unwrap().c0),
+                field_to_u256::<Fq>(open_key.beta_h.x().unwrap().c0),
                 field_to_u256::<Fq>(open_key.beta_h.y().unwrap().c1),
+                field_to_u256::<Fq>(open_key.beta_h.y().unwrap().c0),
             );
             println!("{}", res.encode_hex());
         }
@@ -441,15 +443,8 @@ fn coset_k() -> Vec<Fr> {
 /// Returns `OpenKeys` for KZG10 over BN254 curve from Aztec's SRS
 fn open_key() -> OpenKey<Bn254> {
     let g = G1Affine::new_unchecked(MontFp!("1"), MontFp!("2"));
-    let h = G2Affine::new_unchecked(
+    let h = G2Affine::new(
         Fp2::new(
-            Fq::from(
-                BigUint::from_str_radix(
-                    "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2",
-                    16,
-                )
-                .unwrap(),
-            ),
             Fq::from(
                 BigUint::from_str_radix(
                     "1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed",
@@ -457,15 +452,15 @@ fn open_key() -> OpenKey<Bn254> {
                 )
                 .unwrap(),
             ),
-        ),
-        Fp2::new(
             Fq::from(
                 BigUint::from_str_radix(
-                    "090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b",
+                    "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2",
                     16,
                 )
                 .unwrap(),
             ),
+        ),
+        Fp2::new(
             Fq::from(
                 BigUint::from_str_radix(
                     "12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa",
@@ -473,17 +468,17 @@ fn open_key() -> OpenKey<Bn254> {
                 )
                 .unwrap(),
             ),
-        ),
-    );
-    let beta_h = G2Affine::new_unchecked(
-        Fp2::new(
             Fq::from(
                 BigUint::from_str_radix(
-                    "260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1",
+                    "090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b",
                     16,
                 )
                 .unwrap(),
             ),
+        ),
+    );
+    let beta_h = G2Affine::new(
+        Fp2::new(
             Fq::from(
                 BigUint::from_str_radix(
                     "0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0",
@@ -491,18 +486,25 @@ fn open_key() -> OpenKey<Bn254> {
                 )
                 .unwrap(),
             ),
+            Fq::from(
+                BigUint::from_str_radix(
+                    "260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1",
+                    16,
+                )
+                .unwrap(),
+            ),
         ),
         Fp2::new(
             Fq::from(
                 BigUint::from_str_radix(
-                    "04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4",
+                    "22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55",
                     16,
                 )
                 .unwrap(),
             ),
             Fq::from(
                 BigUint::from_str_radix(
-                    "22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55",
+                    "04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4",
                     16,
                 )
                 .unwrap(),
@@ -961,8 +963,19 @@ fn gen_plonk_proof_for_test(
 > {
     // 1. Simulate universal setup
     let rng = &mut jf_utils::test_rng();
-    // FIXME: (alex) fix SRS to use Aztec's instead
-    let srs = PlonkKzgSnark::<Bn254>::universal_setup_for_testing(2u64.pow(17) as usize, rng)?;
+    let srs = {
+        let aztec_srs = crs::aztec20::kzg10_setup(1024)?;
+
+        UnivariateUniversalParams {
+            powers_of_g: aztec_srs.powers_of_g,
+            h: aztec_srs.h,
+            beta_h: aztec_srs.beta_h,
+        }
+    };
+    let open_key = open_key();
+    assert_eq!(srs.h, open_key.h);
+    assert_eq!(srs.beta_h, open_key.beta_h);
+    assert_eq!(srs.powers_of_g[0], open_key.g);
 
     // 2. Create circuits
     let circuits = (0..num_proof)

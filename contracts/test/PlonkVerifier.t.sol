@@ -203,7 +203,7 @@ contract PlonkVerifier_batchVerify_Test is Test {
             assert(!V.batchVerify(verifyingKeys, badPis, proofs, extraTranscriptInitMsgs));
 
             // wrong proofs
-            IPlonkVerifier.PlonkProof[] memory badProofs;
+            IPlonkVerifier.PlonkProof[] memory badProofs = proofs;
             badProofs[0].wireEval0 = 0x12;
             badProofs[0].sigmaEval0 = 0x34;
             assert(!V.batchVerify(verifyingKeys, publicInputs, badProofs, extraTranscriptInitMsgs));
