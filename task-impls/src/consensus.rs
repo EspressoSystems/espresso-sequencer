@@ -610,6 +610,7 @@ where
                 // Nuance: We timeout on the view + 1 here because that means that we have
                 // not seen evidence to transition to this new view
                 let view_number = self.cur_view + 1;
+                error!("Timeout task spawned for view {}", *view_number);
                 async move {
                     async_sleep(Duration::from_millis(timeout)).await;
                     stream

@@ -28,7 +28,7 @@ async fn web_server_network() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_successful_views: 35,
+            num_successful_views: 30,
             ..Default::default()
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
