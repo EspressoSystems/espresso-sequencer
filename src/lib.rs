@@ -28,7 +28,8 @@
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
 //! use hotshot_query_service::{
 //!     availability,
-//!     data_source::{FileSystemDataSource, UpdateDataSource},
+//!     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+//!     status::UpdateStatusData,
 //!     status, Error
 //! };
 //!
@@ -38,7 +39,7 @@
 //! use tide_disco::App;
 //!
 //! // Create or open a data source.
-//! let data_source = FileSystemDataSource::<AppTypes, AppNodeImpl, ()>::create(storage_path, ())
+//! let data_source = FileSystemDataSource::<AppTypes, AppNodeImpl>::create(storage_path)
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
@@ -92,7 +93,7 @@
 //! # fn doc(storage_path: &Path, options: &Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
-//! let data_source = FileSystemDataSource::create(storage_path, ()).map_err(Error::internal)?;
+//! let data_source = FileSystemDataSource::create(storage_path).map_err(Error::internal)?;
 //! spawn(run_standalone_service(options, data_source, hotshot));
 //! # Ok(())
 //! # }
@@ -534,7 +535,7 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader, ()).unwrap();
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader).unwrap();
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();
         let state = CompositeState {

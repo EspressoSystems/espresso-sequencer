@@ -19,13 +19,19 @@
 //! * [`FileSystemDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
+//!
+//! We also provide combinators for modularly adding functionality to existing data sources:
+//! * [`ExtensibleDataSource`]
+//!
 
-pub mod fs;
+mod extension;
+mod fs;
 mod ledger_log;
 mod update;
 
+pub use extension::ExtensibleDataSource;
 pub use fs::FileSystemDataSource;
-pub use update::UpdateDataSource;
+pub use update::{UpdateDataSource, VersionedDataSource};
 
 /// Generic tests we can instantiate for all the data sources.
 #[cfg(any(test, feature = "testing"))]

@@ -49,7 +49,7 @@ pub struct MockNetwork<D: TestableDataSource> {
 
 // MockNetwork can be used with any TestableDataSource, but it's nice to have a default with a
 // convenient type alias.
-pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl, ()>;
+pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl>;
 
 const MINIMUM_NODES: usize = 6;
 
@@ -181,7 +181,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut ds = ds.write().await;
                     ds.update(&event).await.unwrap();
-                    ds.commit_version().await;
+                    ds.commit_version().await.unwrap();
                 }
             });
         }

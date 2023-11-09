@@ -93,7 +93,7 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::FileSystemDataSource,
+        data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::{MockNodeImpl, MockTransaction, MockTypes},
@@ -221,8 +221,10 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_status_extensions").unwrap();
-        let data_source =
-            FileSystemDataSource::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
+        let data_source = ExtensibleDataSource::new(
+            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            0,
+        );
 
         let extensions = toml! {
             [route.post_ext]
@@ -235,12 +237,13 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api =
-            define_api::<RwLock<FileSystemDataSource<MockTypes, MockNodeImpl, u64>>>(&Options {
-                extensions: vec![extensions.into()],
-                ..Default::default()
-            })
-            .unwrap();
+        let mut api = define_api::<
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
+        >(&Options {
+            extensions: vec![extensions.into()],
+            ..Default::default()
+        })
+        .unwrap();
         api.get("get_ext", |_, state| {
             async move { Ok(*state.as_ref()) }.boxed()
         })

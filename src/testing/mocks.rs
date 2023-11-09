@@ -11,7 +11,9 @@
 // see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    availability::AvailabilityDataSource, data_source::UpdateDataSource, status::StatusDataSource,
+    availability::AvailabilityDataSource,
+    data_source::{UpdateDataSource, VersionedDataSource},
+    status::StatusDataSource,
     QueryableBlock,
 };
 use async_std::sync::Arc;
@@ -353,6 +355,7 @@ pub trait TestableDataSource:
     AvailabilityDataSource<MockTypes, MockNodeImpl>
     + StatusDataSource
     + UpdateDataSource<MockTypes, MockNodeImpl>
+    + VersionedDataSource
     + Send
     + Sync
     + Sized
@@ -361,5 +364,4 @@ pub trait TestableDataSource:
     type TmpData;
 
     async fn create(node_id: usize) -> (Self, Self::TmpData);
-    async fn commit_version(&mut self);
 }

@@ -286,7 +286,7 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::FileSystemDataSource,
+        data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
             mocks::{MockNodeImpl, MockTransaction, MockTypes},
@@ -524,8 +524,10 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
-        let data_source =
-            FileSystemDataSource::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
+        let data_source = ExtensibleDataSource::new(
+            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            0,
+        );
 
         // Create the API extensions specification.
         let extensions = toml! {
@@ -540,7 +542,7 @@ mod test {
         };
 
         let mut api = define_api::<
-            RwLock<FileSystemDataSource<MockTypes, MockNodeImpl, u64>>,
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
             MockTypes,
             MockNodeImpl,
         >(&Options {
