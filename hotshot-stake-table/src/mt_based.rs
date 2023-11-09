@@ -36,11 +36,13 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     type Commitment = MerkleCommitment;
     type LookupProof = MerkleProof<K>;
     type IntoIter = internal::IntoIter<K>;
+    type Aux = ();
 
     fn register(
         &mut self,
         new_key: Self::Key,
         amount: Self::Amount,
+        _: Self::Aux,
     ) -> Result<(), StakeTableError> {
         match self.mapping.get(&new_key) {
             Some(_) => Err(StakeTableError::ExistingKey),
@@ -86,7 +88,18 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         self.mapping.contains_key(key)
     }
 
-    fn lookup(
+    fn lookup(&self, version: SnapshotVersion, key: &K) -> Result<Self::Amount, StakeTableError> {
+        let root = Self::get_root(self, version)?;
+        match self.mapping.get(key) {
+            Some(index) => {
+                let branches = to_merkle_path(*index, self.height);
+                root.simple_lookup(self.height, &branches)
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }
+    }
+
+    fn lookup_with_proof(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
@@ -104,19 +117,13 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         Ok((amount, proof))
     }
 
-    fn simple_lookup(
+    fn lookup_with_aux_and_proof(
         &self,
         version: SnapshotVersion,
-        key: &K,
-    ) -> Result<Self::Amount, StakeTableError> {
-        let root = Self::get_root(self, version)?;
-        match self.mapping.get(key) {
-            Some(index) => {
-                let branches = to_merkle_path(*index, self.height);
-                root.simple_lookup(self.height, &branches)
-            }
-            None => Err(StakeTableError::KeyNotFound),
-        }
+        key: &Self::Key,
+    ) -> Result<(Self::Amount, Self::Aux, Self::LookupProof), StakeTableError> {
+        let (amount, proof) = self.lookup_with_proof(version, key)?;
+        Ok((amount, (), proof))
     }
 
     fn update(
@@ -224,14 +231,14 @@ mod tests {
 
     #[test]
     fn test_stake_table() -> Result<(), StakeTableError> {
-        let mut st = StakeTable::new(3);
+        let mut st = StakeTable::<Key>::new(3);
         let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(0));
 
         // Registering keys
         keys.iter()
             .take(4)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(*key, U256::from(100), ()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(400));
         assert_eq!(st.total_stake(SnapshotVersion::EpochStart)?, U256::from(0));
         assert_eq!(
@@ -247,7 +254,7 @@ mod tests {
         keys.iter()
             .skip(4)
             .take(3)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(*key, U256::from(100), ()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(600));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -260,7 +267,7 @@ mod tests {
         st.advance();
         keys.iter()
             .skip(7)
-            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
+            .for_each(|key| st.register(*key, U256::from(100), ()).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(900));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -272,7 +279,7 @@ mod tests {
         );
 
         // No duplicate register
-        assert!(st.register(keys[0], U256::from(100)).is_err());
+        assert!(st.register(keys[0], U256::from(100), ()).is_err());
         // The 9-th key is still in head stake table
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
@@ -306,7 +313,9 @@ mod tests {
         );
 
         // Testing membership proof
-        let proof = st.lookup(SnapshotVersion::EpochStart, &keys[5])?.1;
+        let proof = st
+            .lookup_with_proof(SnapshotVersion::EpochStart, &keys[5])?
+            .1;
         assert!(proof
             .verify(&st.commitment(SnapshotVersion::EpochStart)?)
             .is_ok());

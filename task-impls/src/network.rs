@@ -235,7 +235,7 @@ impl<
                     CommitteeConsensusMessage::VidVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view_number())), // TODO who is VID leader? https://github.com/EspressoSystems/HotShot/issues/1699
+                Some(membership.get_leader(vote.get_view_number())),
             ),
             HotShotEvent::DAVoteSend(vote) => (
                 vote.get_signing_key(),
