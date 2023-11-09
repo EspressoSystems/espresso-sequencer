@@ -135,6 +135,7 @@ library PlonkVerifier {
         BN254.validateG1Point(proof.split3);
         BN254.validateG1Point(proof.split4);
         BN254.validateG1Point(proof.zeta);
+        BN254.validateG1Point(proof.zetaOmega);
         BN254.validateScalarField(proof.wireEval0);
         BN254.validateScalarField(proof.wireEval1);
         BN254.validateScalarField(proof.wireEval2);

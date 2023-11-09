@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Unlicensed
 
 /* solhint-disable contract-name-camelcase, func-name-mixedcase, one-contract-per-file */
+/* solhint-disable no-inline-assembly  */
 
 // NOTE: For developers and auditors: we mainly test the consistency between the outputs between
 // Solidity and Jellyfish library, with the help of fuzzer-generated inputs from Forge Testing.
@@ -217,132 +218,58 @@ contract PlonkVerifier_batchVerify_Test is Test {
 }
 
 contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
-    /// forge-config: default.fuzz.runs = 5
-    /// @dev Test `_validateProof` correct catches invalidly form proof
-    function testFuzz_validateProof_succeeds(IPlonkVerifier.PlonkProof memory proof) external {
-        // w.o.p. this fuzzer-generated input proof is invalid, either one of the G1Points
-        // or one of the scalar fields is invalid.
+    /// @dev Test that a valid proof shouldn't revert
+    function test_validProof_succeeds() external {
+        // a valid proof
+        IPlonkVerifier.PlonkProof memory proof = dummyProof(42);
+
+        V._validateProof(proof);
+    }
+
+    /// forge-config: default.fuzz.runs = 30
+    /// @dev Randomly pick a coordinate of a point among points in a proof
+    /// mutate it to another value so that the point is no longer valid,
+    /// test if our check will revert.
+    function testFuzz_RevertIfProofContainsInvalidGroup(uint256 nthPoint, bool testX) external {
+        // a valid proof
+        IPlonkVerifier.PlonkProof memory proof = dummyProof(42);
+
+        // we are testing the `nthPoint` in the `proof`,
+        // only mutating a single field element (either x or y coordinate)
+        // There are 13 points in total.
+        nthPoint = bound(nthPoint, 0, 12);
+
+        assembly {
+            if testX {
+                // muteate the x coordinate
+                mstore(mload(add(proof, mul(0x20, nthPoint))), 0x1234)
+            }
+            // else, mutate y coordinate
+            mstore(add(mload(add(proof, mul(0x20, nthPoint))), 0x20), 0x1234)
+        }
+
         vm.expectRevert();
         V._validateProof(proof);
+    }
 
-        // happy path
-        proof = dummyProof(42); // give any seed
-        V._validateProof(proof); // valid proof should pass without any assertion
+    /// forge-config: default.fuzz.runs = 15
+    /// @dev Randomly pick field in a proof mutate it to invalid value
+    /// test if our check will revert.
+    function testFuzz_RevertIfProofContainsInvalidField(uint256 nthField) external {
+        // a valid proof
+        IPlonkVerifier.PlonkProof memory proof = dummyProof(42);
+        uint256 invalidField = BN254.R_MOD;
 
-        // unhappy path
-        BN254.G1Point memory invalidPoint = BN254.G1Point(2, 3);
-        uint256 invalidScalar = BN254.R_MOD;
+        // we are testing the `nthField` in the `proof`,
+        // There are 10 points in total (with 13 points in front)
+        nthField = bound(nthField, 0, 9);
 
-        proof.wire0 = invalidPoint;
+        assembly {
+            let start := add(proof, mul(0x20, 13))
+            mstore(add(start, mul(nthField, 0x20)), invalidField)
+        }
+
         vm.expectRevert();
-        V._validateProof(proof);
-        proof.wire0 = BN254.P1(); // restore to a valid point
-
-        proof.wire1 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wire1 = BN254.P1(); // restore to a valid point
-
-        proof.wire2 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wire2 = BN254.P1(); // restore to a valid point
-
-        proof.wire3 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wire3 = BN254.P1(); // restore to a valid point
-
-        proof.wire4 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wire4 = BN254.P1(); // restore to a valid point
-
-        proof.prodPerm = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.prodPerm = BN254.P1(); // restore to a valid point
-
-        proof.split0 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.split0 = BN254.P1(); // restore to a valid point
-
-        proof.split1 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.split1 = BN254.P1(); // restore to a valid point
-
-        proof.split2 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.split2 = BN254.P1(); // restore to a valid point
-
-        proof.split3 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.split3 = BN254.P1(); // restore to a valid point
-
-        proof.split4 = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.split4 = BN254.P1(); // restore to a valid point
-
-        proof.zeta = invalidPoint;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.zeta = BN254.P1(); // restore to a valid point
-
-        proof.wireEval0 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wireEval0 = 1; // restore to a valid scalar
-
-        proof.wireEval1 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wireEval1 = 1; // restore to a valid scalar
-
-        proof.wireEval2 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wireEval2 = 1; // restore to a valid scalar
-
-        proof.wireEval3 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wireEval3 = 1; // restore to a valid scalar
-
-        proof.wireEval4 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.wireEval4 = 1; // restore to a valid scalar
-
-        proof.sigmaEval0 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.sigmaEval0 = 1; // restore to a valid scalar
-
-        proof.sigmaEval1 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.sigmaEval1 = 1; // restore to a valid scalar
-
-        proof.sigmaEval2 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.sigmaEval2 = 1; // restore to a valid scalar
-
-        proof.sigmaEval3 = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.sigmaEval3 = 1; // restore to a valid scalar
-
-        proof.prodPermZetaOmegaEval = invalidScalar;
-        vm.expectRevert();
-        V._validateProof(proof);
-        proof.prodPermZetaOmegaEval = 1; // restore to a valid scalar
-
         V._validateProof(proof);
     }
 }
