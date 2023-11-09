@@ -477,7 +477,7 @@ where
                 );
 
                 if self.num_timeouts_tracked > 3 {
-                    error!("Too many timeouts!  This shouldn't happen");
+                    error!("Too many consecutive timeouts!  This shouldn't happen");
                 }
 
                 // TODO ED Make this a configurable variable
