@@ -19,8 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Contains structures and functions for committee election
-pub mod certificate;
 #[cfg(feature = "demo")]
 pub mod demo;
 /// Contains traits consumed by [`HotShot`]
