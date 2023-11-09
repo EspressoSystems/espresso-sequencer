@@ -19,8 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Contains structures and functions for committee election
-pub mod certificate;
 #[cfg(feature = "demo")]
 pub mod demo;
 /// Contains traits consumed by [`HotShot`]
@@ -31,7 +29,6 @@ pub mod types;
 pub mod tasks;
 
 use crate::{
-    certificate::QuorumCertificate,
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
         add_transaction_task, add_view_sync_task,
@@ -54,13 +51,14 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    certificate::TimeoutCertificate, data::VidDisperse, simple_certificate::QuorumCertificate2,
-    traits::node_implementation::TimeoutEx,
+    data::VidDisperse,
+    simple_certificate::QuorumCertificate2,
+    traits::{election::ViewSyncExchangeType, node_implementation::TimeoutEx},
 };
 
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::{DACertificate, ViewSyncCertificate},
+    certificate::ViewSyncCertificate,
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
@@ -644,7 +642,6 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
             Commitment = Commitment<Leaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
@@ -652,11 +649,10 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = DAProposal<TYPES>,
-            Certificate = DACertificate<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
             TYPES,
             Message<TYPES, I>,
             Proposal = ViewSyncCertificate<TYPES>,
@@ -675,7 +671,6 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-            Certificate = TimeoutCertificate<TYPES>,
             Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
         > + 'static,

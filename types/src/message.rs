@@ -4,8 +4,8 @@
 //! `HotShot` nodes can send among themselves.
 
 use crate::simple_certificate::{DACertificate2, VIDCertificate2};
-use crate::simple_vote::{DAVote2, VIDVote2};
-use crate::traits::node_implementation::{CommitteeMembership, VIDMembership};
+use crate::simple_vote::{DAVote2, TimeoutVote2, VIDVote2};
+use crate::traits::node_implementation::CommitteeMembership;
 use crate::vote2::HasViewNumber;
 use crate::{
     data::{DAProposal, ProposalType, VidDisperse},
@@ -14,11 +14,11 @@ use crate::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
             ExchangesType, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-            ViewSyncProposalType,
+            VIDMembership, ViewSyncProposalType,
         },
         signature_key::EncodedSignature,
     },
-    vote::{TimeoutVote, ViewSyncVote, VoteType},
+    vote::ViewSyncVote,
 };
 
 use derivative::Derivative;
@@ -339,7 +339,7 @@ where
     ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
 
     /// Message with a Timeout vote
-    TimeoutVote(TimeoutVote<TYPES>),
+    TimeoutVote(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
 
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
@@ -433,7 +433,7 @@ impl<
                     GeneralConsensusMessage::ViewSyncCertificate(message) => {
                         message.data.get_view_number()
                     }
-                    GeneralConsensusMessage::TimeoutVote(message) => message.get_view(),
+                    GeneralConsensusMessage::TimeoutVote(message) => message.get_view_number(),
                 }
             }
             Right(committee_message) => {
