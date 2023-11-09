@@ -46,6 +46,7 @@ pub mod data_source_tests {
     use futures::StreamExt;
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
+    use std::ops::{Bound, RangeBounds};
     use std::time::Duration;
 
     async fn get_non_empty_blocks(
@@ -263,6 +264,72 @@ pub mod data_source_tests {
                     memory_footprint: 0,
                 }
             );
+        }
+    }
+
+    #[async_std::test]
+    pub async fn test_range<D: TestableDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let qd = network.query_data();
+        network.start().await;
+
+        // Wait for there to be at least 3 blocks, then lock the state so the block height can't
+        // change during the test.
+        let (qd, block_height) = loop {
+            let qd = qd.read().await;
+            let block_height = qd.block_height().await.unwrap();
+            if block_height >= 3 {
+                break (qd, block_height as u64);
+            }
+        };
+
+        // Query for a variety of ranges testing all cases of included, excluded, and unbounded
+        // starting and ending bounds
+        do_range_test(&*qd, 1..=2, 1..3).await; // (inclusive, inclusive)
+        do_range_test(&*qd, 1..3, 1..3).await; // (inclusive, exclusive)
+        do_range_test(&*qd, 1.., 1..block_height).await; // (inclusive, unbounded)
+        do_range_test(&*qd, ..=2, 0..3).await; // (unbounded, inclusive)
+        do_range_test(&*qd, ..3, 0..3).await; // (unbounded, exclusive)
+        do_range_test(&*qd, .., 0..block_height).await; // (unbounded, unbounded)
+        do_range_test(&*qd, ExRange(0..=2), 1..3).await; // (exclusive, inclusive)
+        do_range_test(&*qd, ExRange(0..3), 1..3).await; // (exclusive, exclusive)
+        do_range_test(&*qd, ExRange(0..), 1..block_height).await; // (exclusive, unbounded)
+    }
+
+    async fn do_range_test<D, R, I>(qd: &D, range: R, expected_indices: I)
+    where
+        D: TestableDataSource,
+        R: RangeBounds<usize> + Clone + Send,
+        I: IntoIterator<Item = u64>,
+    {
+        let mut leaves = qd.get_leaf_range(range.clone()).await.unwrap();
+        let mut blocks = qd.get_block_range(range).await.unwrap();
+
+        for i in expected_indices {
+            let leaf = leaves.next().await.unwrap().unwrap();
+            let block = blocks.next().await.unwrap().unwrap();
+            assert_eq!(leaf.height(), i);
+            assert_eq!(block.height(), i);
+        }
+    }
+
+    // A wrapper around a range that turns the lower bound from inclusive to exclusive.
+    #[derive(Clone, Copy, Debug)]
+    struct ExRange<R>(R);
+
+    impl<R: RangeBounds<usize>> RangeBounds<usize> for ExRange<R> {
+        fn start_bound(&self) -> Bound<&usize> {
+            match self.0.start_bound() {
+                Bound::Included(x) => Bound::Excluded(x),
+                Bound::Excluded(x) => Bound::Excluded(x),
+                Bound::Unbounded => Bound::Excluded(&0),
+            }
+        }
+
+        fn end_bound(&self) -> Bound<&usize> {
+            self.0.end_bound()
         }
     }
 }
