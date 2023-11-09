@@ -3,12 +3,11 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::simple_certificate::DACertificate2;
-use crate::simple_vote::DAVote2;
-use crate::traits::node_implementation::CommitteeMembership;
+use crate::simple_certificate::{DACertificate2, VIDCertificate2};
+use crate::simple_vote::{DAVote2, VIDVote2};
+use crate::traits::node_implementation::{CommitteeMembership, VIDMembership};
 use crate::vote2::HasViewNumber;
 use crate::{
-    certificate::VIDCertificate,
     data::{DAProposal, ProposalType, VidDisperse},
     simple_vote::QuorumVote,
     traits::{
@@ -19,7 +18,7 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::{TimeoutVote, VIDVote, ViewSyncVote, VoteType},
+    vote::{TimeoutVote, ViewSyncVote, VoteType},
 };
 
 use derivative::Derivative;
@@ -230,9 +229,12 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementati
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
-    VidVote(VIDVote<TYPES>, TYPES::SignatureKey),
+    VidVote(
+        VIDVote2<TYPES, VIDMembership<TYPES, I>>,
+        TYPES::SignatureKey,
+    ),
     /// Certificate for VID. Like [`DACertificate`]
-    VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
+    VidCertificate(VIDCertificate2<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
@@ -366,11 +368,11 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// Vote for VID disperse data
     ///
     /// Like [`DAVote`].
-    VidVote(VIDVote<TYPES>),
+    VidVote(VIDVote2<TYPES, VIDMembership<TYPES, I>>),
     /// VID certificate data is available
     ///
     /// Like [`DACertificate`]
-    VidCertificate(VIDCertificate<TYPES>),
+    VidCertificate(VIDCertificate2<TYPES>),
 }
 
 /// Messages related to the consensus protocol.
@@ -449,7 +451,7 @@ impl<
                     CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
                         disperse.data.get_view_number()
                     }
-                    CommitteeConsensusMessage::VidVote(vote) => vote.get_view(),
+                    CommitteeConsensusMessage::VidVote(vote) => vote.get_view_number(),
                 }
             }
         }

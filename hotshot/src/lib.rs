@@ -54,9 +54,7 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    certificate::{TimeoutCertificate, VIDCertificate},
-    data::VidDisperse,
-    simple_certificate::QuorumCertificate2,
+    certificate::TimeoutCertificate, data::VidDisperse, simple_certificate::QuorumCertificate2,
     traits::node_implementation::TimeoutEx,
 };
 
@@ -670,7 +668,6 @@ where
             TYPES,
             Message<TYPES, I>,
             Proposal = VidDisperse<TYPES>,
-            Certificate = VIDCertificate<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,

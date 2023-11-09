@@ -619,6 +619,10 @@ pub type CommitteeCommChannel<TYPES, I> =
 pub type QuorumMembership<TYPES, I> =
     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
+/// TYPE aliase for the membership of VID exchange
+pub type VIDMembership<TYPES, I> =
+    <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+
 /// Protocol for determining membership in a DA committee.
 pub type CommitteeMembership<TYPES, I> =
     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
