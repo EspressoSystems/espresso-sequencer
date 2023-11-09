@@ -110,7 +110,7 @@ serde = { workspace = true, features = ["rc"] }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
-dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.14" }
+dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.16" }
 
 tracing = { workspace = true }
 typenum = { workspace = true }
