@@ -115,14 +115,13 @@ pub async fn run_orchestrator<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = Leaf<TYPES>,
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
                 Leaf<TYPES>,
-                QuorumProposal<TYPES, Leaf<TYPES>>,
+                QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -137,7 +136,7 @@ pub async fn run_orchestrator<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
+        Storage = MemoryStorage<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 >(
@@ -180,14 +179,13 @@ pub trait RunDA<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = Leaf<TYPES>,
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
                 Leaf<TYPES>,
-                QuorumProposal<TYPES, Leaf<TYPES>>,
+                QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -202,7 +200,7 @@ pub trait RunDA<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
+        Storage = MemoryStorage<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 > where
@@ -223,9 +221,8 @@ pub trait RunDA<
     /// Note: sequencing leaf does not have state, so does not return state
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
         let genesis_block = TYPES::BlockPayload::genesis();
-        let initializer =
-            hotshot::HotShotInitializer::<TYPES, Leaf<TYPES>>::from_genesis(genesis_block)
-                .expect("Couldn't generate genesis block");
+        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis(genesis_block)
+            .expect("Couldn't generate genesis block");
 
         let config = self.get_config();
 
@@ -426,14 +423,13 @@ impl<
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Leaf = Leaf<TYPES>,
             Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
                     Leaf<TYPES>,
-                    QuorumProposal<TYPES, Leaf<TYPES>>,
+                    QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -458,7 +454,7 @@ impl<
                     Message<TYPES, NODE>,
                 >,
             >,
-            Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
+            Storage = MemoryStorage<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
@@ -580,14 +576,13 @@ impl<
         MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Leaf = Leaf<TYPES>,
             Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
                     Leaf<TYPES>,
-                    QuorumProposal<TYPES, Leaf<TYPES>>,
+                    QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -612,7 +607,7 @@ impl<
                     Message<TYPES, NODE>,
                 >,
             >,
-            Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
+            Storage = MemoryStorage<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
@@ -808,14 +803,13 @@ pub async fn main_entry_point<
     VIDNETWORK: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Leaf = Leaf<TYPES>,
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
                 Leaf<TYPES>,
-                QuorumProposal<TYPES, Leaf<TYPES>>,
+                QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
                 Message<TYPES, NODE>,
@@ -830,7 +824,7 @@ pub async fn main_entry_point<
             >,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
-        Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
+        Storage = MemoryStorage<TYPES>,
         ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
     RUNDA: RunDA<TYPES, MEMBERSHIP, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,

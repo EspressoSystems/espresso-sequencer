@@ -18,7 +18,7 @@ use hotshot_task::{
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::{Consensus, View},
-    data::{Leaf, LeafType, ProposalType, QuorumProposal},
+    data::{Leaf, ProposalType, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     simple_certificate::{
@@ -61,13 +61,13 @@ pub struct ConsensusTaskError {}
 /// of consensus
 pub struct ConsensusTaskState<
     TYPES: NodeType<Transaction = VIDTransaction>,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>:
@@ -75,14 +75,14 @@ pub struct ConsensusTaskState<
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
     /// The global task registry
     pub registry: GlobalRegistry,
     /// Reference to consensus. The replica will require a write lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
     /// View timeout from config.
     pub timeout: u64,
     /// View number this view is executing in.
@@ -120,7 +120,7 @@ pub struct ConsensusTaskState<
     pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 
     /// Event stream to publish events to the application layer
-    pub output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
+    pub output_event_stream: ChannelStream<Event<TYPES>>,
 
     /// All the DA certs we've received for current and future views.
     pub da_certs: HashMap<TYPES::Time, DACertificate2<TYPES>>,
@@ -130,7 +130,7 @@ pub struct ConsensusTaskState<
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
-    pub current_proposal: Option<QuorumProposal<TYPES, I::Leaf>>,
+    pub current_proposal: Option<QuorumProposal<TYPES>>,
 
     // ED Should replace this with config information since we need it anyway
     /// The node's id
@@ -138,20 +138,18 @@ pub struct ConsensusTaskState<
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
-pub struct VoteCollectionTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> where
+pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
+where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -165,10 +163,10 @@ pub struct VoteCollectionTaskState<
     pub accumulator: Either<
         VoteAccumulator2<
             TYPES,
-            QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
-            QuorumCertificate2<TYPES, I::Leaf>,
+            QuorumVote<TYPES, QuorumMembership<TYPES, I>>,
+            QuorumCertificate2<TYPES>,
         >,
-        QuorumCertificate2<TYPES, I::Leaf>,
+        QuorumCertificate2<TYPES>,
     >,
 
     /// Accumulator for votes
@@ -189,19 +187,18 @@ pub struct VoteCollectionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for VoteCollectionTaskState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -209,7 +206,7 @@ where
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "Quorum Vote Collection Task", level = "error")]
 
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     mut state: VoteCollectionTaskState<TYPES, I>,
     event: HotShotEvent<TYPES, I>,
 ) -> (
@@ -220,13 +217,13 @@ where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -332,19 +329,15 @@ where
 
 impl<
         TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > ConsensusTaskState<TYPES, I, A>
 where
     TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>:
@@ -352,7 +345,7 @@ where
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -432,8 +425,10 @@ where
                             proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
                         };
                         let vote =
-                            QuorumVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
-                                QuorumData { leaf_commit: leaf.commit() },
+                            QuorumVote::<TYPES, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                QuorumData {
+                                    leaf_commit: leaf.commit(),
+                                },
                                 view,
                                 self.quorum_exchange.public_key(),
                                 self.quorum_exchange.private_key(),
@@ -513,12 +508,14 @@ where
                                 return false;
                             }
                             let vote =
-                            QuorumVote::<TYPES, I::Leaf, QuorumMembership<TYPES, I>>::create_signed_vote(
-                                QuorumData { leaf_commit: leaf.commit() },
-                                view,
-                                self.quorum_exchange.public_key(),
-                                self.quorum_exchange.private_key(),
-                            );
+                                QuorumVote::<TYPES, QuorumMembership<TYPES, I>>::create_signed_vote(
+                                    QuorumData {
+                                        leaf_commit: leaf.commit(),
+                                    },
+                                    view,
+                                    self.quorum_exchange.public_key(),
+                                    self.quorum_exchange.private_key(),
+                                );
                             GeneralConsensusMessage::<TYPES, I>::Vote(vote)
                         } else {
                             error!("Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}", cert, self.cur_view );
@@ -1248,7 +1245,7 @@ where
     #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate2<TYPES, I::Leaf>,
+        _qc: QuorumCertificate2<TYPES>,
         view: TYPES::Time,
         timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
     ) -> bool {
@@ -1362,18 +1359,14 @@ where
 
 impl<
         TYPES: NodeType<Transaction = VIDTransaction>,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I>,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I>,
     > TS for ConsensusTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>:
@@ -1381,7 +1374,7 @@ where
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {
@@ -1406,8 +1399,8 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
     TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 >(
     event: HotShotEvent<TYPES, I>,
     mut state: ConsensusTaskState<TYPES, I, A>,
@@ -1420,7 +1413,7 @@ where
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<Leaf<TYPES>>,
     >,
     CommitteeEx<TYPES, I>:
@@ -1428,7 +1421,7 @@ where
     TimeoutEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
+        Proposal = QuorumProposal<TYPES>,
         Commitment = Commitment<TYPES::Time>,
     >,
 {

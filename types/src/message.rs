@@ -148,13 +148,13 @@ pub enum InternalTrigger<TYPES: NodeType> {
 #[serde(bound(deserialize = ""))]
 pub enum ProcessedGeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
     Proposal(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
     Vote(
-        QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        QuorumVote<TYPES, QuorumMembership<TYPES, I>>,
         TYPES::SignatureKey,
     ),
     /// Message with a view sync vote.
@@ -169,7 +169,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> From<ProcessedGeneralConsensusMessage<TYPES, I>>
     for GeneralConsensusMessage<TYPES, I>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     fn from(value: ProcessedGeneralConsensusMessage<TYPES, I>) -> Self {
         match value {
@@ -192,7 +192,7 @@ where
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ProcessedGeneralConsensusMessage<TYPES, I>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Create a [`ProcessedGeneralConsensusMessage`] from a [`GeneralConsensusMessage`].
     /// # Panics
@@ -324,13 +324,13 @@ impl<
 /// Messages related to both validating and sequencing consensus.
 pub enum GeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
     Proposal(Proposal<QuorumProposalType<TYPES, I>>),
 
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
+    Vote(QuorumVote<TYPES, QuorumMembership<TYPES, I>>),
 
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),

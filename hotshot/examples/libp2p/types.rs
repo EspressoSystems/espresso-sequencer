@@ -22,9 +22,7 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = Leaf<DemoTypes>;
-pub type ThisMembership =
-    GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
+pub type ThisMembership = GeneralStaticCommittee<DemoTypes, <DemoTypes as NodeType>::SignatureKey>;
 pub type DANetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type VIDNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type QuorumNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
@@ -32,20 +30,18 @@ pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership
 
 pub type ThisDAProposal = DAProposal<DemoTypes>;
 
-pub type ThisQuorumProposal = QuorumProposal<DemoTypes, ThisLeaf>;
+pub type ThisQuorumProposal = QuorumProposal<DemoTypes>;
 
 pub type ThisViewSyncProposal = ViewSyncCertificate<DemoTypes>;
 pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
-    type Leaf = Leaf<DemoTypes>;
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,
         QuorumExchange<
             DemoTypes,
-            Self::Leaf,
             ThisQuorumProposal,
             ThisMembership,
             QuorumNetwork,

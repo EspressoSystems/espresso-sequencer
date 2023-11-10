@@ -20,7 +20,8 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::{
-    data::{LeafBlockPayload, LeafType},
+    block_impl::VIDBlockPayload,
+    data::{Leaf, LeafBlockPayload},
     error::RoundTimedoutState,
     event::{Event, EventType},
     simple_certificate::QuorumCertificate2,
@@ -87,15 +88,15 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for OverallSafety
 
 /// Result of running a round of consensus
 #[derive(Debug)]
-pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct RoundResult<TYPES: NodeType> {
     /// Transactions that were submitted
     // pub txns: Vec<TYPES::Transaction>,
 
     /// Nodes that committed this round
     /// id -> (leaf, qc)
-    // TODO GG: isn't it infeasible to store a Vec<LEAF>?
+    // TODO GG: isn't it infeasible to store a Vec<Leaf<TYPES>>?
     #[allow(clippy::type_complexity)]
-    success_nodes: HashMap<u64, (Vec<LEAF>, QuorumCertificate2<TYPES, LEAF>)>,
+    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
@@ -106,18 +107,18 @@ pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// NOTE: technically a map is not needed
     /// left one anyway for ease of viewing
     /// leaf -> # entries decided on that leaf
-    pub leaf_map: HashMap<LEAF, usize>,
+    pub leaf_map: HashMap<Leaf<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<LeafBlockPayload<LEAF>>, usize>,
+    pub block_map: HashMap<Commitment<VIDBlockPayload>, usize>,
 
     /// state -> # entries decided on that state
-    pub state_map: HashMap<<LEAF as LeafType>::MaybeState, usize>,
+    pub state_map: HashMap<(), usize>,
 
     pub num_txns_map: HashMap<u64, usize>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Default for RoundResult<TYPES, LEAF> {
+impl<TYPES: NodeType> Default for RoundResult<TYPES> {
     fn default() -> Self {
         Self {
             success_nodes: Default::default(),
@@ -184,17 +185,17 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> RoundCtx<TYPES, I> {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF> {
+impl<TYPES: NodeType> RoundResult<TYPES> {
     /// insert into round result
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<LEAF>, QuorumCertificate2<TYPES, LEAF>),
+        result: (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>),
         maybe_block_size: Option<u64>,
-    ) -> Option<LEAF> {
+    ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
 
-        let maybe_leaf: Option<LEAF> = result.0.into_iter().last();
+        let maybe_leaf: Option<Leaf<TYPES>> = result.0.into_iter().last();
         if let Some(leaf) = maybe_leaf.clone() {
             match self.leaf_map.entry(leaf.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -245,7 +246,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
         &mut self,
         threshold: usize,
         total_num_nodes: usize,
-        key: LEAF,
+        key: Leaf<TYPES>,
         check_leaf: bool,
         check_state: bool,
         check_block: bool,
@@ -309,8 +310,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
     }
 
     /// generate leaves
-    pub fn gen_leaves(&self) -> HashMap<LEAF, usize> {
-        let mut leaves = HashMap::<LEAF, usize>::new();
+    pub fn gen_leaves(&self) -> HashMap<Leaf<TYPES>, usize> {
+        let mut leaves = HashMap::<Leaf<TYPES>, usize>::new();
 
         for (leaf_vec, _) in self.success_nodes.values() {
             let most_recent_leaf = leaf_vec.iter().last();

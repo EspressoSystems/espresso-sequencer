@@ -1,7 +1,6 @@
 #![cfg(foo)]
 use hotshot::{
     certificate::QuorumCertificate,
-    data::LeafType,
     demos::vdemo::{
         random_quorom_certificate, random_transaction, random_validating_leaf, VDemoBlock,
         VDemoState,

@@ -160,7 +160,7 @@
 //         self,
 //         // registry: &mut GlobalRegistry,
 //         // test_event_stream: ChannelStream<GlobalTestEvent>,
-//         // hotshot_event_stream: UnboundedStream<Event<TYPES, I::Leaf>>,
+//         // hotshot_event_stream: UnboundedStream<Event<TYPES>>,
 //     ) -> TaskGenerator<
 //         PerNodeSafetyTask<TYPES, I>
 //     > {
@@ -252,7 +252,7 @@
 //     PerNodeSafetyTaskErr,
 //     GlobalTestEvent,
 //     ChannelStream<GlobalTestEvent>,
-//     Event<TYPES, I::Leaf>,
-//     UnboundedStream<Event<TYPES, I::Leaf>>,
+//     Event<TYPES>,
+//     UnboundedStream<Event<TYPES>>,
 //     PerNodeSafetyTask<TYPES, I>,
 // >;

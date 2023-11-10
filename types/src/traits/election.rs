@@ -9,14 +9,13 @@ use super::{
 };
 use crate::{
     certificate::{AssembledSignature, ViewSyncCertificate},
-    data::{DAProposal, ProposalType, VidDisperse},
+    data::{DAProposal, Leaf, ProposalType, VidDisperse},
     vote::ViewSyncVoteAccumulator,
 };
 
 use crate::{message::GeneralConsensusMessage, vote::ViewSyncVoteInternal};
 
 use crate::{
-    data::LeafType,
     traits::{
         network::{CommunicationChannel, NetworkMsg},
         signature_key::SignatureKey,
@@ -534,13 +533,11 @@ impl<
 }
 
 /// A [`ConsensusExchange`] where participants vote to append items to a log.
-pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, M: NetworkMsg>:
-    ConsensusExchange<TYPES, M>
-{
+pub trait QuorumExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
-        leaf_commitment: &Commitment<LEAF>,
+        leaf_commitment: &Commitment<Leaf<TYPES>>,
     ) -> EncodedSignature;
 
     /// Sign a block payload commitment.
@@ -557,7 +554,7 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
     /// information in the yes vote.
     fn sign_yes_vote(
         &self,
-        leaf_commitment: Commitment<LEAF>,
+        leaf_commitment: Commitment<Leaf<TYPES>>,
     ) -> (EncodedPublicKey, EncodedSignature);
 }
 
@@ -566,7 +563,6 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
 #[derivative(Clone, Debug)]
 pub struct QuorumExchange<
     TYPES: NodeType,
-    LEAF: LeafType<NodeType = TYPES>,
     PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
@@ -584,23 +580,21 @@ pub struct QuorumExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(LEAF, PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(Leaf<TYPES>, PROPOSAL, MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
-        LEAF: LeafType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > QuorumExchangeType<TYPES, LEAF, M>
-    for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > QuorumExchangeType<TYPES, M> for QuorumExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
-        leaf_commitment: &Commitment<LEAF>,
+        leaf_commitment: &Commitment<Leaf<TYPES>>,
     ) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, leaf_commitment.as_ref());
         signature
@@ -623,7 +617,7 @@ impl<
     /// TODO GG: why return the pubkey? Some other `sign_xxx` methods do not return the pubkey.
     fn sign_yes_vote(
         &self,
-        leaf_commitment: Commitment<LEAF>,
+        leaf_commitment: Commitment<Leaf<TYPES>>,
     ) -> (EncodedPublicKey, EncodedSignature) {
         let signature = TYPES::SignatureKey::sign(
             &self.private_key,
@@ -635,18 +629,16 @@ impl<
 
 impl<
         TYPES: NodeType,
-        LEAF: LeafType<NodeType = TYPES>,
         PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M>
-    for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for QuorumExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<LEAF>;
+    type Commitment = Commitment<Leaf<TYPES>>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,

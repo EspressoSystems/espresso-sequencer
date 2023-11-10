@@ -64,8 +64,7 @@ impl NodeType for Test {
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type ThisLeaf = Leaf<Test>;
-pub type ThisMembership = GeneralStaticCommittee<Test, ThisLeaf, <Test as NodeType>::SignatureKey>;
+pub type ThisMembership = GeneralStaticCommittee<Test, <Test as NodeType>::SignatureKey>;
 pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
@@ -73,14 +72,13 @@ pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 
 pub type ThisDAProposal = DAProposal<Test>;
 
-pub type ThisQuorumProposal = QuorumProposal<Test, ThisLeaf>;
+pub type ThisQuorumProposal = QuorumProposal<Test>;
 
 pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test, Self::Leaf>;
-    type Leaf = Leaf<Test>;
     type Exchanges = Exchanges<
         Test,
         Message<Test, Self>,

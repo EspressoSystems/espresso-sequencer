@@ -14,10 +14,10 @@ use hotshot_task::{
     BoxSyncFuture,
 };
 use hotshot_task_impls::events::HotShotEvent;
+use hotshot_types::data::Leaf;
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::Consensus,
-    data::LeafType,
     error::HotShotError,
     event::EventType,
     message::MessageKind,
@@ -46,7 +46,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ///
     /// This is kept around as an implementation detail, as the [`BroadcastSender::handle_async`]
     /// method is needed to generate new receivers to expose to the user
-    pub(crate) output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
+    pub(crate) output_event_stream: ChannelStream<Event<TYPES>>,
     /// access to the internal ev ent stream, in case we need to, say, shut something down
     pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// registry for controlling tasks
@@ -79,7 +79,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     // /// # Errors
     // ///
     // /// Will return [`HotShotError::NetworkFault`] if the underlying [`SystemContext`] has been closed.
-    // pub async fn next_event(&mut self) -> Result<Event<TYPES, I::Leaf>, HotShotError<TYPES>> {
+    // pub async fn next_event(&mut self) -> Result<Event<TYPES>, HotShotError<TYPES>> {
     //     let result = self.stream_output.recv_async().await;
     //     match result {
     //         Ok(result) => Ok(result),
@@ -91,7 +91,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     // /// # Errors
     // ///
     // /// Will return [`HotShotError::NetworkFault`] if the underlying [`HotShot`] instance has shut down
-    // pub fn try_next_event(&mut self) -> Result<Option<Event<TYPES, I::Leaf>>, HotShotError<TYPES>> {
+    // pub fn try_next_event(&mut self) -> Result<Option<Event<TYPES>>, HotShotError<TYPES>> {
     //     self.stream.await
     //     // let result = self.stream_output.try_recv();
     //     // Ok(result)
@@ -103,13 +103,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     ///
     /// Will return [`HotShotError::NetworkFault`] if the underlying [`HotShot`] instance has been shut
     /// down.
-    // pub async fn available_events(&mut self) -> Result<Vec<Event<TYPES, I::Leaf>>, HotShotError<TYPES>> {
+    // pub async fn available_events(&mut self) -> Result<Vec<Event<TYPES>>, HotShotError<TYPES>> {
     // let mut stream = self.output_stream;
-    // let _ = <dyn SendableStream<Item = Event<TYPES, I::Leaf>> as StreamExt/* ::<Output = Self::Event> */>::next(&mut *stream);
+    // let _ = <dyn SendableStream<Item = Event<TYPES>> as StreamExt/* ::<Output = Self::Event> */>::next(&mut *stream);
     // let mut output = vec![];
     // Loop to pull out all the outputs
     // loop {
-    //     let _ = <dyn SendableStream<Item = Event<TYPES, I::Leaf>> as StreamExt/* ::<Output = Self::Event> */>::next(stream);
+    //     let _ = <dyn SendableStream<Item = Event<TYPES>> as StreamExt/* ::<Output = Self::Event> */>::next(stream);
     // let _ = FutureExt::<Output = Self::Event>::next(*self.output_stream).await;
     // match FutureExt<Output = {
     // Ok(Some(x)) => output.push(x),
@@ -125,8 +125,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// obtains a stream to expose to the user
     pub async fn get_event_stream(
         &mut self,
-        filter: FilterEvent<Event<TYPES, I::Leaf>>,
-    ) -> (impl Stream<Item = Event<TYPES, I::Leaf>>, StreamId) {
+        filter: FilterEvent<Event<TYPES>>,
+    ) -> (impl Stream<Item = Event<TYPES>>, StreamId) {
         self.output_event_stream.subscribe(filter).await
     }
 
@@ -136,8 +136,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// - type wrapper
     pub async fn get_event_stream_known_impl(
         &mut self,
-        filter: FilterEvent<Event<TYPES, I::Leaf>>,
-    ) -> (UnboundedStream<Event<TYPES, I::Leaf>>, StreamId) {
+        filter: FilterEvent<Event<TYPES>>,
+    ) -> (UnboundedStream<Event<TYPES>>, StreamId) {
         self.output_event_stream.subscribe(filter).await
     }
 
@@ -158,15 +158,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// # Errors
     ///
     /// Returns an error if the underlying `Storage` returns an error
-    pub async fn get_state(&self) -> <I::Leaf as LeafType>::MaybeState {
-        self.hotshot.get_state().await
+    pub async fn get_state(&self) {
+        self.hotshot.get_state().await;
     }
 
     /// Gets most recent decided leaf
     /// # Panics
     ///
     /// Panics if internal consensus is in an inconsistent state.
-    pub async fn get_decided_leaf(&self) -> I::Leaf {
+    pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.hotshot.get_decided_leaf().await
     }
 
@@ -190,8 +190,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         let _anchor = self.storage();
         if let Ok(anchor_leaf) = self.storage().get_anchored_view().await {
             if anchor_leaf.view_number == TYPES::Time::genesis() {
-                let leaf: I::Leaf = I::Leaf::from_stored_view(anchor_leaf);
-                let mut qc = QuorumCertificate2::<TYPES, I::Leaf>::genesis();
+                let leaf = Leaf::from_stored_view(anchor_leaf);
+                let mut qc = QuorumCertificate2::<TYPES>::genesis();
                 qc.data = QuorumData {
                     leaf_commit: leaf.commit(),
                 };
@@ -225,7 +225,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     }
 
     /// Get the underyling consensus state for this [`SystemContext`]
-    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
+    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
         self.hotshot.get_consensus()
     }
 
@@ -280,7 +280,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     #[cfg(feature = "hotshot-testing")]
     pub fn sign_validating_or_commitment_proposal(
         &self,
-        leaf_commitment: &Commitment<I::Leaf>,
+        leaf_commitment: &Commitment<Leaf<TYPES>>,
     ) -> EncodedSignature {
         let inner = self.hotshot.inner.clone();
         inner

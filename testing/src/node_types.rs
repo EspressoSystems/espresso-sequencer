@@ -126,7 +126,6 @@ pub type SequencingLibp2pExchange = Exchanges<
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
     type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
     type Exchanges = SequencingLibp2pExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -345,7 +344,6 @@ impl
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
     type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
     type Exchanges = SequencingMemoryExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -486,7 +484,6 @@ impl
 
 impl NodeImplementation<TestTypes> for WebImpl {
     type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
     type Exchanges = SequencingWebExchanges;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -508,8 +505,7 @@ pub type CombinedExchange = Exchanges<
     Message<TestTypes, CombinedImpl>,
     QuorumExchange<
         TestTypes,
-        <CombinedImpl as NodeImplementation<TestTypes>>::Leaf,
-        QuorumProposal<TestTypes, Leaf<TestTypes>>,
+        QuorumProposal<TestTypes>,
         StaticMembership,
         StaticCombinedQuorumComm,
         Message<TestTypes, CombinedImpl>,
@@ -536,8 +532,7 @@ pub type CombinedExchange = Exchanges<
 >;
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
-    type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
+    type Storage = MemoryStorage<TestTypes>;
     type Exchanges = CombinedExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -554,13 +549,7 @@ impl NodeImplementation<TestTypes> for CombinedImpl {
     }
 }
 
-impl
-    TestableExchange<
-        TestTypes,
-        <CombinedImpl as NodeImplementation<TestTypes>>::Leaf,
-        Message<TestTypes, CombinedImpl>,
-    > for CombinedExchange
-{
+impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
