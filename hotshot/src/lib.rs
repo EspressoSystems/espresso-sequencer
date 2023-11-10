@@ -51,16 +51,15 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    data::VidDisperse,
+    certificate::ViewSyncCertificate,
     simple_certificate::QuorumCertificate2,
     traits::{election::ViewSyncExchangeType, node_implementation::TimeoutEx},
 };
 
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{DAProposal, Leaf, QuorumProposal},
+    data::Leaf,
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -627,21 +626,18 @@ where
     QuorumEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES>,
             Commitment = Commitment<Leaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = DAProposal<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
             TYPES,
             Message<TYPES, I>,
-            Proposal = ViewSyncCertificate<TYPES>,
             Certificate = ViewSyncCertificate<TYPES>,
             Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
@@ -649,14 +645,12 @@ where
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = VidDisperse<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     TimeoutEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES>,
             Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
         > + 'static,
@@ -767,12 +761,8 @@ where
             handle.clone(),
         )
         .await;
-        let task_runner = add_view_sync_task::<TYPES, I>(
-            task_runner,
-            internal_event_stream.clone(),
-            handle.clone(),
-        )
-        .await;
+        let task_runner =
+            add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
             task_runner.launch().await;
             info!("Task runner exited!");

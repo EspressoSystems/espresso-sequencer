@@ -15,8 +15,7 @@ use hotshot::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
-    data::{QuorumProposal, ViewNumber},
+    data::ViewNumber,
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
@@ -102,7 +101,6 @@ pub type SequencingLibp2pExchange = Exchanges<
     Message<TestTypes, Libp2pImpl>,
     QuorumExchange<
         TestTypes,
-        QuorumProposal<TestTypes>,
         StaticMembership,
         StaticLibp2pQuorumComm,
         Message<TestTypes, Libp2pImpl>,
@@ -115,7 +113,6 @@ pub type SequencingLibp2pExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticLibp2pViewSyncComm,
         Message<TestTypes, Libp2pImpl>,
@@ -220,7 +217,6 @@ pub type SequencingMemoryExchange = Exchanges<
     Message<TestTypes, MemoryImpl>,
     QuorumExchange<
         TestTypes,
-        QuorumProposal<TestTypes>,
         StaticMembership,
         StaticMemoryQuorumComm,
         Message<TestTypes, MemoryImpl>,
@@ -233,7 +229,6 @@ pub type SequencingMemoryExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticMemoryViewSyncComm,
         Message<TestTypes, MemoryImpl>,
@@ -354,17 +349,10 @@ impl NodeImplementation<TestTypes> for MemoryImpl {
 pub type SequencingWebExchanges = Exchanges<
     TestTypes,
     Message<TestTypes, WebImpl>,
-    QuorumExchange<
-        TestTypes,
-        QuorumProposal<TestTypes>,
-        StaticMembership,
-        StaticWebQuorumComm,
-        Message<TestTypes, WebImpl>,
-    >,
+    QuorumExchange<TestTypes, StaticMembership, StaticWebQuorumComm, Message<TestTypes, WebImpl>>,
     CommitteeExchange<TestTypes, StaticMembership, StaticWebDAComm, Message<TestTypes, WebImpl>>,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticWebViewSyncComm,
         Message<TestTypes, WebImpl>,
@@ -484,7 +472,6 @@ pub type CombinedExchange = Exchanges<
     Message<TestTypes, CombinedImpl>,
     QuorumExchange<
         TestTypes,
-        QuorumProposal<TestTypes>,
         StaticMembership,
         StaticCombinedQuorumComm,
         Message<TestTypes, CombinedImpl>,
@@ -497,7 +484,6 @@ pub type CombinedExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticCombinedViewSyncComm,
         Message<TestTypes, CombinedImpl>,

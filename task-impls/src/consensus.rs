@@ -64,20 +64,12 @@ pub struct ConsensusTaskState<
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     /// The global task registry
     pub registry: GlobalRegistry,
@@ -140,18 +132,10 @@ pub struct ConsensusTaskState<
 /// State for the vote collection task.  This handles the building of a QC from a votes received
 pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     /// the quorum exchange
     pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
@@ -189,18 +173,10 @@ where
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
 }
 
@@ -214,18 +190,10 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     VoteCollectionTaskState<TYPES, I>,
 )
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     match event {
         HotShotEvent::QuorumVoteRecv(vote) => {
@@ -334,20 +302,12 @@ impl<
     > ConsensusTaskState<TYPES, I, A>
 where
     TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
 
@@ -1338,6 +1298,7 @@ where
             let message = Proposal {
                 data: proposal,
                 signature,
+                _pd: PhantomData,
             };
             debug!(
                 "Sending proposal for view {:?} \n {:?}",
@@ -1363,20 +1324,12 @@ impl<
         A: ConsensusApi<TYPES, I>,
     > TS for ConsensusTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
 }
 
@@ -1410,20 +1363,12 @@ pub async fn sequencing_consensus_handle<
 )
 where
     TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     if let HotShotEvent::Shutdown = event {
         (Some(HotShotTaskCompleted::ShutDown), state)

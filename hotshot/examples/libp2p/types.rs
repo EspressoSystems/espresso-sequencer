@@ -7,8 +7,6 @@ use hotshot::{
     },
 };
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
@@ -28,11 +26,6 @@ pub type VIDNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type QuorumNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, ThisMembership>;
 
-pub type ThisDAProposal = DAProposal<DemoTypes>;
-
-pub type ThisQuorumProposal = QuorumProposal<DemoTypes>;
-
-pub type ThisViewSyncProposal = ViewSyncCertificate<DemoTypes>;
 pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
@@ -40,21 +33,9 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,
-        QuorumExchange<
-            DemoTypes,
-            ThisQuorumProposal,
-            ThisMembership,
-            QuorumNetwork,
-            Message<DemoTypes, Self>,
-        >,
+        QuorumExchange<DemoTypes, ThisMembership, QuorumNetwork, Message<DemoTypes, Self>>,
         CommitteeExchange<DemoTypes, ThisMembership, DANetwork, Message<DemoTypes, Self>>,
-        ViewSyncExchange<
-            DemoTypes,
-            ThisViewSyncProposal,
-            ThisMembership,
-            ViewSyncNetwork,
-            Message<DemoTypes, Self>,
-        >,
+        ViewSyncExchange<DemoTypes, ThisMembership, ViewSyncNetwork, Message<DemoTypes, Self>>,
         VIDExchange<DemoTypes, ThisMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<DemoTypes, Self>;

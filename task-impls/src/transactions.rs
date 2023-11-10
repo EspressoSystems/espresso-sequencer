@@ -28,6 +28,7 @@ use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     sync::Arc,
     time::Instant,
 };
@@ -264,6 +265,7 @@ where
                             },
                             // TODO (Keyao) This is also signed in DA task.
                             signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
+                            _pd: PhantomData,
                         },
                         self.quorum_exchange.public_key().clone(),
                     ))

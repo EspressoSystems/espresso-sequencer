@@ -14,8 +14,6 @@ use hotshot::traits::NodeImplementation;
 use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
-use hotshot_types::certificate::ViewSyncCertificate;
-use hotshot_types::data::{DAProposal, QuorumProposal};
 use hotshot_types::message::{Message, SequencingMessage};
 use hotshot_types::traits::election::{
     CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
@@ -70,11 +68,6 @@ pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 
-pub type ThisDAProposal = DAProposal<Test>;
-
-pub type ThisQuorumProposal = QuorumProposal<Test>;
-
-pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
@@ -82,21 +75,9 @@ impl NodeImplementation<Test> for TestImpl {
     type Exchanges = Exchanges<
         Test,
         Message<Test, Self>,
-        QuorumExchange<
-            Test,
-            ThisQuorumProposal,
-            ThisMembership,
-            QuorumNetwork,
-            Message<Test, Self>,
-        >,
+        QuorumExchange<Test, ThisMembership, QuorumNetwork, Message<Test, Self>>,
         CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test, Self>>,
-        ViewSyncExchange<
-            Test,
-            ThisViewSyncProposal,
-            ThisMembership,
-            ViewSyncNetwork,
-            Message<Test, Self>,
-        >,
+        ViewSyncExchange<Test, ThisMembership, ViewSyncNetwork, Message<Test, Self>>,
         VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<Test, Self>;

@@ -3,6 +3,8 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
+use crate::certificate::ViewSyncCertificate;
+use crate::data::QuorumProposal;
 use crate::simple_certificate::{DACertificate2, VIDCertificate2};
 use crate::simple_vote::{DAVote2, TimeoutVote2, VIDVote2};
 use crate::traits::node_implementation::CommitteeMembership;
@@ -13,8 +15,7 @@ use crate::{
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
-            ExchangesType, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-            VIDMembership, ViewSyncProposalType,
+            ExchangesType, NodeImplementation, NodeType, QuorumMembership, VIDMembership,
         },
         signature_key::EncodedSignature,
     },
@@ -23,6 +24,7 @@ use crate::{
 
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -151,7 +153,7 @@ where
     I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
-    Proposal(Proposal<TYPES, QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
+    Proposal(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
     Vote(
         QuorumVote<TYPES, QuorumMembership<TYPES, I>>,
@@ -160,7 +162,7 @@ where
     /// Message with a view sync vote.
     ViewSyncVote(ViewSyncVote<TYPES>),
     /// Message with a view sync certificate.
-    ViewSyncCertificate(Proposal<TYPES, ViewSyncProposalType<TYPES, I>>),
+    ViewSyncCertificate(Proposal<TYPES, ViewSyncCertificate<TYPES>>),
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
@@ -327,7 +329,7 @@ where
     I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
-    Proposal(Proposal<TYPES, QuorumProposalType<TYPES, I>>),
+    Proposal(Proposal<TYPES, QuorumProposal<TYPES>>),
 
     /// Message with a quorum vote.
     Vote(QuorumVote<TYPES, QuorumMembership<TYPES, I>>),
@@ -336,7 +338,7 @@ where
     ViewSyncVote(ViewSyncVote<TYPES>),
 
     /// Message with a view sync certificate.
-    ViewSyncCertificate(Proposal<TYPES, ViewSyncProposalType<TYPES, I>>),
+    ViewSyncCertificate(Proposal<TYPES, ViewSyncCertificate<TYPES>>),
 
     /// Message with a Timeout vote
     TimeoutVote(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
@@ -503,11 +505,13 @@ pub enum DataMessage<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Prepare qc from the leader
-pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES>> {
+pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + DeserializeOwned> {
     // NOTE: optimization could include view number to help look up parent leaf
     // could even do 16 bit numbers if we want
     /// The data being proposed.
     pub data: PROPOSAL,
     /// The proposal must be signed by the view leader
     pub signature: EncodedSignature,
+    /// Phantom for TYPES
+    pub _pd: PhantomData<TYPES>,
 }

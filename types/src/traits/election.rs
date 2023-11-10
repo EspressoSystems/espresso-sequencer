@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     certificate::{AssembledSignature, ViewSyncCertificate},
-    data::{DAProposal, Leaf, VidDisperse},
+    data::Leaf,
     vote::ViewSyncVoteAccumulator,
 };
 
@@ -254,7 +254,6 @@ pub trait Membership<TYPES: NodeType>:
 /// allowing them to vote and query information about the overall state of the protocol (such as
 /// membership and leader status).
 pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
-
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.

@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{
     node_types::{MemoryImpl, TestTypes},
     test_builder::TestMetadata,
@@ -140,12 +142,13 @@ pub async fn build_quorum_proposal(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> Proposal<QuorumProposal<TestTypes>> {
+) -> Proposal<TestTypes, QuorumProposal<TestTypes>> {
     let (proposal, signature) =
         build_quorum_proposal_and_signature(handle, private_key, view).await;
     Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     }
 }
 

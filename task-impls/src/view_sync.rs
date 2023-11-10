@@ -30,7 +30,7 @@ use hotshot_types::{
     vote::{ViewSyncData, ViewSyncVote},
 };
 use snafu::Snafu;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 use tracing::{debug, error, instrument};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
@@ -65,7 +65,6 @@ pub struct ViewSyncTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -110,7 +109,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -134,7 +132,6 @@ pub struct ViewSyncReplicaTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -173,7 +170,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -228,7 +224,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -597,7 +592,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -925,7 +919,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
@@ -994,6 +987,7 @@ where
                         let message = Proposal {
                             data: certificate.clone(),
                             signature,
+                            _pd: PhantomData,
                         };
                         self.event_stream
                             .publish(HotShotEvent::ViewSyncCertificateSend(

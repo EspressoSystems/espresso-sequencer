@@ -403,7 +403,11 @@ where
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
-                let message = Proposal { data, signature };
+                let message = Proposal {
+                    data,
+                    signature,
+                    _pd: PhantomData,
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))

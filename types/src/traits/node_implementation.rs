@@ -263,17 +263,6 @@ pub struct Exchanges<
             > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
                 TYPES,
                 MESSAGE,
-            >>::Proposal,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
             >>::Membership,
             <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
             MESSAGE,
@@ -303,17 +292,6 @@ where
     type TimeoutExchange =
         TimeoutExchange<
             TYPES,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
-            >>::Proposal,
             <<Exchanges<
                 TYPES,
                 MESSAGE,
@@ -363,17 +341,6 @@ where
         #[allow(clippy::type_complexity)]
         let timeout_exchange: TimeoutExchange<
             TYPES,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
-            >>::Proposal,
             <<Exchanges<
                 TYPES,
                 MESSAGE,
@@ -595,18 +562,6 @@ where
         <I::Storage as TestableStorage<TYPES>>::get_full_state(storage).await
     }
 }
-
-/// A proposal to append a new leaf to the log which is output by consensus.
-pub type QuorumProposalType<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A proposal to provide data availability for a new leaf.
-pub type CommitteeProposalType<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A proposal to sync the view.
-pub type ViewSyncProposalType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
 
 /// A vote on a [`ViewSyncProposal`].
 pub type ViewSyncVoteType<TYPES, I> =

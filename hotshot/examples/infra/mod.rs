@@ -23,9 +23,8 @@ use hotshot_task::task::FilterEvent;
 use hotshot_types::{block_impl::VIDBlockHeader, traits::election::VIDExchange};
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, TestableLeaf},
+    data::{Leaf, TestableLeaf},
     event::{Event, EventType},
     message::{Message, SequencingMessage},
     traits::{
@@ -118,21 +117,9 @@ pub async fn run_orchestrator<
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
-            QuorumExchange<
-                TYPES,
-                QuorumProposal<TYPES>,
-                MEMBERSHIP,
-                QUORUMNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            QuorumExchange<TYPES, MEMBERSHIP, QUORUMNETWORK, Message<TYPES, NODE>>,
             CommitteeExchange<TYPES, MEMBERSHIP, DANETWORK, Message<TYPES, NODE>>,
-            ViewSyncExchange<
-                TYPES,
-                ViewSyncCertificate<TYPES>,
-                MEMBERSHIP,
-                VIEWSYNCNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCNETWORK, Message<TYPES, NODE>>,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES>,
@@ -181,21 +168,9 @@ pub trait RunDA<
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
-            QuorumExchange<
-                TYPES,
-                QuorumProposal<TYPES>,
-                MEMBERSHIP,
-                QUORUMNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            QuorumExchange<TYPES, MEMBERSHIP, QUORUMNETWORK, Message<TYPES, NODE>>,
             CommitteeExchange<TYPES, MEMBERSHIP, DANETWORK, Message<TYPES, NODE>>,
-            ViewSyncExchange<
-                TYPES,
-                ViewSyncCertificate<TYPES>,
-                MEMBERSHIP,
-                VIEWSYNCNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCNETWORK, Message<TYPES, NODE>>,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES>,
@@ -426,7 +401,6 @@ impl<
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -439,7 +413,6 @@ impl<
                 >,
                 ViewSyncExchange<
                     TYPES,
-                    ViewSyncCertificate<TYPES>,
                     MEMBERSHIP,
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -578,7 +551,6 @@ impl<
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -591,7 +563,6 @@ impl<
                 >,
                 ViewSyncExchange<
                     TYPES,
-                    ViewSyncCertificate<TYPES>,
                     MEMBERSHIP,
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
                     Message<TYPES, NODE>,
@@ -802,21 +773,9 @@ pub async fn main_entry_point<
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES, NODE>,
-            QuorumExchange<
-                TYPES,
-                QuorumProposal<TYPES>,
-                MEMBERSHIP,
-                QUORUMNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            QuorumExchange<TYPES, MEMBERSHIP, QUORUMNETWORK, Message<TYPES, NODE>>,
             CommitteeExchange<TYPES, MEMBERSHIP, DANETWORK, Message<TYPES, NODE>>,
-            ViewSyncExchange<
-                TYPES,
-                ViewSyncCertificate<TYPES>,
-                MEMBERSHIP,
-                VIEWSYNCNETWORK,
-                Message<TYPES, NODE>,
-            >,
+            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCNETWORK, Message<TYPES, NODE>>,
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES>,
