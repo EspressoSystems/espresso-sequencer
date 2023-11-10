@@ -121,7 +121,7 @@ mod test {
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
+        data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
         simple_certificate::QuorumCertificate2,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
@@ -154,17 +154,15 @@ mod test {
         type StateType = DummyState;
     }
 
-    #[instrument(skip(rng))]
     fn random_stored_view(
-        rng: &mut dyn rand::RngCore,
         view_number: <DummyTypes as NodeType>::Time,
-    ) -> StoredView<DummyTypes, ValidatingLeaf<DummyTypes>> {
+    ) -> StoredView<DummyTypes, Leaf<DummyTypes>> {
         let payload = VIDBlockPayload::genesis();
         let header = VIDBlockHeader {
             block_number: 0,
             payload_commitment: payload.commit(),
         };
-        let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
+        let dummy_leaf_commit = fake_commitment::<Leaf<DummyTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {
             leaf_commit: dummy_leaf_commit,
         };
@@ -180,7 +178,7 @@ mod test {
             },
             header,
             Some(payload),
-            DummyState::random(rng),
+            (),
             dummy_leaf_commit,
             Vec::new(),
             genesis_proposer_id(),
@@ -194,9 +192,8 @@ mod test {
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     #[instrument]
     async fn memory_storage() {
-        let mut rng = rand::thread_rng();
         let storage = MemoryStorage::construct_tmp_storage().unwrap();
-        let genesis = random_stored_view(&mut rng, <DummyTypes as NodeType>::Time::genesis());
+        let genesis = random_stored_view(<DummyTypes as NodeType>::Time::genesis());
         storage
             .append_single_view(genesis.clone())
             .await
