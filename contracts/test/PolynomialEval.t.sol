@@ -16,13 +16,10 @@ contract PolynomialEval_newEvalDomain_Test is Test {
     function test_supportedDomainSize_matches() external {
         uint256[5] memory logSizes = [uint256(5), 14, 15, 16, 17];
         for (uint256 i = 0; i < 5; i++) {
-            string[] memory cmds = new string[](6);
-            cmds[0] = "cargo";
-            cmds[1] = "run";
-            cmds[2] = "--bin";
-            cmds[3] = "diff-test";
-            cmds[4] = "new-poly-eval-domain";
-            cmds[5] = vm.toString(logSizes[i]);
+            string[] memory cmds = new string[](3);
+            cmds[0] = "diff-test";
+            cmds[1] = "new-poly-eval-domain";
+            cmds[2] = vm.toString(logSizes[i]);
 
             bytes memory result = vm.ffi(cmds);
             (uint256 sizeInv, uint256 groupGen, uint256 groupGenInv) =
@@ -59,14 +56,11 @@ contract PolynomialEval_domainElements_Test is Test {
             vm.expectRevert(Poly.InvalidPolyEvalArgs.selector);
             Poly.domainElements(domain, length);
         } else {
-            string[] memory cmds = new string[](7);
-            cmds[0] = "cargo";
-            cmds[1] = "run";
-            cmds[2] = "--bin";
-            cmds[3] = "diff-test";
-            cmds[4] = "eval-domain-elements";
-            cmds[5] = vm.toString(logSize);
-            cmds[6] = vm.toString(length);
+            string[] memory cmds = new string[](4);
+            cmds[0] = "diff-test";
+            cmds[1] = "eval-domain-elements";
+            cmds[2] = vm.toString(logSize);
+            cmds[3] = vm.toString(length);
 
             bytes memory result = vm.ffi(cmds);
             (uint256[] memory elems) = abi.decode(result, (uint256[]));
@@ -102,15 +96,12 @@ contract PolynomialEval_evalDataGen_Test is Test {
         vm.assume(zeta != 1); // otherwise divisor of lagrange_1_poly would be zero
         vm.assume(zeta != domain.groupGenInv); // otherwise divisor of lagrange_n_poly would be zero
 
-        string[] memory cmds = new string[](8);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "eval-data-gen";
-        cmds[5] = vm.toString(logSize);
-        cmds[6] = vm.toString(bytes32(zeta));
-        cmds[7] = vm.toString(abi.encode(publicInput));
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "eval-data-gen";
+        cmds[2] = vm.toString(logSize);
+        cmds[3] = vm.toString(bytes32(zeta));
+        cmds[4] = vm.toString(abi.encode(publicInput));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 vanishEval, uint256 lagrangeOne, uint256 piEval) =

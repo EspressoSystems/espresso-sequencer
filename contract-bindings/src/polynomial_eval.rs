@@ -138,6 +138,8 @@ pub mod polynomial_eval {
         Clone,
         ::ethers::contract::EthError,
         ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
         Default,
         Debug,
         PartialEq,
@@ -151,6 +153,8 @@ pub mod polynomial_eval {
         Clone,
         ::ethers::contract::EthError,
         ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
         Default,
         Debug,
         PartialEq,
@@ -160,7 +164,16 @@ pub mod polynomial_eval {
     #[etherror(name = "UnsupportedDegree", abi = "UnsupportedDegree()")]
     pub struct UnsupportedDegree;
     ///Container type for all of the contract's custom errors
-    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        serde::Serialize,
+        serde::Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
     pub enum PolynomialEvalErrors {
         InvalidPolyEvalArgs(InvalidPolyEvalArgs),
         UnsupportedDegree(UnsupportedDegree),

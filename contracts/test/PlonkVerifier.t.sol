@@ -65,13 +65,10 @@ contract PlonkVerifierCommonTest is Test {
 
     /// @dev Generate a random valid (format-wise) proof from a random seed
     function dummyProof(uint64 seed) public returns (IPlonkVerifier.PlonkProof memory) {
-        string[] memory cmds = new string[](6);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "dummy-proof";
-        cmds[5] = vm.toString(seed);
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "dummy-proof";
+        cmds[2] = vm.toString(seed);
 
         bytes memory result = vm.ffi(cmds);
         (IPlonkVerifier.PlonkProof memory proof) = abi.decode(result, (IPlonkVerifier.PlonkProof));
@@ -116,12 +113,9 @@ contract PlonkVerifierCommonTest is Test {
 contract PlonkVerifier_constants_Test is Test {
     /// @dev Test constants declared matches that from Jellyfish
     function test_correctConstants() external {
-        string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "plonk-constants";
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-constants";
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -169,13 +163,10 @@ contract PlonkVerifier_batchVerify_Test is Test {
     function test_batchVerify_succeeds() external {
         // TODO: change to i<6
         for (uint32 i = 1; i < 2; i++) {
-            string[] memory cmds = new string[](6);
-            cmds[0] = "cargo";
-            cmds[1] = "run";
-            cmds[2] = "--bin";
-            cmds[3] = "diff-test";
-            cmds[4] = "plonk-batch-verify";
-            cmds[5] = vm.toString(i);
+            string[] memory cmds = new string[](3);
+            cmds[0] = "diff-test";
+            cmds[1] = "plonk-batch-verify";
+            cmds[2] = vm.toString(i);
 
             bytes memory result = vm.ffi(cmds);
             (
@@ -288,16 +279,13 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
 
         V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof, extraTranscriptInitMsg);
 
-        string[] memory cmds = new string[](9);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "plonk-prepare-pcs-info";
-        cmds[5] = vm.toString(abi.encode(vk));
-        cmds[6] = vm.toString(abi.encode(publicInput));
-        cmds[7] = vm.toString(abi.encode(proof));
-        cmds[8] = vm.toString(abi.encode(extraTranscriptInitMsg));
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-prepare-pcs-info";
+        cmds[2] = vm.toString(abi.encode(vk));
+        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[4] = vm.toString(abi.encode(proof));
+        cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -336,16 +324,13 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
         publicInput = sanitizeScalarFields(publicInput);
 
-        string[] memory cmds = new string[](9);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "plonk-compute-chal";
-        cmds[5] = vm.toString(abi.encode(vk));
-        cmds[6] = vm.toString(abi.encode(publicInput));
-        cmds[7] = vm.toString(abi.encode(proof));
-        cmds[8] = vm.toString(abi.encode(extraTranscriptInitMsg));
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-compute-chal";
+        cmds[2] = vm.toString(abi.encode(vk));
+        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[4] = vm.toString(abi.encode(proof));
+        cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
 
         bytes memory result = vm.ffi(cmds);
         (V.Challenges memory chal) = abi.decode(result, (V.Challenges));
@@ -375,15 +360,12 @@ contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
         linPolyConstant = sanitizeScalarField(linPolyConstant);
         uint256[] memory commScalars = sanitizeScalarFields(copyCommScalars(scalars));
 
-        string[] memory cmds = new string[](8);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "plonk-prepare-eval";
-        cmds[5] = vm.toString(abi.encode(proof));
-        cmds[6] = vm.toString(bytes32(linPolyConstant));
-        cmds[7] = vm.toString(abi.encode(commScalars));
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-prepare-eval";
+        cmds[2] = vm.toString(abi.encode(proof));
+        cmds[3] = vm.toString(bytes32(linPolyConstant));
+        cmds[4] = vm.toString(abi.encode(commScalars));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 eval) = abi.decode(result, (uint256));

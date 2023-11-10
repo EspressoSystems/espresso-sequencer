@@ -22,14 +22,11 @@ contract Transcript_appendMessage_Test is Test {
         T.TranscriptData memory transcript,
         bytes memory message
     ) external {
-        string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-msg";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        cmds[6] = vm.toString(abi.encode(message));
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-msg";
+        cmds[2] = vm.toString(abi.encode(transcript));
+        cmds[3] = vm.toString(abi.encode(message));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
@@ -53,14 +50,11 @@ contract Transcript_appendFieldElement_Test is Test {
         fieldElement = bound(fieldElement, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(fieldElement);
 
-        string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-field";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        cmds[6] = vm.toString(bytes32(fieldElement));
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-field";
+        cmds[2] = vm.toString(abi.encode(transcript));
+        cmds[3] = vm.toString(bytes32(fieldElement));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
@@ -85,14 +79,11 @@ contract Transcript_appendGroupElement_Test is Test {
         BN254.validateScalarField(randScalar);
         BN254.G1Point memory randPoint = BN254.scalarMul(BN254.P1(), randScalar);
 
-        string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-group";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        cmds[6] = vm.toString(abi.encode(randPoint));
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-group";
+        cmds[2] = vm.toString(abi.encode(transcript));
+        cmds[3] = vm.toString(abi.encode(randPoint));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
@@ -109,14 +100,11 @@ contract Transcript_appendGroupElement_Test is Test {
         BN254.G1Point memory infinity = BN254.G1Point(0, 0);
         assert(BN254.isInfinity(infinity));
 
-        string[] memory cmds = new string[](7);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-group";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        cmds[6] = vm.toString(abi.encode(infinity));
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-group";
+        cmds[2] = vm.toString(abi.encode(transcript));
+        cmds[3] = vm.toString(abi.encode(infinity));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
@@ -134,13 +122,10 @@ contract Transcript_getAndAppendChallenge_Test is Test {
     /// forge-config: default.fuzz.runs = 10
     /// @dev Test if `getAndAppendChallenge` matches that of Jellyfish
     function testFuzz_getAndAppendChallenge_matches(T.TranscriptData memory transcript) external {
-        string[] memory cmds = new string[](6);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-get-chal";
-        cmds[5] = vm.toString(abi.encode(transcript));
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-get-chal";
+        cmds[2] = vm.toString(abi.encode(transcript));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated, uint256 chal) =
@@ -170,15 +155,12 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         }
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
 
-        string[] memory cmds = new string[](8);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-vk-and-pi";
-        cmds[5] = vm.toString(abi.encode(transcript));
-        cmds[6] = vm.toString(abi.encode(vk));
-        cmds[7] = vm.toString(abi.encode(publicInput));
+        string[] memory cmds = new string[](5);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-vk-and-pi";
+        cmds[2] = vm.toString(abi.encode(transcript));
+        cmds[3] = vm.toString(abi.encode(vk));
+        cmds[4] = vm.toString(abi.encode(publicInput));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
@@ -197,13 +179,10 @@ contract Transcript_appendProofEvaluations_Test is Test {
     /// forge-config: default.fuzz.runs = 5
     /// @dev Test if `appendProofEvaluations` matches that of Jellyfish
     function testFuzz_appendProofEvaluations_matches(T.TranscriptData memory transcript) external {
-        string[] memory cmds = new string[](6);
-        cmds[0] = "cargo";
-        cmds[1] = "run";
-        cmds[2] = "--bin";
-        cmds[3] = "diff-test";
-        cmds[4] = "transcript-append-proof-evals";
-        cmds[5] = vm.toString(abi.encode(transcript));
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "transcript-append-proof-evals";
+        cmds[2] = vm.toString(abi.encode(transcript));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated, IPlonkVerifier.PlonkProof memory proof) =

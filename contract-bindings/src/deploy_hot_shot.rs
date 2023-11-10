@@ -162,6 +162,8 @@ pub mod deploy_hot_shot {
         Clone,
         ::ethers::contract::EthCall,
         ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
         Default,
         Debug,
         PartialEq,
@@ -175,6 +177,8 @@ pub mod deploy_hot_shot {
         Clone,
         ::ethers::contract::EthCall,
         ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
         Default,
         Debug,
         PartialEq,
@@ -184,7 +188,16 @@ pub mod deploy_hot_shot {
     #[ethcall(name = "run", abi = "run()")]
     pub struct RunCall;
     ///Container type for all of the contract's call
-    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        serde::Serialize,
+        serde::Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
     pub enum DeployHotShotCalls {
         IsScript(IsScriptCall),
         Run(RunCall),
@@ -234,6 +247,8 @@ pub mod deploy_hot_shot {
         Clone,
         ::ethers::contract::EthAbiType,
         ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
         Default,
         Debug,
         PartialEq,

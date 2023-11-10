@@ -14,6 +14,5 @@ pub mod i_plonk_verifier;
 pub mod plonk_verifier;
 pub mod polynomial_eval;
 pub mod shared_types;
-pub mod std_invariant;
 pub mod transcript;
 pub mod utils;
