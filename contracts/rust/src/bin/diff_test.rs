@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use ark_bn254::{g1, Bn254, Fq, Fr, G1Affine, G2Affine};
+use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, Field, Fp2, MontFp, PrimeField};
+use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::{
@@ -566,16 +566,19 @@ impl From<ParsedTranscript> for SolidityTranscript {
 }
 
 /// an intermediate representation of `BN254.G1Point` in solidity.
-#[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
+#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
 struct ParsedG1Point {
     x: U256,
     y: U256,
 }
 
+// this is convention from BN256 precompile
 impl Default for ParsedG1Point {
     fn default() -> Self {
-        let point = Affine::<g1::Config>::new_unchecked(MontFp!("1"), MontFp!("2"));
-        point.into()
+        Self {
+            x: U256::from(0),
+            y: U256::from(0),
+        }
     }
 }
 
@@ -612,10 +615,14 @@ where
     P::BaseField: PrimeField,
 {
     fn from(p: ParsedG1Point) -> Self {
-        Self::new(
-            u256_to_field::<P::BaseField>(p.x),
-            u256_to_field::<P::BaseField>(p.y),
-        )
+        if p == ParsedG1Point::default() {
+            Self::default()
+        } else {
+            Self::new(
+                u256_to_field::<P::BaseField>(p.x),
+                u256_to_field::<P::BaseField>(p.y),
+            )
+        }
     }
 }
 
@@ -919,7 +926,7 @@ impl FromStr for ParsedChallenges {
 
 impl From<Challenges<Fr>> for ParsedChallenges {
     fn from(c: Challenges<Fr>) -> Self {
-        let alpha_2 = c.alpha.double();
+        let alpha_2 = c.alpha * c.alpha;
         Self {
             alpha: field_to_u256::<Fr>(c.alpha),
             alpha_2: field_to_u256::<Fr>(alpha_2),

@@ -102,6 +102,30 @@ contract Transcript_appendGroupElement_Test is Test {
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);
     }
+
+    /// forge-config: default.fuzz.runs = 5
+    /// @dev Test special case where the identity point (or infinity) is appended.
+    function test_appendInfinityPoint_succeeds(T.TranscriptData memory transcript) external {
+        BN254.G1Point memory infinity = BN254.G1Point(0, 0);
+        assert(BN254.isInfinity(infinity));
+
+        string[] memory cmds = new string[](7);
+        cmds[0] = "cargo";
+        cmds[1] = "run";
+        cmds[2] = "--bin";
+        cmds[3] = "diff-test";
+        cmds[4] = "transcript-append-group";
+        cmds[5] = vm.toString(abi.encode(transcript));
+        cmds[6] = vm.toString(abi.encode(infinity));
+
+        bytes memory result = vm.ffi(cmds);
+        (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
+
+        transcript.appendGroupElement(infinity);
+        assertEq(updated.transcript, transcript.transcript);
+        assertEq(updated.state[0], transcript.state[0]);
+        assertEq(updated.state[1], transcript.state[1]);
+    }
 }
 
 contract Transcript_getAndAppendChallenge_Test is Test {

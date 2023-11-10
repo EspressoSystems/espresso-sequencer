@@ -27,3 +27,6 @@ sepolia = { key = "${ETHERSCAN_API_KEY}" }
 line_length=100
 bracket_spacing=true
 wrap_comments=true
+
+[profile.ci]
+fuzz = { run = 50 }

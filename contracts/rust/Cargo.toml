@@ -26,10 +26,10 @@ ethers-providers = "2.0.4"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
 itertools = "0.10.3"
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test-apis", "test-srs"], branch = "more-test-apis" }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], branch = "more-test-apis" }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", branch = "more-test-apis" }
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = ["test-apis", "test-srs"], rev = "8c66b70c5dae00ceb4d1c32fc3a0ab603d1681cb" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], rev = "8c66b70c5dae00ceb4d1c32fc3a0ab603d1681cb" }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features = ["std"], rev = "8c66b70c5dae00ceb4d1c32fc3a0ab603d1681cb" }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", rev = "8c66b70c5dae00ceb4d1c32fc3a0ab603d1681cb" }
 num-bigint = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 sequencer-utils = { path = "../../utils" }
