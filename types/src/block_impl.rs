@@ -91,7 +91,7 @@ impl VIDBlockPayload {
         // changes.
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
         let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-        vid.disperse(encoded_transactions.to_vec()).unwrap().commit
+        vid.disperse(encoded_transactions).unwrap().commit
     }
 
     /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
