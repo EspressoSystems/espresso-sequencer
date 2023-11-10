@@ -171,7 +171,6 @@
                 # Rust tools
                 cargo-audit
                 cargo-edit
-                cargo-watch
                 cargo-sort
                 just
                 fenix.packages.${system}.rust-analyzer
@@ -192,7 +191,9 @@
                 solhint
 		(python3.withPackages (ps: with ps; [ black ]))
 
-              ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ];
+              ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ]
+                ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
+              ;
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.

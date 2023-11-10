@@ -183,7 +183,7 @@ async fn update_loop(
                 // This does mean that we may end up proposing with a block number that is newer
                 // than the current L1 head, if the height of the L1 is reduced in a reorg. This is
                 // not the best for UX, as rollups will have to block until the new L1 block is
-                // produced, but the L1 chain will _eventually_ (and usualy quickly) catch up, and
+                // produced, but the L1 chain will _eventually_ (and usually quickly) catch up, and
                 // this only happens in very rare cases anyways. In such rare cases we prioritize
                 // maintaining our invariants (increasing L1 block numbers) over UX.
                 tracing::warn!(
