@@ -61,3 +61,8 @@ gen-bindings:
 sol-lint:
     forge fmt
     solhint --fix 'contracts/{script,src,test}/**/*.sol'
+
+# Build diff-test binary and forge test
+sol-test:
+    cargo build --bin diff-test --release
+    forge test
