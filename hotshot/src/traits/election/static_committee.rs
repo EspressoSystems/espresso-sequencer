@@ -105,7 +105,6 @@ where
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
-
     /// Simply make the partial signature
     fn make_vote_token(
         &self,
@@ -123,6 +122,22 @@ where
         message.extend_from_slice(&[0u8; 32 - 8]);
         let signature = PUBKEY::sign(private_key, &message);
         Ok(Some(StaticVoteToken { signature, pub_key }))
+    }
+    fn has_stake(&self, pub_key: &PUBKEY) -> bool {
+        let entry = pub_key.get_stake_table_entry(1u64);
+        self.committee_nodes_with_stake.contains(&entry)
+    }
+
+    fn get_stake(
+        &self,
+        pub_key: &<TYPES as NodeType>::SignatureKey,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        let entry = pub_key.get_stake_table_entry(1u64);
+        if self.committee_nodes_with_stake.contains(&entry) {
+            Some(entry)
+        } else {
+            None
+        }
     }
 
     fn validate_vote_token(

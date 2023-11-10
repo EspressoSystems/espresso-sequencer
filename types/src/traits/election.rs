@@ -229,6 +229,16 @@ pub trait Membership<TYPES: NodeType>:
         priv_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Result<Option<TYPES::VoteTokenType>, ElectionError>;
 
+    /// Check if a key has stake
+    fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;
+
+    /// Get the stake table entry for a public key, returns `None` if the
+    /// key is not in the table
+    fn get_stake(
+        &self,
+        pub_key: &TYPES::SignatureKey,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
+
     /// Checks the claims of a received vote token
     ///
     /// # Errors
@@ -301,18 +311,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// The total number of nodes in the committee.
     fn total_nodes(&self) -> usize {
         self.membership().total_nodes()
-    }
-
-    /// Attempts to generate a vote token for participation at time `view_number`.
-    ///
-    /// # Errors
-    /// When unable to make a vote token because not part of the committee
-    fn make_vote_token(
-        &self,
-        view_number: TYPES::Time,
-    ) -> std::result::Result<std::option::Option<TYPES::VoteTokenType>, ElectionError> {
-        self.membership()
-            .make_vote_token(view_number, self.private_key())
     }
 
     /// The committee which votes on proposals.
@@ -411,13 +409,6 @@ impl<
     fn network(&self) -> &NETWORK {
         &self.network
     }
-    fn make_vote_token(
-        &self,
-        view_number: TYPES::Time,
-    ) -> std::result::Result<std::option::Option<TYPES::VoteTokenType>, ElectionError> {
-        self.membership
-            .make_vote_token(view_number, &self.private_key)
-    }
 
     fn membership(&self) -> &Self::Membership {
         &self.membership
@@ -513,13 +504,6 @@ impl<
     }
     fn network(&self) -> &NETWORK {
         &self.network
-    }
-    fn make_vote_token(
-        &self,
-        view_number: TYPES::Time,
-    ) -> std::result::Result<std::option::Option<TYPES::VoteTokenType>, ElectionError> {
-        self.membership
-            .make_vote_token(view_number, &self.private_key)
     }
 
     fn membership(&self) -> &Self::Membership {

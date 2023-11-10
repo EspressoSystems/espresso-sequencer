@@ -6,7 +6,7 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{
         consensus_api::ConsensusSharedApi,
-        election::{ConsensusExchange, ViewSyncExchangeType},
+        election::{ConsensusExchange, Membership, ViewSyncExchangeType},
         node_implementation::ExchangesType,
         state::ConsensusTime,
     },
@@ -41,7 +41,8 @@ async fn test_view_sync_task() {
     let view_sync_exchange = api.inner.exchanges.view_sync_exchange().clone();
     let relay_pub_key = api.public_key().to_bytes();
     let vote_token = view_sync_exchange
-        .make_vote_token(ViewNumber::new(5))
+        .membership()
+        .make_vote_token(ViewNumber::new(5), api.private_key())
         .unwrap_or_else(|_| panic!("Error making vote token"))
         .unwrap_or_else(|| panic!("Not chosen for the committee"));
     let vote_data_internal: ViewSyncData<TestTypes> = ViewSyncData {

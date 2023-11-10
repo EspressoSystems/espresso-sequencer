@@ -18,7 +18,7 @@ use crate::{
     traits::{
         election::Membership,
         node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
+        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey, StakeTableEntryType},
     },
 };
 
@@ -112,7 +112,9 @@ impl<
         }
 
         // TODO: Lookup the actual stake
-        let stake_table_entry: <<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry = key.get_stake_table_entry(1u64);
+        let Some(stake_table_entry) = membership.get_stake(&key) else {
+            return Either::Left(self);
+        };
         let stake_table = membership.get_committee_qc_stake_table();
         let vote_node_id = stake_table
             .iter()
@@ -131,7 +133,7 @@ impl<
         let (total_stake_casted, total_vote_map) = self
             .vote_outcomes
             .entry(vote_commitment)
-            .or_insert_with(|| (0, BTreeMap::new()));
+            .or_insert_with(|| (U256::from(0), BTreeMap::new()));
 
         // Check for duplicate vote
         // TODO ED Re-encoding signature key to bytes until we get rid of EncodedKey
@@ -148,13 +150,13 @@ impl<
         self.sig_lists.push(original_signature);
 
         // TODO: Get the stake from the stake table entry.
-        *total_stake_casted += 1;
+        *total_stake_casted += stake_table_entry.get_stake();
         total_vote_map.insert(
             encoded_key.clone(),
             (vote.get_signature(), vote.get_data_commitment()),
         );
 
-        if *total_stake_casted >= CERT::threshold(membership) {
+        if *total_stake_casted >= CERT::threshold(membership).into() {
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QCParams =
                 <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
@@ -184,7 +186,7 @@ impl<
 type VoteMap2<COMMITMENT> = HashMap<
     COMMITMENT,
     (
-        u64,
+        U256,
         BTreeMap<EncodedPublicKey, (EncodedSignature, COMMITMENT)>,
     ),
 >;

@@ -231,49 +231,49 @@ where
                     return None;
                 }
 
-                let vote_token = self.committee_exchange.make_vote_token(view);
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for DA committee on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        // Generate and send vote
-                        let vote = DAVote2::create_signed_vote(
-                            DAData {
-                                payload_commit: payload_commitment,
-                            },
-                            view,
-                            self.committee_exchange.public_key(),
-                            self.committee_exchange.private_key(),
-                        );
-
-                        // ED Don't think this is necessary?
-                        // self.cur_view = view;
-
-                        debug!("Sending vote to the DA leader {:?}", vote.get_view_number());
-                        self.event_stream
-                            .publish(HotShotEvent::DAVoteSend(vote))
-                            .await;
-                        let mut consensus = self.consensus.write().await;
-
-                        // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                        // there is already a view there: the replica task may have inserted a `Leaf` view which
-                        // contains strictly more information.
-                        consensus.state_map.entry(view).or_insert(View {
-                            view_inner: ViewInner::DA {
-                                block: payload_commitment,
-                            },
-                        });
-
-                        // Record the block payload we have promised to make available.
-                        consensus
-                            .saved_block_payloads
-                            .insert(proposal.data.block_payload);
-                    }
+                if !self
+                    .committee_exchange
+                    .membership()
+                    .has_stake(self.committee_exchange.public_key())
+                {
+                    debug!(
+                        "We were not chosen for consensus committee on {:?}",
+                        self.cur_view
+                    );
+                    return None;
                 }
+                // Generate and send vote
+                let vote = DAVote2::create_signed_vote(
+                    DAData {
+                        payload_commit: payload_commitment,
+                    },
+                    view,
+                    self.committee_exchange.public_key(),
+                    self.committee_exchange.private_key(),
+                );
+
+                // ED Don't think this is necessary?
+                // self.cur_view = view;
+
+                debug!("Sending vote to the DA leader {:?}", vote.get_view_number());
+                self.event_stream
+                    .publish(HotShotEvent::DAVoteSend(vote))
+                    .await;
+                let mut consensus = self.consensus.write().await;
+
+                // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                // there is already a view there: the replica task may have inserted a `Leaf` view which
+                // contains strictly more information.
+                consensus.state_map.entry(view).or_insert(View {
+                    view_inner: ViewInner::DA {
+                        block: payload_commitment,
+                    },
+                });
+
+                // Record the block payload we have promised to make available.
+                consensus
+                    .saved_block_payloads
+                    .insert(proposal.data.block_payload);
             }
             HotShotEvent::DAVoteRecv(vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
