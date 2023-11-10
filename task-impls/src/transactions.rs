@@ -13,10 +13,10 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockPayload, VIDTransaction, NUM_CHUNKS, NUM_STORAGE_NODES},
     certificate::QuorumCertificate,
     consensus::Consensus,
-    data::{Leaf, VidDisperse, VidScheme, VidSchemeTrait},
+    data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::{Message, Proposal, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
@@ -228,30 +228,15 @@ where
                 // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
                 let txns = self.wait_for_transactions(parent_leaf).await?;
+                let encoded_txns = VIDTransaction::encode(txns.clone());
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+                let srs = test_srs(NUM_STORAGE_NODES);
+                // TODO We are using constant numbers for now, but they will change as the quorum size
+                // changes.
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                let vid_disperse = vid.disperse(encoded_txns.clone()).unwrap();
 
-                // TODO move all VID stuff to a new VID task
-                // details here: https://github.com/EspressoSystems/HotShot/issues/1817#issuecomment-1747143528
-                let num_storage_nodes = 8;
-                debug!("Prepare VID shares for {} storage nodes", num_storage_nodes);
-
-                // TODO Secure SRS for VID
-                // https://github.com/EspressoSystems/HotShot/issues/1686
-                let srs = hotshot_types::data::test_srs(num_storage_nodes);
-
-                // TODO proper source for VID erasure code rate
-                // https://github.com/EspressoSystems/HotShot/issues/1734
-                let num_chunks = 8;
-
-                let vid = VidScheme::new(num_chunks, num_storage_nodes, &srs).unwrap();
-
-                // TODO Wasteful flattening of tx bytes to accommodate VID API
-                // https://github.com/EspressoSystems/jellyfish/issues/375
-                let mut txns_flatten = Vec::new();
-                for txn in &txns {
-                    txns_flatten.extend(txn.0.clone());
-                }
-
-                let vid_disperse = vid.disperse(&txns_flatten).unwrap();
                 let block = VIDBlockPayload {
                     transactions: txns,
                     payload_commitment: vid_disperse.commit,

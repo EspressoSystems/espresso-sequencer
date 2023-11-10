@@ -1355,7 +1355,7 @@ where
                 view_number: view,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
-                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
+                block_header: TYPES::BlockHeader::new(*payload_commitment, (), &parent_header),
                 block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
@@ -1367,7 +1367,7 @@ where
                 .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
+                block_header: TYPES::BlockHeader::new(*payload_commitment, (), &parent_header),
                 view_number: leaf.view_number,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),

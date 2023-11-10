@@ -25,9 +25,34 @@ pub const NUM_STORAGE_NODES: usize = 8;
 /// Number of chunks for VID initiation.
 pub const NUM_CHUNKS: usize = 8;
 
+/// The error type for block and its transactions.
+#[derive(Snafu, Debug)]
+pub enum BlockError {
+    /// Invalid block header.
+    InvalidBlockHeader,
+}
+
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDTransaction(pub Vec<u8>);
+
+impl VIDTransaction {
+    #[must_use]
+    /// Encode a list of transactions into bytes.
+    pub fn encode(transactions: Vec<Self>) -> Vec<u8> {
+        let mut encoded = Vec::new();
+
+        for txn in transactions {
+            // Encode the length of the inner transaction and the transaction bytes.
+            if let Ok(len) = txn.0.len().try_into() {
+                encoded.extend::<Vec<u8>>(vec![len]);
+                encoded.extend(txn.0);
+            }
+        }
+
+        encoded
+    }
+}
 
 impl Committable for VIDTransaction {
     fn commit(&self) -> Commitment<Self> {
@@ -45,21 +70,6 @@ impl Committable for VIDTransaction {
 
 impl Transaction for VIDTransaction {}
 
-/// The error type for block payload.
-#[derive(Snafu, Debug)]
-pub enum BlockPayloadError {
-    /// Previous state commitment does not match
-    PreviousStateMismatch,
-    /// Nonce was reused
-    ReusedTxn,
-    /// Genesis failure
-    GenesisFailed,
-    /// Genesis reencountered after initialization
-    GenesisAfterStart,
-    /// invalid block
-    InvalidBlock,
-}
-
 /// A [`BlockPayload`] that contains a list of `VIDTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDBlockPayload {
@@ -70,23 +80,31 @@ pub struct VIDBlockPayload {
 }
 
 impl VIDBlockPayload {
-    /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
-    /// consensus task initiation.
-    /// # Panics
-    /// If the `VidScheme` construction fails.
     #[must_use]
-    pub fn genesis() -> Self {
+    /// Compute the VID payload commitment.
+    /// # Panics
+    /// If the VID computation fails.
+    pub fn vid_commitment(encoded_transactions: &[u8]) -> <VidScheme as VidSchemeTrait>::Commit {
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
         let srs = test_srs(NUM_STORAGE_NODES);
         // TODO We are using constant numbers for now, but they will change as the quorum size
         // changes.
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
         let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-        let txn = vec![0];
-        let vid_disperse = vid.disperse(&txn).unwrap();
+        vid.disperse(encoded_transactions.to_vec()).unwrap().commit
+    }
+
+    /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
+    /// consensus task initiation.
+    /// # Panics
+    /// If the `VidScheme` construction fails.
+    #[must_use]
+    pub fn genesis() -> Self {
+        let txns: Vec<u8> = vec![0];
+        let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]);
         VIDBlockPayload {
-            transactions: vec![VIDTransaction(txn)],
-            payload_commitment: vid_disperse.commit,
+            transactions: vec![VIDTransaction(txns)],
+            payload_commitment: Self::vid_commitment(&encoded),
         }
     }
 }
@@ -119,9 +137,43 @@ impl TestableBlock for VIDBlockPayload {
 }
 
 impl BlockPayload for VIDBlockPayload {
-    type Error = BlockPayloadError;
-
+    type Error = BlockError;
     type Transaction = VIDTransaction;
+    type Metadata = ();
+
+    fn build(transactions: impl IntoIterator<Item = Self::Transaction>) -> (Self, Self::Metadata) {
+        let txns_vec: Vec<VIDTransaction> = transactions.into_iter().collect();
+        let encoded = VIDTransaction::encode(txns_vec.clone());
+        (
+            Self {
+                transactions: txns_vec,
+                payload_commitment: Self::vid_commitment(&encoded),
+            },
+            (),
+        )
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        VIDTransaction::encode(self.transactions.clone())
+    }
+
+    fn decode(encoded_transactions: &[u8]) -> Self {
+        let mut transactions = Vec::new();
+        let mut current_index = 0;
+        while current_index < encoded_transactions.len() {
+            let txn_len = encoded_transactions[current_index] as usize;
+            let next_index = current_index + txn_len;
+            transactions.push(VIDTransaction(
+                encoded_transactions[current_index..next_index].to_vec(),
+            ));
+            current_index = next_index;
+        }
+
+        Self {
+            transactions,
+            payload_commitment: Self::vid_commitment(encoded_transactions),
+        }
+    }
 
     fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
         self.transactions
@@ -143,7 +195,11 @@ pub struct VIDBlockHeader {
 impl BlockHeader for VIDBlockHeader {
     type Payload = VIDBlockPayload;
 
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self {
+    fn new(
+        payload_commitment: Commitment<Self::Payload>,
+        _metadata: <Self::Payload as BlockPayload>::Metadata,
+        parent_header: &Self,
+    ) -> Self {
         Self {
             block_number: parent_header.block_number + 1,
             payload_commitment,

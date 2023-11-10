@@ -13,16 +13,12 @@ use std::{
     hash::Hash,
 };
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
 }
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over the full contents of a block
 ///
 /// This trait encapsulates the behaviors that the transactions of a block must have in order to be
@@ -50,7 +46,17 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
-    // type Header: BlockHeader;
+    /// Data created during block building which feeds into the block header
+    type Metadata;
+
+    /// Build a payload and associated metadata with the transactions.
+    fn build(transactions: impl IntoIterator<Item = Self::Transaction>) -> (Self, Self::Metadata);
+
+    /// Encode the payload
+    fn encode(&self) -> Vec<u8>;
+
+    /// Decode the payload
+    fn decode(encoded_transactions: &[u8]) -> Self;
 
     /// returns hashes of all the transactions in this block
     /// TODO make this ordered with a vec
@@ -64,8 +70,12 @@ pub trait BlockHeader:
     /// Block payload associated with the commitment.
     type Payload: BlockPayload;
 
-    /// Build a header with the payload commitment and parent header.
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self;
+    /// Build a header with the payload commitment, metadata, and parent header.
+    fn new(
+        payload_commitment: Commitment<Self::Payload>,
+        metadata: <Self::Payload as BlockPayload>::Metadata,
+        parent_header: &Self,
+    ) -> Self;
 
     /// Build a genesis header with the genesis payload.
     fn genesis(payload: Self::Payload) -> Self;
