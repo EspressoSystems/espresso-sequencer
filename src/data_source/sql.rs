@@ -14,8 +14,11 @@
 
 use super::VersionedDataSource;
 use crate::{
-    availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
-    status::UpdateStatusData,
+    availability::{
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+    },
+    status::{MempoolQueryData, StatusDataSource, UpdateStatusData},
     Block, Deltas, QueryableBlock, Resolvable,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
@@ -23,14 +26,17 @@ use async_trait::async_trait;
 use futures::{
     channel::oneshot,
     future::{select, Either, FutureExt},
+    stream::BoxStream,
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
 };
 use hotshot_types::traits::{
     metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
+    signature_key::EncodedPublicKey,
 };
-use std::pin::Pin;
+use itertools::Itertools;
+use std::{ops::RangeBounds, pin::Pin};
 use tokio_postgres::{types::BorrowToSql, Client, NoTls, RowStream, ToStatement};
 
 pub use crate::include_migrations;
@@ -63,7 +69,7 @@ pub use include_dir::include_dir;
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
 /// let migrations: Vec<Migration> = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
-/// assert_eq!(migrations[0].version(), 0);
+/// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
 #[macro_export]
@@ -92,7 +98,57 @@ macro_rules! include_migrations {
 
 /// The migrations requied to build the default schema for this version of [`SqlDataSource`].
 pub fn default_migrations() -> Vec<Migration> {
-    include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect()
+    let mut migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
+    validate_migrations(&mut migrations, true).expect("default migrations are invalid");
+    migrations
+}
+
+/// Validate and preprocess a sequence of migrations.
+///
+/// * Ensure all migrations have distinct versions
+/// * Ensure migrations are sorted by increasing version
+/// * If validating [`default_migrations`] (i.e. `default` is `true`), additionally check that all
+///   migration versions are multiples of 10, so that custom migrations can be inserted in between.
+fn validate_migrations(migrations: &mut [Migration], default: bool) -> Result<(), Error> {
+    migrations.sort_by_key(|m| m.version());
+
+    // Check version uniqueness.
+    for (prev, next) in migrations.iter().zip(migrations.iter().skip(1)) {
+        if next <= prev {
+            return Err(Error::msg(format!(
+                "migration versions are not strictly increasing ({prev}->{next})"
+            )));
+        }
+    }
+
+    if default {
+        // Check version spacing.
+        for m in migrations {
+            if m.version() == 0 || m.version() % 10 != 0 {
+                return Err(Error::msg(
+                    "default migration versions are not positive multiples of 10",
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Merge two migration sequences.
+///
+/// Migrations in `right` replace migrations in `left` with the same version. Each of `left` and
+/// `right` is assumed to be the output of [`validate_migrations`]; that is, each is sorted by
+/// version and contains no duplicate versions.
+fn merge_migrations(
+    left: impl IntoIterator<Item = Migration>,
+    right: impl IntoIterator<Item = Migration>,
+) -> impl Iterator<Item = Migration> {
+    left.into_iter()
+        // Merge sorted lists, joining pairs of equal version into `EitherOrBoth::Both`.
+        .merge_join_by(right, |l, r| l.version().cmp(&r.version()))
+        // Prefer the right migration for a given version when both left and right are present.
+        .map(|m| m.reduce(|_, r| r))
 }
 
 /// Postgres client config.
@@ -166,6 +222,11 @@ impl Config {
     pub fn no_migrations(mut self) -> Self {
         self.no_migrations = true;
         self
+    }
+
+    /// Connect to the database with this config.
+    pub async fn connect(self) -> Result<SqlDataSource, Error> {
+        SqlDataSource::connect(self).await
     }
 }
 
@@ -394,6 +455,7 @@ impl Config {
 ///     Ok(app)
 /// }
 /// ```
+#[derive(Debug)]
 pub struct SqlDataSource {
     client: Client,
     tx_in_progress: bool,
@@ -402,7 +464,7 @@ pub struct SqlDataSource {
 
 impl SqlDataSource {
     /// Connect to a remote database.
-    pub async fn connect(config: Config) -> Result<Self, Error> {
+    pub async fn connect(mut config: Config) -> Result<Self, Error> {
         // Establish a TCP connection to the server.
         let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
 
@@ -435,9 +497,9 @@ impl SqlDataSource {
         }));
 
         // Get migrations and interleave with custom migrations, sorting by version number.
-        let mut migrations = default_migrations();
-        migrations.extend(config.migrations);
-        migrations.sort();
+        validate_migrations(&mut config.migrations, false)?;
+        let migrations =
+            merge_migrations(default_migrations(), config.migrations).collect::<Vec<_>>();
 
         // Get a migration runner. Depending on the config, we can either use this to actually run
         // the migrations or just check if the database is up to date.
@@ -547,6 +609,77 @@ impl VersionedDataSource for SqlDataSource {
 }
 
 #[async_trait]
+impl<Types, I> AvailabilityDataSource<Types, I> for SqlDataSource
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
+    type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
+    type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
+
+    type LeafRange<'a, R> = BoxStream<'a,  QueryResult<LeafQueryData<Types, I>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize> + Send;
+    type BlockRange<'a, R>= BoxStream<'a,  QueryResult<BlockQueryData<Types>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize> + Send;
+
+    async fn get_leaf<ID>(&self, _id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    where
+        ID: Into<LeafId<Types, I>> + Send + Sync,
+    {
+        todo!()
+    }
+    async fn get_block<ID>(&self, _id: ID) -> QueryResult<BlockQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        todo!()
+    }
+
+    async fn get_leaf_range<R>(&self, _range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        todo!()
+    }
+    async fn get_block_range<R>(&self, _range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        todo!()
+    }
+
+    async fn get_block_with_transaction(
+        &self,
+        _hash: TransactionHash<Types>,
+    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+        todo!()
+    }
+
+    async fn get_proposals(
+        &self,
+        _proposer: &EncodedPublicKey,
+        _limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+        todo!()
+    }
+    async fn count_proposals(&self, _proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        todo!()
+    }
+
+    async fn subscribe_leaves(&self, _height: usize) -> QueryResult<Self::LeafStream> {
+        todo!()
+    }
+    async fn subscribe_blocks(&self, _height: usize) -> QueryResult<Self::BlockStream> {
+        todo!()
+    }
+}
+
+#[async_trait]
 impl<Types, I> UpdateAvailabilityData<Types, I> for SqlDataSource
 where
     Types: NodeType,
@@ -563,6 +696,24 @@ where
     }
 
     async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl StatusDataSource for SqlDataSource {
+    type Error = postgres::error::Error;
+
+    async fn block_height(&self) -> Result<usize, Self::Error> {
+        todo!()
+    }
+    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
+        todo!()
+    }
+    async fn success_rate(&self) -> Result<f64, Self::Error> {
+        todo!()
+    }
+    async fn export_metrics(&self) -> Result<String, Self::Error> {
         todo!()
     }
 }
@@ -629,9 +780,32 @@ impl tokio::io::AsyncRead for TcpStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0)
-            .poll_read(cx, buf.initialized_mut())
-            .map(|res| res.map(|_| ()))
+        // tokio uses this hyper-optimized `ReadBuf` construct, where there is a filled portion, an
+        // unfilled portion where we append new data, and the unfilled portion of the buffer need
+        // not even be initialized. However the async_std implementation we're delegating to just
+        // expects a normal `&mut [u8]` buffer which is entirely unfilled. To simplify the
+        // conversion, we will abandon the uninitialized buffer optimization and force
+        // initialization of the entire buffer, resulting in a plain old `&mut [u8]` representing
+        // the unfilled portion. But first, we need to grab the length of the filled region so we
+        // can increment it after we read new data from async_std.
+        let filled = buf.filled().len();
+
+        // Initialize the buffer and get a slice of the unfilled region. This operation is free
+        // after the first time it is called, so we don't need to worry about maintaining state
+        // between subsequent calls to `poll_read`.
+        let unfilled = buf.initialize_unfilled();
+
+        // Read data into the unfilled portion of the buffer.
+        match Pin::new(&mut self.0).poll_read(cx, unfilled) {
+            Poll::Ready(Ok(bytes_read)) => {
+                // After the read completes, the first `bytes_read` of `unfilled` have now been
+                // filled. Increment the `filled` cursor within the `ReadBuf` to account for this.
+                buf.set_filled(filled + bytes_read);
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
@@ -650,5 +824,164 @@ impl tokio::io::AsyncWrite for TcpStream {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.0).poll_close(cx)
+    }
+}
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+    use super::*;
+    use crate::testing::{mocks::TestableDataSource, setup_test, sleep};
+    use portpicker::pick_unused_port;
+    use std::{
+        process::{Command, Stdio},
+        str,
+        time::Duration,
+    };
+
+    #[derive(Debug)]
+    pub struct TmpDb {
+        port: u16,
+        container_id: String,
+    }
+
+    impl TmpDb {
+        async fn init() -> Self {
+            let port = pick_unused_port().unwrap();
+
+            let output = Command::new("docker")
+                .arg("run")
+                .arg("-d")
+                .args(["-p", &format!("{port}:5432")])
+                .args(["-e", "POSTGRES_PASSWORD=password"])
+                .arg("postgres")
+                .output()
+                .unwrap();
+            let stdout = str::from_utf8(&output.stdout).unwrap();
+            let stderr = str::from_utf8(&output.stderr).unwrap();
+            if !output.status.success() {
+                panic!("failed to start postgres docker: {stderr}");
+            }
+
+            // Create the TmpDb object immediately after starting the Docker container, so if
+            // anything panics after this `drop` will be called and we will clean up.
+            let container_id = stdout.trim().to_owned();
+            tracing::info!("launched postgres docker {container_id}");
+            let db = Self { port, container_id };
+
+            // Wait for the database to be ready.
+            while !Command::new("psql")
+                .args(["-h", "localhost", "-p", &port.to_string(), "-U", "postgres"])
+                .env("PGPASSWORD", "password")
+                // Null input so the command terminates as soon as it manages to connect.
+                .stdin(Stdio::null())
+                // Output from this command is not useful, it's just a prompt.
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+            {
+                tracing::warn!("database is not ready");
+                sleep(Duration::from_secs(1)).await;
+            }
+
+            db
+        }
+    }
+
+    impl Drop for TmpDb {
+        fn drop(&mut self) {
+            let output = Command::new("docker")
+                .args(["kill", self.container_id.as_str()])
+                .output()
+                .unwrap();
+            if !output.status.success() {
+                tracing::error!(
+                    "error killing postgres docker {}: {}",
+                    self.container_id,
+                    str::from_utf8(&output.stderr).unwrap()
+                );
+            }
+
+            let output = Command::new("docker")
+                .args(["rm", self.container_id.as_str()])
+                .output()
+                .unwrap();
+            if !output.status.success() {
+                tracing::error!(
+                    "error removing postgres docker {}: {}",
+                    self.container_id,
+                    str::from_utf8(&output.stderr).unwrap()
+                );
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TestableDataSource for SqlDataSource {
+        type TmpData = TmpDb;
+
+        async fn create(_node_id: usize) -> (Self, Self::TmpData) {
+            let tmp_db = TmpDb::init().await;
+            let sql = Config::default()
+                .user("postgres")
+                .password("password")
+                .port(tmp_db.port)
+                .connect()
+                .await
+                .unwrap();
+            (sql, tmp_db)
+        }
+    }
+
+    #[async_std::test]
+    async fn test_migrations() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+
+        let connect = |migrations: bool, custom_migrations| async move {
+            let mut cfg = Config::default()
+                .user("postgres")
+                .password("password")
+                .port(db.port)
+                .migrations(custom_migrations);
+            if !migrations {
+                cfg = cfg.no_migrations();
+            }
+            cfg.connect().await
+        };
+
+        // Connecting with migrations disabled should fail if the database is not already up to date
+        // (since we've just created a fresh database, it isn't).
+        let err = connect(false, vec![]).await.unwrap_err();
+        tracing::info!("connecting without running migrations failed as expected: {err}");
+
+        // Now connect and run migrations to bring the database up to date.
+        connect(true, vec![]).await.unwrap();
+        // Now connecting without migrations should work.
+        connect(false, vec![]).await.unwrap();
+
+        // Connect with some custom migrations, to advance the schema even further. Pass in the
+        // custom migrations out of order; they should still execute in order of version number.
+        // The SQL commands used here will fail if not run in order.
+        let migrations = vec![
+            Migration::unapplied(
+                "V12__create_test_table.sql",
+                "ALTER TABLE test ADD COLUMN data INTEGER;",
+            )
+            .unwrap(),
+            Migration::unapplied("V11__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+        ];
+        connect(true, migrations.clone()).await.unwrap();
+
+        // Connect using the default schema (no custom migrations) and not running migrations. This
+        // should fail because the database is _ahead_ of the client in terms of schema.
+        let err = connect(false, vec![]).await.unwrap_err();
+        tracing::info!("connecting without running migrations failed as expected: {err}");
+
+        // Connecting with the customized schema should work even without running migrations.
+        connect(true, migrations).await.unwrap();
     }
 }

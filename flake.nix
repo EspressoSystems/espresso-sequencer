@@ -47,6 +47,8 @@
             cargo-udeps
             cargo-sort
             cmake
+
+            postgresql_15
           ] ++ lib.optionals stdenv.isDarwin [
             darwin.apple_sdk.frameworks.Security
             darwin.apple_sdk.frameworks.CoreFoundation

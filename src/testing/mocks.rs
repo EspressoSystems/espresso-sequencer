@@ -361,7 +361,7 @@ pub trait TestableDataSource:
     + Sized
     + 'static
 {
-    type TmpData;
+    type TmpData: Send;
 
     async fn create(node_id: usize) -> (Self, Self::TmpData);
 }
