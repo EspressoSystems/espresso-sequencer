@@ -24,7 +24,7 @@ impl BLSPrivKey {
     }
 
     #[must_use]
-    /// Get real seed used for random key generation funtion
+    /// Get real seed used for random key generation function
     pub fn get_seed_from_seed_indexed(seed: [u8; 32], index: u64) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
         hasher.update(&seed);
