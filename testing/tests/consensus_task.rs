@@ -94,6 +94,7 @@ async fn test_consensus_task() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let handle = build_system_handle(1).await.0;
+    // We assign node's key pair rather than read from config file since it's a test
     let (private_key, public_key) = key_pair_for_id(1);
 
     let mut input = Vec::new();
@@ -143,6 +144,7 @@ async fn test_consensus_vote() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let handle = build_system_handle(2).await.0;
+    // We assign node's key pair rather than read from config file since it's a test
     let (private_key, public_key) = key_pair_for_id(1);
 
     let mut input = Vec::new();

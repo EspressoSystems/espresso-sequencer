@@ -23,12 +23,11 @@ use hotshot_types::traits::election::{
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
 use hotshot_types::traits::node_implementation::{ChannelMaps, Exchanges, NodeType};
-use hotshot_types::vote::{DAVote, ViewSyncVote};
+use hotshot_types::vote::ViewSyncVote;
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
     traits::state::ConsensusTime,
-    vote::QuorumVote,
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
@@ -73,10 +72,8 @@ pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 
 pub type ThisDAProposal = DAProposal<Test>;
-pub type ThisDAVote = DAVote<Test>;
 
 pub type ThisQuorumProposal = QuorumProposal<Test, ThisLeaf>;
-pub type ThisQuorumVote = QuorumVote<Test, ThisLeaf>;
 
 pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;

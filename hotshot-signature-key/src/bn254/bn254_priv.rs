@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 /// Private key type for a bn254 keypair
-#[derive(PartialEq, Eq, Clone, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize, Debug, Hash)]
 pub struct BLSPrivKey {
     /// The private key for  this keypair
     pub(super) priv_key: QCSignKey,
@@ -54,12 +54,9 @@ impl BLSPrivKey {
     }
 }
 
-#[allow(clippy::incorrect_partial_ord_impl_on_ord_type)]
 impl PartialOrd for BLSPrivKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let self_bytes = &self.priv_key.to_string();
-        let other_bytes = &other.priv_key.to_string();
-        self_bytes.partial_cmp(other_bytes)
+        Some(self.cmp(other))
     }
 }
 

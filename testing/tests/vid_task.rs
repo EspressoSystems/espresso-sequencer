@@ -5,7 +5,6 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::vid_init,
 };
-use hotshot_types::traits::election::VIDExchangeType;
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
@@ -14,6 +13,7 @@ use hotshot_types::{
         node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
+use hotshot_types::{simple_vote::VIDVote2, traits::election::VIDExchangeType};
 use std::collections::HashMap;
 
 #[cfg_attr(
@@ -84,11 +84,14 @@ async fn test_vid_task() {
         1,
     );
 
-    let vote_token = vid_exchange
-        .make_vote_token(ViewNumber::new(2))
-        .unwrap()
-        .unwrap();
-    let vid_vote = vid_exchange.create_vid_message(block.commit(), ViewNumber::new(2), vote_token);
+    let vid_vote = VIDVote2::create_signed_vote(
+        hotshot_types::simple_vote::VIDData {
+            payload_commit: block.commit(),
+        },
+        ViewNumber::new(2),
+        vid_exchange.public_key(),
+        vid_exchange.private_key(),
+    );
     output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);

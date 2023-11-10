@@ -8,28 +8,20 @@ use super::{
     signature_key::{EncodedPublicKey, EncodedSignature},
 };
 use crate::{
-    certificate::{
-        AssembledSignature, DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
-        ViewSyncCertificate,
-    },
+    certificate::{AssembledSignature, ViewSyncCertificate},
     data::{DAProposal, ProposalType, VidDisperse},
-    vote::{TimeoutVote, VIDVote},
+    vote::ViewSyncVoteAccumulator,
 };
 
-use crate::{
-    message::{GeneralConsensusMessage, Message},
-    vote::ViewSyncVoteInternal,
-};
+use crate::{message::GeneralConsensusMessage, vote::ViewSyncVoteInternal};
 
 use crate::{
     data::LeafType,
     traits::{
         network::{CommunicationChannel, NetworkMsg},
-        node_implementation::ExchangesType,
         signature_key::SignatureKey,
-        state::ConsensusTime,
     },
-    vote::{Accumulator, DAVote, QuorumVote, ViewSyncData, ViewSyncVote, VoteType},
+    vote::{ViewSyncData, ViewSyncVote, VoteType},
 };
 use bincode::Options;
 use commit::{Commitment, CommitmentBounds, Committable};
@@ -176,9 +168,6 @@ where
     /// `VoteType` that is used in this certificate
     type Vote: VoteType<TYPES, COMMITMENT>;
 
-    /// `Accumulator` type to accumulate votes.
-    type VoteAccumulator: Accumulator<TYPES, COMMITMENT, Self::Vote>;
-
     /// Build a QC from the threshold signature and commitment
     // TODO ED Rename this function and rework this function parameters
     // Assumes last vote was valid since it caused a QC to form.
@@ -268,13 +257,7 @@ pub trait Membership<TYPES: NodeType>:
 pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// A proposal for participants to vote on.
     type Proposal: ProposalType<NodeType = TYPES>;
-    /// A vote on a [`Proposal`](Self::Proposal).
-    // TODO ED Make this equal Certificate vote (if possible?)
-    type Vote: VoteType<TYPES, Self::Commitment>;
-    /// A [`SignedCertificate`] attesting to a decision taken by the committee.
-    type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
-        + Hash
-        + Eq;
+
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
@@ -330,147 +313,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     ) -> std::result::Result<std::option::Option<TYPES::VoteTokenType>, ElectionError> {
         self.membership()
             .make_vote_token(view_number, self.private_key())
-    }
-
-    /// Validate a certificate.
-    fn is_valid_cert(&self, qc: &Self::Certificate) -> bool {
-        if qc.is_genesis() && qc.view_number() == TYPES::Time::genesis() {
-            return true;
-        }
-        let leaf_commitment = qc.leaf_commitment();
-
-        match qc.signatures() {
-            AssembledSignature::DA(qc) => {
-                let real_commit = VoteData::DA(leaf_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            AssembledSignature::VID(qc) => {
-                let real_commit = VoteData::VID(leaf_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            AssembledSignature::Yes(qc) => {
-                let real_commit = VoteData::Yes(leaf_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            AssembledSignature::No(qc) => {
-                let real_commit = VoteData::No(leaf_commitment).commit();
-                let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    self.membership().get_committee_qc_stake_table(),
-                    U256::from(self.membership().success_threshold().get()),
-                );
-                <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-            }
-            AssembledSignature::Timeout(_) => {
-                error!("QC type should not be timeout here");
-                false
-            }
-            AssembledSignature::Genesis() => true,
-            AssembledSignature::ViewSyncPreCommit(_)
-            | AssembledSignature::ViewSyncCommit(_)
-            | AssembledSignature::ViewSyncFinalize(_) => {
-                error!("QC should not be ViewSync type here");
-                false
-            }
-        }
-    }
-
-    /// Validate a vote by checking its signature and token.
-    fn is_valid_vote(
-        &self,
-        key: &TYPES::SignatureKey,
-        encoded_signature: &EncodedSignature,
-        data: &VoteData<Self::Commitment>,
-        vote_token: &Checked<TYPES::VoteTokenType>,
-    ) -> bool {
-        let is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
-        let valid_vote_token = self
-            .membership()
-            .validate_vote_token(key.clone(), vote_token.clone());
-        let is_valid_vote_token = match valid_vote_token {
-            Err(_) => {
-                error!("Vote token was invalid");
-                false
-            }
-            Ok(Checked::Valid(_)) => true,
-            Ok(Checked::Inval(_) | Checked::Unchecked(_)) => false,
-        };
-
-        is_valid_signature && is_valid_vote_token
-    }
-
-    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the `SignedCertificate`
-    // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
-    /// Accumulate vote
-    /// Returns either the accumulate if no threshold was reached, or a `SignedCertificate` if the threshold was reached
-    #[allow(clippy::type_complexity)]
-    fn accumulate_vote(
-        &self,
-        accumulator: <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Self::Commitment,
-        >>::VoteAccumulator,
-        vote: &<<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Self::Commitment,
-        >>::Vote,
-        _commit: &Self::Commitment,
-    ) -> Either<
-        <<Self as ConsensusExchange<TYPES, M>>::Certificate as SignedCertificate<
-            TYPES,
-            TYPES::Time,
-            TYPES::VoteTokenType,
-            Self::Commitment,
-        >>::VoteAccumulator,
-        Self::Certificate,
-    > {
-        if !self.is_valid_vote(
-            &vote.get_key(),
-            &vote.get_signature(),
-            &vote.get_data(),
-            &Checked::Unchecked(vote.get_vote_token()),
-        ) {
-            error!("Vote data is {:?}", vote.get_data());
-            error!("Invalid vote!");
-            return Either::Left(accumulator);
-        }
-
-        let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
-        // TODO ED Could we make this part of the vote in the future?  It's only a usize.
-        let append_node_id = self
-            .membership()
-            .get_committee_qc_stake_table()
-            .iter()
-            .position(|x| *x == stake_table_entry.clone())
-            .unwrap();
-
-        // TODO ED Should make append function take a reference to vote
-        match accumulator.append(
-            vote.clone(),
-            append_node_id,
-            self.membership().get_committee_qc_stake_table(),
-        ) {
-            Either::Left(accumulator) => Either::Left(accumulator),
-            Either::Right(signatures) => Either::Right(Self::Certificate::create_certificate(
-                signatures,
-                vote.clone(),
-            )),
-        }
     }
 
     /// The committee which votes on proposals.
@@ -543,8 +385,6 @@ impl<
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = DAProposal<TYPES>;
-    type Vote = DAVote<TYPES>;
-    type Certificate = DACertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -592,20 +432,6 @@ impl<
 
 /// A [`ConsensusExchange`] where participants vote to provide availability for blobs of data.
 pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
-    /// Create a message with a vote on VID disperse data.
-    fn create_vid_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> VIDVote<TYPES>;
-
-    /// Sign a vote on VID disperse
-    fn sign_vid_vote(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature);
-
     /// Sign a VID disperse
     fn sign_vid_disperse(
         &self,
@@ -644,33 +470,6 @@ impl<
         M: NetworkMsg,
     > VIDExchangeType<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    fn create_vid_message(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-        current_view: <TYPES as NodeType>::Time,
-        vote_token: <TYPES as NodeType>::VoteTokenType,
-    ) -> VIDVote<TYPES> {
-        let signature = self.sign_vid_vote(payload_commitment);
-        VIDVote {
-            signature,
-            payload_commitment,
-            current_view,
-            vote_token,
-            vote_data: VoteData::VID(payload_commitment),
-        }
-    }
-
-    fn sign_vid_vote(
-        &self,
-        payload_commitment: Commitment<<TYPES as NodeType>::BlockPayload>,
-    ) -> (EncodedPublicKey, EncodedSignature) {
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            VoteData::VID(payload_commitment).commit().as_ref(),
-        );
-        (self.public_key.to_bytes(), signature)
-    }
-
     /// Sign a VID proposal.
     fn sign_vid_disperse(
         &self,
@@ -689,8 +488,6 @@ impl<
     > ConsensusExchange<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = VidDisperse<TYPES>;
-    type Vote = VIDVote<TYPES>;
-    type Certificate = VIDCertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -847,8 +644,6 @@ impl<
     for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = PROPOSAL;
-    type Vote = QuorumVote<TYPES, Commitment<LEAF>>;
-    type Certificate = QuorumCertificate<TYPES, Commitment<LEAF>>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<LEAF>;
@@ -892,6 +687,13 @@ impl<
 pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
+    /// A vote on a [`Proposal`](Self::Proposal).
+    // TODO ED Make this equal Certificate vote (if possible?)
+    type Vote: VoteType<TYPES, Self::Commitment>;
+    /// A [`SignedCertificate`] attesting to a decision taken by the committee.
+    type Certificate: SignedCertificate<TYPES, TYPES::Time, TYPES::VoteTokenType, Self::Commitment>
+        + Hash
+        + Eq;
     /// Creates a precommit vote
     fn create_precommit_message<I: NodeImplementation<TYPES>>(
         &self,
@@ -939,6 +741,89 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
 
     /// Sign a certificate.
     fn sign_certificate_proposal(&self, certificate: Self::Certificate) -> EncodedSignature;
+
+    // TODO ED Depending on what we do in the future with the exchanges trait, we can move the accumulator out of the `SignedCertificate`
+    // trait.  Logically, I feel it makes sense to accumulate on the certificate rather than the exchange, however.
+    /// Accumulate vote
+    /// Returns either the accumulate if no threshold was reached, or a `SignedCertificate` if the threshold was reached
+    #[allow(clippy::type_complexity)]
+    fn accumulate_vote(
+        &self,
+        accumulator: ViewSyncVoteAccumulator<TYPES>,
+        vote: &<<Self as ViewSyncExchangeType<TYPES, M>>::Certificate as SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+        >>::Vote,
+        _commit: &Self::Commitment,
+    ) -> Either<ViewSyncVoteAccumulator<TYPES>, Self::Certificate>
+    where
+        <Self as ViewSyncExchangeType<TYPES, M>>::Certificate: SignedCertificate<
+            TYPES,
+            TYPES::Time,
+            TYPES::VoteTokenType,
+            Self::Commitment,
+            Vote = ViewSyncVote<TYPES>,
+        >,
+    {
+        if !self.is_valid_vote(
+            &vote.get_key(),
+            &vote.get_signature(),
+            &vote.get_data(),
+            &Checked::Unchecked(vote.get_vote_token()),
+        ) {
+            error!("Vote data is {:?}", vote.get_data());
+            error!("Invalid vote!");
+            return Either::Left(accumulator);
+        }
+
+        let stake_table_entry = vote.get_key().get_stake_table_entry(1u64);
+        // TODO ED Could we make this part of the vote in the future?  It's only a usize.
+        let append_node_id = self
+            .membership()
+            .get_committee_qc_stake_table()
+            .iter()
+            .position(|x| *x == stake_table_entry.clone())
+            .unwrap();
+
+        // TODO ED Should make append function take a reference to vote
+        match accumulator.append(
+            vote,
+            append_node_id,
+            self.membership().get_committee_qc_stake_table(),
+        ) {
+            Either::Left(accumulator) => Either::Left(accumulator),
+            Either::Right(signatures) => Either::Right(Self::Certificate::create_certificate(
+                signatures,
+                vote.clone(),
+            )),
+        }
+    }
+
+    /// Validate a vote by checking its signature and token.
+    fn is_valid_vote(
+        &self,
+        key: &TYPES::SignatureKey,
+        encoded_signature: &EncodedSignature,
+        data: &VoteData<Commitment<ViewSyncData<TYPES>>>,
+        vote_token: &Checked<TYPES::VoteTokenType>,
+    ) -> bool {
+        let is_valid_signature = key.validate(encoded_signature, data.commit().as_ref());
+        let valid_vote_token = self
+            .membership()
+            .validate_vote_token(key.clone(), vote_token.clone());
+        let is_valid_vote_token = match valid_vote_token {
+            Err(_) => {
+                error!("Vote token was invalid");
+                false
+            }
+            Ok(Checked::Valid(_)) => true,
+            Ok(Checked::Inval(_) | Checked::Unchecked(_)) => false,
+        };
+
+        is_valid_signature && is_valid_vote_token
+    }
 }
 
 /// Standard implementation of [`ViewSyncExchangeType`] based on Hot Stuff consensus.
@@ -974,6 +859,10 @@ impl<
         M: NetworkMsg,
     > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
+    type Vote = ViewSyncVote<TYPES>;
+
+    type Certificate = ViewSyncCertificate<TYPES>;
+
     fn create_precommit_message<I: NodeImplementation<TYPES>>(
         &self,
         round: TYPES::Time,
@@ -1176,8 +1065,6 @@ impl<
     > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = PROPOSAL;
-    type Vote = ViewSyncVote<TYPES>;
-    type Certificate = ViewSyncCertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<ViewSyncData<TYPES>>;
@@ -1254,49 +1141,7 @@ impl<
 }
 
 /// Trait defining functiosn for a `TimeoutExchange`
-pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
-    /// Create and sign a timeout message
-    fn create_timeout_message<I: NodeImplementation<TYPES>>(
-        &self,
-        view: TYPES::Time,
-        vote_token: TYPES::VoteTokenType,
-    ) -> GeneralConsensusMessage<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
-    {
-        let signature = TYPES::SignatureKey::sign(
-            self.private_key(),
-            VoteData::<Commitment<TYPES::Time>>::Timeout(view.commit())
-                .commit()
-                .as_ref(),
-        );
-
-        GeneralConsensusMessage::<TYPES, I>::TimeoutVote(TimeoutVote {
-            signature: (self.public_key().to_bytes(), signature),
-            current_view: view,
-            vote_token,
-        })
-    }
-
-    /// Validate a timeout certificate.
-    /// This is separate from other certificate verification functions because we also need to
-    /// verify the certificate is signed over the view we expect
-    fn is_valid_timeout_cert(&self, qc: &Self::Certificate, view_number: TYPES::Time) -> bool {
-        let comparison_commitment = view_number.commit();
-
-        if let AssembledSignature::Timeout(qc) = qc.signatures() {
-            let real_commit = VoteData::Timeout(comparison_commitment).commit();
-            let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                self.membership().get_committee_qc_stake_table(),
-                U256::from(self.membership().success_threshold().get()),
-            );
-            <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
-        } else {
-            error!("Expected TimeoutCertificate, received another certificate variant");
-            false
-        }
-    }
-}
+pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {}
 
 impl<
         TYPES: NodeType,
@@ -1318,8 +1163,6 @@ impl<
     > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
 {
     type Proposal = PROPOSAL;
-    type Vote = TimeoutVote<TYPES>;
-    type Certificate = TimeoutCertificate<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::Time>;

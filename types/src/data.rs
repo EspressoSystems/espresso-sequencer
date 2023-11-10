@@ -4,8 +4,8 @@
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
 use crate::{
-    certificate::{AssembledSignature, TimeoutCertificate, ViewSyncCertificate},
-    simple_certificate::QuorumCertificate2,
+    certificate::{AssembledSignature, ViewSyncCertificate},
+    simple_certificate::{QuorumCertificate2, TimeoutCertificate2},
     traits::{
         block_contents::BlockHeader,
         node_implementation::NodeType,
@@ -176,7 +176,7 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub justify_qc: QuorumCertificate2<TYPES, LEAF>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
-    pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
+    pub timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,

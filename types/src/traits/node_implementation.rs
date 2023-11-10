@@ -591,17 +591,9 @@ pub type CommitteeProposalType<TYPES, I> =
 pub type ViewSyncProposalType<TYPES, I> =
     <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
 
-/// A vote on a [`QuorumProposalType`].
-pub type QuorumVoteType<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote;
-
-/// A vote on a [`ComitteeProposal`].
-pub type CommitteeVote<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote;
-
 /// A vote on a [`ViewSyncProposal`].
 pub type ViewSyncVoteType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Vote;
+    <ViewSyncEx<TYPES, I> as ViewSyncExchangeType<TYPES, Message<TYPES, I>>>::Vote;
 
 /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
 pub type QuorumCommChannel<TYPES, I> =
@@ -618,6 +610,10 @@ pub type CommitteeCommChannel<TYPES, I> =
 /// Protocol for determining membership in a consensus committee.
 pub type QuorumMembership<TYPES, I> =
     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+
+/// TYPE aliase for the membership of VID exchange
+pub type VIDMembership<TYPES, I> =
+    <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
 /// Protocol for determining membership in a DA committee.
 pub type CommitteeMembership<TYPES, I> =

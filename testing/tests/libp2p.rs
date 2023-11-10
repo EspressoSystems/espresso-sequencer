@@ -32,7 +32,7 @@ async fn libp2p_network() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await
@@ -51,7 +51,7 @@ async fn test_stress_libp2p_network() {
     async_compatibility_layer::logging::setup_backtrace();
     let metadata = TestMetadata::default_stress();
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await

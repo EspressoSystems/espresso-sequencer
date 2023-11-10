@@ -14,7 +14,6 @@ use hotshot_task::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction, NUM_CHUNKS, NUM_STORAGE_NODES},
-    certificate::QuorumCertificate,
     consensus::Consensus,
     data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::{Message, Proposal, SequencingMessage},
@@ -47,11 +46,7 @@ pub struct TransactionTaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
     /// The state's api
     pub api: A,
@@ -93,11 +88,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
@@ -290,11 +281,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
@@ -387,11 +374,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
 }
 
