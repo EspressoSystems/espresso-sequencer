@@ -66,8 +66,7 @@ pub struct ViewSyncTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
+        // TODO ED Remove this when exchanges is done, but we don't actually use this commitment type anymore. 
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
@@ -115,8 +114,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
@@ -139,8 +136,6 @@ pub struct ViewSyncReplicaTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
@@ -182,8 +177,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {

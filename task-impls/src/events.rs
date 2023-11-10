@@ -7,6 +7,7 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{
         DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
+        ViewSyncPreCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncCommitCertificate2,
     },
     simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2},
     traits::node_implementation::{
@@ -61,7 +62,16 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Receive a view sync vote from the network; received by a relay in the view sync task
     ViewSyncVoteRecv(ViewSyncVote<TYPES>),
     /// Receive a view sync certificate from the network; received by a replica in the view sync task
+    // TODO ED Remove this event in favor of separate events depending on which certificate type it is.
     ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
+
+    /// Receive a `ViewSyncPreCommitCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncPreCommitCertificate2Recv(ViewSyncPreCommitCertificate2<TYPES>),
+    /// Receive a `ViewSyncCommitCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncCommitCertificate2Recv(ViewSyncCommitCertificate2<TYPES>),
+    /// Receive a `ViewSyncFinalizeCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncFinalizeCertificate2Recv(ViewSyncFinalizeCertificate2<TYPES>),
+
     /// Trigger the start of the view sync protocol; emitted by view sync task; internal trigger only
     ViewSyncTrigger(TYPES::Time),
     /// A consensus view has timed out; emitted by a replica in the consensus task; received by the view sync task; internal event only
