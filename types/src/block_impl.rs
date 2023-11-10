@@ -81,7 +81,7 @@ impl VIDBlockPayload {
         // TODO We are using constant numbers for now, but they will change as the quorum size
         // changes.
         // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap();
         let txn = vec![0];
         let vid_disperse = vid.disperse(&txn).unwrap();
         VIDBlockPayload {

@@ -160,5 +160,5 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
 
 pub fn vid_init() -> VidScheme {
     let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-    VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap()
+    VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap()
 }
