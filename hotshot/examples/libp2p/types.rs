@@ -8,7 +8,7 @@ use hotshot::{
 };
 use hotshot_types::{
     certificate::ViewSyncCertificate,
-    data::{DAProposal, Leaf, QuorumProposal},
+    data::{DAProposal, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
@@ -36,7 +36,7 @@ pub type ThisViewSyncProposal = ViewSyncCertificate<DemoTypes>;
 pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
-    type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
+    type Storage = MemoryStorage<DemoTypes>;
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,

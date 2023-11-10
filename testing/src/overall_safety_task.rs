@@ -9,10 +9,7 @@ use std::{
 
 use async_compatibility_layer::channel::UnboundedStream;
 use futures::FutureExt;
-use hotshot::{
-    traits::{NodeImplementation, TestableNodeImplementation},
-    HotShotError,
-};
+use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_task::{
     event_stream::ChannelStream,
     task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
@@ -20,8 +17,7 @@ use hotshot_task::{
     MergeN,
 };
 use hotshot_types::{
-    block_impl::VIDBlockPayload,
-    data::{Leaf, LeafBlockPayload},
+    data::Leaf,
     error::RoundTimedoutState,
     event::{Event, EventType},
     simple_certificate::QuorumCertificate2,
@@ -79,7 +75,7 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
     /// handles
     pub handles: Vec<Node<TYPES, I>>,
     /// ctx
-    pub ctx: RoundCtx<TYPES, I>,
+    pub ctx: RoundCtx<TYPES>,
     /// event stream for publishing safety violations
     pub test_event_stream: ChannelStream<GlobalTestEvent>,
 }
@@ -110,7 +106,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub leaf_map: HashMap<Leaf<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<VIDBlockPayload>, usize>,
+    pub block_map: HashMap<Commitment<TYPES::BlockPayload>, usize>,
 
     /// state -> # entries decided on that state
     pub state_map: HashMap<(), usize>,
@@ -134,7 +130,7 @@ impl<TYPES: NodeType> Default for RoundResult<TYPES> {
 
 /// smh my head I shouldn't need to implement this
 /// Rust doesn't realize I doesn't need to implement default
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> Default for RoundCtx<TYPES, I> {
+impl<TYPES: NodeType> Default for RoundCtx<TYPES> {
     fn default() -> Self {
         Self {
             round_results: Default::default(),
@@ -149,18 +145,17 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> Default for RoundCtx
 /// that we poll when things are event driven
 /// this context will be passed around
 #[derive(Debug)]
-pub struct RoundCtx<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub struct RoundCtx<TYPES: NodeType> {
     /// results from previous rounds
     /// view number -> round result
-    pub round_results:
-        HashMap<TYPES::Time, RoundResult<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
+    pub round_results: HashMap<TYPES::Time, RoundResult<TYPES>>,
     /// during the run view refactor
     pub failed_views: HashSet<TYPES::Time>,
     /// successful views
     pub successful_views: HashSet<TYPES::Time>,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> RoundCtx<TYPES, I> {
+impl<TYPES: NodeType> RoundCtx<TYPES> {
     /// inserts an error into the context
     pub fn insert_error_to_context(
         &mut self,
@@ -187,6 +182,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> RoundCtx<TYPES, I> {
 
 impl<TYPES: NodeType> RoundResult<TYPES> {
     /// insert into round result
+    #[allow(clippy::unit_arg)]
     pub fn insert_into_result(
         &mut self,
         idx: usize,
@@ -208,7 +204,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
             let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
 
-            match self.state_map.entry(state.clone()) {
+            match self.state_map.entry(state) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
@@ -241,7 +237,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
     /// determines whether or not the round passes
     /// also do a safety check
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::let_unit_value)]
     pub fn update_status(
         &mut self,
         threshold: usize,
@@ -599,15 +595,7 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     OverallSafetyTaskErr,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
-    (
-        usize,
-        Either<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>, HotShotEvent<TYPES, I>>,
-    ),
-    MergeN<
-        Merge<
-            UnboundedStream<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
-            UnboundedStream<HotShotEvent<TYPES, I>>,
-        >,
-    >,
+    (usize, Either<Event<TYPES>, HotShotEvent<TYPES, I>>),
+    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES, I>>>>,
     OverallSafetyTask<TYPES, I>,
 >;

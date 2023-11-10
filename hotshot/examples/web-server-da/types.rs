@@ -8,7 +8,7 @@ use hotshot::{
 };
 use hotshot_types::{
     certificate::ViewSyncCertificate,
-    data::{DAProposal, Leaf, QuorumProposal},
+    data::{DAProposal, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},

@@ -120,7 +120,6 @@ pub async fn run_orchestrator<
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                Leaf<TYPES>,
                 QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
@@ -184,7 +183,6 @@ pub trait RunDA<
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                Leaf<TYPES>,
                 QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,
@@ -428,7 +426,6 @@ impl<
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    Leaf<TYPES>,
                     QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     WebCommChannel<TYPES, NODE, MEMBERSHIP>,
@@ -581,7 +578,6 @@ impl<
                 Message<TYPES, NODE>,
                 QuorumExchange<
                     TYPES,
-                    Leaf<TYPES>,
                     QuorumProposal<TYPES>,
                     MEMBERSHIP,
                     Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
@@ -808,7 +804,6 @@ pub async fn main_entry_point<
             Message<TYPES, NODE>,
             QuorumExchange<
                 TYPES,
-                Leaf<TYPES>,
                 QuorumProposal<TYPES>,
                 MEMBERSHIP,
                 QUORUMNETWORK,

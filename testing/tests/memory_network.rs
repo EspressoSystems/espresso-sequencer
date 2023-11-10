@@ -15,7 +15,7 @@ use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
 use hotshot_types::certificate::ViewSyncCertificate;
-use hotshot_types::data::{DAProposal, Leaf, QuorumProposal};
+use hotshot_types::data::{DAProposal, QuorumProposal};
 use hotshot_types::message::{Message, SequencingMessage};
 use hotshot_types::traits::election::{
     CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
@@ -78,13 +78,12 @@ pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
-    type Storage = MemoryStorage<Test, Self::Leaf>;
+    type Storage = MemoryStorage<Test>;
     type Exchanges = Exchanges<
         Test,
         Message<Test, Self>,
         QuorumExchange<
             Test,
-            Self::Leaf,
             ThisQuorumProposal,
             ThisMembership,
             QuorumNetwork,
