@@ -224,7 +224,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         &self.storage
     }
 
-    /// Get the underyling consensus state for this [`SystemContext`]
+    /// Get the underlying consensus state for this [`SystemContext`]
     pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
         self.hotshot.get_consensus()
     }

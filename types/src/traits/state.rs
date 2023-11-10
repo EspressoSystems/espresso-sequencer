@@ -220,7 +220,7 @@ pub mod dummy {
     }
 }
 
-/// A serialized consensus state for proof generation
+/// A serialized light client state for proof generation
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct LightClientState<F: PrimeField> {
     /// Current view number
