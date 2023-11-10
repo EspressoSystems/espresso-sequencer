@@ -161,8 +161,7 @@ contract PlonkVerifier_batchVerify_Test is Test {
 
     /// @dev Test happy and unhappy path of `batchVerify`.
     function test_batchVerify_succeeds() external {
-        // TODO: change to i<6
-        for (uint32 i = 1; i < 2; i++) {
+        for (uint32 i = 1; i < 6; i++) {
             string[] memory cmds = new string[](3);
             cmds[0] = "diff-test";
             cmds[1] = "plonk-batch-verify";

@@ -402,7 +402,6 @@ fn main() {
 
 // constant in hex string copied from hardcoded constants from solidity contracts
 
-// TODO: (alex) further test these with output from Jellyfish directly!
 // TODO: (alex) change to simply using `MontFp!("0x..")` after
 // <https://github.com/arkworks-rs/algebra/pull/635> is on a tag release
 // Return cosets coefficients for circuits over BN254.
