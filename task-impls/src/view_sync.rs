@@ -10,8 +10,8 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    traits::{election::Membership, network::ConsensusIntentEvent},
-    vote::ViewSyncVoteAccumulator, vote2::HasViewNumber,
+    traits::{election::Membership, network::ConsensusIntentEvent, node_implementation::{QuorumMembership, ViewSyncMembership}},
+    vote::ViewSyncVoteAccumulator, vote2::{HasViewNumber, VoteAccumulator2, Vote2}, simple_vote::ViewSyncPreCommitVote, simple_certificate::ViewSyncPreCommitCertificate2,
 };
 
 use bitvec::prelude::*;
@@ -31,7 +31,7 @@ use hotshot_types::{
     vote::{ViewSyncData, ViewSyncVote},
 };
 use snafu::Snafu;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration, marker::PhantomData};
 use tracing::{debug, error, instrument, info};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
@@ -201,8 +201,14 @@ pub struct ViewSyncRelayTaskState<
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
     /// Vote accumulator
     #[allow(clippy::type_complexity)]
-    pub accumulator: Either<ViewSyncVoteAccumulator<TYPES>, ViewSyncCertificate<TYPES>>,
-    /// Our node id; for logging
+    pub accumulator: Either<
+        VoteAccumulator2<
+            TYPES,
+            ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+            ViewSyncPreCommitCertificate2<TYPES>,
+        >,
+        ViewSyncPreCommitCertificate2<TYPES>,
+    >,    /// Our node id; for logging
     pub id: u64,
 }
 
@@ -247,7 +253,7 @@ where
     /// Handles incoming events for the main view sync task
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
         match &event {
-            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate)  => {
                 info!(
                     "Received view sync cert for phase {:?}",
                     certificate
@@ -352,16 +358,11 @@ where
                     return;
                 }
 
-                let new_accumulator = ViewSyncVoteAccumulator {
-                    pre_commit_vote_outcomes: HashMap::new(),
-                    commit_vote_outcomes: HashMap::new(),
-                    finalize_vote_outcomes: HashMap::new(),
-
-                    success_threshold: self.exchange.success_threshold(),
-                    failure_threshold: self.exchange.failure_threshold(),
-
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],
+                    phantom: PhantomData,
                 };
 
                 let mut relay_state = ViewSyncRelayTaskState {
@@ -947,50 +948,34 @@ where
         ViewSyncRelayTaskState<TYPES, I>,
     ) {
         match event {
-            HotShotEvent::ViewSyncVoteRecv(vote) => {
+            HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
                 if self.accumulator.is_right() {
                     return (Some(HotShotTaskCompleted::ShutDown), self);
                 }
 
-                let (vote_internal, phase) = match vote.clone() {
-                    ViewSyncVote::PreCommit(vote_internal) => {
-                        (vote_internal, ViewSyncPhase::PreCommit)
-                    }
-                    ViewSyncVote::Commit(vote_internal) => (vote_internal, ViewSyncPhase::Commit),
-                    ViewSyncVote::Finalize(vote_internal) => {
-                        (vote_internal, ViewSyncPhase::Finalize)
-                    }
-                };
-
-                debug!(
-                    "Recved vote for next view {}, and relay {}, and phase {:?}",
-                    *vote_internal.round, vote_internal.relay, phase
-                );
-
                 // Ignore this vote if we are not the correct relay
                 if !self
                     .exchange
-                    .is_leader(vote_internal.round + vote_internal.relay)
+                    .is_leader(vote.get_data().round + vote.get_data().relay)
                 {
                     debug!("We are not the correct relay");
                     return (None, self);
                 }
 
                 let view_sync_data = ViewSyncData::<TYPES> {
-                    round: vote_internal.round,
+                    round: vote.get_data().round,
                     relay: self.exchange.public_key().to_bytes(),
                 }
                 .commit();
 
                 debug!(
                     "Accumulating view sync vote {} relay {}",
-                    *vote_internal.round, vote_internal.relay
+                    *vote.get_data().round, vote.get_data().relay
                 );
 
-                let accumulator = self.exchange.accumulate_vote(
-                    self.accumulator.left().unwrap(),
+                let accumulator = self.accumulator.left().unwrap().accumulate(
                     &vote,
-                    &view_sync_data,
+                    self.exchange.membership()
                 );
 
                 self.accumulator = match accumulator {

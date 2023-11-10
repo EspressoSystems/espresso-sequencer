@@ -9,10 +9,10 @@ use hotshot_types::{
         DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
-    simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2},
+    simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncPreCommitVote, ViewSyncCommitVote, ViewSyncFinalizeVote},
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-        VIDMembership, ViewSyncProposalType,
+        VIDMembership, ViewSyncProposalType, ViewSyncMembership,
     },
     vote::ViewSyncVote,
 };
@@ -61,11 +61,30 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
         Proposal<ViewSyncProposalType<TYPES, I>>,
         TYPES::SignatureKey,
     ),
+    // TODO ED Remove this in favor of separate votes for each view sync vote type
     /// Receive a view sync vote from the network; received by a relay in the view sync task
     ViewSyncVoteRecv(ViewSyncVote<TYPES>),
     /// Receive a view sync certificate from the network; received by a replica in the view sync task
     // TODO ED Remove this event in favor of separate events depending on which certificate type it is.
     ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
+
+    /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
+    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, QuorumMembership<TYPES, I>>),
+    /// Receive a `ViewSyncCommitVote` from the network; received by a relay in the view sync task
+    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES, QuorumMembership<TYPES, I>>),
+    /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
+    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, QuorumMembership<TYPES, I>>),
+
+
+
+    /// Send a `ViewSyncPreCommitVote` from the network; emitted by a replica in the view sync task
+    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Send a `ViewSyncCommitVote` from the network; emitted by a replica in the view sync task
+    ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Send a `ViewSyncFinalizeVote` from the network; emitted by a replica in the view sync task
+    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+
 
     /// Receive a `ViewSyncPreCommitCertificate2` from the network; received by a replica in the view sync task
     ViewSyncPreCommitCertificate2Recv(ViewSyncPreCommitCertificate2<TYPES>),

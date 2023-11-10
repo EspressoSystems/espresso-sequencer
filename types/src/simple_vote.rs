@@ -42,7 +42,7 @@ pub struct VIDData<PAYLOAD: Committable> {
 /// Data used for a Pre Commit vote.
 pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
@@ -50,7 +50,7 @@ pub struct ViewSyncPreCommitData<TYPES: NodeType> {
 /// Data used for a Commit vote.
 pub struct ViewSyncCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
@@ -58,7 +58,7 @@ pub struct ViewSyncCommitData<TYPES: NodeType> {
 /// Data used for a Finalize vote.
 pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
