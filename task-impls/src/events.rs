@@ -69,11 +69,11 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, QuorumMembership<TYPES, I>>),
+    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
     /// Receive a `ViewSyncCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES, QuorumMembership<TYPES, I>>),
+    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
     /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
-    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, QuorumMembership<TYPES, I>>),
+    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
 
 
 

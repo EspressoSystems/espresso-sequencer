@@ -182,30 +182,30 @@ impl<PAYLOAD: Committable> Committable for VIDData<PAYLOAD> {
 /// This implements commit for all the types which contain a view and relay public key.
 fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     view: TYPES::Time,
-    relay: &EncodedPublicKey,
+    relay: u64,
     tag: &str,
 ) -> Commitment<T> {
     let builder = commit::RawCommitmentBuilder::new(tag);
     builder
-        .var_size_field("Relay public key", &relay.0)
         .u64(*view)
+        .u64(relay)
         .finalize()
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncPreCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Precommit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Precommit")
     }
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncFinalizeData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Finalize")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Finalize")
     }
 }
 impl<TYPES: NodeType> Committable for ViewSyncCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Commit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Commit")
     }
 }
 
@@ -217,7 +217,7 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 }
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
-/// Yes vote Alias
+/// Quorum vote Alias
 pub type QuorumVote<TYPES, LEAF, M> = SimpleVote<TYPES, QuorumData<LEAF>, M>;
 /// DA vote type alias
 pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;

@@ -10,8 +10,14 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    traits::{election::Membership, network::ConsensusIntentEvent, node_implementation::{QuorumMembership, ViewSyncMembership}},
-    vote::ViewSyncVoteAccumulator, vote2::{HasViewNumber, VoteAccumulator2, Vote2}, simple_vote::ViewSyncPreCommitVote, simple_certificate::ViewSyncPreCommitCertificate2,
+    simple_certificate::ViewSyncPreCommitCertificate2,
+    simple_vote::ViewSyncPreCommitVote,
+    traits::{
+        election::Membership, network::ConsensusIntentEvent,
+        node_implementation::ViewSyncMembership,
+    },
+    vote::ViewSyncVoteAccumulator,
+    vote2::{HasViewNumber, Vote2, VoteAccumulator2},
 };
 
 use bitvec::prelude::*;
@@ -31,8 +37,8 @@ use hotshot_types::{
     vote::{ViewSyncData, ViewSyncVote},
 };
 use snafu::Snafu;
-use std::{collections::HashMap, sync::Arc, time::Duration, marker::PhantomData};
-use tracing::{debug, error, instrument, info};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use tracing::{debug, error, info, instrument};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
 pub enum ViewSyncPhase {
@@ -66,8 +72,9 @@ pub struct ViewSyncTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        // TODO ED Remove this when exchanges is done, but we don't actually use this commitment type anymore. 
+        // TODO ED Remove this when exchanges is done, but we don't actually use this commitment type anymore.
         Commitment = Commitment<ViewSyncData<TYPES>>,
+        // Membership = ViewSyncMembership<TYPES, I>
     >,
 {
     /// Registry to register sub tasks
@@ -199,6 +206,8 @@ pub struct ViewSyncRelayTaskState<
     pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// View sync exchange
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
+
+    pub membership: ViewSyncMembership<TYPES, I>,
     /// Vote accumulator
     #[allow(clippy::type_complexity)]
     pub accumulator: Either<
@@ -208,7 +217,8 @@ pub struct ViewSyncRelayTaskState<
             ViewSyncPreCommitCertificate2<TYPES>,
         >,
         ViewSyncPreCommitCertificate2<TYPES>,
-    >,    /// Our node id; for logging
+    >,
+    /// Our node id; for logging
     pub id: u64,
 }
 
@@ -253,11 +263,8 @@ where
     /// Handles incoming events for the main view sync task
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
         match &event {
-            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate)  => {
-                info!(
-                    "Received view sync cert for phase {:?}",
-                    certificate
-                );
+            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
+                info!("Received view sync cert for phase {:?}", certificate);
 
                 // This certificate is old, we can throw it away
                 // If next view = cert round, then that means we should already have a task running for it
@@ -266,7 +273,9 @@ where
                     return;
                 }
 
-                if let Some(replica_task) = self.replica_task_map.get(&certificate.get_view_number()) {
+                if let Some(replica_task) =
+                    self.replica_task_map.get(&certificate.get_view_number())
+                {
                     // Forward event then return
                     debug!("Forwarding message");
                     self.event_stream
@@ -368,6 +377,7 @@ where
                 let mut relay_state = ViewSyncRelayTaskState {
                     event_stream: self.event_stream.clone(),
                     exchange: self.exchange.clone(),
+                    membership: self.exchange.membership().clone(), 
                     accumulator: either::Left(new_accumulator),
                     id: self.id,
                 };
@@ -949,72 +959,85 @@ where
     ) {
         match event {
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
-                if self.accumulator.is_right() {
-                    return (Some(HotShotTaskCompleted::ShutDown), self);
-                }
-
                 // Ignore this vote if we are not the correct relay
+                // TODO ED Replace exchange with membership
                 if !self
                     .exchange
                     .is_leader(vote.get_data().round + vote.get_data().relay)
                 {
-                    debug!("We are not the correct relay");
+                    info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
                     return (None, self);
                 }
 
-                let view_sync_data = ViewSyncData::<TYPES> {
-                    round: vote.get_data().round,
-                    relay: self.exchange.public_key().to_bytes(),
-                }
-                .commit();
-
                 debug!(
-                    "Accumulating view sync vote {} relay {}",
-                    *vote.get_data().round, vote.get_data().relay
+                    "Accumulating ViewSyncPreCommitVote for round {} and relay {}",
+                    *vote.get_data().round,
+                    vote.get_data().relay
                 );
 
-                let accumulator = self.accumulator.left().unwrap().accumulate(
-                    &vote,
-                    self.exchange.membership()
-                );
+                match self.accumulator {
+                    Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
+                    Left(accumulator) => {
+                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                            Left(new_accumulator) => self.accumulator =  Either::Left(new_accumulator),
+                            Right(certificate) => {
+                                self.event_stream
+                                    .publish(HotShotEvent::ViewSyncPreCommitCertificate2Send(
+                                        certificate.clone(),
+                                    ))
+                                    .await;
+                                self.accumulator = Right(certificate);
 
-                self.accumulator = match accumulator {
-                    Left(new_accumulator) => Either::Left(new_accumulator),
-                    Right(certificate) => {
-                        let signature =
-                            self.exchange.sign_certificate_proposal(certificate.clone());
-                        let message = Proposal {
-                            data: certificate.clone(),
-                            signature,
-                        };
-                        self.event_stream
-                            .publish(HotShotEvent::ViewSyncCertificateSend(
-                                message,
-                                self.exchange.public_key().clone(),
-                            ))
-                            .await;
-
-                        // Reset accumulator for new certificate
-                        let new_accumulator = ViewSyncVoteAccumulator {
-                            pre_commit_vote_outcomes: HashMap::new(),
-                            commit_vote_outcomes: HashMap::new(),
-                            finalize_vote_outcomes: HashMap::new(),
-
-                            success_threshold: self.exchange.success_threshold(),
-                            failure_threshold: self.exchange.failure_threshold(),
-
-                            sig_lists: Vec::new(),
-                            signers: bitvec![0; self.exchange.total_nodes()],
-                        };
-                        either::Left(new_accumulator)
+                                return (Some(HotShotTaskCompleted::ShutDown), self);
+                            }
+                        }
                     }
                 };
+                (None, self)
 
-                if phase == ViewSyncPhase::Finalize {
-                    (Some(HotShotTaskCompleted::ShutDown), self)
-                } else {
-                    (None, self)
-                }
+                // let accumulator = self
+                //     .accumulator
+                //     .left()
+                //     .unwrap()
+                //     .accumulate(&vote, self.exchange.membership());
+
+                // self.accumulator = match accumulator {
+                //     Left(new_accumulator) => Either::Left(new_accumulator),
+                //     Right(certificate) => {
+                //         let signature =
+                //             self.exchange.sign_certificate_proposal(certificate.clone());
+                //         let message = Proposal {
+                //             data: certificate.clone(),
+                //             signature,
+                //         };
+                //         self.event_stream
+                //             .publish(HotShotEvent::ViewSyncCertificateSend(
+                //                 message,
+                //                 self.exchange.public_key().clone(),
+                //             ))
+                //             .await;
+
+                //         // Reset accumulator for new certificate
+                //         let new_accumulator = ViewSyncVoteAccumulator {
+                //             pre_commit_vote_outcomes: HashMap::new(),
+                //             commit_vote_outcomes: HashMap::new(),
+                //             finalize_vote_outcomes: HashMap::new(),
+
+                //             success_threshold: self.exchange.success_threshold(),
+                //             failure_threshold: self.exchange.failure_threshold(),
+
+                //             sig_lists: Vec::new(),
+                //             signers: bitvec![0; self.exchange.total_nodes()],
+                //         };
+                //         either::Left(new_accumulator)
+                //     }
+                // };
+
+                // if phase == ViewSyncPhase::Finalize {
+                //     (Some(HotShotTaskCompleted::ShutDown), self)
+                // } else {
+                //     (None, self)
+                // }
             }
             _ => (None, self),
         }
