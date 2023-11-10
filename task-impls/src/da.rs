@@ -14,7 +14,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{DAProposal, ProposalType},
+    data::DAProposal,
     message::{Message, Proposal, SequencingMessage},
     simple_vote::{DAData, DAVote2},
     traits::{

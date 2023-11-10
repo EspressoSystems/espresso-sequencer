@@ -15,7 +15,6 @@ use hotshot_task::{
 use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::ProposalType,
     message::{Message, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,

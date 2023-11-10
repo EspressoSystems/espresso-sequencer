@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     certificate::{AssembledSignature, ViewSyncCertificate},
-    data::{DAProposal, Leaf, ProposalType, VidDisperse},
+    data::{DAProposal, Leaf, VidDisperse},
     vote::ViewSyncVoteAccumulator,
 };
 
@@ -254,8 +254,6 @@ pub trait Membership<TYPES: NodeType>:
 /// allowing them to vote and query information about the overall state of the protocol (such as
 /// membership and leader status).
 pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
-    /// A proposal for participants to vote on.
-    type Proposal: ProposalType<NodeType = TYPES>;
 
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
@@ -383,7 +381,6 @@ impl<
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = DAProposal<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -486,7 +483,6 @@ impl<
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = VidDisperse<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -563,7 +559,6 @@ pub trait QuorumExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<
 #[derivative(Clone, Debug)]
 pub struct QuorumExchange<
     TYPES: NodeType,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -580,16 +575,15 @@ pub struct QuorumExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(Leaf<TYPES>, PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(Leaf<TYPES>, MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > QuorumExchangeType<TYPES, M> for QuorumExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > QuorumExchangeType<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
@@ -629,13 +623,11 @@ impl<
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for QuorumExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<Leaf<TYPES>>;
@@ -823,7 +815,6 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
 #[derivative(Clone, Debug)]
 pub struct ViewSyncExchange<
     TYPES: NodeType,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -840,16 +831,15 @@ pub struct ViewSyncExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     type Vote = ViewSyncVote<TYPES>;
 
@@ -1050,13 +1040,11 @@ impl<
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<ViewSyncData<TYPES>>;
@@ -1102,7 +1090,6 @@ impl<
 #[derivative(Clone, Debug)]
 pub struct TimeoutExchange<
     TYPES: NodeType,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -1119,16 +1106,15 @@ pub struct TimeoutExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
 }
 
@@ -1137,24 +1123,20 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
 }
 
-// TODO ED Get rid of ProposalType as generic, is debt left over from Validating Consensus
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::Time>;

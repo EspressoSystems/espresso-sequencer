@@ -14,7 +14,7 @@ use crate::{
         storage::StoredView,
         BlockPayload, State,
     },
-    vote2::Certificate2,
+    vote2::{Certificate2, HasViewNumber},
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -178,47 +178,32 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub proposer_id: EncodedPublicKey,
 }
 
-impl<TYPES: NodeType> ProposalType for DAProposal<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType> ProposalType for VidDisperse<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for VidDisperse<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType> ProposalType for QuorumProposal<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType> ProposalType for ViewSyncCertificate<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for ViewSyncCertificate<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         match self {
             ViewSyncCertificate::PreCommit(certificate_internal)
             | ViewSyncCertificate::Commit(certificate_internal)
             | ViewSyncCertificate::Finalize(certificate_internal) => certificate_internal.round,
         }
     }
-}
-
-/// A proposal to a network of voting nodes.
-pub trait ProposalType:
-    Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq + Eq + Hash
-{
-    /// Type of nodes that can vote on this proposal.
-    type NodeType: NodeType;
-
-    /// Time at which this proposal is valid.
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time;
 }
 
 /// A state change encoded in a leaf.

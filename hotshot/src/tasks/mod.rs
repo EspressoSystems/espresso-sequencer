@@ -27,7 +27,7 @@ use hotshot_task_impls::{
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     certificate::ViewSyncCertificate,
-    data::{Leaf, ProposalType, QuorumProposal},
+    data::{Leaf, QuorumProposal},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
@@ -63,9 +63,8 @@ pub enum GlobalEvent {
 pub async fn add_network_message_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP>
         + 'static,
 >(
     task_runner: TaskRunner,
@@ -162,9 +161,8 @@ where
 pub async fn add_network_event_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP>
         + 'static,
 >(
     task_runner: TaskRunner,

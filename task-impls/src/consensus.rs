@@ -18,7 +18,7 @@ use hotshot_task::{
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::{Consensus, View},
-    data::{Leaf, ProposalType, QuorumProposal},
+    data::{Leaf, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     simple_certificate::{
