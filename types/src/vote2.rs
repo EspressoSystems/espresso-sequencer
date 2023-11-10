@@ -111,7 +111,6 @@ impl<
             return Either::Left(self);
         }
 
-        // TODO: Lookup the actual stake
         let Some(stake_table_entry) = membership.get_stake(&key) else {
             return Either::Left(self);
         };
