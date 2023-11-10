@@ -11,7 +11,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     traits::{election::Membership, network::ConsensusIntentEvent},
-    vote::ViewSyncVoteAccumulator,
+    vote::ViewSyncVoteAccumulator, vote2::HasViewNumber,
 };
 
 use bitvec::prelude::*;
@@ -32,7 +32,7 @@ use hotshot_types::{
 };
 use snafu::Snafu;
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, info};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
 pub enum ViewSyncPhase {
@@ -247,31 +247,20 @@ where
     /// Handles incoming events for the main view sync task
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
         match &event {
-            HotShotEvent::ViewSyncCertificateRecv(message) => {
-                let (certificate_internal, last_seen_certificate) = match &message.data {
-                    ViewSyncCertificate::PreCommit(certificate_internal) => {
-                        (certificate_internal, ViewSyncPhase::PreCommit)
-                    }
-                    ViewSyncCertificate::Commit(certificate_internal) => {
-                        (certificate_internal, ViewSyncPhase::Commit)
-                    }
-                    ViewSyncCertificate::Finalize(certificate_internal) => {
-                        (certificate_internal, ViewSyncPhase::Finalize)
-                    }
-                };
-                error!(
+            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
+                info!(
                     "Received view sync cert for phase {:?}",
-                    last_seen_certificate
+                    certificate
                 );
 
                 // This certificate is old, we can throw it away
                 // If next view = cert round, then that means we should already have a task running for it
-                if self.current_view > certificate_internal.round {
+                if self.current_view > certificate.get_view_number() {
                     debug!("Already in a higher view than the view sync message");
                     return;
                 }
 
-                if let Some(replica_task) = self.replica_task_map.get(&certificate_internal.round) {
+                if let Some(replica_task) = self.replica_task_map.get(&certificate.get_view_number()) {
                     // Forward event then return
                     debug!("Forwarding message");
                     self.event_stream
@@ -283,8 +272,8 @@ where
                 // We do not have a replica task already running, so start one
                 let mut replica_state: ViewSyncReplicaTaskState<TYPES, I, A> =
                     ViewSyncReplicaTaskState {
-                        current_view: certificate_internal.round,
-                        next_view: certificate_internal.round,
+                        current_view: certificate.get_view_number(),
+                        next_view: certificate.get_view_number(),
                         relay: 0,
                         finalized: false,
                         sent_view_change_event: false,
@@ -328,7 +317,7 @@ where
                 let event_stream_id = builder.get_stream_id().unwrap();
 
                 self.replica_task_map.insert(
-                    certificate_internal.round,
+                    certificate.get_view_number(),
                     ViewSyncTaskInfo { event_stream_id },
                 );
 
