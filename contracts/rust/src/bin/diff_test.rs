@@ -301,7 +301,7 @@ fn main() {
             let arg4 = cli
                 .arg4
                 .as_ref()
-                .expect("Should provide arg3=extraTranscriptInitMsg");
+                .expect("Should provide arg4=extraTranscriptInitMsg");
 
             let vk: VerifyingKey<Bn254> = arg1.parse::<ParsedVerifyingKey>().unwrap().into();
             let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg2).unwrap();
