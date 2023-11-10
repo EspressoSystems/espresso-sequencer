@@ -299,17 +299,17 @@ where
                         TYPES::Time::new(0)
                     };
 
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.committee_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let accumulator =
-                    new_accumulator.accumulate(&vote, self.committee_exchange.membership());
-
                 if view > collection_view {
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.committee_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let accumulator =
+                        new_accumulator.accumulate(&vote, self.committee_exchange.membership());
+
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 

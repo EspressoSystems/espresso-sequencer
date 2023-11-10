@@ -41,7 +41,7 @@ impl<K1, K2> Default for StakeTableSnapshot<K1, K2> {
 pub struct StakeTable<K1, K2, F>
 where
     K1: Eq + Hash + Clone + ToFields<F>,
-    K2: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + Default + ToFields<F>,
     F: RescueParameter,
 {
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
@@ -72,7 +72,7 @@ where
 impl<K1, K2, F> StakeTableScheme for StakeTable<K1, K2, F>
 where
     K1: Eq + Hash + Clone + ToFields<F>,
-    K2: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + Default + ToFields<F>,
     F: RescueParameter,
 {
     /// The stake table is indexed by BLS key
@@ -236,7 +236,7 @@ where
 impl<K1, K2, F> StakeTable<K1, K2, F>
 where
     K1: Eq + Hash + Clone + ToFields<F>,
-    K2: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + Default + ToFields<F>,
     F: RescueParameter,
 {
     /// Initiating an empty stake table.
@@ -293,15 +293,17 @@ where
     }
 
     /// Helper function to recompute the stake table commitment for head version
+    /// Commitment of a stake table is a triple (bls_keys_comm, schnorr_keys_comm, stake_amount_comm)
+    /// TODO(Chengyu): The BLS verification keys doesn't implement Default. Thus we directly pad with `F::default()`.
     fn compute_head_comm(&mut self) -> (F, F, F) {
+        let padding_len = STAKE_TABLE_CAPACITY - self.head.bls_keys.len();
         // Compute rescue hash for bls keys
         let mut bls_comm_preimage = self
             .head
             .bls_keys
             .iter()
-            .map(|key| key.to_fields())
-            .collect::<Vec<_>>()
-            .concat();
+            .flat_map(|key| key.to_fields())
+            .collect::<Vec<_>>();
         bls_comm_preimage.resize(
             STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE,
             F::default(),
@@ -309,17 +311,13 @@ where
         let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(bls_comm_preimage).unwrap()[0];
 
         // Compute rescue hash for Schnorr keys
-        let mut schnorr_comm_preimage = self
+        let schnorr_comm_preimage = self
             .head
             .schnorr_keys
             .iter()
-            .map(|key| key.to_fields())
-            .collect::<Vec<_>>()
-            .concat();
-        schnorr_comm_preimage.resize(
-            STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE,
-            F::default(),
-        );
+            .chain(ark_std::iter::repeat(&K2::default()).take(padding_len))
+            .flat_map(|key| key.to_fields())
+            .collect::<Vec<_>>();
         let schnorr_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(schnorr_comm_preimage).unwrap()[0];
 
@@ -361,7 +359,7 @@ where
 impl<K1, K2, F> Default for StakeTable<K1, K2, F>
 where
     K1: Eq + Hash + Clone + ToFields<F>,
-    K2: Eq + Hash + Clone + ToFields<F>,
+    K2: Eq + Hash + Clone + Default + ToFields<F>,
     F: RescueParameter,
 {
     fn default() -> Self {
