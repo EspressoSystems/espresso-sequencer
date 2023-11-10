@@ -70,4 +70,6 @@ jobs:
           git diff
 
       - name: Run tests
-        run: nix develop --accept-flake-config -c forge test -vvv
+        run: |
+          nix develop --accept-flake-config -c cargo build --bin diff-test --release
+          nix develop --accept-flake-config -c forge test -vvv
