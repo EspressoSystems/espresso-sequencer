@@ -1,0 +1,654 @@
+// Copyright (c) 2022 Espresso Systems (espressosys.com)
+// This file is part of the HotShot Query Service library.
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+// even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+// You should have received a copy of the GNU General Public License along with this program. If not,
+// see <https://www.gnu.org/licenses/>.
+
+#![cfg(feature = "sql-data-source")]
+
+use super::VersionedDataSource;
+use crate::{
+    availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+    status::UpdateStatusData,
+    Block, Deltas, QueryableBlock, Resolvable,
+};
+use async_std::{net::ToSocketAddrs, task::spawn};
+use async_trait::async_trait;
+use futures::{
+    channel::oneshot,
+    future::{select, Either, FutureExt},
+    task::{Context, Poll},
+    AsyncRead, AsyncWrite,
+};
+use hotshot_types::traits::{
+    metrics::Metrics,
+    node_implementation::{NodeImplementation, NodeType},
+};
+use std::pin::Pin;
+use tokio_postgres::{types::BorrowToSql, Client, NoTls, RowStream, ToStatement};
+
+pub use crate::include_migrations;
+pub use anyhow::Error;
+pub use refinery::Migration;
+pub use tokio_postgres::{self as postgres};
+
+// This needs to be reexported so that we can reference it by absolute path relative to this crate
+// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
+// crate which doesn't have `include_dir` as a dependency.
+pub use include_dir::include_dir;
+
+/// Embed migrations from the given directory into the current binary.
+///
+/// The macro invocation `include_migrations!(path)` evaluates to an expression of type `impl
+/// Iterator<Item = Migration>`. Each migration must be a text file which is an immediate child of
+/// `path`, and there must be no non-migration files in `path`. The migration files must have names
+/// of the form `V${version}__${name}.sql`, where `version` is a positive integer indicating how the
+/// migration is to be ordered relative to other migrations, and `name` is a descriptive name for
+/// the migration.
+///
+/// `path` should be an absolute path. It is possible to give a path relative to the root of the
+/// invoking crate by using environment variable expansions and the `CARGO_MANIFEST_DIR` environment
+/// variable.
+///
+/// As an example, this is the invocation used to load the default migrations from the
+/// `hotshot-query-service` crate. The migrations are located in a directory called `migrations` at
+/// the root of the crate.
+///
+/// ```
+/// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
+/// let migrations: Vec<Migration> = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
+/// assert_eq!(migrations[0].version(), 0);
+/// assert_eq!(migrations[0].name(), "init_schema");
+/// ```
+#[macro_export]
+macro_rules! include_migrations {
+    ($dir:tt) => {
+        $crate::data_source::sql::include_dir!($dir)
+            .files()
+            .map(|file| {
+                let path = file.path();
+                let name = path
+                    .file_name()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "migration file {} must have a non-empty UTF-8 name",
+                            path.display()
+                        )
+                    });
+                let sql = file
+                    .contents_utf8()
+                    .unwrap_or_else(|| panic!("migration file {name} must use UTF-8 encoding"));
+                Migration::unapplied(name, sql).expect("invalid migration")
+            })
+    };
+}
+
+/// The migrations requied to build the default schema for this version of [`SqlDataSource`].
+pub fn default_migrations() -> Vec<Migration> {
+    include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect()
+}
+
+/// Postgres client config.
+#[derive(Clone, Debug)]
+pub struct Config {
+    host: String,
+    port: u16,
+    user: Option<String>,
+    password: Option<String>,
+    database: Option<String>,
+    migrations: Vec<Migration>,
+    no_migrations: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            host: "localhost".into(),
+            port: 5432,
+            user: None,
+            password: None,
+            database: None,
+            migrations: vec![],
+            no_migrations: false,
+        }
+    }
+}
+
+impl Config {
+    /// Set the hostname of the database server.
+    ///
+    /// The default is `localhost`.
+    pub fn host(mut self, host: impl Into<String>) -> Self {
+        self.host = host.into();
+        self
+    }
+
+    /// Set the port on which to connect to the database.
+    ///
+    /// The default is 5432, the default Postgres port.
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
+    /// Set the DB user to connect as.
+    pub fn user(mut self, user: impl Into<String>) -> Self {
+        self.user = Some(user.into());
+        self
+    }
+
+    /// Set a password for connecting to the database.
+    pub fn password(mut self, password: impl Into<String>) -> Self {
+        self.password = Some(password.into());
+        self
+    }
+
+    /// Set the name of the database to connect to.
+    pub fn database(mut self, database: impl Into<String>) -> Self {
+        self.database = Some(database.into());
+        self
+    }
+
+    /// Add custom migrations to run when connecting to the database.
+    pub fn migrations(mut self, migrations: impl IntoIterator<Item = Migration>) -> Self {
+        self.migrations.extend(migrations);
+        self
+    }
+
+    /// Skip all migrations when connecting to the database.
+    pub fn no_migrations(mut self) -> Self {
+        self.no_migrations = true;
+        self
+    }
+}
+
+/// A data source for the APIs provided in this crate, backed by a remote PostgreSQL database.
+///
+/// # Administration
+///
+/// This data source will automatically connect to and perform queries on a remote SQL database.
+/// However, _administration_ of the database, such as initialization, resetting, and backups, is
+/// left out of the scope of this implementation, and is expected to be performed manually using
+/// off-the-shelf DBMS adminstration tools. The one exception is migrations, which are handled
+/// transparently by the [`SqlDataSource`].
+///
+/// ## Initialization
+///
+/// When creating a [`SqlDataSource`], the caller can use [`Config`] to specify the host, user, and
+/// database to connect to. As such, [`SqlDataSource`] is not very opinionated about how the
+/// Postgres instance is set up. The administrator must simply ensure that there is a database
+/// dedicated to the [`SqlDataSource`] and a user with appropriate permissions (all on `SCHEMA` and
+/// all on `DATABASE`) over that database.
+///
+/// Here is an example of how a sufficient database could be initialized. When using the standard
+/// `postgres` Docker image, these statements could be placed in
+/// `/docker-entrypoint-initdb.d/init.sql` to automatically initialize the database upon startup.
+///
+/// ```sql
+/// CREATE DATABASE hotshot_query_service;
+/// \connect hotshot_query_service;
+/// CREATE USER hotshot_user WITH PASSWORD 'password';
+/// GRANT ALL ON SCHEMA public TO hotshot_user;
+/// GRANT ALL ON DATABASE hotshot_query_service TO hotshot_user WITH GRANT OPTION;
+/// ```
+///
+/// One could then connect to this database with the following [`Config`]:
+///
+/// ```
+/// # use hotshot_query_service::data_source::sql::Config;
+/// Config::default()
+///     .host("postgres.database.hostname")
+///     .database("hotshot_query_service")
+///     .user("hotshot_user")
+///     .password("password")
+/// # ;
+/// ```
+///
+/// ## Migrations
+///
+/// For the [`SqlDataSource`] to work, the database must be initialized with the appropriate schema,
+/// and the schema must be kept up to date when deploying a new version of this software which
+/// depends on a different schema. Both of these tasks are accomplished via _migrations_.
+///
+/// Each release of this software is bundled with a sequence of migration files: one migration for
+/// each release that changed the schema, including the latest one. Replaying these SQL files
+/// against a database with an older version of the schema, including a completely empty database,
+/// will bring it up to date with the schema required by this version of the software. Upon creating
+/// an instance of [`SqlDataSource`] and connecting to a database, the data source will
+/// automatically fetch the current version from the database and, if it is old, replay the
+/// necessary migration files.
+///
+/// ## Custom Migrations
+///
+/// In keeping with the philosophy of this crate, [`SqlDataSource`] is designed to be
+/// [extensible and composable](#extension-and-composition). When extending the provided APIs with
+/// new, application-specific queries, it will often be desirable to alter the schema of the
+/// database in some way, such as adding additional columns to some of the tables or creating new
+/// indices. When composing the provided APIs with additional API modules, it may also be desirable
+/// to alter the schema, although the changes are more likely to be completely independent of the
+/// schema used by this data source, such as adding entirely new tables.
+///
+/// In either case, the default schema can be modified by inserting additional migrations between
+/// the migrations distributed with this crate. The new migrations will then automatically be
+/// replayed as necessary when initializing a [`SqlDataSource`]. New custom migrations can be
+/// added with each software update, to keep the custom data up to date as the default schema
+/// changes.
+///
+/// Custom migrations can be inserted using [`Config::migrations`]. Each custom migration will be
+/// inserted into the overall sequence of migrations in order of version number. The migrations
+/// provided by this crate only use version numbers which are multiples of 10, so the non-multiples
+/// can be used to insert custom migrations between the default migrations. You can also replace a
+/// default migration completely by providing a custom migration with the same version number. This
+/// may be useful when an earlier custom migration has altered the schema in such a way that a later
+/// migration no longer works as-is. However, this technique is error prone and should be used only
+/// when necessary.
+///
+/// When using custom migrations, it is the user's responsibility to ensure that the resulting
+/// schema is compatible with the schema expected by [`SqlDataSource`]. Adding things (tables,
+/// columns, indices) should usually be safe. Removing, altering, or renaming things should be done
+/// with extreme caution.
+///
+/// It is standard to store custom migrations as SQL files in a sub-directory of the crate. For ease
+/// of release and deploymenet, such directories can be embedded into a Rust binary and parsed into
+/// a list of [`Migration`] objects using the [`include_migrations`] macro.
+///
+/// It is also possible to take complete control over migrating the schema using
+/// [`Config::no_migrations`] to prevent the [`SqlDataSource`] from running its own migrations. The
+/// database adminstrator then becomes responsible for manually migrating the database, ensuring the
+/// schema is up to date, and ensuring that the schema is at all times compatible with the schema
+/// expected by the current version of this software. Nevertheless, this may be the best option when
+/// your application-specific schema has diverged significantly from the default schema.
+///
+/// # Synchronization
+///
+/// [`SqlDataSource`] implements [`VersionedDataSource`], which means changes are not applied
+/// to the underlying database with every operation. Instead, outstanding changes are batched and
+/// applied all at once, atomically, whenever [`commit_version`](Self::commit_version) is called.
+/// Outstanding, uncommitted changes can also be rolled back completely using
+/// [`revert_version`](Self::revert_version).
+///
+/// Internally, the data source maintains an open [`Transaction`] whenever there are outstanding
+/// changes, and commits the transaction on [`commit_version`](Self::commit_version). The underlying
+/// database transaction can be accessed directly via [`transaction`](Self::transaction), which
+/// makes it possible to compose application-specific database updates atomically with updates made
+/// by the [`SqlDataSource`] itself. This is useful for
+/// [extension and composition](#extension-and-composition).
+///
+/// # Extension and Composition
+///
+/// [`SqlDataSource`] is designed to be both extensible (so you can add additional state to the API
+/// modules defined in this crate) and composable (so you can use [`SqlDataSource`] as one component
+/// of a larger state type for an application with additional modules).
+///
+/// ## Extension
+///
+/// It is possible to add additional, application-specific state to [`SqlDataSource`]. If the new
+/// state should live in memory, simply wrap the [`SqlDataSource`] in an
+/// [`ExtensibleDataSource`](super::ExtensibleDataSource):
+///
+/// ```
+/// # use hotshot_query_service::data_source::{
+/// #   sql::{Config, Error}, ExtensibleDataSource, SqlDataSource,
+/// # };
+/// # use hotshot_query_service::testing::mocks::{
+/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+/// # };
+/// # async fn doc(config: Config) -> Result<(), Error> {
+/// type AppState = &'static str;
+///
+/// let data_source: ExtensibleDataSource<SqlDataSource, AppState> =
+///     ExtensibleDataSource::new(SqlDataSource::connect(config).await?, "app state");
+/// # Ok(())
+/// # }
+/// ```
+///
+/// The [`ExtensibleDataSource`](super::ExtensibleDataSource) wrapper implements all the same data
+/// source traits as [`SqlDataSource`], and also provides access to the `AppState` parameter for use
+/// in API endpoint handlers. This can be used to implement an app-specific data source trait and
+/// add a new API endpoint that uses this app-specific data, as described in the
+/// [extension guide](crate#extension).
+///
+/// If the new application-specific state should live in the SQL database itself, the implementation
+/// is more involved, but still possible. Follow the steps for
+/// [custom migrations](#custom-migrations) to modify the database schema to account for the new
+/// data you want to store. You can then access this data through the [`SqlDataSource`] using
+/// [`query`](Self::query) to run a custom read-only SQL query or [`transaction`](Self::transaction)
+/// to execute a custom atomic mutation of the database. If you use
+/// [`transaction`](Self::transaction), be sure to call [`commit_version`](Self::commit_version)
+/// when you are ready to persist your changes.
+///
+/// You will typically use [`query`](Self::query) to read custom data in API endpoint handlers and
+/// [`transaction`](Self::transaction) to populate custom data in your web server's update loop.
+///
+/// ## Composition
+///
+/// Composing [`SqlDataSource`] with other module states is fairly simple -- just
+/// create an aggregate struct containing both [`SqlDataSource`] and your additional module
+/// states, as described in the [composition guide](crate#composition). If the additional modules
+/// have data that should live in the same database as the [`SqlDataSource`] data, you can follow
+/// the steps in [custom migrations](#custom-migrations) to accomodate this. When modifying that
+/// data, you can use [`transaction`](Self::transaction) to atomically synchronize updates to the
+/// other modules' data with updates to the [`SqlDataSource`]. If the additional data is completely
+/// independent of HotShot query service data and does not need to be synchronized, you can also
+/// connect to the database directly to make updates.
+///
+/// In the following example, we compose HotShot query service modules with other application-
+/// specific modules, synchronizing updates using [`transaction`](Self::transaction).
+///
+/// ```
+/// # use async_std::{sync::{Arc, RwLock}, task::spawn};
+/// # use futures::StreamExt;
+/// # use hotshot::types::SystemContextHandle;
+/// # use hotshot_query_service::Error;
+/// # use hotshot_query_service::data_source::{
+/// #   sql::Config, SqlDataSource, UpdateDataSource, VersionedDataSource,
+/// # };
+/// # use hotshot_query_service::testing::mocks::{
+/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+/// # };
+/// # use tide_disco::App;
+/// struct AppState {
+///     hotshot_qs: SqlDataSource,
+///     // additional state for other modules
+/// }
+///
+/// async fn init_server(
+///     config: Config,
+///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
+/// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
+///     let mut hotshot_qs = SqlDataSource::connect(config).await.map_err(Error::internal)?;
+///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
+///     let tx = hotshot_qs.transaction().await.map_err(Error::internal)?;
+///     // ...
+///
+///     let state = Arc::new(RwLock::new(AppState {
+///         hotshot_qs,
+///         // additional state for other modules
+///     }));
+///     let mut app = App::with_state(state.clone());
+///     // Register API modules.
+///
+///     spawn(async move {
+///         let mut events = hotshot.get_event_stream(Default::default()).await.0;
+///         while let Some(event) = events.next().await {
+///             let mut state = state.write().await;
+///             UpdateDataSource::<AppTypes, AppNodeImpl>::update(&mut state.hotshot_qs, &event)
+///                 .await
+///                 .unwrap();
+///             // Update other modules' states based on `event`. Use `hotshot_qs` to include
+///             // database updates in the same atomic transaction as `hotshot_qs.update`.
+///             let tx = state.hotshot_qs.transaction().await.unwrap();
+///
+///             // Commit all outstanding changes to the entire state at the same time.
+///             state.hotshot_qs.commit_version().await.unwrap();
+///         }
+///     });
+///
+///     Ok(app)
+/// }
+/// ```
+pub struct SqlDataSource {
+    client: Client,
+    tx_in_progress: bool,
+    kill: Option<oneshot::Sender<()>>,
+}
+
+impl SqlDataSource {
+    /// Connect to a remote database.
+    pub async fn connect(config: Config) -> Result<Self, Error> {
+        // Establish a TCP connection to the server.
+        let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
+
+        // Convert the TCP connection into a postgres connection.
+        let mut pgcfg = postgres::Config::default();
+        if let Some(user) = &config.user {
+            pgcfg.user(user);
+        }
+        if let Some(password) = &config.password {
+            pgcfg.password(password);
+        }
+        if let Some(database) = &config.database {
+            pgcfg.dbname(database);
+        }
+        let (mut client, connection) = pgcfg.connect_raw(tcp, NoTls).await?;
+
+        // Spawn a task to drive the connection, with a channel to kill it when this data source is
+        // dropped.
+        let (kill, killed) = oneshot::channel();
+        spawn(select(killed, connection).inspect(|res| {
+            if let Either::Right((res, _)) = res {
+                // If we were killed, do nothing. That is the normal shutdown path. But if the
+                // `select` returned because the `connection` terminated, we should log something,
+                // as that is unusual.
+                match res {
+                    Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
+                    Err(err) => tracing::error!("postgres connection closed with error: {err}"),
+                }
+            }
+        }));
+
+        // Get migrations and interleave with custom migrations, sorting by version number.
+        let mut migrations = default_migrations();
+        migrations.extend(config.migrations);
+        migrations.sort();
+
+        // Get a migration runner. Depending on the config, we can either use this to actually run
+        // the migrations or just check if the database is up to date.
+        let runner = refinery::Runner::new(&migrations).set_grouped(true);
+
+        if config.no_migrations {
+            // We've been asked not to run any migrations. Abort if the DB is not already up to
+            // date.
+            let last_applied = runner.get_last_applied_migration_async(&mut client).await?;
+            let last_expected = migrations.last();
+            if last_applied.as_ref() != last_expected {
+                return Err(Error::msg(format!("DB is out of date: last applied migration is {last_applied:?}, but expected {last_expected:?}")));
+            }
+        } else {
+            // Run migrations using `refinery`.
+            match runner.run_async(&mut client).await {
+                Ok(report) => {
+                    tracing::info!("ran DB migrations: {report:?}");
+                }
+                Err(err) => {
+                    tracing::error!("DB migrations failed: {:?}", err.report());
+                    Err(err)?;
+                }
+            }
+        }
+
+        Ok(Self {
+            client,
+            tx_in_progress: false,
+            kill: Some(kill),
+        })
+    }
+
+    /// Query the underlying SQL database.
+    pub async fn query<T, P>(&self, query: &T, params: P) -> Result<RowStream, Error>
+    where
+        T: ?Sized + ToStatement,
+        P: IntoIterator,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        Ok(self.client.query_raw(query, params).await?)
+    }
+
+    /// Access the transaction which is accumulating all uncommitted changes to the data source.
+    ///
+    /// This can be used to manually group database modifications to custom state atomically with
+    /// modifications made through the [`SqlDataSource`].
+    ///
+    /// If there is no currently open transaction, a new transaction will be opened. No changes
+    /// made through the transaction objeect returned by this method will be persisted until
+    /// [`commit_version`](Self::commit_version) is called.
+    pub async fn transaction(&mut self) -> Result<Transaction<'_>, Error> {
+        if !self.tx_in_progress {
+            // If there is no transaction in progress, open one.
+            self.client.batch_execute("BEGIN").await?;
+            self.tx_in_progress = true;
+        }
+        Ok(Transaction {
+            client: &mut self.client,
+        })
+    }
+}
+
+impl Drop for SqlDataSource {
+    fn drop(&mut self) {
+        if let Some(kill) = self.kill.take() {
+            // Ignore errors, they just mean the task has already exited.
+            kill.send(()).ok();
+        }
+    }
+}
+
+#[async_trait]
+impl VersionedDataSource for SqlDataSource {
+    type Error = postgres::error::Error;
+
+    /// Atomically commit to all outstanding modifications to the data.
+    ///
+    /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
+    /// or to erase outstanding changes with [`revert_version`](Self::revert_version).
+    async fn commit_version(&mut self) -> Result<(), Self::Error> {
+        if !self.tx_in_progress {
+            // Nothing to do if there is no outstanding transaction.
+            return Ok(());
+        }
+        self.client.batch_execute("COMMIT").await?;
+        self.tx_in_progress = false;
+        Ok(())
+    }
+
+    /// Erase all oustanding modifications to the data.
+    ///
+    /// This function must not return if it has failed to revert changes. Inability to revert
+    /// changes to the database is considered a fatal error, and this function may panic.
+    async fn revert_version(&mut self) {
+        if !self.tx_in_progress {
+            // Nothing to do if there is no outstanding transaction.
+            return;
+        }
+        // If we're trying to roll back a transaction, something has already gone wrong and we're
+        // trying to recover. If we're unable to revert the changes and recover, all we can do is
+        // panic.
+        self.client.batch_execute("ROLLBACK").await.unwrap();
+        self.tx_in_progress = false;
+    }
+}
+
+#[async_trait]
+impl<Types, I> UpdateAvailabilityData<Types, I> for SqlDataSource
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
+    type Error = postgres::error::Error;
+
+    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    where
+        Deltas<Types, I>: Resolvable<Block<Types>>,
+    {
+        todo!()
+    }
+
+    async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+        todo!()
+    }
+}
+
+impl UpdateStatusData for SqlDataSource {
+    fn metrics(&self) -> Box<dyn Metrics> {
+        todo!()
+    }
+}
+
+pub struct Transaction<'a> {
+    client: &'a mut Client,
+}
+
+impl<'a> Transaction<'a> {
+    /// Query the underlying SQL database.
+    ///
+    /// The results will reflect the state after the statements thus far added to this transaction
+    /// have been applied, even though those effects have not been committed to the database yet.
+    pub async fn query<T, P>(&self, query: &T, params: P) -> Result<RowStream, Error>
+    where
+        T: ?Sized + ToStatement,
+        P: IntoIterator,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        Ok(self.client.query_raw(query, params).await?)
+    }
+
+    /// Execute a statement against the underlying database.
+    ///
+    /// The results of the statement will be reflected immediately in future statements made within
+    /// this transaction, but will not be reflected in the underlying database until the transaction
+    /// is committed with [`SqlDataSource::commit_version`].
+    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> Result<(), Error>
+    where
+        T: ?Sized + ToStatement,
+        P: IntoIterator,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        self.client.execute_raw(statement, params).await?;
+        Ok(())
+    }
+}
+
+// tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
+// traits do not require any specifics of the tokio runtime. Thus we can implement them using the
+// async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
+// on the async_std executor.
+//
+// To avoid orphan impls, we wrap this tream in a new type.
+struct TcpStream(async_std::net::TcpStream);
+
+impl TcpStream {
+    async fn connect<A: ToSocketAddrs>(addrs: A) -> Result<Self, Error> {
+        Ok(Self(async_std::net::TcpStream::connect(addrs).await?))
+    }
+}
+
+impl tokio::io::AsyncRead for TcpStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0)
+            .poll_read(cx, buf.initialized_mut())
+            .map(|res| res.map(|_| ()))
+    }
+}
+
+impl tokio::io::AsyncWrite for TcpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_close(cx)
+    }
+}

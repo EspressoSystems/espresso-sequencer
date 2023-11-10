@@ -17,6 +17,7 @@
 //! the persistence layer, which we call a _data source_. This module provides the following
 //! concrete persistence implementations:
 //! * [`FileSystemDataSource`]
+//! * [`SqlDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
 //!
@@ -27,10 +28,14 @@
 mod extension;
 mod fs;
 mod ledger_log;
+pub mod sql;
 mod update;
 
 pub use extension::ExtensibleDataSource;
+#[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
+#[cfg(feature = "sql-data-source")]
+pub use sql::SqlDataSource;
 pub use update::{UpdateDataSource, VersionedDataSource};
 
 /// Generic tests we can instantiate for all the data sources.

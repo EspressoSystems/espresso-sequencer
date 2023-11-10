@@ -10,6 +10,8 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+#![cfg(feature = "file-system-data-source")]
+
 use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
 use atomic_store::{
     append_log, load_store::BincodeLoadStore, AppendLog, AtomicStoreLoader, PersistenceError,

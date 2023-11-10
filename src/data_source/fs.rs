@@ -10,6 +10,8 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+#![cfg(feature = "file-system-data-source")]
+
 use super::{
     ledger_log::{Iter, LedgerLog},
     VersionedDataSource,
@@ -66,8 +68,8 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 ///
 /// ## Extension
 ///
-/// Adding additional, application-state to [`FileSystemDataSource`] is possible by wrapping it in
-/// [`ExtensibleDataSource`](super::ExtensibleDataSource):
+/// Adding additional, application-specific state to [`FileSystemDataSource`] is possible by
+/// wrapping it in [`ExtensibleDataSource`](super::ExtensibleDataSource):
 ///
 /// ```
 /// # use atomic_store::PersistenceError;
