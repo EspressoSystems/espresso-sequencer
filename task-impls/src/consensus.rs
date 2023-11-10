@@ -978,27 +978,27 @@ where
                         TYPES::Time::new(0)
                     };
 
-                // Todo check if we are the leader
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let accumulator =
-                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
-
-                // TODO Create default functions for accumulators
-                // https://github.com/EspressoSystems/HotShot/issues/1797
-                let timeout_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
                 if vote.get_view_number() > collection_view {
+                    // Todo check if we are the leader
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let accumulator =
+                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+
+                    // TODO Create default functions for accumulators
+                    // https://github.com/EspressoSystems/HotShot/issues/1797
+                    let timeout_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
                     let state = VoteCollectionTaskState {
                         quorum_exchange: self.quorum_exchange.clone(),
                         timeout_exchange: self.timeout_exchange.clone(),
@@ -1063,27 +1063,27 @@ where
                         TYPES::Time::new(0)
                     };
 
-                //         // Todo check if we are the leader
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let timeout_accumulator =
-                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
-
-                let quorum_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                // self.timeout_accumulator = accumulator;
-
                 if vote.get_view_number() > collection_view {
+                    // Todo check if we are the leader
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let timeout_accumulator =
+                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+
+                    let quorum_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    // self.timeout_accumulator = accumulator;
+
                     let state = VoteCollectionTaskState {
                         quorum_exchange: self.quorum_exchange.clone(),
                         timeout_exchange: self.timeout_exchange.clone(),
