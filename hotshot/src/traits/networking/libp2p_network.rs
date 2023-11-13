@@ -361,7 +361,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let latest_seen_view = self.inner.latest_seen_view.clone();
 
         // deals with handling lookup queue. should be infallible
-        let handle_ = handle.clone();
         async_spawn(async move {
             // cancels on shutdown
             while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
@@ -373,7 +372,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // only run if we are not too close to the next view number
                 if latest_seen_view.load(Ordering::Relaxed) + THRESHOLD <= *view_number {
                     // look up
-                    if let Err(err) = handle_.lookup_node::<K>(pk.clone(), dht_timeout).await {
+                    if let Err(err) = handle.lookup_node::<K>(pk.clone(), dht_timeout).await {
                         error!("Failed to perform lookup for key {:?}: {}", pk, err);
                     };
                 }

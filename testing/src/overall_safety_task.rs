@@ -207,7 +207,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
 
             let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
 
-            match self.state_map.entry(state.clone()) {
+            match self.state_map.entry(state) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
