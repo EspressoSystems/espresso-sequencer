@@ -83,8 +83,8 @@ pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type LeafStream: Stream<Item = LeafQueryData<Types, I>> + Unpin + Send;
-    type BlockStream: Stream<Item = BlockQueryData<Types>> + Unpin + Send;
+    type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin + Send;
+    type BlockStream: Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin + Send;
 
     type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin
     where

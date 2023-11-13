@@ -58,11 +58,21 @@ pub enum Error {
         source: QueryError,
         resource: String,
     },
+    #[snafu(display("error streaming leaves: {source}"))]
+    #[from(ignore)]
+    StreamLeaf {
+        source: QueryError,
+    },
     #[snafu(display("error fetching block {resource}: {source}"))]
     #[from(ignore)]
     QueryBlock {
         source: QueryError,
         resource: String,
+    },
+    #[snafu(display("error streaming blocks: {source}"))]
+    #[from(ignore)]
+    StreamBlock {
+        source: QueryError,
     },
     #[snafu(display("error fetching transaction {resource}: {source}"))]
     #[from(ignore)]
@@ -112,7 +122,9 @@ impl Error {
         match self {
             Self::Request { .. } => StatusCode::BadRequest,
             Self::QueryLeaf { source, .. }
+            | Self::StreamLeaf { source, .. }
             | Self::QueryBlock { source, .. }
+            | Self::StreamBlock { source, .. }
             | Self::QueryTransaction { source, .. }
             | Self::QueryProposals { source, .. } => match source {
                 QueryError::NotFound | QueryError::Missing => StatusCode::NotFound,
@@ -186,7 +198,7 @@ where
                                     height: height as u64,
                                     reason: err.to_string(),
                                 })?
-                                .map(|block| Ok(block.header())))
+                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header())))
                         }
                         .boxed()
                     })

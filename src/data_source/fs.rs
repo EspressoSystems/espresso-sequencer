@@ -387,8 +387,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>> AvailabilityDataSource<Types
 where
     Block<Types>: QueryableBlock,
 {
-    type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
-    type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
+    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>;
+    type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
 
     type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types, I>>>
     where
@@ -485,11 +485,21 @@ where
     }
 
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
-        self.leaf_storage.subscribe(height).context(MissingSnafu)
+        Ok(self
+            .leaf_storage
+            .subscribe(height)
+            .context(MissingSnafu)?
+            .map(Ok)
+            .boxed())
     }
 
     async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
-        self.block_storage.subscribe(height).context(MissingSnafu)
+        Ok(self
+            .block_storage
+            .subscribe(height)
+            .context(MissingSnafu)?
+            .map(Ok)
+            .boxed())
     }
 }
 

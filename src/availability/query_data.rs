@@ -163,8 +163,8 @@ pub trait QueryableBlock: traits::Block {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
-    leaf: Leaf<Types, I>,
-    qc: QuorumCertificate<Types, I>,
+    pub(crate) leaf: Leaf<Types, I>,
+    pub(crate) qc: QuorumCertificate<Types, I>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -197,8 +197,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> QuorumCertificate<Types, I> {
-        self.leaf.get_justify_qc()
+    pub fn qc(&self) -> &QuorumCertificate<Types, I> {
+        &self.qc
     }
 
     pub fn height(&self) -> u64 {
@@ -231,11 +231,11 @@ pub struct BlockQueryData<Types: NodeType>
 where
     Block<Types>: QueryableBlock,
 {
-    block: Block<Types>,
-    hash: BlockHash<Types>,
-    height: u64,
-    timestamp: i128,
-    size: u64,
+    pub(crate) block: Block<Types>,
+    pub(crate) hash: BlockHash<Types>,
+    pub(crate) height: u64,
+    pub(crate) timestamp: i128,
+    pub(crate) size: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

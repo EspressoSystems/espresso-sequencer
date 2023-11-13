@@ -30,6 +30,7 @@ mod fs;
 mod ledger_log;
 pub mod sql;
 mod update;
+mod versioned_channel;
 
 pub use extension::ExtensibleDataSource;
 #[cfg(feature = "file-system-data-source")]
@@ -134,7 +135,7 @@ pub mod data_source_tests {
         }
 
         // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
-        // ID.
+        // ID, and that the list of proposals for each proposer is in chronological order.
         for proposer in ds
             .get_leaf_range(..)
             .await
@@ -143,8 +144,13 @@ pub mod data_source_tests {
             .collect::<HashSet<_>>()
             .await
         {
+            let mut prev_height = None;
             for leaf in ds.get_proposals(&proposer, None).await.unwrap() {
                 assert_eq!(proposer, leaf.proposer());
+                if let Some(prev_height) = prev_height {
+                    assert!(prev_height < leaf.height());
+                }
+                prev_height = Some(leaf.height());
             }
         }
     }
@@ -167,6 +173,7 @@ pub mod data_source_tests {
                 .subscribe_blocks(0)
                 .await
                 .unwrap()
+                .map(Result::unwrap)
                 .enumerate()
         };
         for nonce in 0..3 {
@@ -250,7 +257,7 @@ pub mod data_source_tests {
         let mut blocks = { ds.read().await.subscribe_blocks(0).await.unwrap() };
         network.start().await;
         loop {
-            if !blocks.next().await.unwrap().is_empty() {
+            if !blocks.next().await.unwrap().unwrap().is_empty() {
                 break;
             }
         }
