@@ -12,7 +12,10 @@
 
 use crate::{
     availability::{
-        data_source::{AvailabilityDataSource, UpdateAvailabilityData},
+        data_source::{
+            AvailabilityDataSource, BlockId, LeafId, MissingSnafu, NotFoundSnafu, QueryResult,
+            ResourceId, UpdateAvailabilityData,
+        },
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
             TransactionIndex,
@@ -26,18 +29,20 @@ use crate::{
     },
     Block, Deltas, Resolvable,
 };
+use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
-use futures::stream::BoxStream;
+use futures::stream::{self, BoxStream, Stream, StreamExt, TryStreamExt};
 use hotshot_types::traits::{
     metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
-use snafu::Snafu;
+use serde::{de::DeserializeOwned, Serialize};
+use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
 use std::hash::Hash;
-use std::iter::Skip;
+use std::ops::{Bound, RangeBounds};
 use std::path::Path;
 
 pub use crate::ledger_log::Iter;
@@ -260,70 +265,169 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Snafu)]
-#[snafu(display("unable to open stream"))]
-pub struct StreamError;
+async fn range_stream<T>(
+    mut iter: Iter<'_, T>,
+    range: impl RangeBounds<usize>,
+) -> impl '_ + Stream<Item = QueryResult<T>>
+where
+    T: Clone + Serialize + DeserializeOwned + Sync,
+{
+    let start = range.start_bound().cloned();
+    let end = range.end_bound().cloned();
 
+    // Advance the underlying iterator to the start of the range.
+    let pos = match start {
+        Bound::Included(n) => {
+            if n > 0 {
+                iter.nth(n - 1);
+            }
+            n
+        }
+        Bound::Excluded(n) => {
+            iter.nth(n);
+            n + 1
+        }
+        Bound::Unbounded => 0,
+    };
+
+    stream::unfold((iter, end, pos), |(mut iter, end, pos)| async move {
+        // Check if we have reached the end of the range.
+        let reached_end = match end {
+            Bound::Included(n) => pos > n,
+            Bound::Excluded(n) => pos >= n,
+            Bound::Unbounded => false,
+        };
+        if reached_end {
+            return None;
+        }
+        let opt = iter.next()?;
+        Some((opt.context(MissingSnafu), (iter, end, pos + 1)))
+    })
+}
+
+#[async_trait]
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
     for QueryData<Types, I, UserData>
 where
     Block<Types>: QueryableBlock,
+    UserData: Send + Sync,
 {
-    type Error = StreamError;
+    type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
+    type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
 
-    type LeafIterType<'a> = Skip<Iter<'a, LeafQueryData<Types, I>>> where UserData: 'a;
-    type BlockIterType<'a> = Skip<Iter<'a, BlockQueryData<Types>>> where UserData: 'a;
+    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types, I>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize> + Send;
+    type BlockRange<'a, R> = BoxStream<'a, QueryResult<BlockQueryData<Types>>>
+    where
+        Self: 'a,
+        R: RangeBounds<usize> + Send;
 
-    type LeafStreamType = BoxStream<'static, LeafQueryData<Types, I>>;
-    type BlockStreamType = BoxStream<'static, BlockQueryData<Types>>;
-
-    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-        self.leaf_storage.iter().skip(n)
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    where
+        ID: Into<LeafId<Types, I>> + Send + Sync,
+    {
+        let n = match id.into() {
+            ResourceId::Number(n) => n,
+            ResourceId::Hash(h) => {
+                *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
+            }
+        };
+        self.leaf_storage
+            .iter()
+            .nth(n)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
     }
 
-    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-        self.block_storage.iter().skip(n)
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        let n = match id.into() {
+            ResourceId::Number(n) => n,
+            ResourceId::Hash(h) => {
+                *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize
+            }
+        };
+        self.block_storage
+            .iter()
+            .nth(n)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
     }
 
-    fn get_leaf_index_by_hash(&self, hash: LeafHash<Types, I>) -> Option<u64> {
-        self.index_by_leaf_hash.get(&hash).cloned()
+    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_stream(self.leaf_storage.iter(), range).await.boxed())
     }
 
-    fn get_block_index_by_hash(&self, hash: BlockHash<Types>) -> Option<u64> {
-        self.index_by_block_hash.get(&hash).cloned()
+    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_stream(self.block_storage.iter(), range).await.boxed())
     }
 
-    fn get_txn_index_by_hash(
+    async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Option<(u64, TransactionIndex<Types>)> {
-        self.index_by_txn_hash.get(&hash).cloned()
+    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+        let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
+        let block = self.get_block(*height as usize).await?;
+        Ok((block, ix.clone()))
     }
 
-    fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
-        self.index_by_proposer_id
+    async fn get_proposals(
+        &self,
+        id: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+        let all_ids = self
+            .index_by_proposer_id
             .get(id)
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let start_from = match limit {
+            Some(count) => all_ids.len().saturating_sub(count),
+            None => 0,
+        };
+        stream::iter(all_ids)
+            .skip(start_from)
+            .then(|height| self.get_leaf(height as usize))
+            .try_collect()
+            .await
     }
 
-    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
-        self.leaf_storage.subscribe(height).ok_or(StreamError)
+    async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+        Ok(match self.index_by_proposer_id.get(id) {
+            Some(ids) => ids.len(),
+            None => 0,
+        })
     }
 
-    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
-        self.block_storage.subscribe(height).ok_or(StreamError)
+    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
+        self.leaf_storage.subscribe(height).context(MissingSnafu)
+    }
+
+    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
+        self.block_storage.subscribe(height).context(MissingSnafu)
     }
 }
 
+#[async_trait]
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
     for QueryData<Types, I, UserData>
 where
     Block<Types>: QueryableBlock,
+    UserData: Send,
 {
     type Error = PersistenceError;
 
-    fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
     {
@@ -342,7 +446,7 @@ where
         Ok(())
     }
 
-    fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
         for (txn_ix, txn) in block.block().enumerate() {
@@ -384,18 +488,20 @@ where
     }
 }
 
+#[async_trait]
 impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
     for QueryData<Types, I, UserData>
 where
     Block<Types>: QueryableBlock,
+    UserData: Sync,
 {
     type Error = MetricsError;
 
-    fn block_height(&self) -> Result<usize, Self::Error> {
+    async fn block_height(&self) -> Result<usize, Self::Error> {
         Ok(self.leaf_storage.iter().len())
     }
 
-    fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
+    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
         Ok(MempoolQueryData {
             transaction_count: self
                 .consensus_metrics()?
@@ -408,13 +514,13 @@ where
         })
     }
 
-    fn success_rate(&self) -> Result<f64, Self::Error> {
+    async fn success_rate(&self) -> Result<f64, Self::Error> {
         let total_views = self.consensus_metrics()?.get_gauge("current_view")?.get() as f64;
         // By definition, a successful view is any which committed a block.
-        Ok(self.block_height()? as f64 / total_views)
+        Ok(self.block_height().await? as f64 / total_views)
     }
 
-    fn export_metrics(&self) -> Result<String, Self::Error> {
+    async fn export_metrics(&self) -> Result<String, Self::Error> {
         self.metrics.prometheus()
     }
 }
@@ -439,47 +545,57 @@ mod test {
     };
     use async_std::sync::RwLock;
     use bincode::Options;
-    use commit::Committable;
     use futures::StreamExt;
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::HashSet;
     use std::time::Duration;
 
-    async fn get_non_empty_blocks<UserData>(
+    async fn get_non_empty_blocks<UserData: Send + Sync>(
         qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>,
     ) -> Vec<(
         LeafQueryData<MockTypes, MockNodeImpl>,
         BlockQueryData<MockTypes>,
     )> {
         let qd = qd.read().await;
-        qd.get_nth_leaf_iter(0)
-            .zip(qd.get_nth_block_iter(0))
-            .filter_map(|entry| match entry {
-                (Some(leaf), Some(block)) if !block.is_empty() => Some((leaf, block)),
-                _ => None,
+        qd.get_leaf_range(..)
+            .await
+            .unwrap()
+            .zip(qd.get_block_range(..).await.unwrap())
+            .filter_map(|entry| async move {
+                match entry {
+                    (Ok(leaf), Ok(block)) if !block.is_empty() => Some((leaf, block)),
+                    _ => None,
+                }
             })
             .collect()
+            .await
     }
 
-    async fn validate<UserData>(qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>) {
+    async fn validate<UserData: Send + Sync>(
+        qd: &RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>,
+    ) {
         let qd = qd.read().await;
 
         // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
         // we've seen so we can detect duplicates.
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
-        for (i, leaf) in qd.get_nth_leaf_iter(0).enumerate() {
-            let Some(leaf) = leaf else {
-                continue;
-            };
+        let mut leaves = qd.get_leaf_range(..).await.unwrap().enumerate();
+        while let Some((i, leaf)) = leaves.next().await {
+            let leaf = leaf.unwrap();
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
-            assert_eq!(qd.get_leaf_index_by_hash(leaf.hash()).unwrap(), i as u64);
-            assert!(qd
-                .get_block_ids_by_proposer_id(&leaf.proposer())
-                .contains(&(i as u64)));
 
-            let Some(Some(block)) = qd.get_nth_block_iter(i).next() else {
+            // Check indices.
+            assert_eq!(leaf, qd.get_leaf(i).await.unwrap());
+            assert_eq!(leaf, qd.get_leaf(leaf.hash()).await.unwrap());
+            assert!(qd
+                .get_proposals(&leaf.proposer(), None)
+                .await
+                .unwrap()
+                .contains(&leaf));
+
+            let Ok(block) = qd.get_block(i).await else {
                 continue;
             };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -490,10 +606,12 @@ mod test {
                 bincode_opts().serialized_size(block.block()).unwrap()
             );
 
+            // Check indices.
+            assert_eq!(block, qd.get_block(i).await.unwrap());
             // We should be able to look up the block by hash unless it is a duplicate. For
             // duplicate blocks, this function returns the index of the first duplicate.
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
-            assert_eq!(qd.get_block_index_by_hash(block.hash()).unwrap(), *ix);
+            assert_eq!(qd.get_block(block.hash()).await.unwrap().height(), *ix);
 
             for (j, txn) in block.block().iter().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -502,26 +620,23 @@ mod test {
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                assert_eq!(qd.get_txn_index_by_hash(txn.commit()).unwrap(), *ix);
+                let (block, pos) = qd.get_block_with_transaction(txn.commit()).await.unwrap();
+                assert_eq!((block.height(), pos), *ix);
             }
         }
 
         // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
         // ID.
         for proposer in qd
-            .get_nth_leaf_iter(0)
-            .filter_map(|opt_leaf| opt_leaf.map(|leaf| leaf.proposer()))
+            .get_leaf_range(..)
+            .await
+            .unwrap()
+            .filter_map(|res| async move { res.ok().map(|leaf| leaf.proposer()) })
             .collect::<HashSet<_>>()
+            .await
         {
-            for leaf_id in qd.get_block_ids_by_proposer_id(&proposer) {
-                assert_eq!(
-                    proposer,
-                    qd.get_nth_leaf_iter(leaf_id as usize)
-                        .next()
-                        .unwrap()
-                        .unwrap()
-                        .proposer()
-                );
+            for leaf in qd.get_proposals(&proposer, None).await.unwrap() {
+                assert_eq!(proposer, leaf.proposer());
             }
         }
     }
@@ -538,7 +653,14 @@ mod test {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
-        let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap().enumerate() };
+        let mut blocks = {
+            qd.read()
+                .await
+                .subscribe_blocks(0)
+                .await
+                .unwrap()
+                .enumerate()
+        };
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
             network.submit_transaction(txn).await;
@@ -553,15 +675,7 @@ mod test {
                 tracing::info!("block {i} is empty");
             };
 
-            assert_eq!(
-                qd.read()
-                    .await
-                    .get_nth_block_iter(i)
-                    .next()
-                    .unwrap()
-                    .unwrap(),
-                block
-            );
+            assert_eq!(qd.read().await.get_block(i).await.unwrap(), block);
             validate(&qd).await;
         }
 
@@ -578,16 +692,16 @@ mod test {
         {
             // With consensus paused, check that the success rate returns NaN (since the block
             // height, the numerator, and view number, the denominator, are both 0).
-            assert!(qd.read().await.success_rate().unwrap().is_nan());
+            assert!(qd.read().await.success_rate().await.unwrap().is_nan());
             // Check that block height is initially zero.
-            assert_eq!(qd.read().await.block_height().unwrap(), 0);
+            assert_eq!(qd.read().await.block_height().await.unwrap(), 0);
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         network.submit_transaction(txn.clone()).await;
         loop {
-            let mempool = { qd.read().await.mempool_info().unwrap() };
+            let mempool = { qd.read().await.mempool_info().await.unwrap() };
             let expected = MempoolQueryData {
                 transaction_count: 1,
                 memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -603,7 +717,7 @@ mod test {
         }
         {
             assert_eq!(
-                qd.read().await.mempool_info().unwrap(),
+                qd.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
                     memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -616,7 +730,7 @@ mod test {
         sleep(Duration::from_secs(3)).await;
         {
             assert_eq!(
-                qd.read().await.mempool_info().unwrap(),
+                qd.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
                     memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -625,7 +739,7 @@ mod test {
         }
 
         // Start consensus and wait for the transaction to be finalized.
-        let mut blocks = { qd.read().await.subscribe_blocks(0).unwrap() };
+        let mut blocks = { qd.read().await.subscribe_blocks(0).await.unwrap() };
         network.start().await;
         loop {
             if !blocks.next().await.unwrap().is_empty() {
@@ -640,14 +754,14 @@ mod test {
             // check that block height is at least 2, because we know that the genesis block and our
             // transaction's block have both been committed, but we can't know how many empty blocks
             // were committed.
-            assert!(qd.read().await.success_rate().unwrap() > 0.0);
-            assert!(qd.read().await.block_height().unwrap() >= 2);
+            assert!(qd.read().await.success_rate().await.unwrap() > 0.0);
+            assert!(qd.read().await.block_height().await.unwrap() >= 2);
         }
 
         {
             // Check that the transaction is no longer reflected in the mempool.
             assert_eq!(
-                qd.read().await.mempool_info().unwrap(),
+                qd.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 0,
                     memory_footprint: 0,

@@ -11,18 +11,20 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::MempoolQueryData;
+use async_trait::async_trait;
 use hotshot_types::traits::metrics::Metrics;
 use std::error::Error;
 use std::fmt::Debug;
 
+#[async_trait]
 pub trait StatusDataSource {
     type Error: Error + Debug;
-    fn block_height(&self) -> Result<usize, Self::Error>;
-    fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error>;
-    fn success_rate(&self) -> Result<f64, Self::Error>;
+    async fn block_height(&self) -> Result<usize, Self::Error>;
+    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error>;
+    async fn success_rate(&self) -> Result<f64, Self::Error>;
 
     /// Export all available metrics in the Prometheus text format.
-    fn export_metrics(&self) -> Result<String, Self::Error>;
+    async fn export_metrics(&self) -> Result<String, Self::Error>;
 }
 
 pub trait UpdateStatusData {

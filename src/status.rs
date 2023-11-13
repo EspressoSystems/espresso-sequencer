@@ -75,16 +75,16 @@ where
     )?;
     api.with_version("0.0.1".parse().unwrap())
         .get("latest_block_height", |_, state| {
-            async { state.block_height().map_err(internal) }.boxed()
+            async { state.block_height().await.map_err(internal) }.boxed()
         })?
         .get("mempool_info", |_, state| {
-            async { state.mempool_info().map_err(internal) }.boxed()
+            async { state.mempool_info().await.map_err(internal) }.boxed()
         })?
         .get("success_rate", |_, state| {
-            async { state.success_rate().map_err(internal) }.boxed()
+            async { state.success_rate().await.map_err(internal) }.boxed()
         })?
         .get("metrics", |_, state| {
-            async { state.export_metrics().map_err(internal) }.boxed()
+            async { state.export_metrics().await.map_err(internal) }.boxed()
         })?;
     Ok(api)
 }

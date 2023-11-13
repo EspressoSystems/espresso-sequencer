@@ -16,6 +16,7 @@ use crate::{
     availability::{BlockQueryData, LeafQueryData, QueryableBlock, UpdateAvailabilityData},
     Block, Deltas, Leaf, Resolvable,
 };
+use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
 use hotshot_types::{
     data::LeafType,
@@ -36,6 +37,7 @@ use std::iter::once;
 ///   should be used when initializing a [SystemContextHandle](hotshot::types::SystemContextHandle)
 /// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
 ///   emitted
+#[async_trait]
 pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     type Error: Error + Debug;
 
@@ -57,12 +59,13 @@ pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    async fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
         Block<Types>: QueryableBlock;
 }
 
+#[async_trait]
 impl<
         Types: NodeType,
         I: NodeImplementation<Types>,
@@ -77,7 +80,7 @@ where
         UpdateStatusData::metrics(self)
     }
 
-    fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    async fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
         Block<Types>: QueryableBlock,
@@ -110,12 +113,14 @@ where
                 // guaranteed to correspond, and this should never panic.
                 self.insert_leaf(
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf"),
-                )?;
+                )
+                .await?;
                 // For the same reason, this will not panic either.
                 self.insert_block(
                     BlockQueryData::new::<I>(leaf.clone(), qc.clone(), block)
                         .expect("inconsistent block"),
-                )?;
+                )
+                .await?;
             }
         }
         Ok(())

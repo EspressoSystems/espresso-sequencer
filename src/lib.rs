@@ -155,12 +155,15 @@
 //! ```
 //! # use async_std::sync::RwLock;
 //! # use futures::FutureExt;
-//! # use hotshot_query_service::availability::{self, AvailabilityDataSource, TransactionIndex};
+//! # use hotshot_query_service::availability::{
+//! #   self, AvailabilityDataSource, QueryBlockSnafu, TransactionIndex,
+//! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
 //! # use hotshot_query_service::Error;
+//! # use snafu::ResultExt;
 //! # use std::collections::HashMap;
 //! # use std::path::Path;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
@@ -191,7 +194,10 @@
 //!                 message: format!("no such UTXO {}", utxo_index),
 //!                 status: StatusCode::NotFound,
 //!             })?;
-//!         let block = state.get_nth_block_iter(block_index).next().unwrap().unwrap();
+//!         let block = state
+//!             .get_block(block_index)
+//!             .await
+//!             .context(QueryBlockSnafu { resource: block_index.to_string() })?;
 //!         let txn = block.transaction(&txn_index).unwrap();
 //!         let utxo = // Application-specific logic to extract a UTXO from a transaction.
 //! #           todo!();
@@ -243,15 +249,18 @@
 //! for your custom type. The basic pattern looks like:
 //!
 //! ```
+//! # use async_trait::async_trait;
 //! # use hotshot_types::traits::signature_key::EncodedPublicKey;
 //! # use hotshot_query_service::availability::{
-//! #   AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
+//! #   AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+//! #   TransactionHash, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
+//! # use std::ops::RangeBounds;
 //! # type AppQueryData = ();
 //! struct AppState {
 //!     hotshot_qs: QueryData<AppTypes, AppNodeImpl, AppQueryData>,
@@ -259,51 +268,65 @@
 //! }
 //!
 //! // Implement data source trait for availability API.
+//! #[async_trait]
 //! impl AvailabilityDataSource<AppTypes, AppNodeImpl> for AppState {
-//!     type Error =
+//!     type LeafRange<'a, R> =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::Error;
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafRange<'a, R>
+//!     where
+//!         Self: 'a,
+//!         R: RangeBounds<usize> + Send;
+//!     type BlockRange<'a, R> =
+//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockRange<'a, R>
+//!     where
+//!         Self: 'a,
+//!         R: RangeBounds<usize> + Send;
 //!
-//!     type LeafIterType<'a> =
+//!     type LeafStream =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafIterType<'a>;
-//!     type BlockIterType<'a> =
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafStream;
+//!     type BlockStream =
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockIterType<'a>;
+//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockStream;
 //!
-//!     type LeafStreamType =
-//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::LeafStreamType;
-//!     type BlockStreamType =
-//!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
-//!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockStreamType;
-//!
-//!     fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-//!         self.hotshot_qs.get_nth_leaf_iter(n)
+//!     async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<AppTypes, AppNodeImpl>>
+//!     where
+//!         ID: Into<LeafId<AppTypes, AppNodeImpl>> + Send + Sync,
+//!     {
+//!         self.hotshot_qs.get_leaf(id).await
 //!     }
 //!
 //!     // etc
-//! #   fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> { todo!() }
-//! #   fn get_leaf_index_by_hash(&self, hash: LeafHash<AppTypes, AppNodeImpl>) -> Option<u64> { todo!() }
-//! #   fn get_block_index_by_hash(&self, hash: BlockHash<AppTypes>) -> Option<u64> { todo!() }
-//! #   fn get_txn_index_by_hash(&self, hash: TransactionHash<AppTypes>) -> Option<(u64, TransactionIndex<AppTypes>)> { todo!() }
-//! #   fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> { todo!() }
-//! #   fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> { todo!() }
-//! #   fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> { todo!() }
+//! #   async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<AppTypes>>
+//! #   where
+//! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
+//! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> QueryResult<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
+//! #   async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+//! #   where
+//! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+//! #   where
+//! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes, AppNodeImpl>>> { todo!() }
+//! #   async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> { todo!() }
+//! #   async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> { todo!() }
+//! #   async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> { todo!() }
 //! }
 //!
 //! // Implement data source trait for status API.
+//! #[async_trait]
 //! impl StatusDataSource for AppState {
 //!     type Error = <QueryData<AppTypes, AppNodeImpl, AppQueryData> as StatusDataSource>::Error;
 //!
-//!     fn block_height(&self) -> Result<usize, Self::Error> {
-//!         self.hotshot_qs.block_height()
+//!     async fn block_height(&self) -> Result<usize, Self::Error> {
+//!         self.hotshot_qs.block_height().await
 //!     }
 //!
 //!     // etc
-//! #   fn mempool_info(&self) -> Result<MempoolQueryData, <Self as StatusDataSource>::Error> { todo!() }
-//! #   fn success_rate(&self) -> Result<f64, <Self as StatusDataSource>::Error> { todo!() }
-//! #   fn export_metrics(&self) -> Result<String, <Self as StatusDataSource>::Error> { todo!() }
+//! #   async fn mempool_info(&self) -> Result<MempoolQueryData, <Self as StatusDataSource>::Error> { todo!() }
+//! #   async fn success_rate(&self) -> Result<f64, <Self as StatusDataSource>::Error> { todo!() }
+//! #   async fn export_metrics(&self) -> Result<String, <Self as StatusDataSource>::Error> { todo!() }
 //! }
 //!
 //! // Implement data source traits for other modules, using additional state from AppState.
@@ -377,7 +400,7 @@
 //!         let mut events = hotshot.get_event_stream(Default::default()).await.0;
 //!         while let Some(event) = events.next().await {
 //!             let mut state = state.write().await;
-//!             state.hotshot_qs.update(&event).unwrap();
+//!             state.hotshot_qs.update(&event).await.unwrap();
 //!             // Update other modules' states based on `event`.
 //!
 //!             state.hotshot_qs.commit_version().await.unwrap();
@@ -453,18 +476,21 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, BlockHash, LeafHash, TransactionHash, TransactionIndex,
+            AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+            TransactionHash, TransactionIndex,
         },
         status::{MempoolQueryData, StatusDataSource},
         testing::mocks::{MockNodeImpl, MockTypes},
     };
     use async_std::{sync::RwLock, task::spawn};
+    use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
     use hotshot_signature_key::bn254::BN254Pub;
     use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
+    use std::ops::RangeBounds;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
@@ -477,77 +503,98 @@ mod test {
         module_state: RollingLog<BincodeLoadStore<u64>>,
     }
 
+    #[async_trait]
     impl AvailabilityDataSource<MockTypes, MockNodeImpl> for CompositeState {
-        type Error = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+        type LeafStream = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
             MockTypes,
             MockNodeImpl,
-        >>::Error;
+        >>::LeafStream;
+        type BlockStream = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
+            MockTypes,
+            MockNodeImpl,
+        >>::BlockStream;
 
-        type LeafIterType<'a> =
+        type LeafRange<'a, R> =
             <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
                 MockTypes,
                 MockNodeImpl,
-            >>::LeafIterType<'a>;
-        type BlockIterType<'a> =
+            >>::LeafRange<'a, R>
+        where
+            Self: 'a,
+            R: RangeBounds<usize> + Send;
+        type BlockRange<'a, R> =
             <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
                 MockTypes,
                 MockNodeImpl,
-            >>::BlockIterType<'a>;
+            >>::BlockRange<'a, R>
+        where
+            Self: 'a,
+            R: RangeBounds<usize> + Send;
 
-        type LeafStreamType = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
-            MockTypes,
-            MockNodeImpl,
-        >>::LeafStreamType;
-        type BlockStreamType = <QueryData<MockTypes, MockNodeImpl, ()> as AvailabilityDataSource<
-            MockTypes,
-            MockNodeImpl,
-        >>::BlockStreamType;
-
-        fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-            self.hotshot_qs.get_nth_leaf_iter(n)
+        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>
+        where
+            ID: Into<LeafId<MockTypes, MockNodeImpl>> + Send + Sync,
+        {
+            self.hotshot_qs.get_leaf(id).await
         }
-        fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-            self.hotshot_qs.get_nth_block_iter(n)
+        async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_block(id).await
         }
-        fn get_leaf_index_by_hash(&self, hash: LeafHash<MockTypes, MockNodeImpl>) -> Option<u64> {
-            self.hotshot_qs.get_leaf_index_by_hash(hash)
+        async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+        where
+            R: RangeBounds<usize> + Send,
+        {
+            self.hotshot_qs.get_leaf_range(range).await
         }
-        fn get_block_index_by_hash(&self, hash: BlockHash<MockTypes>) -> Option<u64> {
-            self.hotshot_qs.get_block_index_by_hash(hash)
+        async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+        where
+            R: RangeBounds<usize> + Send,
+        {
+            self.hotshot_qs.get_block_range(range).await
         }
-        fn get_txn_index_by_hash(
+        async fn get_block_with_transaction(
             &self,
             hash: TransactionHash<MockTypes>,
-        ) -> Option<(u64, TransactionIndex<MockTypes>)> {
-            self.hotshot_qs.get_txn_index_by_hash(hash)
+        ) -> QueryResult<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
+            self.hotshot_qs.get_block_with_transaction(hash).await
         }
-        fn get_block_ids_by_proposer_id(&self, id: &EncodedPublicKey) -> Vec<u64> {
-            self.hotshot_qs.get_block_ids_by_proposer_id(id)
+        async fn get_proposals(
+            &self,
+            proposer: &EncodedPublicKey,
+            limit: Option<usize>,
+        ) -> QueryResult<Vec<LeafQueryData<MockTypes, MockNodeImpl>>> {
+            self.hotshot_qs.get_proposals(proposer, limit).await
         }
-
-        fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
-            self.hotshot_qs.subscribe_leaves(height)
+        async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+            self.hotshot_qs.count_proposals(proposer).await
         }
-        fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
-            self.hotshot_qs.subscribe_blocks(height)
+        async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
+            self.hotshot_qs.subscribe_leaves(height).await
+        }
+        async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
+            self.hotshot_qs.subscribe_blocks(height).await
         }
     }
 
     // Implement data source trait for status API.
+    #[async_trait]
     impl StatusDataSource for CompositeState {
         type Error = <QueryData<MockTypes, MockNodeImpl, ()> as StatusDataSource>::Error;
 
-        fn block_height(&self) -> Result<usize, Self::Error> {
-            self.hotshot_qs.block_height()
+        async fn block_height(&self) -> Result<usize, Self::Error> {
+            self.hotshot_qs.block_height().await
         }
-        fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-            self.hotshot_qs.mempool_info()
+        async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
+            self.hotshot_qs.mempool_info().await
         }
-        fn success_rate(&self) -> Result<f64, Self::Error> {
-            self.hotshot_qs.success_rate()
+        async fn success_rate(&self) -> Result<f64, Self::Error> {
+            self.hotshot_qs.success_rate().await
         }
-        fn export_metrics(&self) -> Result<String, Self::Error> {
-            self.hotshot_qs.export_metrics()
+        async fn export_metrics(&self) -> Result<String, Self::Error> {
+            self.hotshot_qs.export_metrics().await
         }
     }
 
