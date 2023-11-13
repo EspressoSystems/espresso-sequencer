@@ -2750,6 +2750,7 @@ dependencies = [
  "clap",
  "commit",
  "custom_debug",
+ "derivative",
  "derive_more",
  "either",
  "futures",

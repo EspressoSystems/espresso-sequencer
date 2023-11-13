@@ -156,7 +156,7 @@
 //! # use async_std::sync::RwLock;
 //! # use futures::FutureExt;
 //! # use hotshot_query_service::availability::{
-//! #   self, AvailabilityDataSource, QueryBlockSnafu, ResourceId, TransactionIndex,
+//! #   self, AvailabilityDataSource, QueryBlockSnafu, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::data_source::QueryData;
 //! # use hotshot_query_service::testing::mocks::{
@@ -194,11 +194,10 @@
 //!                 message: format!("no such UTXO {}", utxo_index),
 //!                 status: StatusCode::NotFound,
 //!             })?;
-//!         let id = ResourceId::Number(block_index);
 //!         let block = state
-//!             .get_block(id)
+//!             .get_block(block_index)
 //!             .await
-//!             .context(QueryBlockSnafu { resource: id.to_string() })?;
+//!             .context(QueryBlockSnafu { resource: block_index.to_string() })?;
 //!         let txn = block.transaction(&txn_index).unwrap();
 //!         let utxo = // Application-specific logic to extract a UTXO from a transaction.
 //! #           todo!();
@@ -291,15 +290,17 @@
 //!         <QueryData<AppTypes, AppNodeImpl, AppQueryData> as
 //!             AvailabilityDataSource<AppTypes, AppNodeImpl>>::BlockStream;
 //!
-//!     async fn get_leaf(
-//!         &self,
-//!         id: LeafId<AppTypes, AppNodeImpl>,
-//!     ) -> QueryResult<LeafQueryData<AppTypes, AppNodeImpl>> {
+//!     async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<AppTypes, AppNodeImpl>>
+//!     where
+//!         ID: Into<LeafId<AppTypes, AppNodeImpl>> + Send + Sync,
+//!     {
 //!         self.hotshot_qs.get_leaf(id).await
 //!     }
 //!
 //!     // etc
-//! #   async fn get_block(&self, id: BlockId<AppTypes>) -> QueryResult<BlockQueryData<AppTypes>> { todo!() }
+//! #   async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<AppTypes>>
+//! #   where
+//! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
 //! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> QueryResult<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
 //! #   async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
 //! #   where
@@ -530,16 +531,16 @@ mod test {
             Self: 'a,
             R: RangeBounds<usize> + Send;
 
-        async fn get_leaf(
-            &self,
-            id: LeafId<MockTypes, MockNodeImpl>,
-        ) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>> {
+        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>
+        where
+            ID: Into<LeafId<MockTypes, MockNodeImpl>> + Send + Sync,
+        {
             self.hotshot_qs.get_leaf(id).await
         }
-        async fn get_block(
-            &self,
-            id: BlockId<MockTypes>,
-        ) -> QueryResult<BlockQueryData<MockTypes>> {
+        async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
             self.hotshot_qs.get_block(id).await
         }
         async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>

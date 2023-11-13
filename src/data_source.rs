@@ -324,8 +324,11 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>> {
-        let n = match id {
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    where
+        ID: Into<LeafId<Types, I>> + Send + Sync,
+    {
+        let n = match id.into() {
             ResourceId::Number(n) => n,
             ResourceId::Hash(h) => {
                 *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
@@ -338,8 +341,11 @@ where
             .context(MissingSnafu)
     }
 
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        let n = match id {
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        let n = match id.into() {
             ResourceId::Number(n) => n,
             ResourceId::Hash(h) => {
                 *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize
@@ -371,7 +377,7 @@ where
         hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
         let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
-        let block = self.get_block(ResourceId::Number(*height as usize)).await?;
+        let block = self.get_block(*height as usize).await?;
         Ok((block, ix.clone()))
     }
 
@@ -391,7 +397,7 @@ where
         };
         stream::iter(all_ids)
             .skip(start_from)
-            .then(|height| self.get_leaf(ResourceId::Number(height as usize)))
+            .then(|height| self.get_leaf(height as usize))
             .try_collect()
             .await
     }
@@ -581,18 +587,15 @@ mod test {
             assert_eq!(leaf.hash(), leaf.leaf().commit());
 
             // Check indices.
-            assert_eq!(leaf, qd.get_leaf(ResourceId::Number(i)).await.unwrap());
-            assert_eq!(
-                leaf,
-                qd.get_leaf(ResourceId::Hash(leaf.hash())).await.unwrap()
-            );
+            assert_eq!(leaf, qd.get_leaf(i).await.unwrap());
+            assert_eq!(leaf, qd.get_leaf(leaf.hash()).await.unwrap());
             assert!(qd
                 .get_proposals(&leaf.proposer(), None)
                 .await
                 .unwrap()
                 .contains(&leaf));
 
-            let Ok(block) = qd.get_block(ResourceId::Number(i)).await else {
+            let Ok(block) = qd.get_block(i).await else {
                 continue;
             };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -604,17 +607,11 @@ mod test {
             );
 
             // Check indices.
-            assert_eq!(block, qd.get_block(ResourceId::Number(i)).await.unwrap());
+            assert_eq!(block, qd.get_block(i).await.unwrap());
             // We should be able to look up the block by hash unless it is a duplicate. For
             // duplicate blocks, this function returns the index of the first duplicate.
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
-            assert_eq!(
-                qd.get_block(ResourceId::Hash(block.hash()))
-                    .await
-                    .unwrap()
-                    .height(),
-                *ix
-            );
+            assert_eq!(qd.get_block(block.hash()).await.unwrap().height(), *ix);
 
             for (j, txn) in block.block().iter().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -678,14 +675,7 @@ mod test {
                 tracing::info!("block {i} is empty");
             };
 
-            assert_eq!(
-                qd.read()
-                    .await
-                    .get_block(ResourceId::Number(i))
-                    .await
-                    .unwrap(),
-                block
-            );
+            assert_eq!(qd.read().await.get_block(i).await.unwrap(), block);
             validate(&qd).await;
         }
 

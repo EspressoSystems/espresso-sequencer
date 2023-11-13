@@ -11,11 +11,13 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{
-    BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
-    TransactionIndex,
+    BlockQueryData, LeafQueryData, QueryableBlock, TransactionHash, TransactionIndex,
 };
-use crate::{Block, Deltas, Resolvable};
+use crate::{Block, Deltas, Leaf, Resolvable};
 use async_trait::async_trait;
+use commit::{Commitment, Committable};
+use derivative::Derivative;
+use derive_more::{Display, From};
 use futures::stream::Stream;
 use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
@@ -23,27 +25,42 @@ use hotshot_types::traits::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::cmp::Ordering;
 use std::error::Error;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::ops::RangeBounds;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ResourceId<H> {
+#[derive(Derivative, From, Display)]
+#[derivative(Ord = "feature_allow_slow_enum")]
+#[derivative(
+    Copy(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Ord(bound = ""),
+    Hash(bound = "")
+)]
+pub enum ResourceId<T: Committable> {
+    #[display(fmt = "{_0}")]
     Number(usize),
-    Hash(H),
+    #[display(fmt = "{_0}")]
+    Hash(Commitment<T>),
 }
 
-impl<H: Display> Display for ResourceId<H> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Number(n) => write!(f, "{n}"),
-            Self::Hash(h) => write!(f, "{h}"),
-        }
+impl<T: Committable> Clone for ResourceId<T> {
+    fn clone(&self) -> Self {
+        *self
     }
 }
 
-pub type BlockId<Types> = ResourceId<BlockHash<Types>>;
-pub type LeafId<Types, I> = ResourceId<LeafHash<Types, I>>;
+impl<T: Committable> PartialOrd for ResourceId<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub type BlockId<Types> = ResourceId<Block<Types>>;
+pub type LeafId<Types, I> = ResourceId<Leaf<Types, I>>;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -78,8 +95,12 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf(&self, id: LeafId<Types, I>) -> QueryResult<LeafQueryData<Types, I>>;
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    where
+        ID: Into<LeafId<Types, I>> + Send + Sync;
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
 
     async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
     where
