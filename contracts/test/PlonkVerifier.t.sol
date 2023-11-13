@@ -142,7 +142,7 @@ contract PlonkVerifier_constants_Test is Test {
     }
 }
 
-contract PlonkVerifier_batchVerify_Test is Test {
+contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
     /// forge-config: default.fuzz.runs = 30
     /// @dev Test if some of the user inputs are invalid
     function testFuzz_revertWhenInvalidArgs(
@@ -178,32 +178,86 @@ contract PlonkVerifier_batchVerify_Test is Test {
                 (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
             );
 
-            // happy path
             assert(V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
-
-            // unhappy path
-            // wrong vk
-            IPlonkVerifier.VerifyingKey[] memory badVks = verifyingKeys;
-            badVks[0].q1 = BN254.negate(verifyingKeys[0].q1);
-            badVks[0].qEcc = BN254.negate(verifyingKeys[0].qEcc);
-            assert(!V.batchVerify(badVks, publicInputs, proofs, extraTranscriptInitMsgs));
-
-            // wrong public inputs
-            uint256[][] memory badPis = publicInputs;
-            badPis[0][0] = 0x1234;
-            assert(!V.batchVerify(verifyingKeys, badPis, proofs, extraTranscriptInitMsgs));
-
-            // wrong proofs
-            IPlonkVerifier.PlonkProof[] memory badProofs = proofs;
-            badProofs[0].wireEval0 = 0x12;
-            badProofs[0].sigmaEval0 = 0x34;
-            assert(!V.batchVerify(verifyingKeys, publicInputs, badProofs, extraTranscriptInitMsgs));
-
-            // wrong extraMsgs
-            bytes[] memory badMsgs = extraTranscriptInitMsgs;
-            badMsgs[0] = bytes("hi");
-            assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, badMsgs));
         }
+    }
+
+    /// forge-config: default.fuzz.runs = 30
+    /// @dev Test when bad public inputs are supplied, the verification should fail
+    /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
+    function testFuzz_badPublicInputs_fails(uint256[3] calldata randPublicInput) external {
+        uint256[] memory badPublicInput = new uint256[](3);
+        badPublicInput[0] = randPublicInput[0];
+        badPublicInput[1] = randPublicInput[1];
+        badPublicInput[2] = randPublicInput[2];
+        badPublicInput = sanitizeScalarFields(badPublicInput);
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        publicInputs[0] = badPublicInput;
+        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
+    }
+
+    /// forge-config: default.fuzz.runs = 30
+    /// @dev Test when bad proofs are supplied, the verification should fail
+    function testFuzz_badProofs_fails(uint64 seed) external {
+        IPlonkVerifier.PlonkProof memory badProof = dummyProof(seed);
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        proofs[0] = badProof;
+        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
+    }
+
+    /// forge-config: default.fuzz.runs = 30
+    /// @dev Test when bad extraTranscriptInitMsgs are supplied, the verification should fail
+    function testFuzz_badExtraTranscriptInitMsgs_fails(bytes calldata badMsg) external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        extraTranscriptInitMsgs[0] = badMsg;
+        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
     }
 }
 
