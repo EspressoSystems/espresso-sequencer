@@ -32,12 +32,14 @@ interface IStakeTable {
     /// @param balance The amount of token staked.
     /// @param registerEpoch The starting epoch for the validator.
     /// @param exitEpoch The ending epoch for the validator.
+    /// @param schnorrVK The Schnorr verification key associated.
     struct Node {
         address account;
         StakeType stakeType;
         uint64 balance;
         uint64 registerEpoch;
         uint64 exitEpoch;
+        EdOnBN254.EdOnBN254Point schnorrVK;
     }
 
     // === Table State & Stats ===
@@ -103,7 +105,7 @@ interface IStakeTable {
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function depoist(BN254.G1Point calldata blsVK, uint64 amount)
+    function deposit(BN254.G1Point calldata blsVK, uint64 amount)
         external
         returns (uint64, uint64);
 
