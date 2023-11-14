@@ -36,11 +36,22 @@ pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 /// Curve config for Schnorr signatures
 pub use ark_ed_on_bn254::EdwardsConfig;
 
+/// Given a SRS, returns the proving key and verifying key for state update
 pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
     let (circuit, _) = build_dummy_circuit_for_preprocessing()?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 
+/// Given a proving key and
+/// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
+/// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
+/// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
+/// - a bit vector indicates the signers
+/// - a quorum threshold
+/// Returns error or a pair (proof, public_inputs) asserting that
+/// - the signer's accumulated weight exceeds the quorum threshold
+/// - the stake table corresponds to the one committed in the light client state
+/// - all signed schnorr signatures are valid
 pub fn generate_state_update_proof<ST, R>(
     rng: &mut R,
     pk: &ProvingKey,
@@ -65,6 +76,7 @@ where
     Ok((proof, public_inputs))
 }
 
+/// Internal function for helping generate the proving/verifying key
 fn build_dummy_circuit_for_preprocessing(
 ) -> Result<(PlonkCircuit<BaseField>, Vec<BaseField>), PlonkError> {
     let st = StakeTable::<BLSVerKey, SchnorrVerKey, BaseField>::new();

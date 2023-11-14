@@ -115,15 +115,19 @@ impl AsRef<[Variable]> for LightClientStateVar {
 }
 
 /// A function that takes as input:
-/// - stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
-/// - schnorr signatures of the updated states (`Vec<SchnorrSignature>`)
+/// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
+/// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
-/// - signer bit vector
-/// - quorum threshold
+/// - a bit vector indicates the signers
+/// - a quorum threshold
 /// checks that
 /// - the signer's accumulated weight exceeds the quorum threshold
-/// - the commitment of the stake table
-/// - all schnorr signatures are valid
+/// - the stake table corresponds to the one committed in the light client state
+/// - all signed schnorr signatures are valid
+/// returns
+/// - A circuit for proof generation
+/// - A list of public inputs for verification
+/// - A PlonkError if any error happens when building the circuit
 pub(crate) fn build_state_verifier_circuit<F, ST, P>(
     stake_table: &ST,
     sigs: &[Signature<P>],
