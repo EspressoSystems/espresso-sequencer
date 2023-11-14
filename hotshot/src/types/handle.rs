@@ -74,54 +74,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> Clone
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandle<TYPES, I> {
-    // /// Will return the next event in the queue
-    // ///
-    // /// # Errors
-    // ///
-    // /// Will return [`HotShotError::NetworkFault`] if the underlying [`SystemContext`] has been closed.
-    // pub async fn next_event(&mut self) -> Result<Event<TYPES>, HotShotError<TYPES>> {
-    //     let result = self.stream_output.recv_async().await;
-    //     match result {
-    //         Ok(result) => Ok(result),
-    //         Err(_) => Err(NetworkFault { source: ShutDown }),
-    //     }
-    // }
-    // /// Will attempt to immediately pull an event out of the queue
-    // ///
-    // /// # Errors
-    // ///
-    // /// Will return [`HotShotError::NetworkFault`] if the underlying [`HotShot`] instance has shut down
-    // pub fn try_next_event(&mut self) -> Result<Option<Event<TYPES>>, HotShotError<TYPES>> {
-    //     self.stream.await
-    //     // let result = self.stream_output.try_recv();
-    //     // Ok(result)
-    // }
-
-    /// Will pull all the currently available events out of the event queue.
-    ///
-    /// # Errors
-    ///
-    /// Will return [`HotShotError::NetworkFault`] if the underlying [`HotShot`] instance has been shut
-    /// down.
-    // pub async fn available_events(&mut self) -> Result<Vec<Event<TYPES>>, HotShotError<TYPES>> {
-    // let mut stream = self.output_stream;
-    // let _ = <dyn SendableStream<Item = Event<TYPES>> as StreamExt/* ::<Output = Self::Event> */>::next(&mut *stream);
-    // let mut output = vec![];
-    // Loop to pull out all the outputs
-    // loop {
-    //     let _ = <dyn SendableStream<Item = Event<TYPES>> as StreamExt/* ::<Output = Self::Event> */>::next(stream);
-    // let _ = FutureExt::<Output = Self::Event>::next(*self.output_stream).await;
-    // match FutureExt<Output = {
-    // Ok(Some(x)) => output.push(x),
-    // Ok(None) => break,
-    // // try_next event can only return HotShotError { source: NetworkError::ShutDown }
-    // Err(x) => return Err(x),
-    // }
-    // }
-    // Ok(output)
-    //     nll_todo()
-    // }
-
     /// obtains a stream to expose to the user
     pub async fn get_event_stream(
         &mut self,
