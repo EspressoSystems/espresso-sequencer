@@ -27,7 +27,7 @@ async fn test_view_sync_task() {
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
         traits::election::VoteData,
-        vote::{ViewSyncData, ViewSyncVote, ViewSyncVoteInternal},
+        vote::{ViewSyncData, ViewSyncVote, ViewSyncVoteInternal}, simple_vote::ViewSyncPreCommitData,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -62,8 +62,11 @@ async fn test_view_sync_task() {
     // let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership> { signature: todo!(), data: todo!(), view_number: todo!(), _pd: std::marker::PhantomData };
 
 
-
-    let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership>::create_signed_vote(todo!(), todo!(), todo!(), todo!());
+    let vote_data = ViewSyncPreCommitData {
+        relay: 0, 
+        round: <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5)
+    };
+    let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership>::create_signed_vote(vote_data, <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5), view_sync_exchange.public_key(), view_sync_exchange.private_key());
     // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
     let mut output = HashMap::new();
