@@ -31,7 +31,6 @@ async fn test_view_sync_task() {
         inner: handle.hotshot.inner.clone(),
     };
     let view_sync_exchange = api.inner.exchanges.view_sync_exchange().clone();
-    let _relay_pub_key = api.public_key().to_bytes();
 
     let vote_data = ViewSyncPreCommitData {
         relay: 0,
