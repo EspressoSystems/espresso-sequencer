@@ -1,11 +1,10 @@
-use hotshot::{types::SignatureKey, HotShotConsensusApi};
+use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        consensus_api::ConsensusSharedApi, election::ConsensusExchange,
-        node_implementation::ExchangesType, state::ConsensusTime,
+        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
 use std::collections::HashMap;
