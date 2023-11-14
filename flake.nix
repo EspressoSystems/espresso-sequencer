@@ -198,7 +198,7 @@
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.
                 export CARGO_HOME=$HOME/.cargo-nix
-                export PATH="./target/release:$PATH"
+                export PATH="$PWD/target/release:$PATH"
               '' + self.checks.${system}.pre-commit-check.shellHook;
               RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
               FOUNDRY_SOLC = "${solc}/bin/solc";

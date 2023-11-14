@@ -36,8 +36,7 @@ contract PlonkVerifierCommonTest is Test {
     /// This is helpful to sanitize fuzzer-generated random `uint[]` values.
     function sanitizeScalarFields(uint256[] memory a) public view returns (uint256[] memory) {
         for (uint256 i = 0; i < a.length; i++) {
-            a[i] = bound(a[i], 0, BN254.R_MOD - 1);
-            BN254.validateScalarField(a[i]);
+            a[i] = sanitizeScalarField(a[i]);
         }
         return a;
     }
@@ -181,6 +180,49 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
         }
     }
 
+    /// @dev Test when bad verifying key are supplied, the verification should fail
+    function testFuzz_badVerifyingKey_fails(uint256 nthPoint) external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        // there are 18 points in verifying key
+        // randomly choose one to mutate
+        nthPoint = bound(nthPoint, 0, 17);
+
+        BN254.G1Point memory badPoint;
+        assembly {
+            // the first 32 bytes is array length
+            let firstVkRef := add(verifyingKeys, 0x20)
+            // the first point offset is 0x40
+            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
+            badPoint := mload(badPointRef)
+        }
+
+        // modify the point to be invalid
+        badPoint = BN254.add(badPoint, BN254.P1());
+
+        assembly {
+            let firstVkRef := add(verifyingKeys, 0x20)
+            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
+            mstore(badPointRef, badPoint)
+        }
+
+        assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
+    }
+
     /// @dev Test when bad public inputs are supplied, the verification should fail
     /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
     function testFuzz_badPublicInputs_fails(uint256[3] calldata randPublicInput) external {
@@ -279,12 +321,15 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
         nthPoint = bound(nthPoint, 0, 12);
 
         assembly {
-            if testX {
-                // muteate the x coordinate
+            switch testX
+            case true {
+                // mutate the x coordinate
                 mstore(mload(add(proof, mul(0x20, nthPoint))), 0x1234)
             }
-            // else, mutate y coordinate
-            mstore(add(mload(add(proof, mul(0x20, nthPoint))), 0x20), 0x1234)
+            default {
+                // else, mutate y coordinate
+                mstore(add(mload(add(proof, mul(0x20, nthPoint))), 0x20), 0x1234)
+            }
         }
 
         vm.expectRevert();
@@ -299,7 +344,7 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
         uint256 invalidField = BN254.R_MOD;
 
         // we are testing the `nthField` in the `proof`,
-        // There are 10 points in total (with 13 points in front)
+        // There are 10 field elements in total (with 13 points in front)
         nthField = bound(nthField, 0, 9);
 
         assembly {
@@ -393,7 +438,7 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
 }
 
 contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
-    /// @dev Test if combinng the polynomial evaluations into a single evaluation is done correctly
+    /// @dev Test if combining the polynomial evaluations into a single evaluation is done correctly
     /// is done correctly
     function testFuzz_prepareEvaluations_matches(
         uint64 seed,
