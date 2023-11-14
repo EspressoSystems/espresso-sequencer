@@ -9,9 +9,12 @@ use hotshot_types::{
         DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
     },
     simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2},
-    traits::node_implementation::{
-        CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-        VIDMembership, ViewSyncProposalType,
+    traits::{
+        node_implementation::{
+            CommitteeMembership, NodeImplementation, NodeType, QuorumMembership,
+            QuorumProposalType, VIDMembership, ViewSyncProposalType,
+        },
+        BlockPayload,
     },
     vote::ViewSyncVote,
 };
@@ -70,10 +73,17 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     TransactionsRecv(Vec<TYPES::Transaction>),
     /// Send transactions to the network
     TransactionSend(TYPES::Transaction, TYPES::SignatureKey),
-    /// Event to send block payload commitment from DA leader to the quorum; internal event only
-    SendPayloadCommitment(Commitment<TYPES::BlockPayload>),
+    /// Event to send block payload commitment and metadata from DA leader to the quorum; internal event only
+    SendPayloadCommitmentAndMetadata(
+        Commitment<TYPES::BlockPayload>,
+        <TYPES::BlockPayload as BlockPayload>::Metadata,
+    ),
     /// Event when the transactions task has a block formed
-    BlockReady(TYPES::BlockPayload, TYPES::Time),
+    BlockReady(
+        TYPES::BlockPayload,
+        <TYPES::BlockPayload as BlockPayload>::Metadata,
+        TYPES::Time,
+    ),
     /// Event when consensus decided on a leaf
     LeafDecided(Vec<I::Leaf>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader

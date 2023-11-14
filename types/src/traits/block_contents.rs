@@ -7,7 +7,6 @@ use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
 
 use std::{
-    collections::HashSet,
     error::Error,
     fmt::{Debug, Display},
     hash::Hash,
@@ -47,20 +46,27 @@ pub trait BlockPayload:
     type Transaction: Transaction;
 
     /// Data created during block building which feeds into the block header
-    type Metadata;
+    type Metadata: Clone + Debug + Eq + Hash + Send + Sync;
+
+    /// Encoded payload.
+    type Encode<'a>: 'a + Iterator<Item = u8> + AsRef<[u8]> + Send;
 
     /// Build a payload and associated metadata with the transactions.
-    fn build(transactions: impl IntoIterator<Item = Self::Transaction>) -> (Self, Self::Metadata);
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> (Self, Self::Metadata);
+
+    /// Build a payload with the encoded transaction bytes and metadata.
+    fn from_bytes(encoded_transactions: Self::Encode<'_>, metadata: Self::Metadata) -> Self;
+
+    /// Build the genesis payload and metadata.
+    fn genesis() -> (Self, Self::Metadata);
 
     /// Encode the payload
-    fn encode(&self) -> Vec<u8>;
+    fn encode(&self) -> Self::Encode<'_>;
 
-    /// Decode the payload
-    fn decode(encoded_transactions: &[u8]) -> Self;
-
-    /// returns hashes of all the transactions in this block
-    /// TODO make this ordered with a vec
-    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>>;
+    /// List of transaction commitments.
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;
 }
 
 /// Header of a block, which commits to a [`BlockPayload`].
@@ -77,8 +83,12 @@ pub trait BlockHeader:
         parent_header: &Self,
     ) -> Self;
 
-    /// Build a genesis header with the genesis payload.
-    fn genesis(payload: Self::Payload) -> Self;
+    /// Build the genesis header, payload, and metadata.
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    );
 
     /// Get the block number.
     fn block_number(&self) -> u64;

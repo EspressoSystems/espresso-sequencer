@@ -302,13 +302,8 @@ pub trait LeafType:
         + Serialize
         + Sync;
 
-    /// Create a new leaf from its components.
-    fn new(
-        view_number: LeafTime<Self>,
-        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
-        deltas: LeafBlockPayload<Self>,
-        state: LeafState<Self>,
-    ) -> Self;
+    /// Create a genesis leaf.
+    fn genesis() -> Self;
     /// Time when this leaf was created.
     fn get_view_number(&self) -> LeafTime<Self>;
     /// Height of this leaf in the chain.
@@ -482,23 +477,8 @@ impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
     type NodeType = TYPES;
     type MaybeState = TYPES::StateType;
 
-    fn new(
-        view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
-        deltas: <Self::NodeType as NodeType>::BlockPayload,
-        state: <Self::NodeType as NodeType>::StateType,
-    ) -> Self {
-        Self {
-            view_number,
-            height: 0,
-            justify_qc,
-            parent_commitment: fake_commitment(),
-            deltas,
-            state,
-            rejected: Vec::new(),
-            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: genesis_proposer_id(),
-        }
+    fn genesis() -> Self {
+        unimplemented!();
     }
 
     fn get_view_number(&self) -> TYPES::Time {
@@ -588,21 +568,16 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 
 impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
     type NodeType = TYPES;
-    // type DeltasType = Either<(u64, TYPES::BlockPayload), TYPES::BlockHeader>;
     type MaybeState = ();
 
-    fn new(
-        view_number: <Self::NodeType as NodeType>::Time,
-        justify_qc: QuorumCertificate2<Self::NodeType, Self>,
-        payload: <Self::NodeType as NodeType>::BlockPayload,
-        _state: <Self::NodeType as NodeType>::StateType,
-    ) -> Self {
+    fn genesis() -> Self {
+        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
         Self {
-            view_number,
-            justify_qc,
+            view_number: TYPES::Time::genesis(),
+            justify_qc: QuorumCertificate2::<TYPES, Self>::genesis(),
             parent_commitment: fake_commitment(),
-            block_header: TYPES::BlockHeader::genesis(payload.clone()),
-            block_payload: Some(payload),
+            block_header,
+            block_payload: Some(block_payload),
             rejected: Vec::new(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: genesis_proposer_id(),

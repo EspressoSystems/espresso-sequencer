@@ -4,7 +4,7 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    traits::{NodeImplementation, TestableNodeImplementation},
+    traits::NodeImplementation,
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, SystemContext,
 };
@@ -44,9 +44,7 @@ pub async fn build_system_handle(
     let initializer = HotShotInitializer::<
         TestTypes,
         <MemoryImpl as NodeImplementation<TestTypes>>::Leaf,
-    >::from_genesis(
-        <MemoryImpl as TestableNodeImplementation<TestTypes>>::block_genesis()
-    )
+    >::from_genesis()
     .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();

@@ -76,7 +76,11 @@ async fn test_network_task() {
     let mut output = HashMap::new();
 
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
+    input.push(HotShotEvent::BlockReady(
+        block.clone(),
+        (),
+        ViewNumber::new(2),
+    ));
     input.push(HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseSend(
         da_vid_disperse.clone(),
@@ -95,7 +99,7 @@ async fn test_network_task() {
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
         2,
     );
     output.insert(
@@ -118,7 +122,10 @@ async fn test_network_task() {
         HotShotEvent::QuorumProposalSend(quorum_proposal.clone(), pub_key),
         1,
     );
-    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        1,
+    );
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
     output.insert(
         HotShotEvent::QuorumProposalRecv(quorum_proposal, pub_key),

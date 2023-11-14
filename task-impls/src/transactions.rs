@@ -13,7 +13,7 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction, NUM_CHUNKS, NUM_STORAGE_NODES},
+    block_impl::{NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::Consensus,
     data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::{Message, Proposal, SequencingMessage},
@@ -75,11 +75,8 @@ pub struct TransactionTaskState<
     pub id: u64,
 }
 
-// We have two `TransactionTaskState` implementations with different bounds. The implementation
-// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
-// whereas it's just `TYPES: NodeType` in the second implementation.
 impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+        TYPES: NodeType,
         I: NodeImplementation<
             TYPES,
             Leaf = Leaf<TYPES>,
@@ -219,24 +216,32 @@ where
                 // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
                 let txns = self.wait_for_transactions(parent_leaf).await?;
-                let encoded_txns = VIDTransaction::encode(txns.clone());
+                // TODO (Keyao) We encode the transactions and compute the VID disperse data twice,
+                // through `from_transactions` once, then `encode` and `disperse` again. This is
+                // because we need `disperse` for the `VidDisperseSend` event, which can't be
+                // retrieved by `from_transactions` directly.
+                // This duplication will be fixed when updating the data sent to the DA task, i.e.,
+                // in the `BlockReady` event.
+                // Relevant issue: https://github.com/EspressoSystems/HotShot/issues/2026.
+                let (payload, metadata) =
+                    <TYPES::BlockPayload as BlockPayload>::from_transactions(txns);
+                let encoded_txns = <TYPES::BlockPayload as BlockPayload>::encode(&payload);
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
                 let srs = test_srs(NUM_STORAGE_NODES);
                 // TODO We are using constant numbers for now, but they will change as the quorum size
                 // changes.
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
                 let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                let vid_disperse = vid.disperse(encoded_txns.clone()).unwrap();
-
-                let block = VIDBlockPayload {
-                    transactions: txns,
-                    payload_commitment: vid_disperse.commit,
-                };
+                let vid_disperse = vid.disperse(encoded_txns).unwrap();
 
                 // TODO never clone a block
                 // https://github.com/EspressoSystems/HotShot/issues/1858
                 self.event_stream
-                    .publish(HotShotEvent::BlockReady(block.clone(), view + 1))
+                    .publish(HotShotEvent::BlockReady(
+                        payload.clone(),
+                        metadata,
+                        view + 1,
+                    ))
                     .await;
 
                 // TODO (Keyao) Determine and update where to publish VidDisperseSend.
@@ -247,12 +252,14 @@ where
                         Proposal {
                             data: VidDisperse {
                                 view_number: view + 1,
-                                payload_commitment: block.commit(),
+                                payload_commitment: payload.commit(),
                                 shares: vid_disperse.shares,
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
+                            signature: self
+                                .quorum_exchange
+                                .sign_payload_commitment(payload.commit()),
                         },
                         self.quorum_exchange.public_key().clone(),
                     ))
@@ -266,23 +273,7 @@ where
         }
         None
     }
-}
 
-// We have two `TransactionTaskState` implementations with different bounds. The implementation
-// above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
-// whereas here it's just `TYPES: NodeType`.
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
-{
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
         &self,

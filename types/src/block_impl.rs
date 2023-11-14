@@ -1,7 +1,7 @@
 //! This module provides an implementation of the `HotShot` suite of traits.
 use std::{
-    collections::HashSet,
     fmt::{Debug, Display},
+    mem::size_of,
 };
 
 use crate::{
@@ -44,10 +44,9 @@ impl VIDTransaction {
 
         for txn in transactions {
             // Encode the length of the inner transaction and the transaction bytes.
-            if let Ok(len) = txn.0.len().try_into() {
-                encoded.extend::<Vec<u8>>(vec![len]);
-                encoded.extend(txn.0);
-            }
+            let txn_size = txn.0.len().to_le_bytes();
+            encoded.extend(txn_size);
+            encoded.extend(txn.0);
         }
 
         encoded
@@ -140,8 +139,11 @@ impl BlockPayload for VIDBlockPayload {
     type Error = BlockError;
     type Transaction = VIDTransaction;
     type Metadata = ();
+    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
-    fn build(transactions: impl IntoIterator<Item = Self::Transaction>) -> (Self, Self::Metadata) {
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> (Self, Self::Metadata) {
         let txns_vec: Vec<VIDTransaction> = transactions.into_iter().collect();
         let encoded = VIDTransaction::encode(txns_vec.clone());
         (
@@ -153,29 +155,38 @@ impl BlockPayload for VIDBlockPayload {
         )
     }
 
-    fn encode(&self) -> Vec<u8> {
-        VIDTransaction::encode(self.transactions.clone())
-    }
-
-    fn decode(encoded_transactions: &[u8]) -> Self {
+    fn from_bytes(encoded_transactions: Self::Encode<'_>, _metadata: Self::Metadata) -> Self {
+        let encoded_vec: Vec<u8> = encoded_transactions.collect();
         let mut transactions = Vec::new();
         let mut current_index = 0;
-        while current_index < encoded_transactions.len() {
-            let txn_len = encoded_transactions[current_index] as usize;
-            let next_index = current_index + txn_len;
+        while current_index < encoded_vec.len() {
+            // Decode the length of the transaction and the transaction bytes.
+            let txn_start_index = current_index + size_of::<usize>();
+            let mut txn_len_bytes = [0; size_of::<usize>()];
+            txn_len_bytes.copy_from_slice(&encoded_vec[current_index..txn_start_index]);
+            let txn_len: usize = usize::from_le_bytes(txn_len_bytes);
+            let next_index = txn_start_index + txn_len;
             transactions.push(VIDTransaction(
-                encoded_transactions[current_index..next_index].to_vec(),
+                encoded_vec[txn_start_index..next_index].to_vec(),
             ));
             current_index = next_index;
         }
 
         Self {
             transactions,
-            payload_commitment: Self::vid_commitment(encoded_transactions),
+            payload_commitment: Self::vid_commitment(&encoded_vec),
         }
     }
 
-    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
+    fn genesis() -> (Self, Self::Metadata) {
+        (Self::genesis(), ())
+    }
+
+    fn encode(&self) -> Self::Encode<'_> {
+        VIDTransaction::encode(self.transactions.clone()).into_iter()
+    }
+
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
@@ -206,11 +217,20 @@ impl BlockHeader for VIDBlockHeader {
         }
     }
 
-    fn genesis(payload: Self::Payload) -> Self {
-        Self {
-            block_number: 0,
-            payload_commitment: payload.commit(),
-        }
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    ) {
+        let (payload, metadata) = <Self::Payload as BlockPayload>::genesis();
+        (
+            Self {
+                block_number: 0,
+                payload_commitment: payload.commit(),
+            },
+            payload,
+            metadata,
+        )
     }
 
     fn block_number(&self) -> u64 {
