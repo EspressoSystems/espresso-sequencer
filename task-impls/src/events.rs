@@ -17,7 +17,6 @@ use hotshot_types::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
         VIDMembership, ViewSyncMembership,
     },
-    vote::ViewSyncVote,
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
@@ -55,21 +54,6 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ViewChange(TYPES::Time),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
     ViewSyncTimeout(TYPES::Time, u64, ViewSyncPhase),
-    /// Send a view sync vote to the network; emitted by a replica in the view sync task
-    // ViewSyncVoteSend(ViewSyncVote<TYPES>),
-
-    // TODO ED Remove this event
-    /// Send a view sync certificate to the network; emitted by a relay in the view sync task
-    // ViewSyncCertificateSend(
-    //     Proposal<ViewSyncProposalType<TYPES, I>>,
-    //     TYPES::SignatureKey,
-    // ),
-    // TODO ED Remove this in favor of separate votes for each view sync vote type
-    /// Receive a view sync vote from the network; received by a relay in the view sync task
-    ViewSyncVoteRecv(ViewSyncVote<TYPES>),
-    /// Receive a view sync certificate from the network; received by a replica in the view sync task
-    // TODO ED Remove this event in favor of separate events depending on which certificate type it is.
-    // ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
     ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
