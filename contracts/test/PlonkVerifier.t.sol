@@ -143,7 +143,6 @@ contract PlonkVerifier_constants_Test is Test {
 }
 
 contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
-    /// forge-config: default.fuzz.runs = 30
     /// @dev Test if some of the user inputs are invalid
     function testFuzz_revertWhenInvalidArgs(
         IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
@@ -182,7 +181,6 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
         }
     }
 
-    /// forge-config: default.fuzz.runs = 30
     /// @dev Test when bad public inputs are supplied, the verification should fail
     /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
     function testFuzz_badPublicInputs_fails(uint256[3] calldata randPublicInput) external {
@@ -212,7 +210,6 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
         assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
     }
 
-    /// forge-config: default.fuzz.runs = 30
     /// @dev Test when bad proofs are supplied, the verification should fail
     function testFuzz_badProofs_fails(uint64 seed) external {
         IPlonkVerifier.PlonkProof memory badProof = dummyProof(seed);
@@ -237,7 +234,6 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
         assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
     }
 
-    /// forge-config: default.fuzz.runs = 30
     /// @dev Test when bad extraTranscriptInitMsgs are supplied, the verification should fail
     function testFuzz_badExtraTranscriptInitMsgs_fails(bytes calldata badMsg) external {
         string[] memory cmds = new string[](3);
@@ -270,7 +266,6 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
         V._validateProof(proof);
     }
 
-    /// forge-config: default.fuzz.runs = 30
     /// @dev Randomly pick a coordinate of a point among points in a proof
     /// mutate it to another value so that the point is no longer valid,
     /// test if our check will revert.
@@ -296,7 +291,6 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
         V._validateProof(proof);
     }
 
-    /// forge-config: default.fuzz.runs = 15
     /// @dev Randomly pick field in a proof mutate it to invalid value
     /// test if our check will revert.
     function testFuzz_RevertIfProofContainsInvalidField(uint256 nthField) external {
@@ -319,7 +313,6 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
 }
 
 contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test `preparePcsInfo` matches that of Jellyfish
     function testFuzz_preparePcsInfo_matches(
         uint64 seed,
@@ -366,7 +359,6 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
 }
 
 contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test `computeChallenges` matches that of Jellyfish
     function testFuzz_computeChallenges_matches(
         uint64 seed,
@@ -401,7 +393,6 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
 }
 
 contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test if combinng the polynomial evaluations into a single evaluation is done correctly
     /// is done correctly
     function testFuzz_prepareEvaluations_matches(

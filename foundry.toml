@@ -29,4 +29,4 @@ bracket_spacing=true
 wrap_comments=true
 
 [profile.ci]
-fuzz = { run = 50 }
+fuzz = { runs = 1000 }

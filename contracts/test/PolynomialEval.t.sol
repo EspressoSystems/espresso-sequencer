@@ -32,7 +32,6 @@ contract PolynomialEval_newEvalDomain_Test is Test {
         }
     }
 
-    /// forge-config: default.fuzz.runs = 20
     /// @dev Test revert if domainSize is not among {2^14, 2^15, 2^16, 2^17, 2^5}
     function testFuzz_unsupportedDomainSize_reverts(uint256 domainSize) external {
         vm.assume(
@@ -47,12 +46,11 @@ contract PolynomialEval_newEvalDomain_Test is Test {
 
 contract PolynomialEval_domainElements_Test is Test {
     /// @dev Test if the domain elements are generated correctly
-    /// forge-config: default.fuzz.runs = 25
     function testFuzz_domainElements_matches(uint256 logSize, uint256 length) external {
         logSize = bound(logSize, 14, 17);
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
 
-        if (length > domain.size || length == 0) {
+        if (length > domain.size) {
             vm.expectRevert(Poly.InvalidPolyEvalArgs.selector);
             Poly.domainElements(domain, length);
         } else {
@@ -73,7 +71,6 @@ contract PolynomialEval_domainElements_Test is Test {
 contract PolynomialEval_evalDataGen_Test is Test {
     /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
     /// poly are correct.
-    /// forge-config: default.fuzz.runs = 10
     function testFuzz_evalDataGen_matches(
         uint256 logSize,
         uint256 zeta,
@@ -82,7 +79,6 @@ contract PolynomialEval_evalDataGen_Test is Test {
         logSize = bound(logSize, 14, 17);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(zeta);
-        vm.assume(publicInput.length > 0);
         // Since these user-provided `publicInputs` were checked outside before passing in via
         // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
         for (uint256 i = 0; i < publicInput.length; i++) {

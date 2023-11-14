@@ -16,7 +16,6 @@ import { Transcript as T } from "../src/libraries/Transcript.sol";
 contract Transcript_appendMessage_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 10
     /// @dev Test if `appendMessage` matches that of the Jellyfish's code
     function testFuzz_appendMessage_matches(
         T.TranscriptData memory transcript,
@@ -41,7 +40,6 @@ contract Transcript_appendMessage_Test is Test {
 contract Transcript_appendFieldElement_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 10
     /// @dev Test if `appendFieldElement` matches that of Jellyfish
     function testFuzz_appendFieldElement_matches(
         T.TranscriptData memory transcript,
@@ -69,7 +67,6 @@ contract Transcript_appendFieldElement_Test is Test {
 contract Transcript_appendGroupElement_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 10
     /// @dev Test if `appendGroupElement` matches that of Jellyfish
     function testFuzz_appendGroupElement_matches(
         T.TranscriptData memory transcript,
@@ -94,7 +91,6 @@ contract Transcript_appendGroupElement_Test is Test {
         assertEq(updated.state[1], transcript.state[1]);
     }
 
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test special case where the identity point (or infinity) is appended.
     function test_appendInfinityPoint_succeeds(T.TranscriptData memory transcript) external {
         BN254.G1Point memory infinity = BN254.G1Point(0, 0);
@@ -119,7 +115,6 @@ contract Transcript_appendGroupElement_Test is Test {
 contract Transcript_getAndAppendChallenge_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 10
     /// @dev Test if `getAndAppendChallenge` matches that of Jellyfish
     function testFuzz_getAndAppendChallenge_matches(T.TranscriptData memory transcript) external {
         string[] memory cmds = new string[](3);
@@ -143,7 +138,6 @@ contract Transcript_getAndAppendChallenge_Test is Test {
 contract Transcript_appendVkAndPubInput_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test if `appendVkAndPubInput` matches that of Jellyfish
     function testFuzz_appendVkAndPubInput_matches(
         T.TranscriptData memory transcript,
@@ -176,7 +170,6 @@ contract Transcript_appendVkAndPubInput_Test is Test {
 contract Transcript_appendProofEvaluations_Test is Test {
     using T for T.TranscriptData;
 
-    /// forge-config: default.fuzz.runs = 5
     /// @dev Test if `appendProofEvaluations` matches that of Jellyfish
     function testFuzz_appendProofEvaluations_matches(T.TranscriptData memory transcript) external {
         string[] memory cmds = new string[](3);

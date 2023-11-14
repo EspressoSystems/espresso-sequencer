@@ -228,7 +228,7 @@ library PolynomialEval {
         pure
         returns (uint256[] memory elements)
     {
-        if (length > self.size || length == 0) revert InvalidPolyEvalArgs();
+        if (length > self.size) revert InvalidPolyEvalArgs();
         uint256 groupGen = self.groupGen;
         uint256 tmp = 1;
         uint256 p = BN254.R_MOD;
