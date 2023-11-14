@@ -326,26 +326,6 @@ impl<
                 TransmitType::Broadcast,
                 None,
             ),
-
-            // HotShotEvent::ViewSyncCertificateSend(certificate_proposal, sender) => (
-            //     sender,
-            //     MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-            //         GeneralConsensusMessage::ViewSyncCertificate(certificate_proposal),
-            //     ))),
-            //     TransmitType::Broadcast,
-            //     None,
-            // ),
-            // HotShotEvent::ViewSyncVoteSend(vote) => {
-            //     // error!("Sending view sync vote in network task to relay with index: {:?}", vote.round() + vote.relay());
-            //     (
-            //         vote.signature_key(),
-            //         MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-            //             GeneralConsensusMessage::ViewSyncVote(vote.clone()),
-            //         ))),
-            //         TransmitType::Direct,
-            //         Some(membership.get_leader(vote.round() + vote.relay())),
-            //     )
-            // }
             HotShotEvent::TimeoutVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
@@ -437,19 +417,18 @@ impl<
     }
 
     /// view sync filter
-    fn view_sync_filter(_event: &HotShotEvent<TYPES, I>) -> bool {
-        // matches!(
-        //     event,
-        //     HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
-        //         | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
-        //         | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
-        //         | HotShotEvent::ViewSyncPreCommitVoteSend(_)
-        //         | HotShotEvent::ViewSyncCommitVoteSend(_)
-        //         | HotShotEvent::ViewSyncFinalizeVoteSend(_)
-        //         | HotShotEvent::Shutdown
-        //         | HotShotEvent::ViewChange(_)
-        // )
-        true
+    fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+        matches!(
+            event,
+            HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncPreCommitVoteSend(_)
+                | HotShotEvent::ViewSyncCommitVoteSend(_)
+                | HotShotEvent::ViewSyncFinalizeVoteSend(_)
+                | HotShotEvent::Shutdown
+                | HotShotEvent::ViewChange(_)
+        )
     }
 }
 

@@ -71,9 +71,6 @@ pub struct ViewSyncTaskState<
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        // TODO ED Remove this when exchanges is done, but we don't actually use this commitment type anymore.
-        // Commitment = Commitment<ViewSyncData<TYPES>>,
-        // Membership = ViewSyncMembership<TYPES, I>
     >,
 {
     /// Registry to register sub tasks
@@ -120,7 +117,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        // Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
 }
