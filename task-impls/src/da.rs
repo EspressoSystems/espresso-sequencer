@@ -200,6 +200,14 @@ where
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
 
+                // stop polling for the received proposal
+                self.committee_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
+                        *proposal.data.view_number,
+                    ))
+                    .await;
+
                 if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
                     return None;

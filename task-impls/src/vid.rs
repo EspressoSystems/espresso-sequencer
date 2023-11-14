@@ -265,6 +265,14 @@ where
                     disperse.data.get_view_number()
                 );
 
+                // stop polling for the received disperse
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
+
                 // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
                 let view = disperse.data.get_view_number();
 
@@ -338,8 +346,13 @@ where
                     }
                 }
             }
-            HotShotEvent::VidCertRecv(_) => {
-                // RM TODO
+            HotShotEvent::VidCertRecv(cert) => {
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDCertificate(
+                        *cert.view_number,
+                    ))
+                    .await;
             }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {

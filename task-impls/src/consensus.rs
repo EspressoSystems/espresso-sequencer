@@ -599,6 +599,14 @@ where
                     *proposal.data.view_number
                 );
 
+                // stop polling for the received proposal
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
+                        *proposal.data.view_number,
+                    ))
+                    .await;
+
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
                     debug!("Proposal is from an older view {:?}", proposal.data.clone());
@@ -1122,8 +1130,13 @@ where
             }
             HotShotEvent::DACRecv(cert) => {
                 debug!("DAC Recved for view ! {}", *cert.view_number);
-
                 let view = cert.view_number;
+
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForDAC(*view))
+                    .await;
+
                 self.da_certs.insert(view, cert);
 
                 if self.vote_if_able().await {
