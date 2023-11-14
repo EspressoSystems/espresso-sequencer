@@ -122,7 +122,7 @@ pub enum AssembledSignature<TYPES: NodeType> {
     /// These signatures are for a 'DA' certificate
     DA(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for genesis certificate
-    Genesis(),
+    Genesis,
     /// These signatures are for ViewSyncPreCommit
     ViewSyncPreCommit(<TYPES::SignatureKey as SignatureKey>::QCType),
     /// These signatures are for ViewSyncCommit
@@ -194,7 +194,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>>
         Self {
             leaf_commitment: fake_commitment::<LEAF>(),
             view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: AssembledSignature::Genesis(),
+            signatures: AssembledSignature::Genesis,
             is_genesis: true,
         }
     }

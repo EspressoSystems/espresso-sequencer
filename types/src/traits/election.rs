@@ -374,7 +374,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
                 );
                 <TYPES::SignatureKey as SignatureKey>::check(&real_qc_pp, real_commit.as_ref(), &qc)
             }
-            AssembledSignature::Genesis() => true,
+            AssembledSignature::Genesis => true,
             AssembledSignature::ViewSyncPreCommit(_)
             | AssembledSignature::ViewSyncCommit(_)
             | AssembledSignature::ViewSyncFinalize(_) => {

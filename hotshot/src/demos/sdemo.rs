@@ -357,7 +357,7 @@ pub fn random_quorum_certificate<TYPES: NodeType, LEAF: LeafType<NodeType = TYPE
         // block_commitment: random_commitment(rng),
         leaf_commitment: random_commitment(rng),
         view_number: TYPES::Time::new(rng.gen()),
-        signatures: AssembledSignature::Genesis(),
+        signatures: AssembledSignature::Genesis,
         is_genesis: rng.gen(),
     }
 }

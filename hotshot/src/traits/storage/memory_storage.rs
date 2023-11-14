@@ -170,7 +170,7 @@ mod test {
                 // block_commitment: dummy_block_commit,
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
                 leaf_commitment: dummy_leaf_commit,
-                signatures: AssembledSignature::Genesis(),
+                signatures: AssembledSignature::Genesis,
                 view_number,
             },
             DummyBlock::random(rng),

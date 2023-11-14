@@ -844,7 +844,7 @@ pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES
             signatures_bytes.extend("ViewSyncFinalize".as_bytes());
             Some(signatures.clone())
         }
-        AssembledSignature::Genesis() => None,
+        AssembledSignature::Genesis => None,
     };
     if let Some(sig) = signatures {
         let (sig, proof) = TYPES::SignatureKey::get_sig_proof(&sig);
