@@ -521,9 +521,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
         Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
 {
     let api = HotShotConsensusApi {

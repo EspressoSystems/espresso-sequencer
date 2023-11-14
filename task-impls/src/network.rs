@@ -82,12 +82,27 @@ impl<
                             GeneralConsensusMessage::Vote(vote) => {
                                 HotShotEvent::QuorumVoteRecv(vote.clone())
                             }
-                            GeneralConsensusMessage::ViewSyncVote(view_sync_message) => {
-                                HotShotEvent::ViewSyncVoteRecv(view_sync_message)
+                            GeneralConsensusMessage::ViewSyncPreCommitVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncPreCommitVoteRecv(view_sync_message)
                             }
-                            GeneralConsensusMessage::ViewSyncCertificate(view_sync_message) => {
-                                HotShotEvent::ViewSyncCertificateRecv(view_sync_message)
+                            GeneralConsensusMessage::ViewSyncPreCommitCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncPreCommitCertificate2Recv(view_sync_message),
+
+                            GeneralConsensusMessage::ViewSyncCommitVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncCommitVoteRecv(view_sync_message)
                             }
+                            GeneralConsensusMessage::ViewSyncCommitCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncCommitCertificate2Recv(view_sync_message),
+
+                            GeneralConsensusMessage::ViewSyncFinalizeVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncFinalizeVoteRecv(view_sync_message)
+                            }
+                            GeneralConsensusMessage::ViewSyncFinalizeCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncFinalizeCertificate2Recv(view_sync_message),
+
                             GeneralConsensusMessage::TimeoutVote(message) => {
                                 HotShotEvent::TimeoutVoteRecv(message)
                             }
@@ -262,25 +277,75 @@ impl<
                 TransmitType::Broadcast,
                 None,
             ),
-            HotShotEvent::ViewSyncCertificateSend(certificate_proposal, sender) => (
+            HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncCommitVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncFinalizeVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => (
                 sender,
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::ViewSyncCertificate(certificate_proposal),
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate(certificate.clone()),
                 ))),
                 TransmitType::Broadcast,
                 None,
             ),
-            HotShotEvent::ViewSyncVoteSend(vote) => {
-                // error!("Sending view sync vote in network task to relay with index: {:?}", vote.round() + vote.relay());
-                (
-                    vote.signature_key(),
-                    MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-                        GeneralConsensusMessage::ViewSyncVote(vote.clone()),
-                    ))),
-                    TransmitType::Direct,
-                    Some(membership.get_leader(vote.round() + vote.relay())),
-                )
-            }
+            HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => (
+                sender,
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(certificate.clone()),
+                ))),
+                TransmitType::Broadcast,
+                None,
+            ),
+
+            HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => (
+                sender,
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate.clone()),
+                ))),
+                TransmitType::Broadcast,
+                None,
+            ),
+
+            // HotShotEvent::ViewSyncCertificateSend(certificate_proposal, sender) => (
+            //     sender,
+            //     MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+            //         GeneralConsensusMessage::ViewSyncCertificate(certificate_proposal),
+            //     ))),
+            //     TransmitType::Broadcast,
+            //     None,
+            // ),
+            // HotShotEvent::ViewSyncVoteSend(vote) => {
+            //     // error!("Sending view sync vote in network task to relay with index: {:?}", vote.round() + vote.relay());
+            //     (
+            //         vote.signature_key(),
+            //         MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+            //             GeneralConsensusMessage::ViewSyncVote(vote.clone()),
+            //         ))),
+            //         TransmitType::Direct,
+            //         Some(membership.get_leader(vote.round() + vote.relay())),
+            //     )
+            // }
             HotShotEvent::TimeoutVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
@@ -372,11 +437,12 @@ impl<
     }
 
     /// view sync filter
+    // TODO ED Add new events here
     fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
-            HotShotEvent::ViewSyncVoteSend(_)
-                | HotShotEvent::ViewSyncCertificateSend(_, _)
+            // HotShotEvent::ViewSyncVoteSend(_)
+            //     | HotShotEvent::ViewSyncCertificateSend(_, _)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::ViewChange(_)
         )

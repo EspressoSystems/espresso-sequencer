@@ -33,31 +33,31 @@ async fn test_view_sync_task() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    // Build the API for node 3.
+    // Build the API for node 5.
     let handle = build_system_handle(5).await.0;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     let view_sync_exchange = api.inner.exchanges.view_sync_exchange().clone();
     let relay_pub_key = api.public_key().to_bytes();
-    let vote_token = view_sync_exchange
-        .make_vote_token(ViewNumber::new(5))
-        .unwrap_or_else(|_| panic!("Error making vote token"))
-        .unwrap_or_else(|| panic!("Not chosen for the committee"));
-    let vote_data_internal: ViewSyncData<TestTypes> = ViewSyncData {
-        relay: relay_pub_key.clone(),
-        round: ViewNumber::new(5),
-    };
-    let vote_data_internal_commitment = vote_data_internal.commit();
-    let signature = view_sync_exchange.sign_precommit_message(vote_data_internal_commitment);
-    let vote = ViewSyncVote::PreCommit(ViewSyncVoteInternal {
-        relay_pub_key,
-        relay: 0,
-        round: ViewNumber::new(5),
-        signature,
-        vote_token,
-        vote_data: VoteData::ViewSyncPreCommit(vote_data_internal_commitment),
-    });
+    // let vote_token = view_sync_exchange
+    //     .make_vote_token(ViewNumber::new(5))
+    //     .unwrap_or_else(|_| panic!("Error making vote token"))
+    //     .unwrap_or_else(|| panic!("Not chosen for the committee"));
+    // let vote_data_internal: ViewSyncData<TestTypes> = ViewSyncData {
+    //     relay: relay_pub_key.clone(),
+    //     round: ViewNumber::new(5),
+    // };
+    // let vote_data_internal_commitment = vote_data_internal.commit();
+    // let signature = view_sync_exchange.sign_precommit_message(vote_data_internal_commitment);
+    // let vote = ViewSyncVote::PreCommit(ViewSyncVoteInternal {
+    //     relay_pub_key,
+    //     relay: 0,
+    //     round: ViewNumber::new(5),
+    //     signature,
+    //     vote_token,
+    //     vote_data: VoteData::ViewSyncPreCommit(vote_data_internal_commitment),
+    // });
 
     // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
@@ -73,7 +73,7 @@ async fn test_view_sync_task() {
     output.insert(HotShotEvent::Timeout(ViewNumber::new(3)), 1);
     output.insert(HotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
-    output.insert(HotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
+    // output.insert(HotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(3)), 1);
 

@@ -12,7 +12,7 @@ use hotshot_types::{
     simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncPreCommitVote, ViewSyncCommitVote, ViewSyncFinalizeVote},
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-        VIDMembership, ViewSyncProposalType, ViewSyncMembership,
+        VIDMembership,  ViewSyncMembership,
     },
     vote::ViewSyncVote,
 };
@@ -53,20 +53,20 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
     ViewSyncTimeout(TYPES::Time, u64, ViewSyncPhase),
     /// Send a view sync vote to the network; emitted by a replica in the view sync task
-    ViewSyncVoteSend(ViewSyncVote<TYPES>),
+    // ViewSyncVoteSend(ViewSyncVote<TYPES>),
 
     // TODO ED Remove this event
     /// Send a view sync certificate to the network; emitted by a relay in the view sync task
-    ViewSyncCertificateSend(
-        Proposal<ViewSyncProposalType<TYPES, I>>,
-        TYPES::SignatureKey,
-    ),
+    // ViewSyncCertificateSend(
+    //     Proposal<ViewSyncProposalType<TYPES, I>>,
+    //     TYPES::SignatureKey,
+    // ),
     // TODO ED Remove this in favor of separate votes for each view sync vote type
     /// Receive a view sync vote from the network; received by a relay in the view sync task
     ViewSyncVoteRecv(ViewSyncVote<TYPES>),
     /// Receive a view sync certificate from the network; received by a replica in the view sync task
     // TODO ED Remove this event in favor of separate events depending on which certificate type it is.
-    ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
+    // ViewSyncCertificateRecv(Proposal<ViewSyncProposalType<TYPES, I>>),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
     ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
@@ -94,11 +94,11 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ViewSyncFinalizeCertificate2Recv(ViewSyncFinalizeCertificate2<TYPES>),
 
     /// Send a `ViewSyncPreCommitCertificate2` from the network; emitted by a relay in the view sync task
-    ViewSyncPreCommitCertificate2Send(ViewSyncPreCommitCertificate2<TYPES>),
+    ViewSyncPreCommitCertificate2Send(ViewSyncPreCommitCertificate2<TYPES>, TYPES::SignatureKey),
     /// Send a `ViewSyncCommitCertificate2` from the network; emitted by a relay in the view sync task
-    ViewSyncCommitCertificate2Send(ViewSyncCommitCertificate2<TYPES>),
+    ViewSyncCommitCertificate2Send(ViewSyncCommitCertificate2<TYPES>, TYPES::SignatureKey),
     /// Send a `ViewSyncFinalizeCertificate2` from the network; emitted by a relay in the view sync task
-    ViewSyncFinalizeCertificate2Send(ViewSyncFinalizeCertificate2<TYPES>),
+    ViewSyncFinalizeCertificate2Send(ViewSyncFinalizeCertificate2<TYPES>, TYPES::SignatureKey),
 
     /// Trigger the start of the view sync protocol; emitted by view sync task; internal trigger only
     ViewSyncTrigger(TYPES::Time),

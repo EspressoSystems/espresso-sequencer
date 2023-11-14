@@ -646,9 +646,6 @@ where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
             TYPES,
             Message<TYPES, I>,
-            Proposal = ViewSyncCertificate<TYPES>,
-            Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = Commitment<ViewSyncData<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     VIDEx<TYPES, I>: ConsensusExchange<
