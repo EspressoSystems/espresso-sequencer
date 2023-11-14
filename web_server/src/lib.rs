@@ -492,7 +492,7 @@ where
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error>::from_file(path)?,
         None => {
-            let toml = toml::from_str(include_str!("../api.toml")).map_err(|err| {
+            let toml: toml::Value = toml::from_str(include_str!("../api.toml")).map_err(|err| {
                 ApiError::CannotReadToml {
                     reason: err.to_string(),
                 }

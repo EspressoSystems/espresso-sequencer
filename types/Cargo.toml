@@ -15,9 +15,7 @@ arbitrary = { version = "1.3", features = ["derive"] }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
-ark-serialize = { version = "0.3", features = [
-    "derive",
-] } # TODO GG upgrade to 0.4 and inherit this dep from workspace
+ark-serialize = { workspace = true, features = ["derive"] }
 ark-std = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
@@ -42,7 +40,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 snafu = { workspace = true }
-tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.2.4" }
+tagged-base64 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 ethereum-types = { workspace = true }

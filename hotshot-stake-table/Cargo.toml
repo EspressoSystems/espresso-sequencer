@@ -22,7 +22,7 @@ jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
 jf-utils = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
-tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
+tagged-base64 = { workspace = true }
 typenum = { workspace = true }
 
 [dev-dependencies]
