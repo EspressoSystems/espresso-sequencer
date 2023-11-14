@@ -404,6 +404,8 @@ where
                 let signature = self
                     .committee_exchange
                     .sign_da_proposal(&payload_commitment);
+                // TODO (Keyao) Fix the payload sending and receiving for the DA proposal.
+                // <https://github.com/EspressoSystems/HotShot/issues/2026>
                 let data: DAProposal<TYPES> = DAProposal {
                     block_payload: payload.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?

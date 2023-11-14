@@ -49,7 +49,9 @@ pub trait BlockPayload:
     type Metadata: Clone + Debug + Eq + Hash + Send + Sync;
 
     /// Encoded payload.
-    type Encode<'a>: 'a + Iterator<Item = u8> + AsRef<[u8]> + Send;
+    type Encode<'a>: 'a + Iterator<Item = u8> + Send
+    where
+        Self: 'a;
 
     /// Build a payload and associated metadata with the transactions.
     fn from_transactions(
@@ -57,7 +59,11 @@ pub trait BlockPayload:
     ) -> (Self, Self::Metadata);
 
     /// Build a payload with the encoded transaction bytes and metadata.
-    fn from_bytes(encoded_transactions: Self::Encode<'_>, metadata: Self::Metadata) -> Self;
+    ///
+    /// `I` may be, but not necessarily is, the `Encode` type directly from `fn encode`.
+    fn from_bytes<I>(encoded_transactions: I, metadata: Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>;
 
     /// Build the genesis payload and metadata.
     fn genesis() -> (Self, Self::Metadata);

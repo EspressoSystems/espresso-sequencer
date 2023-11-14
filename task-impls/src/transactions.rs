@@ -216,13 +216,6 @@ where
                 // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
                 let txns = self.wait_for_transactions(parent_leaf).await?;
-                // TODO (Keyao) We encode the transactions and compute the VID disperse data twice,
-                // through `from_transactions` once, then `encode` and `disperse` again. This is
-                // because we need `disperse` for the `VidDisperseSend` event, which can't be
-                // retrieved by `from_transactions` directly.
-                // This duplication will be fixed when updating the data sent to the DA task, i.e.,
-                // in the `BlockReady` event.
-                // Relevant issue: https://github.com/EspressoSystems/HotShot/issues/2026.
                 let (payload, metadata) =
                     <TYPES::BlockPayload as BlockPayload>::from_transactions(txns);
                 let encoded_txns = <TYPES::BlockPayload as BlockPayload>::encode(&payload);
@@ -232,7 +225,9 @@ where
                 // changes.
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
                 let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                let vid_disperse = vid.disperse(encoded_txns).unwrap();
+                let vid_disperse = vid
+                    .disperse(encoded_txns.into_iter().collect::<Vec<u8>>())
+                    .unwrap();
 
                 // TODO never clone a block
                 // https://github.com/EspressoSystems/HotShot/issues/1858

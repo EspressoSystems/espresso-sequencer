@@ -43,8 +43,11 @@ impl VIDTransaction {
         let mut encoded = Vec::new();
 
         for txn in transactions {
-            // Encode the length of the inner transaction and the transaction bytes.
-            let txn_size = txn.0.len().to_le_bytes();
+            // The transaction length is converted from `usize` to `u64` to ensure consistent
+            // number of bytes on different platforms.
+            let txn_size = (txn.0.len() as u64).to_le_bytes();
+
+            // Concatenate the bytes of the transaction size and the transaction itself.
             encoded.extend(txn_size);
             encoded.extend(txn.0);
         }
@@ -155,16 +158,21 @@ impl BlockPayload for VIDBlockPayload {
         )
     }
 
-    fn from_bytes(encoded_transactions: Self::Encode<'_>, _metadata: Self::Metadata) -> Self {
+    fn from_bytes<E>(encoded_transactions: E, _metadata: Self::Metadata) -> Self
+    where
+        E: Iterator<Item = u8>,
+    {
         let encoded_vec: Vec<u8> = encoded_transactions.collect();
         let mut transactions = Vec::new();
         let mut current_index = 0;
         while current_index < encoded_vec.len() {
-            // Decode the length of the transaction and the transaction bytes.
-            let txn_start_index = current_index + size_of::<usize>();
-            let mut txn_len_bytes = [0; size_of::<usize>()];
+            // Decode the transaction length.
+            let txn_start_index = current_index + size_of::<u64>();
+            let mut txn_len_bytes = [0; size_of::<u64>()];
             txn_len_bytes.copy_from_slice(&encoded_vec[current_index..txn_start_index]);
             let txn_len: usize = usize::from_le_bytes(txn_len_bytes);
+
+            // Get the transaction.
             let next_index = txn_start_index + txn_len;
             transactions.push(VIDTransaction(
                 encoded_vec[txn_start_index..next_index].to_vec(),
