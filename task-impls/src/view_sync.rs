@@ -17,7 +17,7 @@ use hotshot_types::{
         node_implementation::ViewSyncMembership,
     },
     vote::ViewSyncVoteAccumulator,
-    vote2::{HasViewNumber, Vote2, VoteAccumulator2},
+    vote2::{HasViewNumber, Vote2, VoteAccumulator2, Certificate2},
 };
 
 use bitvec::prelude::*;
@@ -200,7 +200,9 @@ pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
 /// State of a view sync relay task
 pub struct ViewSyncRelayTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>, 
+    VOTE: Vote2<TYPES>, 
+    CERTIFICATE: Certificate2<TYPES, Voteable = VOTE::Commitment>,
 > {
     /// Event stream to publish events to
     pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -213,10 +215,10 @@ pub struct ViewSyncRelayTaskState<
     pub accumulator: Either<
         VoteAccumulator2<
             TYPES,
-            ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
-            ViewSyncPreCommitCertificate2<TYPES>,
+            VOTE, 
+            CERTIFICATE
         >,
-        ViewSyncPreCommitCertificate2<TYPES>,
+        CERTIFICATE,
     >,
     /// Our node id; for logging
     pub id: u64,
@@ -228,17 +230,20 @@ impl<
             TYPES,
             Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
+            
         >,
-    > TS for ViewSyncRelayTaskState<TYPES, I>
+        VOTE: Vote2<TYPES> + std::marker::Send + std::marker::Sync + 'static, 
+        CERTIFICATE: Certificate2<TYPES, Voteable = VOTE::Commitment> + std::marker::Send + std::marker::Sync + 'static,
+    > TS for ViewSyncRelayTaskState<TYPES, I, VOTE, CERTIFICATE>
 {
 }
 
 /// Types used by the view sync relay task
-pub type ViewSyncRelayTaskStateTypes<TYPES, I> = HSTWithEvent<
+pub type ViewSyncRelayTaskStateTypes<TYPES, I, VOTE, CERTIFICATE> = HSTWithEvent<
     ViewSyncTaskError,
     HotShotEvent<TYPES, I>,
     ChannelStream<HotShotEvent<TYPES, I>>,
-    ViewSyncRelayTaskState<TYPES, I>,
+    ViewSyncRelayTaskState<TYPES, I, VOTE, CERTIFICATE>,
 >;
 
 impl<
@@ -938,7 +943,7 @@ impl<
             Leaf = Leaf<TYPES>,
             ConsensusMessage = SequencingMessage<TYPES, I>,
         >,
-    > ViewSyncRelayTaskState<TYPES, I>
+    > ViewSyncRelayTaskState<TYPES, I, ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>, ViewSyncPreCommitCertificate2<TYPES>>
 where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,
@@ -947,6 +952,7 @@ where
         Certificate = ViewSyncCertificate<TYPES>,
         Commitment = Commitment<ViewSyncData<TYPES>>,
     >,
+    
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
@@ -955,7 +961,7 @@ where
         event: HotShotEvent<TYPES, I>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
-        ViewSyncRelayTaskState<TYPES, I>,
+        ViewSyncRelayTaskState<TYPES, I, ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>, ViewSyncPreCommitCertificate2<TYPES>>
     ) {
         match event {
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
@@ -995,50 +1001,83 @@ where
                 };
                 (None, self)
 
-                // let accumulator = self
-                //     .accumulator
-                //     .left()
-                //     .unwrap()
-                //     .accumulate(&vote, self.exchange.membership());
-
-                // self.accumulator = match accumulator {
-                //     Left(new_accumulator) => Either::Left(new_accumulator),
-                //     Right(certificate) => {
-                //         let signature =
-                //             self.exchange.sign_certificate_proposal(certificate.clone());
-                //         let message = Proposal {
-                //             data: certificate.clone(),
-                //             signature,
-                //         };
-                //         self.event_stream
-                //             .publish(HotShotEvent::ViewSyncCertificateSend(
-                //                 message,
-                //                 self.exchange.public_key().clone(),
-                //             ))
-                //             .await;
-
-                //         // Reset accumulator for new certificate
-                //         let new_accumulator = ViewSyncVoteAccumulator {
-                //             pre_commit_vote_outcomes: HashMap::new(),
-                //             commit_vote_outcomes: HashMap::new(),
-                //             finalize_vote_outcomes: HashMap::new(),
-
-                //             success_threshold: self.exchange.success_threshold(),
-                //             failure_threshold: self.exchange.failure_threshold(),
-
-                //             sig_lists: Vec::new(),
-                //             signers: bitvec![0; self.exchange.total_nodes()],
-                //         };
-                //         either::Left(new_accumulator)
-                //     }
-                // };
-
-                // if phase == ViewSyncPhase::Finalize {
-                //     (Some(HotShotTaskCompleted::ShutDown), self)
-                // } else {
-                //     (None, self)
-                // }
             }
+            HotShotEvent::ViewSyncCommitVoteRecv(vote) => {
+                // Ignore this vote if we are not the correct relay
+                if !self
+                    .exchange
+                    .is_leader(vote.get_data().round + vote.get_data().relay)
+                {
+                    info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
+                    return (None, self);
+                }
+
+                debug!(
+                    "Accumulating ViewSyncPreCommitVote for round {} and relay {}",
+                    *vote.get_data().round,
+                    vote.get_data().relay
+                );
+
+                match self.accumulator {
+                    Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
+                    Left(accumulator) => {
+                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                            Left(new_accumulator) => self.accumulator =  Either::Left(new_accumulator),
+                            Right(certificate) => {
+                                self.event_stream
+                                    .publish(HotShotEvent::ViewSyncCommitCertificate2Send(
+                                        certificate.clone(),
+                                    ))
+                                    .await;
+                                self.accumulator = Right(certificate);
+
+                                return (Some(HotShotTaskCompleted::ShutDown), self);
+                            }
+                        }
+                    }
+                };
+                (None, self)
+
+            }
+            HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
+                // Ignore this vote if we are not the correct relay
+                // TODO ED Replace exchange with membership
+                if !self
+                    .exchange
+                    .is_leader(vote.get_data().round + vote.get_data().relay)
+                {
+                    info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
+                    return (None, self);
+                }
+
+                debug!(
+                    "Accumulating ViewSyncPreCommitVote for round {} and relay {}",
+                    *vote.get_data().round,
+                    vote.get_data().relay
+                );
+
+                match self.accumulator {
+                    Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
+                    Left(accumulator) => {
+                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                            Left(new_accumulator) => self.accumulator =  Either::Left(new_accumulator),
+                            Right(certificate) => {
+                                self.event_stream
+                                    .publish(HotShotEvent::ViewSyncFinalizeCertificate2Send(
+                                        certificate.clone(),
+                                    ))
+                                    .await;
+                                self.accumulator = Right(certificate);
+
+                                return (Some(HotShotTaskCompleted::ShutDown), self);
+                            }
+                        }
+                    }
+                };
+                (None, self)
+
+            }
+   
             _ => (None, self),
         }
     }
