@@ -37,14 +37,9 @@ struct Cli {
     /// Identifier for the functions to invoke in Jellyfish
     #[arg(value_enum)]
     action: Action,
-    /// Optional 1st argument for the `action`
-    arg1: Option<String>,
-    /// Optional 2nd argument for the `action`
-    arg2: Option<String>,
-    /// Optional 3rd argument for the `action`
-    arg3: Option<String>,
-    /// Optional 4th argument for the `action`
-    arg4: Option<String>,
+    /// Optional arguments for the `action`
+    #[arg(value_parser, num_args = 1.., value_delimiter = ' ')]
+    args: Vec<String>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -89,8 +84,10 @@ fn main() {
 
     match cli.action {
         Action::NewPolyEvalDomain => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=logSize");
-            let log_size = arg1.parse::<u32>().unwrap();
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=logSize");
+            }
+            let log_size = cli.args[0].parse::<u32>().unwrap();
 
             let domain = Radix2EvaluationDomain::<Fr>::new(2u32.pow(log_size) as usize).unwrap();
             let res = (
@@ -101,10 +98,11 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::EvalDomainElements => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=logSize");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=length");
-            let log_size = arg1.parse::<u32>().unwrap();
-            let length = arg2.parse::<usize>().unwrap();
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=logSize, arg2=length");
+            }
+            let log_size = cli.args[0].parse::<u32>().unwrap();
+            let length = cli.args[1].parse::<usize>().unwrap();
 
             let domain = Radix2EvaluationDomain::<Fr>::new(2u32.pow(log_size) as usize).unwrap();
             let res = domain
@@ -115,13 +113,13 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::EvalDataGen => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=logSize");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=zeta");
-            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=publicInput");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=logSize, arg2=zeta, arg3=publicInput");
+            }
 
-            let log_size = arg1.parse::<u32>().unwrap();
-            let zeta = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg3).unwrap();
+            let log_size = cli.args[0].parse::<u32>().unwrap();
+            let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -136,11 +134,12 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::TranscriptAppendMsg => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=message");
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=transcript, arg2=message");
+            }
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
             let msg = {
-                let parsed: Bytes = AbiDecode::decode_hex(arg2).unwrap();
+                let parsed: Bytes = AbiDecode::decode_hex(&cli.args[1]).unwrap();
                 parsed.0.to_vec()
             };
 
@@ -150,10 +149,11 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::TranscriptAppendField => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=fieldElement");
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
-            let field = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=transcript, arg2=fieldElement");
+            }
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
+            let field = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
 
             let mut t: SolidityTranscript = t_parsed.into();
             t.append_challenge::<Bn254>(&[], &field).unwrap();
@@ -161,10 +161,12 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::TranscriptAppendGroup => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=groupElement");
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
-            let point: G1Affine = arg2.parse::<ParsedG1Point>().unwrap().into();
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=transcript, arg2=groupElement");
+            }
+
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
+            let point: G1Affine = cli.args[1].parse::<ParsedG1Point>().unwrap().into();
 
             let mut t: SolidityTranscript = t_parsed.into();
             t.append_commitment::<Bn254, ark_bn254::g1::Config>(&[], &Commitment::from(point))
@@ -173,8 +175,11 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::TranscriptGetChal => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=transcript");
+            }
+
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
 
             let mut t: SolidityTranscript = t_parsed.into();
             let chal = t.get_and_append_challenge::<Bn254>(&[]).unwrap();
@@ -184,13 +189,13 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::TranscriptAppendVkAndPi => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=verifyingKey");
-            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=publicInput");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=transcript, arg2=verifyingKey, arg3=publicInput");
+            }
 
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
-            let vk_parsed = arg2.parse::<ParsedVerifyingKey>().unwrap();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg3).unwrap();
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
+            let vk_parsed = cli.args[1].parse::<ParsedVerifyingKey>().unwrap();
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let mut t: SolidityTranscript = t_parsed.into();
@@ -201,10 +206,13 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::TranscriptAppendProofEvals => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=transcript");
+            }
+
             let mut rng = jf_utils::test_rng();
 
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=transcript");
-            let t_parsed = arg1.parse::<ParsedTranscript>().unwrap();
+            let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
             let proof_parsed = ParsedPlonkProof::dummy_with_rand_proof_evals(&mut rng);
             let proof: Proof<Bn254> = proof_parsed.clone().into();
 
@@ -238,20 +246,16 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::PlonkComputeChal => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=verifyingKey");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=publicInput");
-            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=proof");
-            let arg4 = cli
-                .arg4
-                .as_ref()
-                .expect("Should provide arg3=extraTranscriptInitMsg");
+            if cli.args.len() != 4 {
+                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof, arg4=extraTranscriptInitMsg");
+            }
 
-            let vk = arg1.parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg2).unwrap();
+            let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
-            let proof: Proof<Bn254> = arg3.parse::<ParsedPlonkProof>().unwrap().into();
+            let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
-                let parsed: Bytes = AbiDecode::decode_hex(arg4).unwrap();
+                let parsed: Bytes = AbiDecode::decode_hex(&cli.args[3]).unwrap();
                 parsed.0.to_vec()
             };
 
@@ -267,16 +271,13 @@ fn main() {
             println!("{}", (chal,).encode_hex());
         }
         Action::PlonkPrepareEval => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=proof");
-            let arg2 = cli
-                .arg2
-                .as_ref()
-                .expect("Should provide arg2=linPolyConstant");
-            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=commScalars");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=proof, arg2=linPolyConstant, arg3=commScalars");
+            }
 
-            let proof: Proof<Bn254> = arg1.parse::<ParsedPlonkProof>().unwrap().into();
-            let lin_poly_constant = u256_to_field::<Fr>(arg2.parse::<U256>().unwrap());
-            let comm_scalars_u256: Vec<U256> = AbiDecode::decode_hex(arg3).unwrap();
+            let proof: Proof<Bn254> = cli.args[0].parse::<ParsedPlonkProof>().unwrap().into();
+            let lin_poly_constant = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
+            let comm_scalars_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             // NOTE: only take the last 10 scalars, the first 20 are linearization scalars
             let comm_scalars: Vec<Fr> = comm_scalars_u256
                 .into_iter()
@@ -295,20 +296,16 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::PlonkPreparePcsInfo => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=verifyingKey");
-            let arg2 = cli.arg2.as_ref().expect("Should provide arg2=publicInput");
-            let arg3 = cli.arg3.as_ref().expect("Should provide arg3=proof");
-            let arg4 = cli
-                .arg4
-                .as_ref()
-                .expect("Should provide arg4=extraTranscriptInitMsg");
+            if cli.args.len() != 4 {
+                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof, arg4=extraTranscriptInitMsg");
+            }
 
-            let vk: VerifyingKey<Bn254> = arg1.parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(arg2).unwrap();
+            let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
+            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
-            let proof: Proof<Bn254> = arg3.parse::<ParsedPlonkProof>().unwrap().into();
+            let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
-                let parsed: Bytes = AbiDecode::decode_hex(arg4).unwrap();
+                let parsed: Bytes = AbiDecode::decode_hex(&cli.args[3]).unwrap();
                 parsed.0.to_vec()
             };
 
@@ -336,15 +333,18 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::PlonkBatchVerify => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=numProof");
-            let num_proof = arg1.parse::<u32>().unwrap();
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numProof");
+            }
+
+            let num_proof = cli.args[0].parse::<u32>().unwrap();
             let (proofs, vks, public_inputs, extra_msgs, _): (
                 Vec<Proof<Bn254>>,
                 Vec<VerifyingKey<Bn254>>,
                 Vec<Vec<Fr>>,
                 Vec<Option<Vec<u8>>>,
                 Vec<usize>,
-            ) = multiunzip(gen_plonk_proof_for_test(num_proof as usize).unwrap());
+            ) = multiunzip(gen_plonk_proof_for_test(num_proof as usize));
 
             // ensure they are correct params
             let proofs_refs: Vec<&Proof<Bn254>> = proofs.iter().collect();
@@ -377,22 +377,15 @@ fn main() {
         }
         Action::DummyProof => {
             let mut rng = jf_utils::test_rng();
-            if let Some(arg1) = cli.arg1.as_ref() {
-                let seed = arg1.parse::<u64>().unwrap();
+            if !cli.args.is_empty() {
+                let seed = cli.args[0].parse::<u64>().unwrap();
                 rng = StdRng::seed_from_u64(seed);
             }
-
             let proof = ParsedPlonkProof::dummy(&mut rng);
             println!("{}", (proof,).encode_hex());
         }
         Action::TestOnly => {
-            let arg1 = cli.arg1.as_ref().expect("Should provide arg1=proof");
-            let proof_parsed = arg1.parse::<ParsedPlonkProof>().unwrap();
-
-            let proof: Proof<Bn254> = proof_parsed.into();
-
-            let res: ParsedPlonkProof = proof.into();
-            println!("{}", (res,).encode_hex());
+            println!("args: {:?}", cli.args);
         }
     };
 }
@@ -402,40 +395,42 @@ fn main() {
 
 // constant in hex string copied from hardcoded constants from solidity contracts
 
+const COSET: [&str; 5] = [
+    "1",
+    "2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a",
+    "1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025",
+    "2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a",
+    "2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881",
+];
+
+// H: G2Affine(x: Fp2, y:Fp2), x = x0 + u * x1, y = y0 + u * y1
+// NOTE: extra careful with discrepancy with current version of BN254.G2Point
+// which assume Fp2 = x0 * u + x1 !
+const H: [&str; 4] = [
+    "1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed", // x0
+    "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2", // x1
+    "12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa", // y0
+    "090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b", // y1
+];
+
+// See notes about `const H` above.
+const BETA_H: [&str; 4] = [
+    "0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0",
+    "260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1",
+    "22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55",
+    "04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4",
+];
+
 // TODO: (alex) change to simply using `MontFp!("0x..")` after
 // <https://github.com/arkworks-rs/algebra/pull/635> is on a tag release
 // Return cosets coefficients for circuits over BN254.
 fn coset_k() -> Vec<Fr> {
     vec![
-        Fr::from(BigUint::from_str_radix("1", 16).unwrap()),
-        Fr::from(
-            BigUint::from_str_radix(
-                "2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a",
-                16,
-            )
-            .unwrap(),
-        ),
-        Fr::from(
-            BigUint::from_str_radix(
-                "1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025",
-                16,
-            )
-            .unwrap(),
-        ),
-        Fr::from(
-            BigUint::from_str_radix(
-                "2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a",
-                16,
-            )
-            .unwrap(),
-        ),
-        Fr::from(
-            BigUint::from_str_radix(
-                "2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881",
-                16,
-            )
-            .unwrap(),
-        ),
+        Fr::from(BigUint::from_str_radix(COSET[0], 16).unwrap()),
+        Fr::from(BigUint::from_str_radix(COSET[1], 16).unwrap()),
+        Fr::from(BigUint::from_str_radix(COSET[2], 16).unwrap()),
+        Fr::from(BigUint::from_str_radix(COSET[3], 16).unwrap()),
+        Fr::from(BigUint::from_str_radix(COSET[4], 16).unwrap()),
     ]
 }
 
@@ -444,70 +439,22 @@ fn open_key() -> OpenKey<Bn254> {
     let g = G1Affine::new_unchecked(MontFp!("1"), MontFp!("2"));
     let h = G2Affine::new(
         Fp2::new(
-            Fq::from(
-                BigUint::from_str_radix(
-                    "1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed",
-                    16,
-                )
-                .unwrap(),
-            ),
-            Fq::from(
-                BigUint::from_str_radix(
-                    "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2",
-                    16,
-                )
-                .unwrap(),
-            ),
+            Fq::from(BigUint::from_str_radix(H[0], 16).unwrap()),
+            Fq::from(BigUint::from_str_radix(H[1], 16).unwrap()),
         ),
         Fp2::new(
-            Fq::from(
-                BigUint::from_str_radix(
-                    "12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa",
-                    16,
-                )
-                .unwrap(),
-            ),
-            Fq::from(
-                BigUint::from_str_radix(
-                    "090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b",
-                    16,
-                )
-                .unwrap(),
-            ),
+            Fq::from(BigUint::from_str_radix(H[2], 16).unwrap()),
+            Fq::from(BigUint::from_str_radix(H[3], 16).unwrap()),
         ),
     );
     let beta_h = G2Affine::new(
         Fp2::new(
-            Fq::from(
-                BigUint::from_str_radix(
-                    "0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0",
-                    16,
-                )
-                .unwrap(),
-            ),
-            Fq::from(
-                BigUint::from_str_radix(
-                    "260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1",
-                    16,
-                )
-                .unwrap(),
-            ),
+            Fq::from(BigUint::from_str_radix(BETA_H[0], 16).unwrap()),
+            Fq::from(BigUint::from_str_radix(BETA_H[1], 16).unwrap()),
         ),
         Fp2::new(
-            Fq::from(
-                BigUint::from_str_radix(
-                    "22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55",
-                    16,
-                )
-                .unwrap(),
-            ),
-            Fq::from(
-                BigUint::from_str_radix(
-                    "04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4",
-                    16,
-                )
-                .unwrap(),
-            ),
+            Fq::from(BigUint::from_str_radix(BETA_H[2], 16).unwrap()),
+            Fq::from(BigUint::from_str_radix(BETA_H[3], 16).unwrap()),
         ),
     );
 
@@ -958,19 +905,17 @@ impl From<ParsedChallenges> for Challenges<Fr> {
 #[allow(clippy::type_complexity)]
 fn gen_plonk_proof_for_test(
     num_proof: usize,
-) -> Result<
-    Vec<(
-        Proof<Bn254>,
-        VerifyingKey<Bn254>,
-        Vec<Fr>,
-        Option<Vec<u8>>,
-        usize,
-    )>,
-> {
+) -> Vec<(
+    Proof<Bn254>,
+    VerifyingKey<Bn254>,
+    Vec<Fr>,
+    Option<Vec<u8>>,
+    usize,
+)> {
     // 1. Simulate universal setup
     let rng = &mut jf_utils::test_rng();
     let srs = {
-        let aztec_srs = crs::aztec20::kzg10_setup(1024)?;
+        let aztec_srs = crs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
 
         UnivariateUniversalParams {
             powers_of_g: aztec_srs.powers_of_g,
@@ -990,7 +935,8 @@ fn gen_plonk_proof_for_test(
             let a0 = 1 + i % 3;
             gen_circuit_for_test::<Fr>(m, a0)
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()
+        .expect("Test circuits fail to create");
     let domain_sizes: Vec<usize> = circuits
         .iter()
         .map(|c| c.eval_domain_size().unwrap())
@@ -1000,7 +946,8 @@ fn gen_plonk_proof_for_test(
     let mut prove_keys = vec![];
     let mut ver_keys = vec![];
     for c in circuits.iter() {
-        let (pk, vk) = PlonkKzgSnark::<Bn254>::preprocess(&srs, c)?;
+        let (pk, vk) =
+            PlonkKzgSnark::<Bn254>::preprocess(&srs, c).expect("Circuit preprocessing failed");
         prove_keys.push(pk);
         ver_keys.push(vk);
     }
@@ -1032,7 +979,7 @@ fn gen_plonk_proof_for_test(
         .map(|cs| cs.public_input().unwrap())
         .collect();
 
-    Ok(izip!(proofs, ver_keys, public_inputs, extra_msgs, domain_sizes).collect())
+    izip!(proofs, ver_keys, public_inputs, extra_msgs, domain_sizes).collect()
 }
 
 // Different `m`s lead to different circuits.
