@@ -150,7 +150,7 @@ impl<
         // TODO: Get the stake from the stake table entry.
         *total_stake_casted += 1;
         total_vote_map.insert(
-            encoded_key.clone(),
+            encoded_key,
             (vote.get_signature(), vote.get_data_commitment()),
         );
 
@@ -158,7 +158,7 @@ impl<
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QCParams =
                 <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                    stake_table.clone(),
+                    stake_table,
                     U256::from(CERT::threshold(membership)),
                 );
 
