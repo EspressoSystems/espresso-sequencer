@@ -371,7 +371,7 @@ impl Default for OverallSafetyPropertiesDescription {
             check_leaf: false,
             check_state: true,
             check_block: true,
-            num_failed_views: 10,
+            num_failed_views: 0,
             transaction_threshold: 0,
             // very strict
             threshold_calculator: Arc::new(|_num_live, num_total| 2 * num_total / 3 + 1),
