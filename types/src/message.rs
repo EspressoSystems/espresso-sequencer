@@ -162,10 +162,6 @@ where
         QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
         TYPES::SignatureKey,
     ),
-    /// Message with a view sync vote.
-    // ViewSyncVote(ViewSyncVote<TYPES>),
-    // /// Message with a view sync certificate.
-    // ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
@@ -184,12 +180,7 @@ where
             ProcessedGeneralConsensusMessage::Vote(v, _) => GeneralConsensusMessage::Vote(v),
             ProcessedGeneralConsensusMessage::InternalTrigger(a) => {
                 GeneralConsensusMessage::InternalTrigger(a)
-            } // ProcessedGeneralConsensusMessage::ViewSyncCertificate(certificate) => {
-              //     GeneralConsensusMessage::ViewSyncCertificate(certificate)
-              // }
-              // ProcessedGeneralConsensusMessage::ViewSyncVote(vote) => {
-              //     GeneralConsensusMessage::ViewSyncVote(vote)
-              // }
+            }
         }
     }
 }
@@ -210,16 +201,14 @@ where
             GeneralConsensusMessage::InternalTrigger(a) => {
                 ProcessedGeneralConsensusMessage::InternalTrigger(a)
             }
-            // GeneralConsensusMessage::ViewSyncVote(_)
-            // | GeneralConsensusMessage::ViewSyncCertificate(_) => todo!(),
-            // ED NOTE These are deprecated anyway
-            GeneralConsensusMessage::TimeoutVote(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncPreCommitVote(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncCommitVote(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncFinalizeVote(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncPreCommitCertificate(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncCommitCertificate(_) => todo!(),
-            GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => todo!(),
+            // ED NOTE These are deprecated
+            GeneralConsensusMessage::TimeoutVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncPreCommitVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncCommitVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncFinalizeVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncPreCommitCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncCommitCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => unimplemented!(),
         }
     }
 }
@@ -452,10 +441,7 @@ impl<
                     GeneralConsensusMessage::InternalTrigger(trigger) => match trigger {
                         InternalTrigger::Timeout(time) => *time,
                     },
-                    // GeneralConsensusMessage::ViewSyncVote(message) => message.round(),
-                    // GeneralConsensusMessage::ViewSyncCertificate(message) => {
-                    //     message.data.get_view_number()
-                    // }
+
                     GeneralConsensusMessage::TimeoutVote(message) => message.get_view_number(),
                     GeneralConsensusMessage::ViewSyncPreCommitVote(message) => {
                         message.get_view_number()
@@ -517,8 +503,6 @@ impl<
                 | GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => {
                     MessagePurpose::ViewSyncProposal
                 }
-                // GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
-                // GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,

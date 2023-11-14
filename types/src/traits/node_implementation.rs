@@ -587,14 +587,6 @@ pub type QuorumProposalType<TYPES, I> =
 pub type CommitteeProposalType<TYPES, I> =
     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
 
-/// A proposal to sync the view.
-// pub type ViewSyncProposalType<TYPES, I> =
-//     <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A vote on a [`ViewSyncProposal`].
-// pub type ViewSyncVoteType<TYPES, I> =
-//     <ViewSyncEx<TYPES, I> as ViewSyncExchangeType<TYPES, Message<TYPES, I>>>::Vote;
-
 /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
 pub type QuorumCommChannel<TYPES, I> =
     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking;

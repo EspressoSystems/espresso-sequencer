@@ -68,10 +68,7 @@ pub struct ViewSyncTaskState<
     I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
 > where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-        TYPES,
-        Message<TYPES, I>,
-    >,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
 {
     /// Registry to register sub tasks
     pub registry: GlobalRegistry,
@@ -114,10 +111,7 @@ impl<
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-        TYPES,
-        Message<TYPES, I>,
-    >,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
 {
 }
 
