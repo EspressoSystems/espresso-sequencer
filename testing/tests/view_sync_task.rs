@@ -59,6 +59,11 @@ async fn test_view_sync_task() {
     //     vote_data: VoteData::ViewSyncPreCommit(vote_data_internal_commitment),
     // });
 
+    // let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership> { signature: todo!(), data: todo!(), view_number: todo!(), _pd: std::marker::PhantomData };
+
+
+
+    let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership>::create_signed_vote(todo!(), todo!(), todo!(), todo!());
     // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
     let mut output = HashMap::new();
