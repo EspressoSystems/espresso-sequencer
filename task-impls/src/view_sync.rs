@@ -425,6 +425,174 @@ where
                 });
             }
 
+            HotShotEvent::ViewSyncCommitVoteRecv(vote) => {
+                if let Some(relay_task) = self.relay_task_map.get(&vote.get_view_number()) {
+                    // Forward event then return
+                    self.event_stream
+                        .direct_message(relay_task.event_stream_id, event)
+                        .await;
+                    return;
+                }
+
+                // We do not have a relay task already running, so start one
+
+                if !self
+                    .exchange
+                    .is_leader(vote.get_view_number() + vote.get_data().relay)
+                {
+                    // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
+                    debug!("View sync vote sent to wrong leader");
+                    return;
+                }
+
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                let mut relay_state = ViewSyncRelayTaskState::<TYPES, I, ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>, ViewSyncCommitCertificate2<TYPES>> 
+                {
+                    event_stream: self.event_stream.clone(),
+                    exchange: self.exchange.clone(),
+                    membership: self.exchange.membership().clone(),
+                    accumulator: either::Left(new_accumulator),
+                    id: self.id,
+                };
+
+                let result = relay_state.handle_event(event.clone()).await;
+
+                if result.0 == Some(HotShotTaskCompleted::ShutDown) {
+                    // The protocol has finished
+                    return;
+                }
+
+                relay_state = result.1;
+
+                let name = format!("View Sync Relay Task for view {:?}", vote.get_view_number());
+
+                let relay_handle_event = HandleEvent(Arc::new(
+                    move |event,
+                          state: ViewSyncRelayTaskState<
+                        TYPES,
+                        I,
+                        ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncCommitCertificate2<TYPES>,
+                    >| {
+                        async move { state.handle_event(event).await }.boxed()
+                    },
+                ));
+
+                let filter = FilterEvent::default();
+                let builder = TaskBuilder::<
+                    ViewSyncRelayTaskStateTypes<
+                        TYPES,
+                        I,
+                        ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncCommitCertificate2<TYPES>,
+                    >,
+                >::new(name)
+                .register_event_stream(relay_state.event_stream.clone(), filter)
+                .await
+                .register_registry(&mut self.registry.clone())
+                .await
+                .register_state(relay_state)
+                .register_event_handler(relay_handle_event);
+
+                let event_stream_id = builder.get_stream_id().unwrap();
+
+                self.relay_task_map
+                    .insert(vote.get_view_number(), ViewSyncTaskInfo { event_stream_id });
+                let _view_sync_relay_task = async_spawn(async move {
+                    ViewSyncRelayTaskStateTypes::build(builder).launch().await
+                });
+            }
+
+            HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
+                if let Some(relay_task) = self.relay_task_map.get(&vote.get_view_number()) {
+                    // Forward event then return
+                    self.event_stream
+                        .direct_message(relay_task.event_stream_id, event)
+                        .await;
+                    return;
+                }
+
+                // We do not have a relay task already running, so start one
+
+                if !self
+                    .exchange
+                    .is_leader(vote.get_view_number() + vote.get_data().relay)
+                {
+                    // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
+                    debug!("View sync vote sent to wrong leader");
+                    return;
+                }
+
+                let new_accumulator = VoteAccumulator2 {
+                    vote_outcomes: HashMap::new(),
+                    sig_lists: Vec::new(),
+                    signers: bitvec![0; self.exchange.total_nodes()],
+                    phantom: PhantomData,
+                };
+
+                let mut relay_state = ViewSyncRelayTaskState::<TYPES, I, ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>, ViewSyncFinalizeCertificate2<TYPES>> 
+                {
+                    event_stream: self.event_stream.clone(),
+                    exchange: self.exchange.clone(),
+                    membership: self.exchange.membership().clone(),
+                    accumulator: either::Left(new_accumulator),
+                    id: self.id,
+                };
+
+                let result = relay_state.handle_event(event.clone()).await;
+
+                if result.0 == Some(HotShotTaskCompleted::ShutDown) {
+                    // The protocol has finished
+                    return;
+                }
+
+                relay_state = result.1;
+
+                let name = format!("View Sync Relay Task for view {:?}", vote.get_view_number());
+
+                let relay_handle_event = HandleEvent(Arc::new(
+                    move |event,
+                          state: ViewSyncRelayTaskState<
+                        TYPES,
+                        I,
+                        ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncFinalizeCertificate2<TYPES>,
+                    >| {
+                        async move { state.handle_event(event).await }.boxed()
+                    },
+                ));
+
+                let filter = FilterEvent::default();
+                let builder = TaskBuilder::<
+                    ViewSyncRelayTaskStateTypes<
+                        TYPES,
+                        I,
+                        ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncFinalizeCertificate2<TYPES>,
+                    >,
+                >::new(name)
+                .register_event_stream(relay_state.event_stream.clone(), filter)
+                .await
+                .register_registry(&mut self.registry.clone())
+                .await
+                .register_state(relay_state)
+                .register_event_handler(relay_handle_event);
+
+                let event_stream_id = builder.get_stream_id().unwrap();
+
+                self.relay_task_map
+                    .insert(vote.get_view_number(), ViewSyncTaskInfo { event_stream_id });
+                let _view_sync_relay_task = async_spawn(async move {
+                    ViewSyncRelayTaskStateTypes::build(builder).launch().await
+                });
+            }
+
             &HotShotEvent::ViewChange(new_view) => {
                 let new_view = TYPES::Time::new(*new_view);
                 if self.current_view < new_view {
