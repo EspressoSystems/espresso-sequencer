@@ -143,7 +143,7 @@ async fn update_loop(
     retry_delay: Duration,
     snapshot: Arc<RwLock<L1Snapshot>>,
 ) {
-    'reset_connection: loop {
+    loop {
         // Subscribe to new blocks. This task cannot fail; retry until we succeed.
         let rpc = match Provider::connect(url.clone()).await {
             Ok(rpc) => rpc,
@@ -224,7 +224,7 @@ async fn update_loop(
             // have updated what we can.
             if finalized.is_none() {
                 tracing::warn!("resetting connection due to error in get_finalized_block");
-                continue 'reset_connection;
+                break;
             }
         }
 
@@ -245,12 +245,15 @@ async fn get_finalized_block<P: JsonRpcClient>(
         return Ok(None);
     };
 
-    // The block number always exists unless the block is pending. The finalized block cannot be
-    // pending, unless there has been a catastrophic reorg of the finalized prefix of the L1
-    // chain, so it is OK to panic if this happens.
-    let number = block.number.expect("finalized block has no number");
-    // Same for the hash.
-    let hash = block.hash.expect("finalized block has no hash");
+    // The number and hash _should_ both exists: they exist unless the block is pending, and the
+    // finalized block cannot be pending, unless there has been a catastrophic reorg of the
+    // finalized prefix of the L1 chain.
+    let number = block
+        .number
+        .ok_or_else(|| ProviderError::CustomError("finalized block has no number".into()))?;
+    let hash = block
+        .hash
+        .ok_or_else(|| ProviderError::CustomError("finalized block has no hash".into()))?;
 
     Ok(Some(L1BlockInfo {
         number: number.as_u64(),
