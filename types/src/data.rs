@@ -18,7 +18,7 @@ use crate::{
         Block, State,
     },
 };
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
