@@ -186,10 +186,7 @@ fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     tag: &str,
 ) -> Commitment<T> {
     let builder = commit::RawCommitmentBuilder::new(tag);
-    builder
-        .u64(*view)
-        .u64(relay)
-        .finalize()
+    builder.u64(*view).u64(relay).finalize()
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncPreCommitData<TYPES> {

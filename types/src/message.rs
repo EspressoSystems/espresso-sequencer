@@ -24,7 +24,6 @@ use crate::{
         },
         signature_key::EncodedSignature,
     },
-    vote::ViewSyncVote,
 };
 
 use derivative::Derivative;
@@ -344,22 +343,24 @@ where
     /// Message with a quorum vote.
     Vote(QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
 
+    /// Message with a view sync pre-commit vote
     ViewSyncPreCommitVote(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+    /// Message with a view sync commit vote
     ViewSyncCommitVote(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
 
+    /// Message with a view sync finalize vote
     ViewSyncFinalizeVote(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
 
+    /// Message with a view sync pre-commit certificate
     ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2<TYPES>),
 
+    /// Message with a view sync commit certificate
     ViewSyncCommitCertificate(ViewSyncCommitCertificate2<TYPES>),
 
+    /// Message with a view sync finalize certificate
     ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2<TYPES>),
 
-    // /// Message with a view sync vote.
-    // ViewSyncVote(ViewSyncVote<TYPES>),
-
-    // /// Message with a view sync certificate.
-    // ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
     /// Message with a Timeout vote
     TimeoutVote(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
 

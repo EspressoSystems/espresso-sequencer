@@ -437,7 +437,7 @@ impl<
     }
 
     /// view sync filter
-    fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    fn view_sync_filter(_event: &HotShotEvent<TYPES, I>) -> bool {
         // matches!(
         //     event,
         //     HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)

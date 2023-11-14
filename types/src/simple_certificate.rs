@@ -10,7 +10,10 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::{DAData, QuorumData, TimeoutData, VIDData, Voteable, ViewSyncPreCommitData, ViewSyncCommitData, ViewSyncFinalizeData},
+    simple_vote::{
+        DAData, QuorumData, TimeoutData, VIDData, ViewSyncCommitData, ViewSyncFinalizeData,
+        ViewSyncPreCommitData, Voteable,
+    },
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
@@ -136,9 +139,11 @@ pub type VIDCertificate2<TYPES> =
     SimpleCertificate<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
 
 // TODO ED Update this to use the correct threshold instead of the default `success_threshold`
-/// Type alias for a ViewSyncPreCommit certificate over a view number
-pub type ViewSyncPreCommitCertificate2<TYPES> = SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>>;
-/// Type alias for a ViewSyncCommit certificate over a view number
+/// Type alias for a `ViewSyncPreCommit` certificate over a view number
+pub type ViewSyncPreCommitCertificate2<TYPES> =
+    SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>>;
+/// Type alias for a `ViewSyncCommit` certificate over a view number
 pub type ViewSyncCommitCertificate2<TYPES> = SimpleCertificate<TYPES, ViewSyncCommitData<TYPES>>;
-/// Type alias for a ViewSyncFinalize certificate over a view number
-pub type ViewSyncFinalizeCertificate2<TYPES> = SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>>;
+/// Type alias for a `ViewSyncFinalize` certificate over a view number
+pub type ViewSyncFinalizeCertificate2<TYPES> =
+    SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>>;

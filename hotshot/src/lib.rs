@@ -58,7 +58,6 @@ use hotshot_types::{
 
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
@@ -79,7 +78,6 @@ use hotshot_types::{
         storage::StoredView,
         State,
     },
-    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
@@ -643,11 +641,8 @@ where
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-            TYPES,
-            Message<TYPES, I>,
-            Membership = MEMBERSHIP,
-        > + 'static,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,

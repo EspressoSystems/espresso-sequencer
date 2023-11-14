@@ -9,10 +9,13 @@ use hotshot_types::{
         DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
-    simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncPreCommitVote, ViewSyncCommitVote, ViewSyncFinalizeVote},
+    simple_vote::{
+        DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        ViewSyncPreCommitVote,
+    },
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-        VIDMembership,  ViewSyncMembership,
+        VIDMembership, ViewSyncMembership,
     },
     vote::ViewSyncVote,
 };
@@ -75,16 +78,12 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
     ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
 
-
-
     /// Send a `ViewSyncPreCommitVote` from the network; emitted by a replica in the view sync task
     ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
     /// Send a `ViewSyncCommitVote` from the network; emitted by a replica in the view sync task
     ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
     /// Send a `ViewSyncFinalizeVote` from the network; emitted by a replica in the view sync task
     ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
-
-
 
     /// Receive a `ViewSyncPreCommitCertificate2` from the network; received by a replica in the view sync task
     ViewSyncPreCommitCertificate2Recv(ViewSyncPreCommitCertificate2<TYPES>),
