@@ -14,7 +14,7 @@ use hotshot_types::{
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
+        ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote, ViewSyncCommitData,
     },
     traits::{
         election::Membership, network::ConsensusIntentEvent,
@@ -735,7 +735,7 @@ where
                         },
                     ));
 
-                    let filter = FilterEvent(Arc::new(Self::filter));
+                    let filter = FilterEvent::default();
                     let builder =
                         TaskBuilder::<ViewSyncReplicaTaskStateTypes<TYPES, I, A>>::new(name)
                             .register_event_stream(replica_state.event_stream.clone(), filter)
@@ -772,10 +772,16 @@ where
 
     /// Filter view sync related events.
     pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
-        // TODO ED Add new events
         matches!(
             event,
+                HotShotEvent::ViewSyncPreCommitCertificate2Recv(_) 
+                | HotShotEvent::ViewSyncCommitCertificate2Recv(_)
+                | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
 
+
+                | HotShotEvent::ViewSyncPreCommitVoteRecv(_)
+                | HotShotEvent::ViewSyncCommitVoteRecv(_)
+                | HotShotEvent::ViewSyncFinalizeVoteRecv(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewSyncTimeout(_, _, _)
@@ -899,21 +905,21 @@ where
                 //     .make_vote_token(self.next_view, self.exchange.private_key());
 
                 let vote =
-                ViewSyncPreCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
-                    ViewSyncPreCommitData { relay: certificate.get_data().relay, round: self.next_view},
+                ViewSyncCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
+                    ViewSyncCommitData { relay: certificate.get_data().relay, round: self.next_view},
                     self.next_view,
                     self.exchange.public_key(),
                     self.exchange.private_key(),
                 );
-                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncPreCommitVote(vote);
+                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncCommitVote(vote);
 
-                if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
+                if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
                     debug!(
                         "Sending vote to next quorum leader {:?}",
                         vote.get_view_number() + 1
                     );
                     self.event_stream
-                        .publish(HotShotEvent::ViewSyncPreCommitVoteSend(vote))
+                        .publish(HotShotEvent::ViewSyncCommitVoteSend(vote))
                         .await;
                 }
                 // TODO ED Send to first relay
@@ -937,10 +943,32 @@ where
             }
 
             HotShotEvent::ViewSyncTrigger(view_number) => {
+                // TODO ED Check self . next view for correctness
                 if self.next_view != TYPES::Time::new(*view_number) {
                     error!("Unexpected view number to triger view sync");
                     return (None, self);
                 }
+                
+
+                let vote =
+                ViewSyncPreCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
+                    ViewSyncPreCommitData { relay: 0, round: view_number},
+                    view_number,
+                    self.exchange.public_key(),
+                    self.exchange.private_key(),
+                );
+                error!("Vote in task is {:?}", vote.clone());
+                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncPreCommitVote(vote);
+
+                if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
+                    error!("Triggering next view! {}", *view_number);
+
+                    self.event_stream
+                        .publish(HotShotEvent::ViewSyncPreCommitVoteSend(vote))
+                        .await;
+                }
+                error!("Triggering next view! {}", *view_number);
+
                 // let maybe_vote_token = self
                 //     .exchange
                 //     .membership()

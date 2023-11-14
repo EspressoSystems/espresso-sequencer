@@ -437,15 +437,19 @@ impl<
     }
 
     /// view sync filter
-    // TODO ED Add new events here
     fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
-        matches!(
-            event,
-            // HotShotEvent::ViewSyncVoteSend(_)
-            //     | HotShotEvent::ViewSyncCertificateSend(_, _)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::ViewChange(_)
-        )
+        // matches!(
+        //     event,
+        //     HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
+        //         | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
+        //         | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
+        //         | HotShotEvent::ViewSyncPreCommitVoteSend(_)
+        //         | HotShotEvent::ViewSyncCommitVoteSend(_)
+        //         | HotShotEvent::ViewSyncFinalizeVoteSend(_)
+        //         | HotShotEvent::Shutdown
+        //         | HotShotEvent::ViewChange(_)
+        // )
+        true
     }
 }
 

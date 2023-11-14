@@ -67,6 +67,11 @@ async fn test_view_sync_task() {
         round: <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5)
     };
     let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes, hotshot_testing::node_types::StaticMembership>::create_signed_vote(vote_data, <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5), view_sync_exchange.public_key(), view_sync_exchange.private_key());
+
+    tracing::error!("Vote in test is {:?}", vote.clone());
+
+
+
     // Every event input is seen on the event stream in the output.
     let mut input = Vec::new();
     let mut output = HashMap::new();
@@ -81,9 +86,11 @@ async fn test_view_sync_task() {
     output.insert(HotShotEvent::Timeout(ViewNumber::new(3)), 1);
     output.insert(HotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
-    // output.insert(HotShotEvent::ViewSyncVoteSend(vote.clone()), 1);
+
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(3)), 1);
+    output.insert(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()), 1);
+
 
     output.insert(HotShotEvent::Shutdown, 1);
 
