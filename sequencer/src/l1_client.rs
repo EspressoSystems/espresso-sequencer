@@ -105,7 +105,7 @@ impl L1ClientOptions {
         // at least until the background task starts updating the snapshot.
         let snapshot = L1Snapshot {
             head: rpc.get_block_number().await?.as_u64(),
-            finalized: get_finalized_block(&rpc, self.finalized_block_tag, self.retry_delay).await,
+            finalized: get_finalized_block(&rpc, self.finalized_block_tag).await?,
         };
         tracing::info!("L1 client initialized with snapshot {snapshot:?}");
 
@@ -143,7 +143,7 @@ async fn update_loop(
     retry_delay: Duration,
     snapshot: Arc<RwLock<L1Snapshot>>,
 ) {
-    loop {
+    'reset_connection: loop {
         // Subscribe to new blocks. This task cannot fail; retry until we succeed.
         let rpc = match Provider::connect(url.clone()).await {
             Ok(rpc) => rpc,
@@ -195,15 +195,37 @@ async fn update_loop(
 
             // A new block has been produced. This happens fairly rarely, so it is now ok to poll to
             // see if a new block has been finalized.
-            let finalized = get_finalized_block(&rpc, finalized_tag, retry_delay).await;
+            let finalized = match get_finalized_block(&rpc, finalized_tag).await {
+                Ok(finalized) => Some(finalized),
+                Err(err) => {
+                    tracing::error!("failed to get finalized block: {err}");
+
+                    // If we cannot get the finalized block for any reason, don't let this stop us
+                    // from updating the L1 head. By returning `None` here, we will proceed to
+                    // update the head but not the finalized block, and then we will reset the
+                    // connection, in the hopes that this fixes whatever went wrong with
+                    // `get_finalized_block`.
+                    None
+                }
+            };
 
             // Update the snapshot.
             let mut snapshot = RwLockUpgradableReadGuard::upgrade(snapshot).await;
-            *snapshot = L1Snapshot { head, finalized };
+            snapshot.head = head;
+            if let Some(finalized) = finalized {
+                snapshot.finalized = finalized;
+            }
 
             // Drop our exclusive lock before logging anything.
             let snapshot = RwLockWriteGuard::downgrade(snapshot);
             tracing::info!("updated L1 snapshot to {:?}", *snapshot);
+
+            // If we encountered an error in `get_finalized_block`, reset the connection now that we
+            // have updated what we can.
+            if finalized.is_none() {
+                tracing::warn!("resetting connection due to error in get_finalized_block");
+                continue 'reset_connection;
+            }
         }
 
         tracing::error!("L1 block stream ended unexpectedly, trying to re-establish");
@@ -213,40 +235,28 @@ async fn update_loop(
 async fn get_finalized_block<P: JsonRpcClient>(
     rpc: &Provider<P>,
     tag: BlockNumber,
-    retry_delay: Duration,
-) -> Option<L1BlockInfo> {
-    // This cannot fail, retry until we succeed.
-    loop {
-        let block = match rpc.get_block(tag).await {
-            Ok(Some(block)) => block,
-            Ok(None) => {
-                // This can happen in rare cases where the L1 chain is very young and has not
-                // finalized a block yet. This is more common in testing and demo environments. In
-                // any case, we proceed with a null L1 block rather than wait for the L1 to finalize
-                // a block, which can take a long time.
-                tracing::warn!("no finalized block yet");
-                return None;
-            }
-            Err(err) => {
-                tracing::error!("failed to get finalized block from L1 provider, retrying ({err})");
-                sleep(retry_delay).await;
-                continue;
-            }
-        };
+) -> Result<Option<L1BlockInfo>, ProviderError> {
+    let Some(block) = rpc.get_block(tag).await? else {
+        // This can happen in rare cases where the L1 chain is very young and has not finalized a
+        // block yet. This is more common in testing and demo environments. In any case, we proceed
+        // with a null L1 block rather than wait for the L1 to finalize a block, which can take a
+        // long time.
+        tracing::warn!("no finalized block yet");
+        return Ok(None);
+    };
 
-        // The block number always exists unless the block is pending. The finalized block cannot be
-        // pending, unless there has been a catastrophic reorg of the finalized prefix of the L1
-        // chain, so it is OK to panic if this happens.
-        let number = block.number.expect("finalized block has no number");
-        // Same for the hash.
-        let hash = block.hash.expect("finalized block has no hash");
+    // The block number always exists unless the block is pending. The finalized block cannot be
+    // pending, unless there has been a catastrophic reorg of the finalized prefix of the L1
+    // chain, so it is OK to panic if this happens.
+    let number = block.number.expect("finalized block has no number");
+    // Same for the hash.
+    let hash = block.hash.expect("finalized block has no hash");
 
-        break Some(L1BlockInfo {
-            number: number.as_u64(),
-            timestamp: block.timestamp,
-            hash,
-        });
-    }
+    Ok(Some(L1BlockInfo {
+        number: number.as_u64(),
+        timestamp: block.timestamp,
+        hash,
+    }))
 }
 
 #[cfg(test)]
