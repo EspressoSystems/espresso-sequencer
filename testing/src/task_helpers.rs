@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{
     node_types::{MemoryImpl, TestTypes},
     test_builder::TestMetadata,
@@ -41,13 +43,11 @@ pub async fn build_system_handle(
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<
-        TestTypes,
-        <MemoryImpl as NodeImplementation<TestTypes>>::Leaf,
-    >::from_genesis(
-        <MemoryImpl as TestableNodeImplementation<TestTypes>>::block_genesis()
-    )
-    .unwrap();
+    let initializer =
+        HotShotInitializer::<TestTypes>::from_genesis(<MemoryImpl as TestableNodeImplementation<
+            TestTypes,
+        >>::block_genesis())
+        .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
@@ -91,7 +91,7 @@ async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> (QuorumProposal<TestTypes, Leaf<TestTypes>>, EncodedSignature) {
+) -> (QuorumProposal<TestTypes>, EncodedSignature) {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
@@ -126,7 +126,7 @@ async fn build_quorum_proposal_and_signature(
         proposer_id: api.public_key().to_bytes(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
-    let proposal = QuorumProposal::<TestTypes, Leaf<TestTypes>> {
+    let proposal = QuorumProposal::<TestTypes> {
         block_header,
         view_number: ViewNumber::new(view),
         justify_qc: QuorumCertificate2::genesis(),
@@ -141,12 +141,13 @@ pub async fn build_quorum_proposal(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> Proposal<QuorumProposal<TestTypes, Leaf<TestTypes>>> {
+) -> Proposal<TestTypes, QuorumProposal<TestTypes>> {
     let (proposal, signature) =
         build_quorum_proposal_and_signature(handle, private_key, view).await;
     Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     }
 }
 

@@ -3,13 +3,13 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
-use hotshot::demo::DemoTypes;
+use hotshot::demo::{DemoMembership, DemoTypes};
 use hotshot_orchestrator::client::ValidatorArgs;
 use std::net::IpAddr;
 use tracing::instrument;
 use types::VIDNetwork;
 
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisMembership, ThisRun, ViewSyncNetwork};
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork};
 
 pub mod types;
 
@@ -49,7 +49,7 @@ async fn main() {
         let node = async_spawn(async move {
             infra::main_entry_point::<
                 DemoTypes,
-                ThisMembership,
+                DemoMembership,
                 DANetwork,
                 QuorumNetwork,
                 ViewSyncNetwork,

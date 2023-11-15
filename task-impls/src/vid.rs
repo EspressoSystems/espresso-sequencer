@@ -15,7 +15,6 @@ use hotshot_task::{
 use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, ProposalType},
     message::{Message, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
@@ -45,8 +44,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
@@ -60,7 +59,7 @@ pub struct VIDTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// the VID exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
@@ -76,10 +75,8 @@ pub struct VIDTaskState<
 }
 
 /// Struct to maintain VID Vote Collection task state
-pub struct VIDVoteCollectionTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> where
+pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
+where
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -99,11 +96,9 @@ pub struct VIDVoteCollectionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for VIDVoteCollectionTaskState<TYPES, I>
-where
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
@@ -117,7 +112,7 @@ async fn vote_handle<TYPES, I>(
 )
 where
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+    I: NodeImplementation<TYPES>,
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -174,12 +169,8 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>:
@@ -432,12 +423,8 @@ where
 /// task state implementation for VID Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TS for VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>:

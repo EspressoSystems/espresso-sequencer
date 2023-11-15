@@ -11,7 +11,7 @@ use hotshot_types::{
         consensus_api::ConsensusSharedApi, node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg(test)]
 #[cfg_attr(
@@ -56,6 +56,7 @@ async fn test_network_task() {
             view_number: ViewNumber::new(2),
         },
         signature,
+        _pd: PhantomData,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
     // TODO for now reuse the same block payload commitment and signature as DA committee
@@ -68,6 +69,7 @@ async fn test_network_task() {
             common: vid_disperse.common,
         },
         signature: da_proposal.signature.clone(),
+        _pd: PhantomData,
     };
 
     // Every event input is seen on the event stream in the output.

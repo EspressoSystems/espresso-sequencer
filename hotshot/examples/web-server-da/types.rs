@@ -1,14 +1,9 @@
 use crate::infra::WebServerDARun;
 use hotshot::{
-    demo::DemoTypes,
-    traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{MemoryStorage, WebCommChannel},
-    },
+    demo::{DemoMembership, DemoTypes},
+    traits::implementations::{MemoryStorage, WebCommChannel},
 };
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
-    data::{DAProposal, Leaf, QuorumProposal},
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
@@ -22,44 +17,22 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type ThisLeaf = Leaf<DemoTypes>;
-pub type ThisMembership =
-    GeneralStaticCommittee<DemoTypes, ThisLeaf, <DemoTypes as NodeType>::SignatureKey>;
-pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
-pub type VIDNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
-pub type QuorumNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
-pub type ViewSyncNetwork = WebCommChannel<DemoTypes, NodeImpl, ThisMembership>;
+pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
+pub type VIDNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
+pub type QuorumNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
+pub type ViewSyncNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
 
-pub type ThisDAProposal = DAProposal<DemoTypes>;
-
-pub type ThisQuorumProposal = QuorumProposal<DemoTypes, ThisLeaf>;
-
-pub type ThisViewSyncProposal = ViewSyncCertificate<DemoTypes>;
 pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
-    type Storage = MemoryStorage<DemoTypes, Self::Leaf>;
-    type Leaf = Leaf<DemoTypes>;
+    type Storage = MemoryStorage<DemoTypes>;
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes, Self>,
-        QuorumExchange<
-            DemoTypes,
-            Self::Leaf,
-            ThisQuorumProposal,
-            ThisMembership,
-            QuorumNetwork,
-            Message<DemoTypes, Self>,
-        >,
-        CommitteeExchange<DemoTypes, ThisMembership, DANetwork, Message<DemoTypes, Self>>,
-        ViewSyncExchange<
-            DemoTypes,
-            ThisViewSyncProposal,
-            ThisMembership,
-            ViewSyncNetwork,
-            Message<DemoTypes, Self>,
-        >,
-        VIDExchange<DemoTypes, ThisMembership, VIDNetwork, Message<DemoTypes, Self>>,
+        QuorumExchange<DemoTypes, DemoMembership, QuorumNetwork, Message<DemoTypes, Self>>,
+        CommitteeExchange<DemoTypes, DemoMembership, DANetwork, Message<DemoTypes, Self>>,
+        ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes, Self>>,
+        VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
     type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 
@@ -72,4 +45,4 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl, ThisMembership>;
+pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl, DemoMembership>;

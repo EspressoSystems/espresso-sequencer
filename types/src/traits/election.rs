@@ -5,15 +5,11 @@
 
 use super::{
     node_implementation::{NodeImplementation, NodeType},
-    signature_key::{EncodedPublicKey, EncodedSignature},
+    signature_key::EncodedSignature,
 };
-use crate::{
-    certificate::AssembledSignature,
-    data::{DAProposal, ProposalType, VidDisperse},
-};
+use crate::{certificate::AssembledSignature, data::Leaf};
 
 use crate::{
-    data::LeafType,
     traits::{
         network::{CommunicationChannel, NetworkMsg},
         signature_key::SignatureKey,
@@ -260,9 +256,6 @@ pub trait Membership<TYPES: NodeType>:
 /// allowing them to vote and query information about the overall state of the protocol (such as
 /// membership and leader status).
 pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
-    /// A proposal for participants to vote on.
-    type Proposal: ProposalType<NodeType = TYPES>;
-
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
@@ -377,7 +370,6 @@ impl<
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = DAProposal<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -473,7 +465,6 @@ impl<
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = VidDisperse<TYPES>;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::BlockPayload>;
@@ -513,13 +504,11 @@ impl<
 }
 
 /// A [`ConsensusExchange`] where participants vote to append items to a log.
-pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, M: NetworkMsg>:
-    ConsensusExchange<TYPES, M>
-{
+pub trait QuorumExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
-        leaf_commitment: &Commitment<LEAF>,
+        leaf_commitment: &Commitment<Leaf<TYPES>>,
     ) -> EncodedSignature;
 
     /// Sign a block payload commitment.
@@ -527,17 +516,6 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
         &self,
         payload_commitment: Commitment<TYPES::BlockPayload>,
     ) -> EncodedSignature;
-
-    /// Sign a positive vote on validating or commitment proposal.
-    ///
-    /// The leaf commitment and the type of the vote (yes) are signed, which is the minimum amount
-    /// of information necessary for any user of the subsequently constructed QC to check that this
-    /// node voted `Yes` on that leaf. The leaf is expected to be reconstructed based on other
-    /// information in the yes vote.
-    fn sign_yes_vote(
-        &self,
-        leaf_commitment: Commitment<LEAF>,
-    ) -> (EncodedPublicKey, EncodedSignature);
 }
 
 /// Standard implementation of [`QuroumExchangeType`] based on Hot Stuff consensus.
@@ -545,8 +523,6 @@ pub trait QuorumExchangeType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, 
 #[derivative(Clone, Debug)]
 pub struct QuorumExchange<
     TYPES: NodeType,
-    LEAF: LeafType<NodeType = TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -563,23 +539,20 @@ pub struct QuorumExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(LEAF, PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(Leaf<TYPES>, MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
-        LEAF: LeafType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > QuorumExchangeType<TYPES, LEAF, M>
-    for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > QuorumExchangeType<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     /// Sign a validating or commitment proposal.
     fn sign_validating_or_commitment_proposal<I: NodeImplementation<TYPES>>(
         &self,
-        leaf_commitment: &Commitment<LEAF>,
+        leaf_commitment: &Commitment<Leaf<TYPES>>,
     ) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, leaf_commitment.as_ref());
         signature
@@ -591,41 +564,18 @@ impl<
     ) -> EncodedSignature {
         TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref())
     }
-
-    /// Sign a positive vote on validating or commitment proposal.
-    ///
-    /// The leaf commitment and the type of the vote (yes) are signed, which is the minimum amount
-    /// of information necessary for any user of the subsequently constructed QC to check that this
-    /// node voted `Yes` on that leaf. The leaf is expected to be reconstructed based on other
-    /// information in the yes vote.
-    ///
-    /// TODO GG: why return the pubkey? Some other `sign_xxx` methods do not return the pubkey.
-    fn sign_yes_vote(
-        &self,
-        leaf_commitment: Commitment<LEAF>,
-    ) -> (EncodedPublicKey, EncodedSignature) {
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            VoteData::Yes(leaf_commitment).commit().as_ref(),
-        );
-        (self.public_key.to_bytes(), signature)
-    }
 }
 
 impl<
         TYPES: NodeType,
-        LEAF: LeafType<NodeType = TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M>
-    for QuorumExchange<TYPES, LEAF, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<LEAF>;
+    type Commitment = Commitment<Leaf<TYPES>>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -673,7 +623,6 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
 #[derivative(Clone, Debug)]
 pub struct ViewSyncExchange<
     TYPES: NodeType,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -690,28 +639,25 @@ pub struct ViewSyncExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
 }
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<ViewSyncData<TYPES>>;
@@ -757,7 +703,6 @@ impl<
 #[derivative(Clone, Debug)]
 pub struct TimeoutExchange<
     TYPES: NodeType,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
     M: NetworkMsg,
@@ -774,16 +719,15 @@ pub struct TimeoutExchange<
     #[derivative(Debug = "ignore")]
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[doc(hidden)]
-    _pd: PhantomData<(PROPOSAL, MEMBERSHIP, M)>,
+    _pd: PhantomData<(MEMBERSHIP, M)>,
 }
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
 }
 
@@ -792,23 +736,20 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
 }
 
 impl<
         TYPES: NodeType,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
         M: NetworkMsg,
-    > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, PROPOSAL, MEMBERSHIP, NETWORK, M>
+    > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    type Proposal = PROPOSAL;
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
     type Commitment = Commitment<TYPES::Time>;

@@ -5,7 +5,9 @@
 //!
 //! These implementations are useful in examples and integration testing, but are not suitable for
 //! production use.
-use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
+use crate::traits::election::static_committee::{
+    GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
+};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 
@@ -138,6 +140,9 @@ impl NodeType for DemoTypes {
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
 }
+
+/// Alias for the static committee used in the Demo apps
+pub type DemoMembership = GeneralStaticCommittee<DemoTypes, <DemoTypes as NodeType>::SignatureKey>;
 
 /// The node implementation for the sequencing demo
 #[derive(Derivative)]

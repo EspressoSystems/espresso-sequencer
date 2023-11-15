@@ -184,8 +184,7 @@ impl TestMetadata {
     ) -> TestLauncher<TYPES, I>
     where
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        <I as NodeImplementation<TYPES>>::Exchanges:
-            TestableExchange<TYPES, <I as NodeImplementation<TYPES>>::Leaf, Message<TYPES, I>>,
+        <I as NodeImplementation<TYPES>>::Exchanges: TestableExchange<TYPES, Message<TYPES, I>>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
@@ -274,7 +273,6 @@ impl TestMetadata {
                 ResourceGenerators {
                     channel_generator:
                         <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<
-                            _,
                             _,
                             _,
                         >>::gen_comm_channels(
