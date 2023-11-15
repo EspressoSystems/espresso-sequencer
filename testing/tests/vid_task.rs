@@ -39,7 +39,7 @@ async fn test_vid_task() {
 
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = vec![1, 0];
+    let encoded_txns = VIDTransaction::encode(transactions.clone());
     let vid_disperse = vid.disperse(&encoded_txns).unwrap();
     let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {

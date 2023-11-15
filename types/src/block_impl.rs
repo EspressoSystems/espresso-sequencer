@@ -1,4 +1,6 @@
-//! This module provides an implementation of the `HotShot` suite of traits.
+//! This module provides implementations of block traits for examples and tests only.
+//! TODO (Keyao) Organize non-production code.
+//! <https://github.com/EspressoSystems/HotShot/issues/2059>
 use std::{
     fmt::{Debug, Display},
     mem::size_of,
@@ -39,13 +41,18 @@ pub struct VIDTransaction(pub Vec<u8>);
 impl VIDTransaction {
     #[must_use]
     /// Encode a list of transactions into bytes.
+    ///
+    /// # Panics
+    /// If the conversion from the transaction length to `u32` fails.
     pub fn encode(transactions: Vec<Self>) -> Vec<u8> {
         let mut encoded = Vec::new();
 
         for txn in transactions {
-            // The transaction length is converted from `usize` to `u64` to ensure consistent
+            // The transaction length is converted from `usize` to `u32` to ensure consistent
             // number of bytes on different platforms.
-            let txn_size = (txn.0.len() as u64).to_le_bytes();
+            let txn_size = u32::try_from(txn.0.len())
+                .expect("Conversion fails")
+                .to_le_bytes();
 
             // Concatenate the bytes of the transaction size and the transaction itself.
             encoded.extend(txn_size);
@@ -167,10 +174,10 @@ impl BlockPayload for VIDBlockPayload {
         let mut current_index = 0;
         while current_index < encoded_vec.len() {
             // Decode the transaction length.
-            let txn_start_index = current_index + size_of::<u64>();
-            let mut txn_len_bytes = [0; size_of::<u64>()];
+            let txn_start_index = current_index + size_of::<u32>();
+            let mut txn_len_bytes = [0; size_of::<u32>()];
             txn_len_bytes.copy_from_slice(&encoded_vec[current_index..txn_start_index]);
-            let txn_len: usize = usize::from_le_bytes(txn_len_bytes);
+            let txn_len: usize = u32::from_le_bytes(txn_len_bytes) as usize;
 
             // Get the transaction.
             let next_index = txn_start_index + txn_len;

@@ -37,7 +37,7 @@ async fn test_da_task() {
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = vec![1, 0];
+    let encoded_txns = VIDTransaction::encode(transactions.clone());
     let payload_commitment = VIDBlockPayload::vid_commitment(&encoded_txns);
     let block = VIDBlockPayload {
         transactions,
