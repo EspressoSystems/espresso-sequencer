@@ -587,14 +587,6 @@ pub type QuorumProposalType<TYPES, I> =
 pub type CommitteeProposalType<TYPES, I> =
     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
 
-/// A proposal to sync the view.
-pub type ViewSyncProposalType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A vote on a [`ViewSyncProposal`].
-pub type ViewSyncVoteType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ViewSyncExchangeType<TYPES, Message<TYPES, I>>>::Vote;
-
 /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
 pub type QuorumCommChannel<TYPES, I> =
     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking;
@@ -620,7 +612,8 @@ pub type CommitteeMembership<TYPES, I> =
     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
 /// Protocol for determining membership in a view sync committee.
-pub type ViewSyncMembership<TYPES, I> = QuorumMembership<TYPES, I>;
+pub type ViewSyncMembership<TYPES, I> =
+    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
 /// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
 pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as CommunicationChannel<
