@@ -63,7 +63,7 @@ jobs:
       - name: Initialize Nix Environment
         run: |
           nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c echo Nix Setup Complete
-          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR" | tee -a $GITHUB_ENV
+          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c sh -c 'echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"' | tee -a $GITHUB_ENV
 
       - name: Compile all executables
         # timeout-minutes: 120
