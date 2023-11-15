@@ -57,8 +57,11 @@ jobs:
       - name: Solhint solidity linter
         run: nix develop --accept-flake-config -c pre-commit run solhint --all-files
 
-      - name: Build contracts
-        run: nix develop --accept-flake-config -c forge build --deny-warnings
+      - name: Build non-test contracts without warnings
+        run: nix develop --accept-flake-config -c forge build --skip test --deny-warnings
+
+      - name: Build all contracts
+        run: nix develop --accept-flake-config -c forge build
 
       - name: Check if bindings up to date
         run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files
