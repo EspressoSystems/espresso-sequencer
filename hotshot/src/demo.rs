@@ -11,9 +11,10 @@ use derivative::Derivative;
 
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
-    block_impl::{BlockError, VIDBlockHeader, VIDBlockPayload, VIDTransaction},
+    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     data::{fake_commitment, ViewNumber},
     traits::{
+        block_contents::BlockError,
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableState},

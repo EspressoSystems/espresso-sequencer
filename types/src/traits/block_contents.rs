@@ -5,12 +5,22 @@
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
+use snafu::Snafu;
 
 use std::{
     error::Error,
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+/// The error type for block and its transactions.
+#[derive(Snafu, Debug)]
+pub enum BlockError {
+    /// Invalid block header.
+    InvalidBlockHeader,
+    /// Invalid transaction length.
+    InvalidTransactionLength,
+}
 
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
@@ -54,9 +64,12 @@ pub trait BlockPayload:
         Self: 'a;
 
     /// Build a payload and associated metadata with the transactions.
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
-    ) -> (Self, Self::Metadata);
+    ) -> Result<(Self, Self::Metadata), BlockError>;
 
     /// Build a payload with the encoded transaction bytes and metadata.
     ///
@@ -69,7 +82,10 @@ pub trait BlockPayload:
     fn genesis() -> (Self, Self::Metadata);
 
     /// Encode the payload
-    fn encode(&self) -> Self::Encode<'_>;
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
+    fn encode(&self) -> Result<Self::Encode<'_>, BlockError>;
 
     /// List of transaction commitments.
     fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;

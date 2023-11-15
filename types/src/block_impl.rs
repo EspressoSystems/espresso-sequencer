@@ -9,7 +9,7 @@ use std::{
 use crate::{
     data::{test_srs, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{BlockHeader, Transaction},
+        block_contents::{BlockError, BlockHeader, Transaction},
         state::TestableBlock,
         BlockPayload,
     },
@@ -18,7 +18,6 @@ use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-use snafu::Snafu;
 
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of storage nodes for VID initiation.
@@ -27,39 +26,34 @@ pub const NUM_STORAGE_NODES: usize = 8;
 /// Number of chunks for VID initiation.
 pub const NUM_CHUNKS: usize = 8;
 
-/// The error type for block and its transactions.
-#[derive(Snafu, Debug)]
-pub enum BlockError {
-    /// Invalid block header.
-    InvalidBlockHeader,
-}
-
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDTransaction(pub Vec<u8>);
 
 impl VIDTransaction {
-    #[must_use]
     /// Encode a list of transactions into bytes.
     ///
-    /// # Panics
-    /// If the conversion from the transaction length to `u32` fails.
-    pub fn encode(transactions: Vec<Self>) -> Vec<u8> {
+    /// # Errors
+    /// If the transaction length conversion fails.
+    pub fn encode(transactions: Vec<Self>) -> Result<Vec<u8>, BlockError> {
         let mut encoded = Vec::new();
 
         for txn in transactions {
             // The transaction length is converted from `usize` to `u32` to ensure consistent
             // number of bytes on different platforms.
-            let txn_size = u32::try_from(txn.0.len())
-                .expect("Conversion fails")
-                .to_le_bytes();
+            let txn_size = match u32::try_from(txn.0.len()) {
+                Ok(len) => len.to_le_bytes(),
+                Err(_) => {
+                    return Err(BlockError::InvalidTransactionLength);
+                }
+            };
 
             // Concatenate the bytes of the transaction size and the transaction itself.
             encoded.extend(txn_size);
             encoded.extend(txn.0);
         }
 
-        encoded
+        Ok(encoded)
     }
 }
 
@@ -110,7 +104,8 @@ impl VIDBlockPayload {
     #[must_use]
     pub fn genesis() -> Self {
         let txns: Vec<u8> = vec![0];
-        let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]);
+        // It's impossible for `encode` to fail because the transaciton length is very small.
+        let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]).unwrap();
         VIDBlockPayload {
             transactions: vec![VIDTransaction(txns)],
             payload_commitment: Self::vid_commitment(&encoded),
@@ -153,16 +148,16 @@ impl BlockPayload for VIDBlockPayload {
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
-    ) -> (Self, Self::Metadata) {
+    ) -> Result<(Self, Self::Metadata), BlockError> {
         let txns_vec: Vec<VIDTransaction> = transactions.into_iter().collect();
-        let encoded = VIDTransaction::encode(txns_vec.clone());
-        (
+        let encoded = VIDTransaction::encode(txns_vec.clone())?;
+        Ok((
             Self {
                 transactions: txns_vec,
                 payload_commitment: Self::vid_commitment(&encoded),
             },
             (),
-        )
+        ))
     }
 
     fn from_bytes<E>(encoded_transactions: E, _metadata: Self::Metadata) -> Self
@@ -197,8 +192,8 @@ impl BlockPayload for VIDBlockPayload {
         (Self::genesis(), ())
     }
 
-    fn encode(&self) -> Self::Encode<'_> {
-        VIDTransaction::encode(self.transactions.clone()).into_iter()
+    fn encode(&self) -> Result<Self::Encode<'_>, BlockError> {
+        Ok(VIDTransaction::encode(self.transactions.clone())?.into_iter())
     }
 
     fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
