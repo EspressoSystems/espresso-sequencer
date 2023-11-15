@@ -46,6 +46,11 @@ jobs:
         with:
           prefix-key: v1-rust
 
+      - name: Check forge version
+        run: |
+          nix develop --accept-flake-config -c which forge
+          nix develop --accept-flake-config -c forge --version
+
       - name: Format check
         run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files
 
@@ -57,6 +62,12 @@ jobs:
 
       - name: Check if bindings up to date
         run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files
+
+      - name: Print changes to bindings
+        if: ${{ failure() }}
+        run: |
+          git status
+          git diff
 
       - name: Run tests
         run: nix develop --accept-flake-config -c forge test -vvv
