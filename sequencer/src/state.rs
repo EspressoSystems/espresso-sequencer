@@ -2,17 +2,17 @@ use crate::{
     block::Block,
     chain_variables::ChainVariables,
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
-    Error, Transaction,
+    Error,
 };
 use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable};
 use ethers::prelude::BlockNumber;
 use hotshot::traits::State as HotShotState;
-use hotshot_types::{data::ViewNumber, traits::state::TestableState};
+use hotshot_types::data::ViewNumber;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::time::Duration;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
@@ -115,20 +115,20 @@ lazy_static! {
 
 // Required for TestableState
 #[cfg(any(test, feature = "testing"))]
-impl Display for State {
+impl std::fmt::Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl TestableState for State {
+impl hotshot_types::traits::state::TestableState for State {
     fn create_random_transaction(
         _state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         _padding: u64,
     ) -> <Self::BlockType as hotshot::traits::Block>::Transaction {
-        Transaction::random(rng)
+        crate::Transaction::random(rng)
     }
 }
 
