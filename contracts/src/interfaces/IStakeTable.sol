@@ -51,8 +51,9 @@ interface IStakeTable {
     /// of the current epoch)
     function frozenStakeTableCommitment() external view returns (bytes32);
 
-    /// @notice Get the total stake of the registered keys in the latest stake table (Head)
-    function totalStake() external view returns (uint256);
+    /// @notice Get the total stakes of the registered keys in the latest stake table (Head).
+    /// @return The total stake for native token and restaked token respectively.
+    function totalStake() external view returns (uint256, uint256);
     /// @notice Get the total number of stakers, uniquely identified by their `blsVK`
     function totalKeys() external view returns (uint32);
     /// @notice Get the total stake of the registered keys in the voting stake table
