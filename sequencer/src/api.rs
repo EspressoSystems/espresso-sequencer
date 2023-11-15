@@ -38,9 +38,9 @@ pub struct HttpOptions {
     pub port: u16,
 }
 
-/// Options for the query API module.
+/// Options for the query API module backed by the file system.
 #[derive(Parser, Clone, Debug)]
-pub struct QueryOptions {
+pub struct FsQueryOptions {
     /// Storage path for HotShot query service data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
     pub storage_path: PathBuf,
@@ -98,7 +98,7 @@ impl SubmitOptions {
 #[derive(Clone, Debug)]
 pub struct Options {
     pub http: HttpOptions,
-    pub query: Option<QueryOptions>,
+    pub query_fs: Option<FsQueryOptions>,
     pub submit: Option<SubmitOptions>,
 }
 
@@ -106,16 +106,16 @@ impl From<HttpOptions> for Options {
     fn from(http: HttpOptions) -> Self {
         Self {
             http,
-            query: None,
+            query_fs: None,
             submit: None,
         }
     }
 }
 
 impl Options {
-    /// Add a query API module.
-    pub fn query(mut self, opt: QueryOptions) -> Self {
-        self.query = Some(opt);
+    /// Add a query API module backed by the file system.
+    pub fn query_fs(mut self, opt: FsQueryOptions) -> Self {
+        self.query_fs = Some(opt);
         self
     }
 
@@ -131,7 +131,7 @@ impl Options {
     ) -> io::Result<SequencerNode<N>> {
         // The server state type depends on whether we are running a query API or not, so we handle
         // the two cases differently.
-        let (handle, node_index, update_task) = if let Some(query) = self.query {
+        let (handle, node_index, update_task) = if let Some(query) = self.query_fs {
             type StateType<N> = Arc<RwLock<AppState<N>>>;
 
             let storage_path = Path::new(&query.storage_path);
@@ -589,7 +589,7 @@ mod test {
     async fn submit_test_with_query_module() {
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        submit_test_helper(Some(QueryOptions {
+        submit_test_helper(Some(FsQueryOptions {
             storage_path,
             reset_store: true,
         }))
@@ -601,7 +601,7 @@ mod test {
         submit_test_helper(None).await
     }
 
-    async fn submit_test_helper(query_opt: Option<QueryOptions>) {
+    async fn submit_test_helper(query_opt: Option<FsQueryOptions>) {
         setup_logging();
         setup_backtrace();
 
@@ -623,7 +623,7 @@ mod test {
 
         let mut options = Options::from(HttpOptions { port }).submit(Default::default());
         if let Some(query) = query_opt {
-            options = options.query(query);
+            options = options.query_fs(query);
         }
         let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
@@ -660,7 +660,7 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
         Options::from(HttpOptions { port })
-            .query(QueryOptions {
+            .query_fs(FsQueryOptions {
                 storage_path,
                 reset_store: true,
             })

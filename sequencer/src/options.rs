@@ -105,7 +105,10 @@ impl ModuleArgs {
             )?;
             match module {
                 SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
-                SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
+                SequencerModule::Query(m) => curr = m.add(&mut modules.query_fs, &mut provided)?,
+                SequencerModule::QueryFs(m) => {
+                    curr = m.add(&mut modules.query_fs, &mut provided)?
+                }
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
                 SequencerModule::CommitmentTask(m) => {
                     curr = m.add(&mut modules.commitment_task, &mut provided)?
@@ -135,7 +138,7 @@ macro_rules! module {
 }
 
 module!("http", api::HttpOptions);
-module!("query", api::QueryOptions, requires: "http");
+module!("query-fs", api::FsQueryOptions, requires: "http");
 module!("submit", api::SubmitOptions, requires: "http");
 module!("commitment-task", CommitmentTaskOptions);
 
@@ -185,10 +188,12 @@ enum SequencerModule {
     /// * query: add query service endpoints
     /// * submit: add transaction submission endpoints
     Http(Module<api::HttpOptions>),
-    /// Run the query service API module.
+    /// Alias for query-fs.
+    Query(Module<api::FsQueryOptions>),
+    /// Run the query service API module, backed by the file system.
     ///
     /// This modules requires the http module to be started.
-    Query(Module<api::QueryOptions>),
+    QueryFs(Module<api::FsQueryOptions>),
     /// Run the transaction submission API module.
     ///
     /// This modules requires the http module to be started.
@@ -199,7 +204,7 @@ enum SequencerModule {
 #[derive(Clone, Debug, Default)]
 pub struct Modules {
     pub http: Option<api::HttpOptions>,
-    pub query: Option<api::QueryOptions>,
+    pub query_fs: Option<api::FsQueryOptions>,
     pub submit: Option<api::SubmitOptions>,
     pub commitment_task: Option<CommitmentTaskOptions>,
 }
