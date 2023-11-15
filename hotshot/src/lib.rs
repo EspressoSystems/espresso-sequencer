@@ -51,7 +51,6 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
     simple_certificate::QuorumCertificate2,
     traits::{election::ViewSyncExchangeType, node_implementation::TimeoutEx},
 };
@@ -77,7 +76,6 @@ use hotshot_types::{
         state::ConsensusTime,
         storage::StoredView,
     },
-    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
@@ -635,13 +633,8 @@ where
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-            TYPES,
-            Message<TYPES, I>,
-            Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = Commitment<ViewSyncData<TYPES>>,
-            Membership = MEMBERSHIP,
-        > + 'static,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,

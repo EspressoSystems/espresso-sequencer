@@ -26,7 +26,6 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
     data::Leaf,
     event::Event,
     message::{Message, Messages, SequencingMessage},
@@ -39,7 +38,6 @@ use hotshot_types::{
         },
         state::ConsensusTime,
     },
-    vote::ViewSyncData,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -506,12 +504,7 @@ pub async fn add_view_sync_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = Commitment<ViewSyncData<TYPES>>,
-    >,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
 {
     let api = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),

@@ -3,17 +3,20 @@ use crate::view_sync::ViewSyncPhase;
 use commit::Commitment;
 use either::Either;
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
     data::{DAProposal, Leaf, QuorumProposal, VidDisperse},
     message::Proposal,
     simple_certificate::{
         DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
+        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
-    simple_vote::{DAVote2, QuorumVote, TimeoutVote2, VIDVote2},
+    simple_vote::{
+        DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        ViewSyncPreCommitVote,
+    },
     traits::node_implementation::{
         CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, VIDMembership,
+        ViewSyncMembership,
     },
-    vote::ViewSyncVote,
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
@@ -51,17 +54,35 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ViewChange(TYPES::Time),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
     ViewSyncTimeout(TYPES::Time, u64, ViewSyncPhase),
-    /// Send a view sync vote to the network; emitted by a replica in the view sync task
-    ViewSyncVoteSend(ViewSyncVote<TYPES>),
-    /// Send a view sync certificate to the network; emitted by a relay in the view sync task
-    ViewSyncCertificateSend(
-        Proposal<TYPES, ViewSyncCertificate<TYPES>>,
-        TYPES::SignatureKey,
-    ),
-    /// Receive a view sync vote from the network; received by a relay in the view sync task
-    ViewSyncVoteRecv(ViewSyncVote<TYPES>),
-    /// Receive a view sync certificate from the network; received by a replica in the view sync task
-    ViewSyncCertificateRecv(Proposal<TYPES, ViewSyncCertificate<TYPES>>),
+
+    /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
+    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Receive a `ViewSyncCommitVote` from the network; received by a relay in the view sync task
+    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
+    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+    /// Send a `ViewSyncPreCommitVote` from the network; emitted by a replica in the view sync task
+    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Send a `ViewSyncCommitVote` from the network; emitted by a replica in the view sync task
+    ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    /// Send a `ViewSyncFinalizeVote` from the network; emitted by a replica in the view sync task
+    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+    /// Receive a `ViewSyncPreCommitCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncPreCommitCertificate2Recv(ViewSyncPreCommitCertificate2<TYPES>),
+    /// Receive a `ViewSyncCommitCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncCommitCertificate2Recv(ViewSyncCommitCertificate2<TYPES>),
+    /// Receive a `ViewSyncFinalizeCertificate2` from the network; received by a replica in the view sync task
+    ViewSyncFinalizeCertificate2Recv(ViewSyncFinalizeCertificate2<TYPES>),
+
+    /// Send a `ViewSyncPreCommitCertificate2` from the network; emitted by a relay in the view sync task
+    ViewSyncPreCommitCertificate2Send(ViewSyncPreCommitCertificate2<TYPES>, TYPES::SignatureKey),
+    /// Send a `ViewSyncCommitCertificate2` from the network; emitted by a relay in the view sync task
+    ViewSyncCommitCertificate2Send(ViewSyncCommitCertificate2<TYPES>, TYPES::SignatureKey),
+    /// Send a `ViewSyncFinalizeCertificate2` from the network; emitted by a relay in the view sync task
+    ViewSyncFinalizeCertificate2Send(ViewSyncFinalizeCertificate2<TYPES>, TYPES::SignatureKey),
+
     /// Trigger the start of the view sync protocol; emitted by view sync task; internal trigger only
     ViewSyncTrigger(TYPES::Time),
     /// A consensus view has timed out; emitted by a replica in the consensus task; received by the view sync task; internal event only
