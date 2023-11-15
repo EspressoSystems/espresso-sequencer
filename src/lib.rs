@@ -375,7 +375,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use tide_disco::App;
+use tide_disco::{App, StatusCode};
 
 /// Leaf type appended to a chain by consensus.
 pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
@@ -400,6 +400,15 @@ pub enum QueryError {
     /// There was an error while trying to fetch the requested resource.
     #[snafu(display("Failed to fetch requested resource: {message}"))]
     Error { message: String },
+}
+
+impl QueryError {
+    pub fn status(&self) -> StatusCode {
+        match self {
+            Self::NotFound | Self::Missing => StatusCode::NotFound,
+            Self::Error { .. } => StatusCode::InternalServerError,
+        }
+    }
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;

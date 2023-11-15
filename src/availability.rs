@@ -126,10 +126,7 @@ impl Error {
             | Self::QueryBlock { source, .. }
             | Self::StreamBlock { source, .. }
             | Self::QueryTransaction { source, .. }
-            | Self::QueryProposals { source, .. } => match source {
-                QueryError::NotFound | QueryError::Missing => StatusCode::NotFound,
-                QueryError::Error { .. } => StatusCode::InternalServerError,
-            },
+            | Self::QueryProposals { source, .. } => source.status(),
             Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
             Self::LeafStream { .. } | Self::BlockStream { .. } => StatusCode::InternalServerError,
             Self::Custom { status, .. } => *status,
