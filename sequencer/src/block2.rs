@@ -17,6 +17,13 @@ impl BlockPayload {
         // so that the payload bytes of the ith tx is
         // tx_bodies[tx_table[i-1]..tx_table[i]].
         // edge case: tx_table[-1] is defined as 0.
+        //
+        // TODO clarification for future docs:
+        // perhaps the final entry of tx_table is redundant:
+        // it should always equal the length of the flattened tx bytes.
+        // But this might not always be the case.
+        // Example: If the flattened tx bytes are not a monolith at the end
+        // of the payload then the final tx_table entry is needed.
         let mut tx_table = Vec::new();
 
         // concatenation of all tx payloads
@@ -41,9 +48,13 @@ impl BlockPayload {
             tx_bodies.extend(tx.payload);
         }
 
+        // tx_table_len is the number of 4-byte entries.
+        // tx_table.len() is the number of bytes in the tx table,
+        // so we divide by size_of::<u32>()
         let tx_table_len: u32 = (tx_table.len() / size_of::<u32>())
             .try_into()
             .expect("tx_table len should fit into u32");
+
         let mut payload = Vec::new();
         payload.extend(tx_table_len.to_be_bytes());
         payload.extend(tx_table);
