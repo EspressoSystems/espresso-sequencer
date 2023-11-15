@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 pub struct BlockPayload {
     payload: Vec<u8>,
     // tx_ranges: Vec<Range<u32>>, // not convinced we need this
@@ -39,8 +41,7 @@ impl BlockPayload {
             tx_bodies.extend(tx.payload);
         }
 
-        let tx_table_len: u32 = tx_table
-            .len()
+        let tx_table_len: u32 = (tx_table.len() / size_of::<u32>())
             .try_into()
             .expect("tx_table len should fit into u32");
         let mut payload = Vec::new();
@@ -68,28 +69,31 @@ mod test {
 
         // other things as a function of the above
         let txs = tx_payloads.iter().cloned().map(|payload| Tx { payload });
-        let tx_payload_lengths: Vec<u32> = tx_payloads
+        let tx_offsets: Vec<u32> = tx_payloads
             .iter()
-            .map(|payload| payload.len().try_into().unwrap())
+            .scan(0, |end, tx| {
+                *end += u32::try_from(tx.len()).unwrap();
+                Some(*end)
+            })
             .collect();
 
         let block = BlockPayload::build(txs);
 
         // test tx table length
-        let (len, payload) = block.payload.split_at(size_of::<u32>());
-        let len = u32::from_be_bytes(len.try_into().unwrap());
-        assert_eq!(len, tx_payloads.len() as u32);
+        let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
+        let tx_table_len = u32::from_be_bytes(tx_table_len_bytes.try_into().unwrap());
+        assert_eq!(tx_table_len, tx_payloads.len() as u32);
 
         // test tx table contents
-        let (tx_table, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
-        let tx_table: Vec<u32> = tx_table
+        let (tx_table_bytes, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
+        let tx_table: Vec<u32> = tx_table_bytes
             .chunks(size_of::<u32>())
             .map(|len_bytes| u32::from_be_bytes(len_bytes.try_into().unwrap()))
             .collect();
-        assert_eq!(tx_table, tx_payload_lengths);
+        assert_eq!(tx_table, tx_offsets);
 
         // test block payload body
-        let tx_payloads: Vec<u8> = tx_payloads.into_iter().flatten().collect();
-        assert_eq!(payload, tx_payloads);
+        let tx_payloads_flat: Vec<u8> = tx_payloads.into_iter().flatten().collect();
+        assert_eq!(payload, tx_payloads_flat);
     }
 }
