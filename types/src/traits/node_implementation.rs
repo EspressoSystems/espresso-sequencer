@@ -116,18 +116,6 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Storage type for this consensus implementation
     type Storage: Storage<TYPES> + Clone;
 
-    // /// Consensus message type.
-    // type ConsensusMessage: ConsensusMessageType<TYPES, Self>
-    //     + Clone
-    //     + Debug
-    //     + Send
-    //     + Sync
-    //     + 'static
-    //     + for<'a> Deserialize<'a>
-    //     + Hash
-    //     + Eq
-    //     + Serialize;
-
     /// Consensus type selected exchanges.
     ///
     /// Implements either `ValidatingExchangesType` or `ExchangesType`.

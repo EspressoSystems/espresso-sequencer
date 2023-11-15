@@ -384,29 +384,6 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>
     VidCertificate(VIDCertificate2<TYPES>),
 }
 
-// /// Messages related to the consensus protocol.
-// pub trait ConsensusMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-//     /// The type of messages for both validating and sequencing consensus.
-//     type GeneralConsensusMessage;
-
-//     /// The type of processed consensus messages.
-//     type ProcessedConsensusMessage: Send;
-
-//     /// Get the view number when the message was sent or the view of the timeout.
-//     fn view_number(&self) -> TYPES::Time;
-
-//     /// Get the message purpose.
-//     fn purpose(&self) -> MessagePurpose;
-// }
-
-/// Messages related to the sequencing consensus protocol.
-// pub trait SequencingMessageType<TYPES: NodeType, I: NodeImplementation<TYPES>>:
-//     ConsensusMessageType<TYPES, I>
-// {
-//     /// Messages for DA committee only.
-//     type CommitteeConsensusMessage;
-// }
-
 /// Messages for sequencing consensus.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
