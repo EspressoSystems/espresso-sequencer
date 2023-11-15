@@ -116,7 +116,7 @@ where
 /// A data source with an atomic transaction-based synchronization interface.
 #[async_trait]
 pub trait VersionedDataSource {
-    type Error: Error + Debug;
+    type Error: Error + Debug + Send + Sync + 'static;
 
     /// Atomically commit to all outstanding modifications to the data.
     ///

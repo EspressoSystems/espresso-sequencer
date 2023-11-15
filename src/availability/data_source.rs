@@ -114,7 +114,7 @@ pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type Error: Error + Debug;
+    type Error: Error + Debug + Send + Sync + 'static;
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>;
