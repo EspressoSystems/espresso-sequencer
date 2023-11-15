@@ -30,13 +30,13 @@ jobs:
       - name: Prepare AMD
         if: ${{ matrix.arch == 'amd' }}
         run: |
-          echo "TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
+          echo "TARGET_TRIPLET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
           echo "DEVSHELL=.#crossShell" >> $GITHUB_ENV
 
       - name: Prepare ARM
         if: ${{ matrix.arch == 'arm' }}
         run: |
-          echo "TARGET=aarch64-unknown-linux-musl" >> $GITHUB_ENV
+          echo "TARGET_TRIPLET=aarch64-unknown-linux-musl" >> $GITHUB_ENV
           echo "DEVSHELL=.#armCrossShell" >> $GITHUB_ENV
 
       - name: Checkout Repository
@@ -63,6 +63,7 @@ jobs:
       - name: Initialize Nix Environment
         run: |
           nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c echo Nix Setup Complete
+          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c sh -c 'echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"' | tee -a $GITHUB_ENV
 
       - name: Compile all executables
         # timeout-minutes: 120
@@ -72,13 +73,13 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.TARGET }}-services
+          name: ${{ env.TARGET_TRIPLET }}-services
           path: |
-            target/${{ env.TARGET }}/release/orchestrator
-            target/${{ env.TARGET }}/release/web-server
-            target/${{ env.TARGET }}/release/sequencer
-            target/${{ env.TARGET }}/release/cli
-            target/${{ env.TARGET }}/release/commitment-task
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/orchestrator
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/web-server
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cli
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/commitment-task
 
   static-dockers:
     runs-on: ubuntu-latest
