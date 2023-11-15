@@ -23,6 +23,10 @@ file-system-data-source = ["atomic_store"]
 sql-data-source = ["anyhow", "include_dir", "refinery", "serde_json", "tokio", "tokio-postgres"]
 testing = ["espresso-macros", "portpicker", "rand", "spin_sleep", "tempdir"]
 
+[[example]]
+name = "simple-server"
+required-features = ["sql-data-source", "testing"]
+
 [dependencies]
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
     "logging-utils",

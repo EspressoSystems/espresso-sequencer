@@ -90,7 +90,7 @@
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::testing::mocks::{MockTypes, MockNodeImpl};
 //! # use std::path::Path;
-//! # fn doc(storage_path: &Path, options: &Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! # fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path).map_err(Error::internal)?;
@@ -360,7 +360,11 @@ pub use availability::QueryableBlock;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
-use futures::Future;
+use async_std::{
+    sync::{Arc, RwLock},
+    task::spawn,
+};
+use futures::StreamExt;
 use hotshot::{certificate, types::SystemContextHandle};
 use hotshot_types::{
     data::LeafType,
@@ -371,6 +375,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use tide_disco::App;
 
 /// Leaf type appended to a chain by consensus.
 pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
@@ -405,21 +410,59 @@ pub struct Options {
     pub availability: availability::Options,
     #[clap(flatten)]
     pub status: status::Options,
+    #[clap(short, long, default_value = "8080")]
+    pub port: u16,
 }
 
 /// Run an instance of the HotShot Query service with no customization.
-pub fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>, D>(
-    _options: &Options,
-    _data_source: D,
-    _hotshot: SystemContextHandle<Types, I>,
-) -> impl Future<Output = ()> + Send + Sync + 'static
+pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>, D>(
+    options: Options,
+    data_source: D,
+    mut hotshot: SystemContextHandle<Types, I>,
+) -> Result<(), Error>
 where
+    Deltas<Types, I>: Resolvable<Block<Types>>,
     Block<Types>: QueryableBlock,
     D: availability::AvailabilityDataSource<Types, I>
         + status::StatusDataSource
-        + data_source::UpdateDataSource<Types, I>,
+        + data_source::UpdateDataSource<Types, I>
+        + data_source::VersionedDataSource
+        + Send
+        + Sync
+        + 'static,
 {
-    async move { unimplemented!() }
+    // Create API modules.
+    let availability_api =
+        availability::define_api(&options.availability).map_err(Error::internal)?;
+    let status_api = status::define_api(&options.status).map_err(Error::internal)?;
+
+    // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
+    let data_source = Arc::new(RwLock::new(data_source));
+    let mut app = App::<_, Error>::with_state(data_source.clone());
+    app.register_module("availability", availability_api)
+        .map_err(Error::internal)?
+        .register_module("status", status_api)
+        .map_err(Error::internal)?;
+
+    // Serve app.
+    let url = format!("0.0.0.0:{}", options.port);
+    spawn(async move { app.serve(&url).await });
+
+    // Subscribe to events before starting consensus, so we don't miss any events.
+    let mut events = hotshot.get_event_stream(Default::default()).await.0;
+    hotshot.hotshot.start_consensus().await;
+
+    // Update query data using HotShot events.
+    while let Some(event) = events.next().await {
+        // Re-lock the mutex each time we get a new event.
+        let mut data_source = data_source.write().await;
+
+        // Update the query data based on this event.
+        data_source.update(&event).await.map_err(Error::internal)?;
+        data_source.commit().await.map_err(Error::internal)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

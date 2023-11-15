@@ -283,7 +283,11 @@ pub mod data_source_tests {
             // check that block height is at least 2, because we know that the genesis block and our
             // transaction's block have both been committed, but we can't know how many empty blocks
             // were committed.
-            assert!(ds.read().await.success_rate().await.unwrap() > 0.0);
+            let success_rate = ds.read().await.success_rate().await.unwrap();
+            // TODO re-enable this check once HotShot is populating view metrics again
+            //      https://github.com/EspressoSystems/HotShot/issues/2066
+            // assert!(success_rate.is_finite(), "{success_rate}");
+            assert!(success_rate > 0.0, "{success_rate}");
             assert!(ds.read().await.block_height().await.unwrap() >= 2);
         }
 
