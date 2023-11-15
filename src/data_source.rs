@@ -134,8 +134,7 @@ pub mod data_source_tests {
             }
         }
 
-        // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
-        // ID, and that the list of proposals for each proposer is in chronological order.
+        // Validate the list of proposals for every distinct proposer ID in the chain.
         for proposer in ds
             .get_leaf_range(..)
             .await
@@ -144,8 +143,23 @@ pub mod data_source_tests {
             .collect::<HashSet<_>>()
             .await
         {
+            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
+            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
+            // one proposal from this proposer.
+            assert!(!proposals.is_empty());
+            // If we select with a limit, we should get the most recent `limit` proposals in
+            // chronological order.
+            let suffix = ds
+                .get_proposals(&proposer, Some(proposals.len() / 2))
+                .await
+                .unwrap();
+            assert_eq!(suffix.len(), proposals.len() / 2);
+            assert!(proposals.ends_with(&suffix));
+
+            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
+            // that the list of proposals is in chronological order.
             let mut prev_height = None;
-            for leaf in ds.get_proposals(&proposer, None).await.unwrap() {
+            for leaf in proposals {
                 assert_eq!(proposer, leaf.proposer());
                 if let Some(prev_height) = prev_height {
                     assert!(prev_height < leaf.height());

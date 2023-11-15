@@ -51,7 +51,7 @@ pub struct MockNetwork<D: TestableDataSource> {
 // convenient type alias.
 pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl>;
 
-const MINIMUM_NODES: usize = 6;
+const MINIMUM_NODES: usize = 2;
 
 impl<D: TestableDataSource> MockNetwork<D> {
     pub async fn init() -> Self {
