@@ -1,5 +1,6 @@
 use std::mem::size_of;
 
+#[allow(dead_code)] // TODO temporary
 pub struct BlockPayload {
     payload: Vec<u8>,
     // tx_ranges: Vec<Range<u32>>, // not convinced we need this
@@ -12,6 +13,7 @@ pub struct Tx {
 }
 
 impl BlockPayload {
+    #[allow(dead_code)] // TODO temporary
     fn build(txs: impl IntoIterator<Item = Tx>) -> Self {
         // tx_table[i] is the end index (exclusive) of the ith tx
         // so that the payload bytes of the ith tx is
