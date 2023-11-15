@@ -76,7 +76,6 @@ impl BlockPayload {
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
-
     use super::{BlockPayload, Tx};
 
     #[test]
@@ -127,7 +126,7 @@ mod test {
             // test tx table length
             let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
             let tx_table_len = u32::from_be_bytes(tx_table_len_bytes.try_into().unwrap());
-            assert_eq!(tx_table_len, tx_payloads.len() as u32);
+            assert_eq!(tx_table_len, u32::try_from(tx_payloads.len()).unwrap());
 
             // test tx table contents
             let (tx_table_bytes, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
