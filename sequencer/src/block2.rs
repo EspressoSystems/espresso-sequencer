@@ -75,8 +75,8 @@ impl BlockPayload {
 
 #[cfg(test)]
 mod test {
-    use std::mem::size_of;
     use super::{BlockPayload, Tx};
+    use std::mem::size_of;
 
     #[test]
     fn build_basic_correctness() {
