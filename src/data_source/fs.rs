@@ -19,27 +19,22 @@ use super::{
 use crate::{
     availability::{
         data_source::{
-            AvailabilityDataSource, BlockId, LeafId, MissingSnafu, NotFoundSnafu, QueryResult,
-            ResourceId, UpdateAvailabilityData,
+            AvailabilityDataSource, BlockId, LeafId, ResourceId, UpdateAvailabilityData,
         },
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
             TransactionIndex,
         },
     },
-    metrics::{MetricsError, PrometheusMetrics},
-    status::{
-        data_source::{StatusDataSource, UpdateStatusData},
-        query_data::MempoolQueryData,
-    },
-    Block, Deltas, Resolvable,
+    metrics::PrometheusMetrics,
+    status::data_source::StatusDataSource,
+    Block, Deltas, MissingSnafu, NotFoundSnafu, QueryResult, Resolvable,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, BoxStream, Stream, StreamExt, TryStreamExt};
 use hotshot_types::traits::{
-    metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
@@ -562,59 +557,18 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
     }
 }
 
-/// Metric-related functions.
-impl<Types: NodeType, I: NodeImplementation<Types>> FileSystemDataSource<Types, I>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn consensus_metrics(&self) -> Result<PrometheusMetrics, MetricsError> {
-        self.metrics.get_subgroup(["consensus"])
-    }
-}
-
 #[async_trait]
 impl<Types: NodeType, I: NodeImplementation<Types>> StatusDataSource
     for FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
 {
-    type Error = MetricsError;
-
-    async fn block_height(&self) -> Result<usize, Self::Error> {
+    async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.leaf_storage.iter().len())
     }
 
-    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        Ok(MempoolQueryData {
-            transaction_count: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions")?
-                .get() as u64,
-            memory_footprint: self
-                .consensus_metrics()?
-                .get_gauge("outstanding_transactions_memory_size")?
-                .get() as u64,
-        })
-    }
-
-    async fn success_rate(&self) -> Result<f64, Self::Error> {
-        let total_views = self.consensus_metrics()?.get_gauge("current_view")?.get() as f64;
-        // By definition, a successful view is any which committed a block.
-        Ok(self.block_height().await? as f64 / total_views)
-    }
-
-    async fn export_metrics(&self) -> Result<String, Self::Error> {
-        self.metrics.prometheus()
-    }
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>> UpdateStatusData
-    for FileSystemDataSource<Types, I>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn metrics(&self) -> Box<dyn Metrics> {
-        Box::new(self.metrics.clone())
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
     }
 }
 

@@ -45,7 +45,7 @@
 //! // Create hotshot, giving it a handle to the status metrics.
 //! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
-//!     data_source.metrics(),
+//!     data_source.populate_metrics(),
 //!     // Other fields omitted
 //! ).await.map_err(Error::internal)?;
 //!
@@ -252,11 +252,13 @@
 //! ```
 //! # use async_trait::async_trait;
 //! # use hotshot_types::traits::signature_key::EncodedPublicKey;
+//! # use hotshot_query_service::QueryResult;
 //! # use hotshot_query_service::availability::{
-//! #   AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
-//! #   TransactionHash, TransactionIndex,
+//! #   AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, TransactionHash,
+//! #   TransactionIndex,
 //! # };
-//! # use hotshot_query_service::status::{MempoolQueryData, StatusDataSource};
+//! # use hotshot_query_service::metrics::PrometheusMetrics;
+//! # use hotshot_query_service::status::StatusDataSource;
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
@@ -313,16 +315,13 @@
 //! // Implement data source trait for status API by delegating to the underlying data source.
 //! #[async_trait]
 //! impl<D: StatusDataSource + Send + Sync> StatusDataSource for AppState<D> {
-//!     type Error = D::Error;
-//!
-//!     async fn block_height(&self) -> Result<usize, Self::Error> {
+//!     async fn block_height(&self) -> QueryResult<usize> {
 //!         self.hotshot_qs.block_height().await
 //!     }
 //!
-//!     // etc
-//! #   async fn mempool_info(&self) -> Result<MempoolQueryData, <Self as StatusDataSource>::Error> { todo!() }
-//! #   async fn success_rate(&self) -> Result<f64, <Self as StatusDataSource>::Error> { todo!() }
-//! #   async fn export_metrics(&self) -> Result<String, <Self as StatusDataSource>::Error> { todo!() }
+//!     fn metrics(&self) -> &PrometheusMetrics {
+//!         self.hotshot_qs.metrics()
+//!     }
 //! }
 //!
 //! // Implement data source traits for other modules, using additional state from AppState.
@@ -352,7 +351,7 @@ mod api;
 pub mod availability;
 pub mod data_source;
 mod error;
-mod metrics;
+pub mod metrics;
 mod resolvable;
 pub mod status;
 pub mod testing;
@@ -370,6 +369,8 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
     },
 };
+use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 
 /// Leaf type appended to a chain by consensus.
 pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
@@ -381,6 +382,22 @@ pub type Deltas<Types, I> = <Leaf<Types, I> as LeafType>::DeltasType;
 pub type Block<Types> = <Types as NodeType>::BlockType;
 /// Item within a [`Block`].
 pub type Transaction<Types> = <Block<Types> as block_contents::Block>::Transaction;
+
+#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
+#[snafu(visibility(pub))]
+pub enum QueryError {
+    /// The requested resource does not exist or is not known to this query service.
+    NotFound,
+    /// The requested resource exists but is not currently available.
+    ///
+    /// In most cases a missing resource can be recovered from DA.
+    Missing,
+    /// There was an error while trying to fetch the requested resource.
+    #[snafu(display("Failed to fetch requested resource: {message}"))]
+    Error { message: String },
+}
+
+pub type QueryResult<T> = Result<T, QueryError>;
 
 #[derive(clap::Args, Default)]
 pub struct Options {
@@ -410,10 +427,11 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+            AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData,
             TransactionHash, TransactionIndex,
         },
-        status::{MempoolQueryData, StatusDataSource},
+        metrics::PrometheusMetrics,
+        status::StatusDataSource,
         testing::{
             consensus::MockDataSource,
             mocks::{MockNodeImpl, MockTypes},
@@ -515,19 +533,12 @@ mod test {
     // Implement data source trait for status API.
     #[async_trait]
     impl StatusDataSource for CompositeState {
-        type Error = <MockDataSource as StatusDataSource>::Error;
-
-        async fn block_height(&self) -> Result<usize, Self::Error> {
+        async fn block_height(&self) -> QueryResult<usize> {
             self.hotshot_qs.block_height().await
         }
-        async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-            self.hotshot_qs.mempool_info().await
-        }
-        async fn success_rate(&self) -> Result<f64, Self::Error> {
-            self.hotshot_qs.success_rate().await
-        }
-        async fn export_metrics(&self) -> Result<String, Self::Error> {
-            self.hotshot_qs.export_metrics().await
+
+        fn metrics(&self) -> &PrometheusMetrics {
+            self.hotshot_qs.metrics()
         }
     }
 

@@ -15,13 +15,13 @@
 use super::{versioned_channel::VersionedChannel, VersionedDataSource};
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, MissingSnafu,
-        NotFoundSnafu, QueryError, QueryResult, ResourceId, TransactionHash, TransactionIndex,
-        UpdateAvailabilityData,
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, ResourceId,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
-    status::{MempoolQueryData, StatusDataSource, UpdateStatusData},
-    Block, Deltas, Leaf, QueryableBlock, QuorumCertificate, Resolvable,
+    status::StatusDataSource,
+    Block, Deltas, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock,
+    QuorumCertificate, Resolvable,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
 use async_trait::async_trait;
@@ -34,7 +34,6 @@ use futures::{
     AsyncRead, AsyncWrite,
 };
 use hotshot_types::traits::{
-    metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
@@ -1027,9 +1026,7 @@ where
     I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
-    type Error = QueryError;
-
-    async fn block_height(&self) -> Result<usize, Self::Error> {
+    async fn block_height(&self) -> QueryResult<usize> {
         let query = "SELECT max(height) FROM header";
         let row = self
             .client
@@ -1052,27 +1049,8 @@ where
         }
     }
 
-    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        todo!()
-    }
-
-    async fn success_rate(&self) -> Result<f64, Self::Error> {
-        todo!()
-    }
-
-    async fn export_metrics(&self) -> Result<String, Self::Error> {
-        todo!()
-    }
-}
-
-impl<Types, I> UpdateStatusData for SqlDataSource<Types, I>
-where
-    Types: NodeType,
-    I: NodeImplementation<Types>,
-    Block<Types>: QueryableBlock,
-{
-    fn metrics(&self) -> Box<dyn Metrics> {
-        Box::new(self.metrics.clone())
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
     }
 }
 

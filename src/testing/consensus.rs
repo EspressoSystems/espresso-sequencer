@@ -101,7 +101,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         let (data_source, tmp_data) = D::create(node_id).await;
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            data_source.metrics(),
+                            data_source.populate_metrics(),
                             master_map.clone(),
                             None,
                         ));
@@ -128,7 +128,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             MemoryStorage::empty(),
                             exchanges,
                             HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                            data_source.metrics(),
+                            data_source.populate_metrics(),
                         )
                         .await
                         .unwrap();

@@ -107,15 +107,15 @@ impl Registry {
 /// name. The subgroup is then related to the parent, and any [PrometheusMetrics] in the tree of
 /// related groups can be used to collect _all_ registered metrics. The namespacing will be
 /// reflected in the fully qualified name of each metric in the Prometheus output. The subgroup
-/// relationship is pure and deterministic -- calling [subgroup](PrometheusMetrics::subgroup) with
-/// the same subgroup name will always return a handle to the same underlying [PrometheusMetrics]
-/// object.
+/// relationship is pure and deterministic -- calling
+/// [get_subgroup](PrometheusMetrics::get_subgroup) with the same subgroup name will always return a
+/// handle to the same underlying [PrometheusMetrics] object.
 ///
 /// [PrometheusMetrics] also supports querying for individual metrics by name, unlike
 /// [prometheus::Registry]. This provides a programming interface for inspecting the values of
 /// specific metrics at run-time, if that is preferrable to exporting all metrics wholesale.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PrometheusMetrics {
+pub struct PrometheusMetrics {
     metrics: Registry,
     namespace: Vec<String>,
     children: Arc<RwLock<HashMap<String, PrometheusMetrics>>>,

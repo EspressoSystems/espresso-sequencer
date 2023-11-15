@@ -30,8 +30,9 @@ use std::iter::once;
 ///
 /// If a type implements both [UpdateAvailabilityData] and [UpdateStatusData], then it can be fully
 /// kept up to date through two interfaces:
-/// * [metrics](UpdateStatusData::metrics), to get a handle for populating the status metrics, which
-///   should be used when initializing a [SystemContextHandle](hotshot::types::SystemContextHandle)
+/// * [populate_metrics](UpdateStatusData::populate_metrics), to get a handle for populating the
+///   status metrics, which should be used when initializing a
+///   [SystemContextHandle](hotshot::types::SystemContextHandle)
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>>:

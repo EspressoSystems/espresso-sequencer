@@ -13,15 +13,15 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
-        QueryableBlock, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryableBlock,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
-    status::{MempoolQueryData, StatusDataSource, UpdateStatusData},
-    Block, Deltas, Resolvable,
+    metrics::PrometheusMetrics,
+    status::StatusDataSource,
+    Block, Deltas, QueryResult, Resolvable,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::{
-    metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
@@ -227,28 +227,11 @@ where
     D: StatusDataSource + Send + Sync,
     U: Send + Sync,
 {
-    type Error = D::Error;
-
-    async fn block_height(&self) -> Result<usize, Self::Error> {
+    async fn block_height(&self) -> QueryResult<usize> {
         self.data_source.block_height().await
     }
-    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        self.data_source.mempool_info().await
-    }
-    async fn success_rate(&self) -> Result<f64, Self::Error> {
-        self.data_source.success_rate().await
-    }
-    async fn export_metrics(&self) -> Result<String, Self::Error> {
-        self.data_source.export_metrics().await
-    }
-}
 
-impl<D, U> UpdateStatusData for ExtensibleDataSource<D, U>
-where
-    D: UpdateStatusData + Send + Sync,
-    U: Send + Sync,
-{
-    fn metrics(&self) -> Box<dyn Metrics> {
+    fn metrics(&self) -> &PrometheusMetrics {
         self.data_source.metrics()
     }
 }
