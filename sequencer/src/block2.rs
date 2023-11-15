@@ -1,3 +1,5 @@
+// Question: jellyfish uses `ark_std` everywhere instead of `std`.
+// Is there a chance of badness if we (as a downstream user) use `std`?
 use std::mem::size_of;
 
 #[allow(dead_code)] // TODO temporary
@@ -35,6 +37,7 @@ impl BlockPayload {
         let mut end: u32 = 0;
         for tx in txs.into_iter() {
             // TODO idiomatic usize -> u32 conversion?
+            // Is panic acceptable? If not then we need to return `Result`.
             let len: u32 = tx
                 .payload
                 .len()
@@ -57,6 +60,11 @@ impl BlockPayload {
             .try_into()
             .expect("tx_table len should fit into u32");
 
+        // Naively copy all pieces into a flat payload.
+        // We could avoid this by allocating memory in advance,
+        // but that would require knowing the number of txs and their total
+        // byte length in advance, which we can't do without a complete scan
+        // of the `txs` iterator.
         let mut payload = Vec::new();
         payload.extend(tx_table_len.to_be_bytes());
         payload.extend(tx_table);
@@ -74,39 +82,64 @@ mod test {
     #[test]
     fn build_basic_correctness() {
         // play with this
-        let tx_payloads = vec![
-            vec![0, 1, 2, 3, 4],
-            vec![5, 6, 7, 8, 9, 10, 11, 12],
-            vec![13, 14, 15, 16, 17, 18, 19, 20],
+        let test_cases = vec![
+            // 3 non-empty txs
+            vec![
+                vec![0, 1, 2, 3, 4],
+                vec![5, 6, 7, 8, 9, 10, 11, 12],
+                vec![13, 14, 15, 16, 17, 18, 19, 20],
+            ],
+            // 1 empty tx at the beginning
+            vec![
+                vec![],
+                vec![5, 6, 7, 8, 9, 10, 11, 12],
+                vec![13, 14, 15, 16, 17, 18, 19, 20],
+            ],
+            // 1 empty tx in the middle
+            vec![
+                vec![0, 1, 2, 3, 4],
+                vec![],
+                vec![13, 14, 15, 16, 17, 18, 19, 20],
+            ],
+            // 1 empty tx at the end
+            vec![vec![0, 1, 2, 3, 4], vec![5, 6, 7, 8, 9, 10, 11, 12], vec![]],
+            // 1 nonempty tx
+            vec![vec![0, 1, 2, 3, 4]],
+            // 1 empty tx
+            vec![vec![]],
+            // zero txs
+            vec![],
         ];
 
-        // other things as a function of the above
-        let txs = tx_payloads.iter().cloned().map(|payload| Tx { payload });
-        let tx_offsets: Vec<u32> = tx_payloads
-            .iter()
-            .scan(0, |end, tx| {
-                *end += u32::try_from(tx.len()).unwrap();
-                Some(*end)
-            })
-            .collect();
+        for tx_payloads in test_cases {
+            // prepare things as a function of the test case
+            let txs = tx_payloads.iter().cloned().map(|payload| Tx { payload });
+            let tx_offsets: Vec<u32> = tx_payloads
+                .iter()
+                .scan(0, |end, tx| {
+                    *end += u32::try_from(tx.len()).unwrap();
+                    Some(*end)
+                })
+                .collect();
 
-        let block = BlockPayload::build(txs);
+            let block = BlockPayload::build(txs);
 
-        // test tx table length
-        let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
-        let tx_table_len = u32::from_be_bytes(tx_table_len_bytes.try_into().unwrap());
-        assert_eq!(tx_table_len, tx_payloads.len() as u32);
+            // test tx table length
+            let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
+            let tx_table_len = u32::from_be_bytes(tx_table_len_bytes.try_into().unwrap());
+            assert_eq!(tx_table_len, tx_payloads.len() as u32);
 
-        // test tx table contents
-        let (tx_table_bytes, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
-        let tx_table: Vec<u32> = tx_table_bytes
-            .chunks(size_of::<u32>())
-            .map(|len_bytes| u32::from_be_bytes(len_bytes.try_into().unwrap()))
-            .collect();
-        assert_eq!(tx_table, tx_offsets);
+            // test tx table contents
+            let (tx_table_bytes, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
+            let tx_table: Vec<u32> = tx_table_bytes
+                .chunks(size_of::<u32>())
+                .map(|len_bytes| u32::from_be_bytes(len_bytes.try_into().unwrap()))
+                .collect();
+            assert_eq!(tx_table, tx_offsets);
 
-        // test block payload body
-        let tx_payloads_flat: Vec<u8> = tx_payloads.into_iter().flatten().collect();
-        assert_eq!(payload, tx_payloads_flat);
+            // test block payload body
+            let tx_payloads_flat: Vec<u8> = tx_payloads.into_iter().flatten().collect();
+            assert_eq!(payload, tx_payloads_flat);
+        }
     }
 }
