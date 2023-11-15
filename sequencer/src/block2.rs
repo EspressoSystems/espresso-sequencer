@@ -36,8 +36,7 @@ impl BlockPayload {
                 .checked_add(len)
                 .expect("total byte length of all tx bodies should fit into u32");
 
-            // TODO to_be_bytes or to_le_bytes?
-            tx_table.extend(end.to_be_bytes());
+            tx_table.extend(end.to_le_bytes());
             tx_bodies.extend(tx.payload());
         }
 
@@ -54,7 +53,7 @@ impl BlockPayload {
         // byte length in advance, which we can't do without a complete scan
         // of the `txs` iterator.
         let mut payload = Vec::new();
-        payload.extend(tx_table_len.to_be_bytes());
+        payload.extend(tx_table_len.to_le_bytes());
         payload.extend(tx_table);
         payload.extend(tx_bodies);
         Self { payload }
@@ -117,14 +116,14 @@ mod test {
 
             // test tx table length
             let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
-            let tx_table_len = u32::from_be_bytes(tx_table_len_bytes.try_into().unwrap());
+            let tx_table_len = u32::from_le_bytes(tx_table_len_bytes.try_into().unwrap());
             assert_eq!(tx_table_len, u32::try_from(tx_payloads.len()).unwrap());
 
             // test tx table contents
             let (tx_table_bytes, payload) = payload.split_at(tx_payloads.len() * size_of::<u32>());
             let tx_table: Vec<u32> = tx_table_bytes
                 .chunks(size_of::<u32>())
-                .map(|len_bytes| u32::from_be_bytes(len_bytes.try_into().unwrap()))
+                .map(|len_bytes| u32::from_le_bytes(len_bytes.try_into().unwrap()))
                 .collect();
             assert_eq!(tx_table, tx_offsets);
 
