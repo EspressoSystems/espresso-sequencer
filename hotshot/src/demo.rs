@@ -139,6 +139,7 @@ impl NodeType for DemoTypes {
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
+    type Membership = DemoMembership;
 }
 
 /// Alias for the static committee used in the Demo apps

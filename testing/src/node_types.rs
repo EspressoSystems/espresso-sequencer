@@ -1,4 +1,6 @@
-use hotshot::traits::implementations::CombinedNetworks;
+use hotshot::traits::{
+    election::static_committee::GeneralStaticCommittee, implementations::CombinedNetworks,
+};
 use std::{marker::PhantomData, sync::Arc};
 
 use hotshot::{
@@ -48,6 +50,7 @@ impl NodeType for TestTypes {
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
+    type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]

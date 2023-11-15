@@ -57,6 +57,7 @@ impl NodeType for Test {
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
+    type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]

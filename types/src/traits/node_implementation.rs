@@ -636,4 +636,7 @@ pub trait NodeType:
 
     /// The state type that this hotshot setup is using.
     type StateType: State<BlockPayload = Self::BlockPayload, Time = Self::Time>;
+
+    /// Membership used for this implementation
+    type Membership: Membership<Self>;
 }

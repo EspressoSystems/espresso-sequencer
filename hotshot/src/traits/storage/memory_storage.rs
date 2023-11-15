@@ -107,7 +107,9 @@ impl<TYPES: NodeType> Storage<TYPES> for MemoryStorage<TYPES> {
 
 #[cfg(test)]
 mod test {
-    use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
+    use crate::traits::election::static_committee::{
+        GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
+    };
 
     use super::*;
     use commit::Committable;
@@ -145,6 +147,7 @@ mod test {
         type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
+        type Membership = GeneralStaticCommittee<DummyTypes, BLSPubKey>;
     }
 
     fn random_stored_view(view_number: <DummyTypes as NodeType>::Time) -> StoredView<DummyTypes> {
