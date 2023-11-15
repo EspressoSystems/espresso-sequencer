@@ -10,14 +10,12 @@
       , "func-param-name-mixedcase": "error"
       , "func-visibility": ["error", { "ignoreConstructors": true }]
       , "imports-on-top": "error"
-      , "max-line-length": ["error", 100]
       , "modifier-name-mixedcase": "error"
       , "named-parameters-mapping": "error"
       , "no-console": "error"
       , "no-empty-blocks": "error"
       , "no-unused-vars": "error"
       , "no-global-import": "off"
-      , "private-vars-leading-underscore": ["error", { "strict": true }]
       , "var-name-mixedcase": "error"
   }
 }

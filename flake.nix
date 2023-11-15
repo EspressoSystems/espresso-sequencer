@@ -40,20 +40,22 @@
         # node=error: disable noisy anvil output
         RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
         RUST_BACKTRACE = 1;
-        RUSTFLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+        RUSTFLAGS =
+          " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
 
-        solhintPkg = { buildNpmPackage, fetchFromGitHub }: buildNpmPackage rec {
-          pname = "solhint";
-          version = "3.4.1";
-          src = fetchFromGitHub {
-            owner = "protofire";
-            repo = pname;
-            rev = "v${version}";
-            hash = "sha256-cOZgphyNbTBWnnomOoQj9Ferss6/109EGkzVZY1eqrg=";
+        solhintPkg = { buildNpmPackage, fetchFromGitHub }:
+          buildNpmPackage rec {
+            pname = "solhint";
+            version = "3.6.2";
+            src = fetchFromGitHub {
+              owner = "protofire";
+              repo = pname;
+              rev = "refs/tags/${version}";
+              hash = "sha256-VI6J2iSgimcT9TWPlPD6aIDfRFmlQafCc/J4dwF9rMs=";
+            };
+            npmDepsHash = "sha256-lSe3Rt3I2yFy9Je3SLD2QJA/608ppvbLWmwDt6vkDIk=";
+            dontNpmBuild = true;
           };
-          npmDepsHash = "sha256-s037N+fma4aLTrEhRb64UGr7uItP7v0s1gQ9X7fra00=";
-          dontNpmBuild = true;
-        };
 
         overlays = [
           (import rust-overlay)
@@ -196,6 +198,7 @@
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.
                 export CARGO_HOME=$HOME/.cargo-nix
+                export PATH="$PWD/target/release:$PATH"
               '' + self.checks.${system}.pre-commit-check.shellHook;
               RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
               FOUNDRY_SOLC = "${solc}/bin/solc";

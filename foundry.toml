@@ -12,6 +12,7 @@ cache_path = "contracts/cache"
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
 solc = "0.8.20"
+ffi = true
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 
@@ -26,3 +27,6 @@ sepolia = { key = "${ETHERSCAN_API_KEY}" }
 line_length=100
 bracket_spacing=true
 wrap_comments=true
+
+[profile.ci]
+fuzz = { runs = 1000 }
