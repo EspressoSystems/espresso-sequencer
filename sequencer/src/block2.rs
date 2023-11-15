@@ -1,11 +1,8 @@
-// Question: jellyfish uses `ark_std` everywhere instead of `std`.
-// Is there a chance of badness if we (as a downstream user) use `std`?
 use std::mem::size_of;
 
 #[allow(dead_code)] // TODO temporary
 pub struct BlockPayload {
     payload: Vec<u8>,
-    // tx_ranges: Vec<Range<u32>>, // not convinced we need this
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -22,12 +19,8 @@ impl BlockPayload {
         // tx_bodies[tx_table[i-1]..tx_table[i]].
         // edge case: tx_table[-1] is defined as 0.
         //
-        // TODO clarification for future docs:
-        // perhaps the final entry of tx_table is redundant:
-        // it should always equal the length of the flattened tx bytes.
-        // But this might not always be the case.
-        // Example: If the flattened tx bytes are not a monolith at the end
-        // of the payload then the final tx_table entry is needed.
+        // TODO final entry should be implicit:
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/757
         let mut tx_table = Vec::new();
 
         // concatenation of all tx payloads
