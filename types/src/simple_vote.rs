@@ -6,6 +6,7 @@ use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    data::Leaf,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -16,9 +17,10 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.
-pub struct QuorumData<LEAF: Committable> {
+#[serde(bound(deserialize = ""))]
+pub struct QuorumData<TYPES: NodeType> {
     /// Commitment to the leaf
-    pub leaf_commit: Commitment<LEAF>,
+    pub leaf_commit: Commitment<Leaf<TYPES>>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
@@ -42,7 +44,7 @@ pub struct VIDData<PAYLOAD: Committable> {
 /// Data used for a Pre Commit vote.
 pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
@@ -50,7 +52,7 @@ pub struct ViewSyncPreCommitData<TYPES: NodeType> {
 /// Data used for a Commit vote.
 pub struct ViewSyncCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
@@ -58,7 +60,7 @@ pub struct ViewSyncCommitData<TYPES: NodeType> {
 /// Data used for a Finalize vote.
 pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The relay this vote is intended for
-    pub relay: EncodedPublicKey,
+    pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::Time,
 }
@@ -148,7 +150,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
     }
 }
 
-impl<LEAF: Committable> Committable for QuorumData<LEAF> {
+impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Yes Vote")
             .var_size_bytes(self.leaf_commit.as_ref())
@@ -182,30 +184,27 @@ impl<PAYLOAD: Committable> Committable for VIDData<PAYLOAD> {
 /// This implements commit for all the types which contain a view and relay public key.
 fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     view: TYPES::Time,
-    relay: &EncodedPublicKey,
+    relay: u64,
     tag: &str,
 ) -> Commitment<T> {
     let builder = commit::RawCommitmentBuilder::new(tag);
-    builder
-        .var_size_field("Relay public key", &relay.0)
-        .u64(*view)
-        .finalize()
+    builder.u64(*view).u64(relay).finalize()
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncPreCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Precommit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Precommit")
     }
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncFinalizeData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Finalize")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Finalize")
     }
 }
 impl<TYPES: NodeType> Committable for ViewSyncCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, &self.relay, "View Sync Commit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Commit")
     }
 }
 
@@ -217,8 +216,8 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 }
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
-/// Yes vote Alias
-pub type QuorumVote<TYPES, LEAF, M> = SimpleVote<TYPES, QuorumData<LEAF>, M>;
+/// Quorum vote Alias
+pub type QuorumVote<TYPES, M> = SimpleVote<TYPES, QuorumData<TYPES>, M>;
 /// DA vote type alias
 pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;
 /// VID vote type alias

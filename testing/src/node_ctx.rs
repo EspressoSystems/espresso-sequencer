@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
-use hotshot_types::{data::LeafType, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 
 /// context for a round
 // TODO eventually we want these to just be futures
@@ -31,7 +31,7 @@ pub enum ViewStatus<TYPES: NodeType, I: TestableNodeImplementation<TYPES::Consen
     /// The view is failed.
     ViewFailed(ViewFailed<TYPES>),
     /// The view is a success.
-    ViewSuccess(ViewSuccess<TYPES, I::Leaf>),
+    ViewSuccess(ViewSuccess<TYPES>),
 }
 
 /// In-progress status of a view.
@@ -44,13 +44,13 @@ pub struct ViewFailed<TYPES: NodeType>(pub Arc<HotShotError<TYPES>>);
 
 /// Success status of a view.
 #[derive(Debug, Clone)]
-pub struct ViewSuccess<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct ViewSuccess<TYPES: NodeType> {
     /// state after decide event
-    pub agreed_state: LEAF::MaybeState,
+    pub agreed_state: (),
 
     /// block after decide event
-    pub agreed_block: LEAF::DeltasType,
+    pub agreed_block: LeafBlockPayload<Leaf<TYPES>>,
 
     /// leaf after decide event
-    pub agreed_leaf: LEAF,
+    pub agreed_leaf: Leaf<TYPES>,
 }

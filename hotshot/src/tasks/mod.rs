@@ -26,8 +26,7 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
-    data::{Leaf, ProposalType, QuorumProposal},
+    data::Leaf,
     event::Event,
     message::{Message, Messages},
     traits::{
@@ -39,7 +38,6 @@ use hotshot_types::{
         },
         state::ConsensusTime,
     },
-    vote::ViewSyncData,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -62,11 +60,9 @@ pub enum GlobalEvent {
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_network_message_task<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
+    I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
-        + 'static,
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -161,11 +157,9 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_network_event_task<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
+    I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Proposal = PROPOSAL, Membership = MEMBERSHIP>
-        + 'static,
+    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -228,28 +222,20 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
     TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+    I: NodeImplementation<TYPES>,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    output_stream: ChannelStream<Event<TYPES, I::Leaf>>,
+    output_stream: ChannelStream<Event<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Commitment = Commitment<Leaf<TYPES>>,
-    >,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-        Commitment = Commitment<TYPES::Time>,
-    >,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
     let consensus = handle.hotshot.get_consensus();
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
@@ -326,7 +312,7 @@ where
 /// add the VID task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     vid_exchange: VIDEx<TYPES, I>,
@@ -385,7 +371,7 @@ where
 /// add the Data Availability task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     committee_exchange: CommitteeEx<TYPES, I>,
@@ -445,7 +431,7 @@ where
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
     TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+    I: NodeImplementation<TYPES>,
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -503,19 +489,13 @@ where
 /// add the view sync task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-        TYPES,
-        Message<TYPES, I>,
-        Proposal = ViewSyncCertificate<TYPES>,
-        Certificate = ViewSyncCertificate<TYPES>,
-        Commitment = Commitment<ViewSyncData<TYPES>>,
-    >,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
 {
     let api = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),

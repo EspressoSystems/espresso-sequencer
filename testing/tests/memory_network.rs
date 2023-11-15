@@ -14,8 +14,6 @@ use hotshot::traits::NodeImplementation;
 use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
-use hotshot_types::certificate::ViewSyncCertificate;
-use hotshot_types::data::{DAProposal, Leaf, QuorumProposal};
 use hotshot_types::message::Message;
 use hotshot_types::traits::election::{
     CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
@@ -64,42 +62,22 @@ impl NodeType for Test {
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type ThisLeaf = Leaf<Test>;
-pub type ThisMembership = GeneralStaticCommittee<Test, ThisLeaf, <Test as NodeType>::SignatureKey>;
+pub type ThisMembership = GeneralStaticCommittee<Test, <Test as NodeType>::SignatureKey>;
 pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 
-pub type ThisDAProposal = DAProposal<Test>;
-
-pub type ThisQuorumProposal = QuorumProposal<Test, ThisLeaf>;
-
-pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
 pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
-    type Storage = MemoryStorage<Test, Self::Leaf>;
-    type Leaf = Leaf<Test>;
+    type Storage = MemoryStorage<Test>;
     type Exchanges = Exchanges<
         Test,
         Message<Test, Self>,
-        QuorumExchange<
-            Test,
-            Self::Leaf,
-            ThisQuorumProposal,
-            ThisMembership,
-            QuorumNetwork,
-            Message<Test, Self>,
-        >,
+        QuorumExchange<Test, ThisMembership, QuorumNetwork, Message<Test, Self>>,
         CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test, Self>>,
-        ViewSyncExchange<
-            Test,
-            ThisViewSyncProposal,
-            ThisMembership,
-            ViewSyncNetwork,
-            Message<Test, Self>,
-        >,
+        ViewSyncExchange<Test, ThisMembership, ViewSyncNetwork, Message<Test, Self>>,
         VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test, Self>>,
     >;
 

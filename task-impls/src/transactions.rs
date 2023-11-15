@@ -28,6 +28,7 @@ use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     sync::Arc,
     time::Instant,
 };
@@ -43,8 +44,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
@@ -57,7 +58,7 @@ pub struct TransactionTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// A list of undecided transactions
     pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
@@ -80,8 +81,8 @@ pub struct TransactionTaskState<
 // whereas it's just `TYPES: NodeType` in the second implementation.
 impl<
         TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
@@ -264,6 +265,7 @@ where
                             },
                             // TODO (Keyao) This is also signed in DA task.
                             signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
+                            _pd: PhantomData,
                         },
                         self.quorum_exchange.public_key().clone(),
                     ))
@@ -282,11 +284,8 @@ where
 // We have two `TransactionTaskState` implementations with different bounds. The implementation
 // above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
 // whereas here it's just `TYPES: NodeType`.
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TransactionTaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    TransactionTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
@@ -371,11 +370,8 @@ where
 }
 
 /// task state implementation for Transactions Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TS for TransactionTaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
+    for TransactionTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {

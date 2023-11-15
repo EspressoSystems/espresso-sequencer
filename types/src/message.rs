@@ -3,26 +3,32 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use crate::simple_certificate::{DACertificate2, VIDCertificate2};
-use crate::simple_vote::{DAVote2, TimeoutVote2, VIDVote2};
-use crate::traits::node_implementation::CommitteeMembership;
+use crate::data::QuorumProposal;
+use crate::simple_certificate::{
+    DACertificate2, VIDCertificate2, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+    ViewSyncPreCommitCertificate2,
+};
+use crate::simple_vote::{
+    DAVote2, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
+    ViewSyncPreCommitVote,
+};
+use crate::traits::node_implementation::{CommitteeMembership, ViewSyncMembership};
 use crate::vote2::HasViewNumber;
 use crate::{
-    data::{DAProposal, ProposalType, VidDisperse},
+    data::{DAProposal, VidDisperse},
     simple_vote::QuorumVote,
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::{
-            ExchangesType, NodeImplementation, NodeType, QuorumMembership, QuorumProposalType,
-            VIDMembership, ViewSyncProposalType,
+            ExchangesType, NodeImplementation, NodeType, QuorumMembership, VIDMembership,
         },
         signature_key::EncodedSignature,
     },
-    vote::ViewSyncVote,
 };
 
 use derivative::Derivative;
 use either::Either::{self, Left, Right};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -148,19 +154,15 @@ pub enum InternalTrigger<TYPES: NodeType> {
 #[serde(bound(deserialize = ""))]
 pub enum ProcessedGeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
-    Proposal(Proposal<QuorumProposalType<TYPES, I>>, TYPES::SignatureKey),
+    Proposal(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Message with a quorum vote.
     Vote(
-        QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>,
+        QuorumVote<TYPES, QuorumMembership<TYPES, I>>,
         TYPES::SignatureKey,
     ),
-    /// Message with a view sync vote.
-    ViewSyncVote(ViewSyncVote<TYPES>),
-    /// Message with a view sync certificate.
-    ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
     InternalTrigger(InternalTrigger<TYPES>),
@@ -169,7 +171,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> From<ProcessedGeneralConsensusMessage<TYPES, I>>
     for GeneralConsensusMessage<TYPES, I>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     fn from(value: ProcessedGeneralConsensusMessage<TYPES, I>) -> Self {
         match value {
@@ -180,19 +182,13 @@ where
             ProcessedGeneralConsensusMessage::InternalTrigger(a) => {
                 GeneralConsensusMessage::InternalTrigger(a)
             }
-            ProcessedGeneralConsensusMessage::ViewSyncCertificate(certificate) => {
-                GeneralConsensusMessage::ViewSyncCertificate(certificate)
-            }
-            ProcessedGeneralConsensusMessage::ViewSyncVote(vote) => {
-                GeneralConsensusMessage::ViewSyncVote(vote)
-            }
         }
     }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ProcessedGeneralConsensusMessage<TYPES, I>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Create a [`ProcessedGeneralConsensusMessage`] from a [`GeneralConsensusMessage`].
     /// # Panics
@@ -206,9 +202,14 @@ where
             GeneralConsensusMessage::InternalTrigger(a) => {
                 ProcessedGeneralConsensusMessage::InternalTrigger(a)
             }
-            GeneralConsensusMessage::ViewSyncVote(_)
-            | GeneralConsensusMessage::ViewSyncCertificate(_) => todo!(),
-            GeneralConsensusMessage::TimeoutVote(_) => todo!(),
+            // ED NOTE These are deprecated
+            GeneralConsensusMessage::TimeoutVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncPreCommitVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncCommitVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncFinalizeVote(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncPreCommitCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncCommitCertificate(_) => unimplemented!(),
+            GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => unimplemented!(),
         }
     }
 }
@@ -218,7 +219,7 @@ where
 #[serde(bound(deserialize = ""))]
 pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Proposal for the DA committee.
-    DAProposal(Proposal<DAProposal<TYPES>>, TYPES::SignatureKey),
+    DAProposal(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Vote from the DA committee.
     DAVote(
         DAVote2<TYPES, CommitteeMembership<TYPES, I>>,
@@ -227,7 +228,7 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementati
     /// Certificate for the DA.
     DACertificate(DACertificate2<TYPES>, TYPES::SignatureKey),
     /// VID dispersal data. Like [`DAProposal`]
-    VidDisperseMsg(Proposal<VidDisperse<TYPES>>, TYPES::SignatureKey),
+    VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
     VidVote(
         VIDVote2<TYPES, VIDMembership<TYPES, I>>,
@@ -320,19 +321,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> From<ProcessedGeneralConsens
 /// Messages related to both validating and sequencing consensus.
 pub enum GeneralConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    I::Exchanges: ExchangesType<TYPES, I::Leaf, Message<TYPES, I>>,
+    I::Exchanges: ExchangesType<TYPES, Message<TYPES, I>>,
 {
     /// Message with a quorum proposal.
-    Proposal(Proposal<QuorumProposalType<TYPES, I>>),
+    Proposal(Proposal<TYPES, QuorumProposal<TYPES>>),
 
     /// Message with a quorum vote.
-    Vote(QuorumVote<TYPES, I::Leaf, QuorumMembership<TYPES, I>>),
+    Vote(QuorumVote<TYPES, QuorumMembership<TYPES, I>>),
 
-    /// Message with a view sync vote.
-    ViewSyncVote(ViewSyncVote<TYPES>),
+    /// Message with a view sync pre-commit vote
+    ViewSyncPreCommitVote(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
 
-    /// Message with a view sync certificate.
-    ViewSyncCertificate(Proposal<ViewSyncProposalType<TYPES, I>>),
+    /// Message with a view sync commit vote
+    ViewSyncCommitVote(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+    /// Message with a view sync finalize vote
+    ViewSyncFinalizeVote(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+
+    /// Message with a view sync pre-commit certificate
+    ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2<TYPES>),
+
+    /// Message with a view sync commit certificate
+    ViewSyncCommitCertificate(ViewSyncCommitCertificate2<TYPES>),
+
+    /// Message with a view sync finalize certificate
+    ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2<TYPES>),
 
     /// Message with a Timeout vote
     TimeoutVote(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
@@ -347,7 +360,7 @@ where
 /// Messages related to the sequencing consensus protocol for the DA committee.
 pub enum CommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Proposal for data availability committee
-    DAProposal(Proposal<DAProposal<TYPES>>),
+    DAProposal(Proposal<TYPES, DAProposal<TYPES>>),
 
     /// vote for data availability committee
     DAVote(DAVote2<TYPES, CommitteeMembership<TYPES, I>>),
@@ -359,7 +372,7 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType, I: NodeImplementation<TYPES>
     ///
     /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from [`VidDisperse`].
     /// TODO this variant should not be a [`CommitteeConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
-    VidDisperseMsg(Proposal<VidDisperse<TYPES>>),
+    VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>),
 
     /// Vote for VID disperse data
     ///
@@ -418,11 +431,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencingMessage<TYPES, I> 
                     GeneralConsensusMessage::InternalTrigger(trigger) => match trigger {
                         InternalTrigger::Timeout(time) => *time,
                     },
-                    GeneralConsensusMessage::ViewSyncVote(message) => message.round(),
-                    GeneralConsensusMessage::ViewSyncCertificate(message) => {
-                        message.data.get_view_number()
-                    }
+
                     GeneralConsensusMessage::TimeoutVote(message) => message.get_view_number(),
+                    GeneralConsensusMessage::ViewSyncPreCommitVote(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::ViewSyncCommitVote(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(message) => {
+                        message.get_view_number()
+                    }
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(message) => {
+                        message.get_view_number()
+                    }
                 }
             }
             Right(committee_message) => {
@@ -457,8 +485,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencingMessage<TYPES, I> 
                     MessagePurpose::Vote
                 }
                 GeneralConsensusMessage::InternalTrigger(_) => MessagePurpose::Internal,
-                GeneralConsensusMessage::ViewSyncVote(_) => MessagePurpose::ViewSyncVote,
-                GeneralConsensusMessage::ViewSyncCertificate(_) => MessagePurpose::ViewSyncProposal,
+                GeneralConsensusMessage::ViewSyncPreCommitVote(_)
+                | GeneralConsensusMessage::ViewSyncCommitVote(_)
+                | GeneralConsensusMessage::ViewSyncFinalizeVote(_) => MessagePurpose::ViewSyncVote,
+
+                GeneralConsensusMessage::ViewSyncPreCommitCertificate(_)
+                | GeneralConsensusMessage::ViewSyncCommitCertificate(_)
+                | GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => {
+                    MessagePurpose::ViewSyncProposal
+                }
             },
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,
@@ -485,11 +520,13 @@ pub enum DataMessage<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Prepare qc from the leader
-pub struct Proposal<PROPOSAL: ProposalType> {
+pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + DeserializeOwned> {
     // NOTE: optimization could include view number to help look up parent leaf
     // could even do 16 bit numbers if we want
     /// The data being proposed.
     pub data: PROPOSAL,
     /// The proposal must be signed by the view leader
     pub signature: EncodedSignature,
+    /// Phantom for TYPES
+    pub _pd: PhantomData<TYPES>,
 }

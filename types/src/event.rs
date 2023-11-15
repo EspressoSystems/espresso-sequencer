@@ -1,7 +1,7 @@
 //! Events that a `HotShot` instance can emit
 
 use crate::{
-    data::LeafType, error::HotShotError, simple_certificate::QuorumCertificate2,
+    data::Leaf, error::HotShotError, simple_certificate::QuorumCertificate2,
     traits::node_implementation::NodeType,
 };
 
@@ -11,11 +11,11 @@ use std::sync::Arc;
 /// This includes some metadata, such as the stage and view number that the event was generated in,
 /// as well as an inner [`EventType`] describing the event proper.
 #[derive(Clone, Debug)]
-pub struct Event<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct Event<TYPES: NodeType> {
     /// The view number that this event originates from
     pub view_number: TYPES::Time,
     /// The underlying event
-    pub event: EventType<TYPES, LEAF>,
+    pub event: EventType<TYPES>,
 }
 
 /// The type and contents of a status event emitted by a `HotShot` instance
@@ -24,7 +24,7 @@ pub struct Event<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
 /// number, and is thus always returned wrapped in an [`Event`].
 #[non_exhaustive]
 #[derive(Clone, Debug)]
-pub enum EventType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub enum EventType<TYPES: NodeType> {
     /// A view encountered an error and was interrupted
     Error {
         /// The underlying error
@@ -38,12 +38,12 @@ pub enum EventType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
         /// block first in the list.
         ///
         /// This list may be incomplete if the node is currently performing catchup.
-        leaf_chain: Arc<Vec<LEAF>>,
+        leaf_chain: Arc<Vec<Leaf<TYPES>>>,
         /// The QC signing the most recent leaf in `leaf_chain`.
         ///
         /// Note that the QC for each additional leaf in the chain can be obtained from the leaf
         /// before it using
-        qc: Arc<QuorumCertificate2<TYPES, LEAF>>,
+        qc: Arc<QuorumCertificate2<TYPES>>,
         /// Optional information of the number of transactions in the block, for logging purposes.
         block_size: Option<u64>,
     },

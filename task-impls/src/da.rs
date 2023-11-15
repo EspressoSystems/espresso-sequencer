@@ -14,7 +14,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{DAProposal, Leaf, ProposalType},
+    data::DAProposal,
     message::{Message, Proposal},
     simple_vote::{DAData, DAVote2},
     traits::{
@@ -45,8 +45,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a DA task
 pub struct DATaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
@@ -60,7 +60,7 @@ pub struct DATaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -76,10 +76,8 @@ pub struct DATaskState<
 }
 
 /// Struct to maintain DA Vote Collection task state
-pub struct DAVoteCollectionTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> where
+pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
+where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -103,16 +101,14 @@ pub struct DAVoteCollectionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for DAVoteCollectionTaskState<TYPES, I>
-where
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     mut state: DAVoteCollectionTaskState<TYPES, I>,
     event: HotShotEvent<TYPES, I>,
 ) -> (
@@ -173,11 +169,8 @@ where
     (None, state)
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > DATaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
@@ -415,7 +408,11 @@ where
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
-                let message = Proposal { data, signature };
+                let message = Proposal {
+                    data,
+                    signature,
+                    _pd: PhantomData,
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))
@@ -461,11 +458,8 @@ where
 }
 
 /// task state implementation for DA Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TS for DATaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
+    for DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,

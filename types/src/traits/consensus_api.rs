@@ -1,7 +1,7 @@
 //! Contains the [`ConsensusApi`] trait.
 
 use crate::{
-    data::LeafType,
+    data::Leaf,
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
@@ -20,12 +20,7 @@ use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 /// The API that [`HotStuff`] needs to talk to the system, implemented for both validating and
 /// sequencing consensus.
 #[async_trait]
-pub trait ConsensusSharedApi<
-    TYPES: NodeType,
-    LEAF: LeafType<NodeType = TYPES>,
-    I: NodeImplementation<TYPES>,
->: Send + Sync
-{
+pub trait ConsensusSharedApi<TYPES: NodeType, I: NodeImplementation<TYPES>>: Send + Sync {
     /// Total number of nodes in the network. Also known as `n`.
     fn total_nodes(&self) -> NonZeroUsize;
 
@@ -40,7 +35,7 @@ pub trait ConsensusSharedApi<
     async fn store_leaf(
         &self,
         old_anchor_view: TYPES::Time,
-        leaf: LEAF,
+        leaf: Leaf<TYPES>,
     ) -> Result<(), StorageError>;
 
     /// Retuns the maximum transactions allowed in a block
@@ -55,7 +50,7 @@ pub trait ConsensusSharedApi<
     async fn should_start_round(&self, view_number: TYPES::Time) -> bool;
 
     /// Notify the system of an event within `hotshot-consensus`.
-    async fn send_event(&self, event: Event<TYPES, LEAF>);
+    async fn send_event(&self, event: Event<TYPES>);
 
     /// Get a reference to the public key.
     fn public_key(&self) -> &TYPES::SignatureKey;
@@ -96,8 +91,8 @@ pub trait ConsensusSharedApi<
     async fn send_decide(
         &self,
         view_number: TYPES::Time,
-        leaf_views: Vec<LEAF>,
-        decide_qc: QuorumCertificate2<TYPES, LEAF>,
+        leaf_views: Vec<Leaf<TYPES>>,
+        decide_qc: QuorumCertificate2<TYPES>,
     ) {
         self.send_event(Event {
             view_number,
@@ -122,11 +117,8 @@ pub trait ConsensusSharedApi<
 
 /// The API that [`HotStuff`] needs to talk to the system, for sequencing consensus.
 #[async_trait]
-pub trait ConsensusApi<
-    TYPES: NodeType,
-    LEAF: LeafType<NodeType = TYPES>,
-    I: NodeImplementation<TYPES>,
->: ConsensusSharedApi<TYPES, LEAF, I>
+pub trait ConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>>:
+    ConsensusSharedApi<TYPES, I>
 {
     /// Send a direct message to the given recipient
     async fn send_direct_message(

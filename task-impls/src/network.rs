@@ -7,7 +7,6 @@ use hotshot_task::{
     GeneratedStream, Merge,
 };
 use hotshot_types::{
-    data::Leaf,
     message::{
         CommitteeConsensusMessage, GeneralConsensusMessage, Message, MessageKind, Messages,
         SequencingMessage,
@@ -38,22 +37,14 @@ pub enum NetworkTaskKind {
 }
 
 /// the network message task state
-pub struct NetworkMessageTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> {
+pub struct NetworkMessageTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// event stream (used for publishing)
     pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for NetworkMessageTaskState<TYPES, I>
-{
-}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for NetworkMessageTaskState<TYPES, I> {}
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>
-    NetworkMessageTaskState<TYPES, I>
-{
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkMessageTaskState<TYPES, I> {
     /// Handle the message.
     pub async fn handle_messages(&mut self, messages: Vec<Message<TYPES, I>>) {
         // We will send only one event for a vector of transactions.
@@ -70,12 +61,27 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>
                             GeneralConsensusMessage::Vote(vote) => {
                                 HotShotEvent::QuorumVoteRecv(vote.clone())
                             }
-                            GeneralConsensusMessage::ViewSyncVote(view_sync_message) => {
-                                HotShotEvent::ViewSyncVoteRecv(view_sync_message)
+                            GeneralConsensusMessage::ViewSyncPreCommitVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncPreCommitVoteRecv(view_sync_message)
                             }
-                            GeneralConsensusMessage::ViewSyncCertificate(view_sync_message) => {
-                                HotShotEvent::ViewSyncCertificateRecv(view_sync_message)
+                            GeneralConsensusMessage::ViewSyncPreCommitCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncPreCommitCertificate2Recv(view_sync_message),
+
+                            GeneralConsensusMessage::ViewSyncCommitVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncCommitVoteRecv(view_sync_message)
                             }
+                            GeneralConsensusMessage::ViewSyncCommitCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncCommitCertificate2Recv(view_sync_message),
+
+                            GeneralConsensusMessage::ViewSyncFinalizeVote(view_sync_message) => {
+                                HotShotEvent::ViewSyncFinalizeVoteRecv(view_sync_message)
+                            }
+                            GeneralConsensusMessage::ViewSyncFinalizeCertificate(
+                                view_sync_message,
+                            ) => HotShotEvent::ViewSyncFinalizeCertificate2Recv(view_sync_message),
+
                             GeneralConsensusMessage::TimeoutVote(message) => {
                                 HotShotEvent::TimeoutVoteRecv(message)
                             }
@@ -130,7 +136,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>
 /// network event task state
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+    I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
     COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
 > {
@@ -147,7 +153,7 @@ pub struct NetworkEventTaskState<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+        I: NodeImplementation<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
     > TS for NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
@@ -156,7 +162,7 @@ impl<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+        I: NodeImplementation<TYPES>,
         MEMBERSHIP: Membership<TYPES>,
         COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
     > NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
@@ -242,25 +248,55 @@ impl<
                 TransmitType::Broadcast,
                 None,
             ),
-            HotShotEvent::ViewSyncCertificateSend(certificate_proposal, sender) => (
+            HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncCommitVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncFinalizeVoteSend(vote) => (
+                vote.get_signing_key(),
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
+                ))),
+                TransmitType::Direct,
+                Some(membership.get_leader(vote.get_view_number() + vote.get_data().relay)),
+            ),
+            HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => (
                 sender,
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::ViewSyncCertificate(certificate_proposal),
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate(certificate.clone()),
                 ))),
                 TransmitType::Broadcast,
                 None,
             ),
-            HotShotEvent::ViewSyncVoteSend(vote) => {
-                // error!("Sending view sync vote in network task to relay with index: {:?}", vote.round() + vote.relay());
-                (
-                    vote.signature_key(),
-                    MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
-                        GeneralConsensusMessage::ViewSyncVote(vote.clone()),
-                    ))),
-                    TransmitType::Direct,
-                    Some(membership.get_leader(vote.round() + vote.relay())),
-                )
-            }
+            HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => (
+                sender,
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(certificate.clone()),
+                ))),
+                TransmitType::Broadcast,
+                None,
+            ),
+
+            HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => (
+                sender,
+                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate.clone()),
+                ))),
+                TransmitType::Broadcast,
+                None,
+            ),
             HotShotEvent::TimeoutVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
@@ -355,8 +391,12 @@ impl<
     fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
         matches!(
             event,
-            HotShotEvent::ViewSyncVoteSend(_)
-                | HotShotEvent::ViewSyncCertificateSend(_, _)
+            HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
+                | HotShotEvent::ViewSyncPreCommitVoteSend(_)
+                | HotShotEvent::ViewSyncCommitVoteSend(_)
+                | HotShotEvent::ViewSyncFinalizeVoteSend(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::ViewChange(_)
         )
