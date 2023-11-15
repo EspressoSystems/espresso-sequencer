@@ -365,26 +365,39 @@ pub async fn contract_send<T: Detokenize>(
 }
 
 async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256) -> bool {
-    let interval = provider.get_interval();
     let retries = 10;
+    // It's common to have to try a few times before the transactions is mined. It is too noisy if
+    // we log every retry. However, if it is not mined after several retries, something might be
+    // wrong, and it would be useful to start logging.
+    let log_retries = 5;
+
+    let interval = provider.get_interval();
     for i in 0..retries {
         match provider.get_transaction(hash).await {
             Err(err) => {
-                tracing::error!("contract call {hash:?} (retry {i}/{retries}): error getting transaction status: {err}");
+                if i >= log_retries {
+                    tracing::warn!("contract call {hash:?} (retry {i}/{retries}): error getting transaction status: {err}");
+                }
             }
             Ok(None) => {
-                tracing::error!(
-                    "contract call {hash:?} (retry {i}/{retries}): missing from mempool"
-                );
+                if i >= log_retries {
+                    tracing::warn!(
+                        "contract call {hash:?} (retry {i}/{retries}): missing from mempool"
+                    );
+                }
             }
             Ok(Some(tx)) if tx.block_number.is_none() => {
-                tracing::error!("contract call {hash:?} (retry {i}/{retries}): pending");
+                if i >= log_retries {
+                    tracing::warn!("contract call {hash:?} (retry {i}/{retries}): pending");
+                }
             }
             Ok(Some(_)) => return true,
         }
 
         sleep(interval).await;
     }
+
+    tracing::error!("contraact call {hash:?}: not mined after {retries} retries");
     false
 }
 
