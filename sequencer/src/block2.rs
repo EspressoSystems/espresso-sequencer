@@ -1,3 +1,4 @@
+use crate::Transaction;
 use std::mem::size_of;
 
 #[allow(dead_code)] // TODO temporary
@@ -5,15 +6,9 @@ pub struct BlockPayload {
     payload: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Tx {
-    // namespace: u32, // TODO how many bytes for namespace id?
-    payload: Vec<u8>,
-}
-
 impl BlockPayload {
     #[allow(dead_code)] // TODO temporary
-    fn build(txs: impl IntoIterator<Item = Tx>) -> Self {
+    fn build(txs: impl IntoIterator<Item = Transaction>) -> Self {
         // tx_table[i] is the end index (exclusive) of the ith tx
         // so that the payload bytes of the ith tx is
         // tx_bodies[tx_table[i-1]..tx_table[i]].
@@ -24,7 +19,7 @@ impl BlockPayload {
         let mut tx_table = Vec::new();
 
         // concatenation of all tx payloads
-        let mut tx_bodies = Vec::new();
+        let mut tx_bodies = Vec::<u8>::new();
 
         // build tx_table, tx_bodies
         let mut end: u32 = 0;
@@ -32,7 +27,7 @@ impl BlockPayload {
             // TODO idiomatic usize -> u32 conversion?
             // Is panic acceptable? If not then we need to return `Result`.
             let len: u32 = tx
-                .payload
+                .payload()
                 .len()
                 .try_into()
                 .expect("tx byte length should fit into u32");
@@ -43,7 +38,7 @@ impl BlockPayload {
 
             // TODO to_be_bytes or to_le_bytes?
             tx_table.extend(end.to_be_bytes());
-            tx_bodies.extend(tx.payload);
+            tx_bodies.extend(tx.payload());
         }
 
         // tx_table_len is the number of 4-byte entries.
@@ -68,7 +63,8 @@ impl BlockPayload {
 
 #[cfg(test)]
 mod test {
-    use super::{BlockPayload, Tx};
+    use super::BlockPayload;
+    use crate::Transaction;
     use std::mem::size_of;
 
     #[test]
@@ -105,7 +101,10 @@ mod test {
 
         for tx_payloads in test_cases {
             // prepare things as a function of the test case
-            let txs = tx_payloads.iter().cloned().map(|payload| Tx { payload });
+            let txs = tx_payloads
+                .iter()
+                .cloned()
+                .map(|payload| Transaction::new(crate::VmId(0), payload));
             let tx_offsets: Vec<u32> = tx_payloads
                 .iter()
                 .scan(0, |end, tx| {
