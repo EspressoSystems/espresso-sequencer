@@ -208,6 +208,14 @@ where
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
 
+                // stop polling for the received proposal
+                self.committee_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
+                        *proposal.data.view_number,
+                    ))
+                    .await;
+
                 if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
                     return None;
@@ -299,17 +307,17 @@ where
                         TYPES::Time::new(0)
                     };
 
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.committee_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let accumulator =
-                    new_accumulator.accumulate(&vote, self.committee_exchange.membership());
-
                 if view > collection_view {
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.committee_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let accumulator =
+                        new_accumulator.accumulate(&vote, self.committee_exchange.membership());
+
                     let state = DAVoteCollectionTaskState {
                         committee_exchange: self.committee_exchange.clone(),
 

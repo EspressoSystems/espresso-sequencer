@@ -634,6 +634,14 @@ where
                     *proposal.data.view_number
                 );
 
+                // stop polling for the received proposal
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
+                        *proposal.data.view_number,
+                    ))
+                    .await;
+
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
                     debug!("Proposal is from an older view {:?}", proposal.data.clone());
@@ -970,27 +978,27 @@ where
                         TYPES::Time::new(0)
                     };
 
-                // Todo check if we are the leader
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let accumulator =
-                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
-
-                // TODO Create default functions for accumulators
-                // https://github.com/EspressoSystems/HotShot/issues/1797
-                let timeout_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
                 if vote.get_view_number() > collection_view {
+                    // Todo check if we are the leader
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let accumulator =
+                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+
+                    // TODO Create default functions for accumulators
+                    // https://github.com/EspressoSystems/HotShot/issues/1797
+                    let timeout_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
                     let state = VoteCollectionTaskState {
                         quorum_exchange: self.quorum_exchange.clone(),
                         timeout_exchange: self.timeout_exchange.clone(),
@@ -1055,27 +1063,27 @@ where
                         TYPES::Time::new(0)
                     };
 
-                //         // Todo check if we are the leader
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.timeout_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let timeout_accumulator =
-                    new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
-
-                let quorum_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.quorum_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                // self.timeout_accumulator = accumulator;
-
                 if vote.get_view_number() > collection_view {
+                    // Todo check if we are the leader
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let timeout_accumulator =
+                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+
+                    let quorum_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    // self.timeout_accumulator = accumulator;
+
                     let state = VoteCollectionTaskState {
                         quorum_exchange: self.quorum_exchange.clone(),
                         timeout_exchange: self.timeout_exchange.clone(),
@@ -1157,8 +1165,13 @@ where
             }
             HotShotEvent::DACRecv(cert) => {
                 debug!("DAC Recved for view ! {}", *cert.view_number);
-
                 let view = cert.view_number;
+
+                self.quorum_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForDAC(*view))
+                    .await;
+
                 self.da_certs.insert(view, cert);
 
                 if self.vote_if_able().await {

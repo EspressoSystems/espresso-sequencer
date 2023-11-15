@@ -152,6 +152,7 @@ where
             "DA committee size must be less than or equal to total # nodes"
         );
         let bootstrap_addrs: PeerInfoVec = Arc::default();
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
 
@@ -176,6 +177,7 @@ where
                 let addr =
                     // Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/0/quic-v1")).unwrap();
                     Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{}{}/quic-v1", 5000 + node_id, network_id)).unwrap();
+                // We assign node's public key and stake value rather than read from config file since it's a test
                 let privkey =
                     TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
                 let pubkey = TYPES::SignatureKey::from_private(&privkey);
@@ -359,7 +361,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         let latest_seen_view = self.inner.latest_seen_view.clone();
 
         // deals with handling lookup queue. should be infallible
-        let handle_ = handle.clone();
         async_spawn(async move {
             // cancels on shutdown
             while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
@@ -371,7 +372,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // only run if we are not too close to the next view number
                 if latest_seen_view.load(Ordering::Relaxed) + THRESHOLD <= *view_number {
                     // look up
-                    if let Err(err) = handle_.lookup_node::<K>(pk.clone(), dht_timeout).await {
+                    if let Err(err) = handle.lookup_node::<K>(pk.clone(), dht_timeout).await {
                         error!("Failed to perform lookup for key {:?}: {}", pk, err);
                     };
                 }

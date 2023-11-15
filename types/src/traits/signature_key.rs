@@ -55,7 +55,15 @@ pub trait SignatureKey:
     + Ord
 {
     /// The private key type for this signature algorithm
-    type PrivateKey: Send + Sync + Sized + Clone;
+    type PrivateKey: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Hash;
     /// The type of the entry that contain both public key and stake value
     type StakeTableEntry: StakeTableEntryType
         + Send

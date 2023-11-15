@@ -58,7 +58,6 @@ use hotshot_types::{
 
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::{DAProposal, Leaf, LeafType, QuorumProposal},
     error::StorageSnafu,
@@ -79,7 +78,6 @@ use hotshot_types::{
         storage::StoredView,
         State,
     },
-    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
@@ -114,10 +112,7 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// Configuration items for this hotshot instance
-    config: HotShotConfig<
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >,
+    config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 
     /// Networking interface for this hotshot instance
     // networking: I::Networking,
@@ -169,10 +164,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
-        config: HotShotConfig<
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
@@ -377,10 +369,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
-        config: HotShotConfig<
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
         initializer: HotShotInitializer<TYPES, I::Leaf>,
@@ -652,14 +641,8 @@ where
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = ViewSyncCertificate<TYPES>,
-            Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = Commitment<ViewSyncData<TYPES>>,
-            Membership = MEMBERSHIP,
-        > + 'static,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,

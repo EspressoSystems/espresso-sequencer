@@ -224,16 +224,17 @@ where
                         TYPES::Time::new(0)
                     };
 
-                let new_accumulator = VoteAccumulator2 {
-                    vote_outcomes: HashMap::new(),
-                    sig_lists: Vec::new(),
-                    signers: bitvec![0; self.vid_exchange.total_nodes()],
-                    phantom: PhantomData,
-                };
-
-                let accumulator = new_accumulator.accumulate(&vote, self.vid_exchange.membership());
-
                 if view > collection_view {
+                    let new_accumulator = VoteAccumulator2 {
+                        vote_outcomes: HashMap::new(),
+                        sig_lists: Vec::new(),
+                        signers: bitvec![0; self.vid_exchange.total_nodes()],
+                        phantom: PhantomData,
+                    };
+
+                    let accumulator =
+                        new_accumulator.accumulate(&vote, self.vid_exchange.membership());
+
                     let state = VIDVoteCollectionTaskState {
                         vid_exchange: self.vid_exchange.clone(),
 
@@ -272,6 +273,14 @@ where
                     "VID disperse received for view: {:?}",
                     disperse.data.get_view_number()
                 );
+
+                // stop polling for the received disperse
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
 
                 // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
                 let view = disperse.data.get_view_number();
@@ -347,8 +356,13 @@ where
                 // TODO https://github.com/EspressoSystems/HotShot/issues/1692
                 // consensus.saved_block_payloads.insert(proposal.data.block_payload);
             }
-            HotShotEvent::VidCertRecv(_) => {
-                // RM TODO
+            HotShotEvent::VidCertRecv(cert) => {
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDCertificate(
+                        *cert.view_number,
+                    ))
+                    .await;
             }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
