@@ -125,7 +125,7 @@ pub trait ConsensusSharedApi<
 pub trait ConsensusApi<
     TYPES: NodeType,
     LEAF: LeafType<NodeType = TYPES>,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES>,
 >: ConsensusSharedApi<TYPES, LEAF, I>
 {
     /// Send a direct message to the given recipient

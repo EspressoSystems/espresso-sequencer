@@ -19,7 +19,7 @@ use hotshot_task::global_registry::GlobalRegistry;
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::Leaf,
-    message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
+    message::{GeneralConsensusMessage, Message, Proposal},
     traits::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, ViewSyncExchangeType},
@@ -60,7 +60,7 @@ pub struct ViewSyncTaskError {}
 /// Main view sync task state
 pub struct ViewSyncTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
 > where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
@@ -104,11 +104,7 @@ pub struct ViewSyncTaskState<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
 where
@@ -133,7 +129,7 @@ pub type ViewSyncTaskStateTypes<TYPES, I, A> = HSTWithEvent<
 /// State of a view sync replica task
 pub struct ViewSyncReplicaTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
@@ -171,11 +167,7 @@ pub struct ViewSyncReplicaTaskState<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for ViewSyncReplicaTaskState<TYPES, I, A>
 where
@@ -198,10 +190,8 @@ pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
 >;
 
 /// State of a view sync relay task
-pub struct ViewSyncRelayTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-> {
+pub struct ViewSyncRelayTaskState<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>
+{
     /// Event stream to publish events to
     pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     /// View sync exchange
@@ -213,14 +203,8 @@ pub struct ViewSyncRelayTaskState<
     pub id: u64,
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-    > TS for ViewSyncRelayTaskState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
+    for ViewSyncRelayTaskState<TYPES, I>
 {
 }
 
@@ -234,11 +218,7 @@ pub type ViewSyncRelayTaskStateTypes<TYPES, I> = HSTWithEvent<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static + std::clone::Clone,
     > ViewSyncTaskState<TYPES, I, A>
 where
@@ -607,11 +587,7 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > ViewSyncReplicaTaskState<TYPES, I, A>
 where
@@ -938,14 +914,8 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-    > ViewSyncRelayTaskState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>
+    ViewSyncRelayTaskState<TYPES, I>
 where
     ViewSyncEx<TYPES, I>: ViewSyncExchangeType<
         TYPES,

@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     data::{Leaf, LeafType, TestableLeaf},
-    message::{ConsensusMessageType, Message, SequencingMessage},
+    message::{Message, ProcessedSequencingMessage},
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
         storage::Storage, BlockPayload,
@@ -34,16 +34,15 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 /// Alias for the [`ProcessedConsensusMessage`] type of a [`NodeImplementation`].
-type ProcessedConsensusMessageType<TYPES, I> = <<I as NodeImplementation<TYPES>>::ConsensusMessage as ConsensusMessageType<TYPES, I>>::ProcessedConsensusMessage;
 
 /// struct containing messages for a view to send to a replica or DA committee member.
 #[derive(Clone)]
 pub struct ViewQueue<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// to send networking events to a replica or DA committee member.
-    pub sender_chan: UnboundedSender<ProcessedConsensusMessageType<TYPES, I>>,
+    pub sender_chan: UnboundedSender<ProcessedSequencingMessage<TYPES, I>>,
 
     /// to recv networking events for a replica or DA committee member.
-    pub receiver_chan: Arc<Mutex<UnboundedReceiver<ProcessedConsensusMessageType<TYPES, I>>>>,
+    pub receiver_chan: Arc<Mutex<UnboundedReceiver<ProcessedSequencingMessage<TYPES, I>>>>,
 
     /// `true` if this queue has already received a proposal
     pub has_received_proposal: Arc<AtomicBool>,
@@ -120,17 +119,17 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Storage type for this consensus implementation
     type Storage: Storage<TYPES, Self::Leaf> + Clone;
 
-    /// Consensus message type.
-    type ConsensusMessage: ConsensusMessageType<TYPES, Self>
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + 'static
-        + for<'a> Deserialize<'a>
-        + Hash
-        + Eq
-        + Serialize;
+    // /// Consensus message type.
+    // type ConsensusMessage: ConsensusMessageType<TYPES, Self>
+    //     + Clone
+    //     + Debug
+    //     + Send
+    //     + Sync
+    //     + 'static
+    //     + for<'a> Deserialize<'a>
+    //     + Hash
+    //     + Eq
+    //     + Serialize;
 
     /// Consensus type selected exchanges.
     ///
@@ -509,10 +508,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, Self>>,
-    > TestableNodeImplementation<TYPES> for I
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
     CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES, I>>,
     QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES, I>>,

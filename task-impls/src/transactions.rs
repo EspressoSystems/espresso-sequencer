@@ -16,7 +16,7 @@ use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::Consensus,
     data::{Leaf, VidDisperse, VidScheme, VidSchemeTrait},
-    message::{Message, Proposal, SequencingMessage},
+    message::{Message, Proposal},
     traits::{
         consensus_api::ConsensusApi,
         election::{ConsensusExchange, QuorumExchangeType},
@@ -43,7 +43,7 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
@@ -80,11 +80,7 @@ pub struct TransactionTaskState<
 // whereas it's just `TYPES: NodeType` in the second implementation.
 impl<
         TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
@@ -288,11 +284,7 @@ where
 // whereas here it's just `TYPES: NodeType`.
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
@@ -381,11 +373,7 @@ where
 /// task state implementation for Transactions Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for TransactionTaskState<TYPES, I, A>
 where

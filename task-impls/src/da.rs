@@ -15,7 +15,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::{Consensus, View},
     data::{DAProposal, Leaf, ProposalType},
-    message::{Message, Proposal, SequencingMessage},
+    message::{Message, Proposal},
     simple_vote::{DAData, DAVote2},
     traits::{
         consensus_api::ConsensusApi,
@@ -45,7 +45,7 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a DA task
 pub struct DATaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     CommitteeEx<TYPES, I>:
@@ -175,11 +175,7 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > DATaskState<TYPES, I, A>
 where
@@ -467,11 +463,7 @@ where
 /// task state implementation for DA Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for DATaskState<TYPES, I, A>
 where

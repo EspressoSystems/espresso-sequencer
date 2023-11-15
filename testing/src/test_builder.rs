@@ -4,7 +4,7 @@ use hotshot_types::traits::election::{ConsensusExchange, Membership};
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
-use hotshot_types::message::{Message, SequencingMessage};
+use hotshot_types::message::Message;
 
 use hotshot_types::{
     traits::node_implementation::{NodeType, QuorumEx, TestableExchange},
@@ -183,7 +183,7 @@ impl TestMetadata {
         node_id: u64,
     ) -> TestLauncher<TYPES, I>
     where
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        I: NodeImplementation<TYPES>,
         <I as NodeImplementation<TYPES>>::Exchanges:
             TestableExchange<TYPES, <I as NodeImplementation<TYPES>>::Leaf, Message<TYPES, I>>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,

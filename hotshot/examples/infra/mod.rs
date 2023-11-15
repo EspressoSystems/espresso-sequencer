@@ -27,7 +27,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, TestableLeaf},
     event::{Event, EventType},
-    message::{Message, SequencingMessage},
+    message::Message,
     traits::{
         election::{
             CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
@@ -138,7 +138,6 @@ pub async fn run_orchestrator<
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 >(
     OrchestratorArgs {
@@ -203,7 +202,6 @@ pub trait RunDA<
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 > where
     <TYPES as NodeType>::StateType: TestableState,
@@ -459,7 +457,6 @@ impl<
                 >,
             >,
             Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
     RunDA<
@@ -613,7 +610,6 @@ impl<
                 >,
             >,
             Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
     RunDA<
@@ -831,7 +827,6 @@ pub async fn main_entry_point<
             VIDExchange<TYPES, MEMBERSHIP, VIDNETWORK, Message<TYPES, NODE>>,
         >,
         Storage = MemoryStorage<TYPES, Leaf<TYPES>>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
     RUNDA: RunDA<TYPES, MEMBERSHIP, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,
 >(

@@ -16,7 +16,7 @@ use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::
 use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, ProposalType},
-    message::{Message, SequencingMessage},
+    message::Message,
     traits::{
         consensus_api::ConsensusApi,
         election::ConsensusExchange,
@@ -45,7 +45,7 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
     A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
 > where
     VIDEx<TYPES, I>:
@@ -174,11 +174,7 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > VIDTaskState<TYPES, I, A>
 where
@@ -431,11 +427,7 @@ where
 /// task state implementation for VID Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
         A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
     > TS for VIDTaskState<TYPES, I, A>
 where

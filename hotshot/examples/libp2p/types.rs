@@ -9,7 +9,7 @@ use hotshot::{
 use hotshot_types::{
     certificate::ViewSyncCertificate,
     data::{DAProposal, Leaf, QuorumProposal},
-    message::{Message, SequencingMessage},
+    message::Message,
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
@@ -61,7 +61,6 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         >,
         VIDExchange<DemoTypes, ThisMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
-    type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 
     fn new_channel_maps(
         start_view: <DemoTypes as NodeType>::Time,
