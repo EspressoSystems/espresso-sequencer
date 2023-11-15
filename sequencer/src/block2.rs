@@ -24,8 +24,8 @@ impl BlockPayload {
         // build tx_table, tx_bodies
         let mut end: u32 = 0;
         for tx in txs.into_iter() {
-            // TODO idiomatic usize -> u32 conversion?
-            // Is panic acceptable? If not then we need to return `Result`.
+            // TODO do not panic, return Result instead:
+            // https://github.com/EspressoSystems/espresso-sequencer/pull/756#discussion_r1394550640
             let len: u32 = tx
                 .payload()
                 .len()
