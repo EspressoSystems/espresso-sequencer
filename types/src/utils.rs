@@ -1,15 +1,12 @@
 //! Utility functions, type aliases, helper structs and enum definitions.
 
-use crate::{
-    data::{LeafBlockPayload, LeafType},
-    traits::node_implementation::NodeType,
-};
+use crate::{data::Leaf, traits::node_implementation::NodeType};
 use commit::Commitment;
 use std::ops::Deref;
 
 /// A view's state
 #[derive(Debug)]
-pub enum ViewInner<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub enum ViewInner<TYPES: NodeType> {
     /// A pending view with an available block but not leaf proposal yet.
     ///
     /// Storing this state allows us to garbage collect blocks for views where a proposal is never
@@ -17,21 +14,21 @@ pub enum ViewInner<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// leaders repeatedly request availability for blocks that they never propose.
     DA {
         /// Available block.
-        block: Commitment<LeafBlockPayload<LEAF>>,
+        block: Commitment<TYPES::BlockPayload>,
     },
     /// Undecided view
     Leaf {
         /// Proposed leaf
-        leaf: Commitment<LEAF>,
+        leaf: Commitment<Leaf<TYPES>>,
     },
     /// Leaf has failed
     Failed,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ViewInner<TYPES, LEAF> {
+impl<TYPES: NodeType> ViewInner<TYPES> {
     /// return the underlying leaf hash if it exists
     #[must_use]
-    pub fn get_leaf_commitment(&self) -> Option<Commitment<LEAF>> {
+    pub fn get_leaf_commitment(&self) -> Option<Commitment<Leaf<TYPES>>> {
         if let Self::Leaf { leaf } = self {
             Some(*leaf)
         } else {
@@ -41,7 +38,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ViewInner<TYPES, LEAF> {
 
     /// return the underlying block paylod commitment if it exists
     #[must_use]
-    pub fn get_payload_commitment(&self) -> Option<Commitment<LeafBlockPayload<LEAF>>> {
+    pub fn get_payload_commitment(&self) -> Option<Commitment<TYPES::BlockPayload>> {
         if let Self::DA { block } = self {
             Some(*block)
         } else {
@@ -50,8 +47,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ViewInner<TYPES, LEAF> {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Deref for View<TYPES, LEAF> {
-    type Target = ViewInner<TYPES, LEAF>;
+impl<TYPES: NodeType> Deref for View<TYPES> {
+    type Target = ViewInner<TYPES>;
 
     fn deref(&self) -> &Self::Target {
         &self.view_inner
@@ -60,9 +57,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Deref for View<TYPES, LE
 
 /// This exists so we can perform state transitions mutably
 #[derive(Debug)]
-pub struct View<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct View<TYPES: NodeType> {
     /// The view data. Wrapped in a struct so we can mutate
-    pub view_inner: ViewInner<TYPES, LEAF>,
+    pub view_inner: ViewInner<TYPES>,
 }
 
 /// A struct containing information about a finished round.

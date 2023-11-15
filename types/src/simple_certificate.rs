@@ -10,6 +10,7 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
+    data::Leaf,
     simple_vote::{
         DAData, QuorumData, TimeoutData, VIDData, ViewSyncCommitData, ViewSyncFinalizeData,
         ViewSyncPreCommitData, Voteable,
@@ -92,9 +93,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> HasViewNumber<TYPES>
         self.view_number
     }
 }
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
-    for QuorumCertificate2<TYPES, VOTEABLE>
-{
+impl<TYPES: NodeType> Display for QuorumCertificate2<TYPES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -104,16 +103,12 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
     }
 }
 
-impl<
-        TYPES: NodeType,
-        LEAF: Committable + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq + 'static,
-    > QuorumCertificate2<TYPES, LEAF>
-{
+impl<TYPES: NodeType> QuorumCertificate2<TYPES> {
     #[must_use]
     /// Creat the Genisis certificate
     pub fn genesis() -> Self {
         let data = QuorumData {
-            leaf_commit: Commitment::<LEAF>::default_commitment_no_preimage(),
+            leaf_commit: Commitment::<Leaf<TYPES>>::default_commitment_no_preimage(),
         };
         let commit = data.commit();
         Self {
@@ -128,7 +123,7 @@ impl<
 }
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
-pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, QuorumData<LEAF>>;
+pub type QuorumCertificate2<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
 /// Type alias for a DA certificate over `DAData`
 pub type DACertificate2<TYPES> =
     SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;

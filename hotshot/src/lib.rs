@@ -51,14 +51,13 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    data::VidDisperse,
     simple_certificate::QuorumCertificate2,
     traits::{election::ViewSyncExchangeType, node_implementation::TimeoutEx},
 };
 
 use hotshot_types::{
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{DAProposal, Leaf, LeafType, QuorumProposal},
+    data::Leaf,
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -122,13 +121,13 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub exchanges: Arc<I::Exchanges>,
 
     /// Sender for [`Event`]s
-    event_sender: RwLock<Option<BroadcastSender<Event<TYPES, I::Leaf>>>>,
+    event_sender: RwLock<Option<BroadcastSender<Event<TYPES>>>>,
 
     /// the metrics that the implementor is using.
     _metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
-    consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
+    consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
     /// latter of which is only applicable for sequencing consensus.
@@ -136,7 +135,7 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
-    output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
+    output_event_stream: ChannelStream<Event<TYPES>>,
 
     /// access to the internal event stream, in case we need to, say, shut something down
     internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
@@ -165,7 +164,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
-        initializer: HotShotInitializer<TYPES, I::Leaf>,
+        initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
@@ -328,25 +327,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Panics
     ///
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) -> <I::Leaf as LeafType>::MaybeState {
+    pub async fn get_state(&self) {
         self.inner
             .consensus
             .read()
             .await
             .get_decided_leaf()
-            .get_state()
+            .get_state();
     }
 
     /// Returns a copy of the consensus struct
     #[must_use]
-    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
+    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
         self.inner.consensus.clone()
     }
 
     /// Returns a copy of the last decided leaf
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_decided_leaf(&self) -> I::Leaf {
+    pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.inner.consensus.read().await.get_decided_leaf()
     }
 
@@ -370,7 +369,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
-        initializer: HotShotInitializer<TYPES, I::Leaf>,
+        initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<
         (
@@ -514,7 +513,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 #[async_trait]
 pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Get the [`hotstuff`] field of [`HotShot`].
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>>;
+    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>>;
 
     /// Spawn all tasks that operate on the given [`HotShot`].
     ///
@@ -613,25 +612,19 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 #[async_trait]
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
         MEMBERSHIP: Membership<TYPES>,
     > HotShotType<TYPES, I> for SystemContext<TYPES, I>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
             Commitment = Commitment<Leaf<TYPES>>,
             Membership = MEMBERSHIP,
         > + 'static,
     CommitteeEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = DAProposal<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
@@ -640,19 +633,17 @@ where
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = VidDisperse<TYPES>,
             Commitment = Commitment<TYPES::BlockPayload>,
             Membership = MEMBERSHIP,
         > + 'static,
     TimeoutEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
             Commitment = Commitment<TYPES::Time>,
             Membership = MEMBERSHIP,
         > + 'static,
 {
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
+    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
         &self.inner.consensus
     }
 
@@ -758,12 +749,8 @@ where
             handle.clone(),
         )
         .await;
-        let task_runner = add_view_sync_task::<TYPES, I>(
-            task_runner,
-            internal_event_stream.clone(),
-            handle.clone(),
-        )
-        .await;
+        let task_runner =
+            add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
             task_runner.launch().await;
             info!("Task runner exited!");
@@ -780,7 +767,7 @@ pub struct HotShotConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I::Leaf, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I>
     for HotShotConsensusApi<TYPES, I>
 {
     fn total_nodes(&self) -> NonZeroUsize {
@@ -809,7 +796,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
         false
     }
 
-    async fn send_event(&self, event: Event<TYPES, I::Leaf>) {
+    async fn send_event(&self, event: Event<TYPES>) {
         debug!(?event, "send_event");
         let mut event_sender = self.inner.event_sender.write().await;
         if let Some(sender) = &*event_sender {
@@ -831,7 +818,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
     async fn store_leaf(
         &self,
         old_anchor_view: TYPES::Time,
-        leaf: I::Leaf,
+        leaf: Leaf<TYPES>,
     ) -> std::result::Result<(), hotshot_types::traits::storage::StorageError> {
         let view_to_insert = StoredView::from(leaf);
         let storage = &self.inner.storage;
@@ -846,7 +833,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    > ConsensusApi<TYPES, I::Leaf, I> for HotShotConsensusApi<TYPES, I>
+    > ConsensusApi<TYPES, I> for HotShotConsensusApi<TYPES, I>
 {
     async fn send_direct_message(
         &self,
@@ -978,23 +965,23 @@ impl<
 }
 
 /// initializer struct for creating starting block
-pub struct HotShotInitializer<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct HotShotInitializer<TYPES: NodeType> {
     /// the leaf specified initialization
-    inner: LEAF,
+    inner: Leaf<TYPES>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES, LEAF> {
+impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
     pub fn from_genesis() -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
-            inner: LEAF::genesis(),
+            inner: Leaf::genesis(),
         })
     }
 
     /// reload previous state based on most recent leaf
-    pub fn from_reload(anchor_leaf: LEAF) -> Self {
+    pub fn from_reload(anchor_leaf: Leaf<TYPES>) -> Self {
         Self { inner: anchor_leaf }
     }
 }

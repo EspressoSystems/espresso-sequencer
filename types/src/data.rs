@@ -14,14 +14,13 @@ use crate::{
         storage::StoredView,
         BlockPayload, State,
     },
-    vote2::Certificate2,
+    vote2::{Certificate2, HasViewNumber},
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
-use espresso_systems_common::hotshot::tag;
 use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
@@ -44,9 +43,6 @@ use std::{
     Ord,
     Hash,
     Serialize,
-    // std::ops::Add,
-    // std::ops::Div,
-    // std::ops::Rem,
     Deserialize,
     CanonicalSerialize,
     CanonicalDeserialize,
@@ -165,7 +161,7 @@ pub fn test_srs(
 /// Proposal to append a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
-pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct QuorumProposal<TYPES: NodeType> {
     /// The block header to append
     pub block_header: TYPES::BlockHeader,
 
@@ -173,7 +169,7 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES, LEAF>,
+    pub justify_qc: QuorumCertificate2<TYPES>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
     pub timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
@@ -182,49 +178,32 @@ pub struct QuorumProposal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub proposer_id: EncodedPublicKey,
 }
 
-impl<TYPES: NodeType> ProposalType for DAProposal<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType> ProposalType for VidDisperse<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for VidDisperse<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> ProposalType
-    for QuorumProposal<TYPES, LEAF>
-{
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType> ProposalType for ViewSyncCertificate<TYPES> {
-    type NodeType = TYPES;
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for ViewSyncCertificate<TYPES> {
+    fn get_view_number(&self) -> TYPES::Time {
         match self {
             ViewSyncCertificate::PreCommit(certificate_internal)
             | ViewSyncCertificate::Commit(certificate_internal)
             | ViewSyncCertificate::Finalize(certificate_internal) => certificate_internal.round,
         }
     }
-}
-
-/// A proposal to a network of voting nodes.
-pub trait ProposalType:
-    Debug + Clone + 'static + Serialize + for<'a> Deserialize<'a> + Send + Sync + PartialEq + Eq + Hash
-{
-    /// Type of nodes that can vote on this proposal.
-    type NodeType: NodeType;
-
-    /// Time at which this proposal is valid.
-    fn get_view_number(&self) -> <Self::NodeType as NodeType>::Time;
 }
 
 /// A state change encoded in a leaf.
@@ -262,7 +241,7 @@ pub trait DeltasType<BlockPayload: Committable>:
     fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
 }
 
-/// Error which occurs when [`LeafType::fill_block_payload`] is called with a payload commitment
+/// Error which occurs when [`Leaf::fill_block_payload`] is called with a payload commitment
 /// that does not match the internal payload commitment of the leaf.
 #[derive(Clone, Copy, Debug, Snafu)]
 #[snafu(display("the block payload {:?} has commitment {} (expected {})", payload, payload.commit(), commitment))]
@@ -273,90 +252,7 @@ pub struct InconsistentPayloadCommitmentError<PAYLOAD: BlockPayload> {
     commitment: Commitment<PAYLOAD>,
 }
 
-/// An item which is appended to a blockchain.
-pub trait LeafType:
-    Debug
-    + Display
-    + Clone
-    + 'static
-    + Committable
-    + Serialize
-    + for<'a> Deserialize<'a>
-    + Send
-    + Sync
-    + Eq
-    + std::hash::Hash
-{
-    /// Type of nodes participating in the network.
-    type NodeType: NodeType;
-    // /// Type of block contained by this leaf.
-    // type DeltasType: DeltasType<LeafBlockPayload<Self>>;
-    /// Either state or empty
-    type MaybeState: Clone
-        + Debug
-        + for<'a> Deserialize<'a>
-        + PartialEq
-        + Eq
-        + std::hash::Hash
-        + Send
-        + Serialize
-        + Sync;
-
-    /// Create a genesis leaf.
-    fn genesis() -> Self;
-    /// Time when this leaf was created.
-    fn get_view_number(&self) -> LeafTime<Self>;
-    /// Height of this leaf in the chain.
-    ///
-    /// Equivalently, this is the number of leaves before this one in the chain.
-    fn get_height(&self) -> u64;
-    /// The QC linking this leaf to its parent in the chain.
-    fn get_justify_qc(&self) -> QuorumCertificate2<Self::NodeType, Self>;
-    /// Commitment to this leaf's parent.
-    fn get_parent_commitment(&self) -> Commitment<Self>;
-    /// The block header contained in this leaf.
-    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader;
-    /// A commitment to the block payload contained in this leaf.
-    fn get_payload_commitment(&self) -> Commitment<LeafBlockPayload<Self>> {
-        self.get_block_header().payload_commitment()
-    }
-    /// Fill this leaf with the block payload.
-    ///
-    /// # Errors
-    ///
-    /// Fails if the payload commitment doesn't match `self.block_header.payload_commitment()`.
-    fn fill_block_payload(
-        &mut self,
-        block_payload: <Self::NodeType as NodeType>::BlockPayload,
-    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>;
-    /// Optional block payload.
-    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload>;
-    /// The blockchain state after appending this leaf.
-    fn get_state(&self) -> Self::MaybeState;
-    /// Transactions rejected or invalidated by the application of this leaf.
-    fn get_rejected(&self) -> Vec<LeafTransaction<Self>>;
-    /// Real-world time when this leaf was created.
-    fn get_timestamp(&self) -> i128;
-    /// Identity of the network participant who proposed this leaf.
-    fn get_proposer_id(&self) -> EncodedPublicKey;
-    /// Create a leaf from information stored about a view.
-    fn from_stored_view(stored_view: StoredView<Self::NodeType, Self>) -> Self;
-}
-
-/// The [`NodeType`] in a [`LeafType`].
-pub type LeafNode<LEAF> = <LEAF as LeafType>::NodeType;
-/// The [`StateType`] in a [`LeafType`].
-pub type LeafState<LEAF> = <LeafNode<LEAF> as NodeType>::StateType;
-/// The [`BlockHeader`] in a [`LeafType`].
-pub type LeafBlockHeader<LEAF> = <LeafNode<LEAF> as NodeType>::BlockHeader;
-/// The [`BlockPayload`] in a [`LeafType`].
-pub type LeafBlockPayload<LEAF> = <LeafNode<LEAF> as NodeType>::BlockPayload;
-/// The [`Transaction`] in a [`LeafType`].
-pub type LeafTransaction<LEAF> = <LeafBlockPayload<LEAF> as BlockPayload>::Transaction;
-/// The [`ConsensusTime`] used by a [`LeafType`].
-pub type LeafTime<LEAF> = <LeafNode<LEAF> as NodeType>::Time;
-
-/// Additional functions required to use a [`LeafType`] with hotshot-testing.
+/// Additional functions required to use a [`Leaf`] with hotshot-testing.
 pub trait TestableLeaf {
     /// Type of nodes participating in the network.
     type NodeType: NodeType;
@@ -372,46 +268,6 @@ pub trait TestableLeaf {
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
 /// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative)]
-#[serde(bound(deserialize = ""))]
-#[derivative(Hash, PartialEq, Eq)]
-pub struct ValidatingLeaf<TYPES: NodeType> {
-    /// CurView from leader when proposing leaf
-    pub view_number: TYPES::Time,
-
-    /// Number of leaves before this one in the chain
-    pub height: u64,
-
-    /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES, Self>,
-
-    /// The hash of the parent `Leaf`
-    /// So we can ask if it extends
-    pub parent_commitment: Commitment<Self>,
-
-    /// BlockPayload leaf wants to apply
-    pub deltas: TYPES::BlockPayload,
-
-    /// What the state should be AFTER applying `self.deltas`
-    pub state: TYPES::StateType,
-
-    /// Transactions that were marked for rejection while collecting deltas
-    pub rejected: Vec<<TYPES::BlockPayload as BlockPayload>::Transaction>,
-
-    /// the timestamp the leaf was constructed at, in nanoseconds. Only exposed for dashboard stats
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub timestamp: i128,
-
-    /// the proposer id of the leaf
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub proposer_id: EncodedPublicKey,
-}
-
-/// This is the consensus-internal analogous concept to a block, and it contains the block proper,
-/// as well as the hash of its parent `Leaf`.
-/// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
 #[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct Leaf<TYPES: NodeType> {
@@ -419,7 +275,7 @@ pub struct Leaf<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES, Self>,
+    pub justify_qc: QuorumCertificate2<TYPES>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -463,96 +319,6 @@ impl<TYPES: NodeType> Hash for Leaf<TYPES> {
         self.rejected.hash(state);
     }
 }
-impl<TYPES: NodeType> Display for ValidatingLeaf<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "view: {:?}, height: {:?}, justify: {}",
-            self.view_number, self.height, self.justify_qc
-        )
-    }
-}
-
-impl<TYPES: NodeType> LeafType for ValidatingLeaf<TYPES> {
-    type NodeType = TYPES;
-    type MaybeState = TYPES::StateType;
-
-    fn genesis() -> Self {
-        unimplemented!();
-    }
-
-    fn get_view_number(&self) -> TYPES::Time {
-        self.view_number
-    }
-
-    fn get_height(&self) -> u64 {
-        self.height
-    }
-
-    fn get_justify_qc(&self) -> QuorumCertificate2<TYPES, Self> {
-        self.justify_qc.clone()
-    }
-
-    fn get_parent_commitment(&self) -> Commitment<Self> {
-        self.parent_commitment
-    }
-
-    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader {
-        unimplemented!("Unimplemented for validating consensus which will be removed.");
-    }
-
-    fn fill_block_payload(
-        &mut self,
-        _block_payload: <Self::NodeType as NodeType>::BlockPayload,
-    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>
-    {
-        unimplemented!("Unimplemented for validating consensus which will be removed.");
-    }
-
-    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload> {
-        unimplemented!("Unimplemented for validating consensus which will be removed.");
-    }
-
-    fn get_state(&self) -> Self::MaybeState {
-        self.state.clone()
-    }
-
-    fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
-        self.rejected.clone()
-    }
-
-    fn get_timestamp(&self) -> i128 {
-        self.timestamp
-    }
-
-    fn get_proposer_id(&self) -> EncodedPublicKey {
-        self.proposer_id.clone()
-    }
-
-    fn from_stored_view(_stored_view: StoredView<Self::NodeType, Self>) -> Self {
-        unimplemented!("Unimplemented for validating consensus which will be removed.");
-    }
-}
-
-impl<TYPES: NodeType> TestableLeaf for ValidatingLeaf<TYPES>
-where
-    TYPES::StateType: TestableState,
-    TYPES::BlockPayload: TestableBlock,
-{
-    type NodeType = TYPES;
-
-    fn create_random_transaction(
-        &self,
-        rng: &mut dyn rand::RngCore,
-        padding: u64,
-    ) -> <<Self::NodeType as NodeType>::BlockPayload as BlockPayload>::Transaction {
-        <TYPES::StateType as TestableState>::create_random_transaction(
-            Some(&self.state),
-            rng,
-            padding,
-        )
-    }
-}
 
 impl<TYPES: NodeType> Display for Leaf<TYPES> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -566,11 +332,9 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
-    type NodeType = TYPES;
-    type MaybeState = ();
-
-    fn genesis() -> Self {
+impl<TYPES: NodeType> Leaf<TYPES> {
+    /// Create a new leaf from its components.
+    pub fn genesis() -> Self {
         let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
         Self {
             view_number: TYPES::Time::genesis(),
@@ -584,31 +348,37 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
         }
     }
 
-    fn get_view_number(&self) -> TYPES::Time {
+    /// Time when this leaf was created.
+    pub fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }
-
-    fn get_height(&self) -> u64 {
+    /// Height of this leaf in the chain.
+    ///
+    /// Equivalently, this is the number of leaves before this one in the chain.
+    pub fn get_height(&self) -> u64 {
         self.block_header.block_number()
     }
-
-    fn get_justify_qc(&self) -> QuorumCertificate2<TYPES, Self> {
+    /// The QC linking this leaf to its parent in the chain.
+    pub fn get_justify_qc(&self) -> QuorumCertificate2<TYPES> {
         self.justify_qc.clone()
     }
-
-    fn get_parent_commitment(&self) -> Commitment<Self> {
+    /// Commitment to this leaf's parent.
+    pub fn get_parent_commitment(&self) -> Commitment<Self> {
         self.parent_commitment
     }
-
-    fn get_block_header(&self) -> &<Self::NodeType as NodeType>::BlockHeader {
+    /// The block header contained in this leaf.
+    pub fn get_block_header(&self) -> &<TYPES as NodeType>::BlockHeader {
         &self.block_header
     }
-
-    fn fill_block_payload(
+    /// Fill this leaf with the block payload.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the payload commitment doesn't match `self.block_header.payload_commitment()`.
+    pub fn fill_block_payload(
         &mut self,
-        block_payload: <Self::NodeType as NodeType>::BlockPayload,
-    ) -> Result<(), InconsistentPayloadCommitmentError<<Self::NodeType as NodeType>::BlockPayload>>
-    {
+        block_payload: TYPES::BlockPayload,
+    ) -> Result<(), InconsistentPayloadCommitmentError<TYPES::BlockPayload>> {
         if block_payload.commit() != self.block_header.payload_commitment() {
             return Err(InconsistentPayloadCommitmentError {
                 payload: block_payload,
@@ -618,27 +388,32 @@ impl<TYPES: NodeType> LeafType for Leaf<TYPES> {
         self.block_payload = Some(block_payload);
         Ok(())
     }
-
-    fn get_block_payload(&self) -> Option<<Self::NodeType as NodeType>::BlockPayload> {
+    /// Optional block payload.
+    pub fn get_block_payload(&self) -> Option<TYPES::BlockPayload> {
         self.block_payload.clone()
     }
 
+    /// A commitment to the block payload contained in this leaf.
+    pub fn get_payload_commitment(&self) -> Commitment<TYPES::BlockPayload> {
+        self.get_block_header().payload_commitment()
+    }
+    /// The blockchain state after appending this leaf.
     // The Sequencing Leaf doesn't have a state.
-    fn get_state(&self) -> Self::MaybeState {}
-
-    fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
+    pub fn get_state(&self) {}
+    /// Transactions rejected or invalidated by the application of this leaf.
+    pub fn get_rejected(&self) -> Vec<<TYPES::BlockPayload as BlockPayload>::Transaction> {
         self.rejected.clone()
     }
-
-    fn get_timestamp(&self) -> i128 {
+    /// Real-world time when this leaf was created.
+    pub fn get_timestamp(&self) -> i128 {
         self.timestamp
     }
-
-    fn get_proposer_id(&self) -> EncodedPublicKey {
+    /// Identity of the network participant who proposed this leaf.
+    pub fn get_proposer_id(&self) -> EncodedPublicKey {
         self.proposer_id.clone()
     }
-
-    fn from_stored_view(stored_view: StoredView<Self::NodeType, Self>) -> Self {
+    /// Create a leaf from information stored about a view.
+    pub fn from_stored_view(stored_view: StoredView<TYPES>) -> Self {
         Self {
             view_number: stored_view.view_number,
             justify_qc: stored_view.justify_qc,
@@ -765,37 +540,6 @@ pub fn serialize_signature2<TYPES: NodeType>(
     signatures_bytes.extend(sig_bytes.as_slice());
     signatures_bytes
 }
-impl<TYPES: NodeType> Committable for ValidatingLeaf<TYPES> {
-    fn commit(&self) -> commit::Commitment<Self> {
-        let signatures_bytes = if self.justify_qc.is_genesis {
-            let mut bytes = vec![];
-            bytes.extend("genesis".as_bytes());
-            bytes
-        } else {
-            serialize_signature2::<TYPES>(self.justify_qc.signatures.as_ref().unwrap())
-        };
-
-        commit::RawCommitmentBuilder::new("leaf commitment")
-            .u64_field("view number", *self.view_number)
-            .u64_field("height", self.height)
-            .field("parent Leaf commitment", self.parent_commitment)
-            .field("block payload commitment", self.deltas.commit())
-            .field("state commitment", self.state.commit())
-            .constant_str("justify_qc view number")
-            .u64(*self.justify_qc.view_number)
-            .field(
-                "justify_qc leaf commitment",
-                self.justify_qc.get_data().leaf_commit,
-            )
-            .constant_str("justify_qc signatures")
-            .var_size_bytes(&signatures_bytes)
-            .finalize()
-    }
-
-    fn tag() -> String {
-        tag::LEAF.to_string()
-    }
-}
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
@@ -825,17 +569,15 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     }
 }
 
-impl<TYPES, LEAF> From<LEAF> for StoredView<TYPES, LEAF>
+impl<TYPES> From<Leaf<TYPES>> for StoredView<TYPES>
 where
     TYPES: NodeType,
-    LEAF: LeafType<NodeType = TYPES>,
 {
-    fn from(leaf: LEAF) -> Self {
+    fn from(leaf: Leaf<TYPES>) -> Self {
         StoredView {
             view_number: leaf.get_view_number(),
             parent: leaf.get_parent_commitment(),
             justify_qc: leaf.get_justify_qc(),
-            state: leaf.get_state(),
             block_header: leaf.get_block_header().clone(),
             block_payload: leaf.get_block_payload(),
             rejected: leaf.get_rejected(),

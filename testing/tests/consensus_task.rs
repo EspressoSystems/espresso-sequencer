@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
-    proposal: QuorumProposal<TestTypes, Leaf<TestTypes>>,
+    proposal: QuorumProposal<TestTypes>,
 ) -> GeneralConsensusMessage<TestTypes, MemoryImpl> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
@@ -68,9 +68,10 @@ async fn build_vote(
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),
     };
-    let vote =
-    QuorumVote::<TestTypes, Leaf<TestTypes>, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
-        QuorumData { leaf_commit: leaf.commit() },
+    let vote = QuorumVote::<TestTypes, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+        QuorumData {
+            leaf_commit: leaf.commit(),
+        },
         view,
         quorum_exchange.public_key(),
         quorum_exchange.private_key(),
@@ -101,7 +102,7 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate2::<TestTypes, Leaf<TestTypes>>::genesis();
+    let qc = QuorumCertificate2::<TestTypes>::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));

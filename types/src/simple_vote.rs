@@ -6,6 +6,7 @@ use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    data::Leaf,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -16,9 +17,10 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.
-pub struct QuorumData<LEAF: Committable> {
+#[serde(bound(deserialize = ""))]
+pub struct QuorumData<TYPES: NodeType> {
     /// Commitment to the leaf
-    pub leaf_commit: Commitment<LEAF>,
+    pub leaf_commit: Commitment<Leaf<TYPES>>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
@@ -148,7 +150,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
     }
 }
 
-impl<LEAF: Committable> Committable for QuorumData<LEAF> {
+impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("Yes Vote")
             .var_size_bytes(self.leaf_commit.as_ref())
@@ -215,7 +217,7 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
 /// Quorum vote Alias
-pub type QuorumVote<TYPES, LEAF, M> = SimpleVote<TYPES, QuorumData<LEAF>, M>;
+pub type QuorumVote<TYPES, M> = SimpleVote<TYPES, QuorumData<TYPES>, M>;
 /// DA vote type alias
 pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;
 /// VID vote type alias

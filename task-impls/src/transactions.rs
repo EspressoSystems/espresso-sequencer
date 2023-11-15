@@ -28,6 +28,7 @@ use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     sync::Arc,
     time::Instant,
 };
@@ -43,8 +44,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
 {
@@ -57,7 +58,7 @@ pub struct TransactionTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// A list of undecided transactions
     pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
@@ -77,12 +78,8 @@ pub struct TransactionTaskState<
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
@@ -267,6 +264,7 @@ where
                             signature: self
                                 .quorum_exchange
                                 .sign_payload_commitment(payload.commit()),
+                            _pd: PhantomData,
                         },
                         self.quorum_exchange.public_key().clone(),
                     ))
@@ -364,12 +362,8 @@ where
 /// task state implementation for Transactions Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TS for TransactionTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,

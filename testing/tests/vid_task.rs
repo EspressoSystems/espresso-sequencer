@@ -15,6 +15,7 @@ use hotshot_types::{
 };
 use hotshot_types::{simple_vote::VIDVote2, traits::election::VIDExchangeType};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -55,6 +56,7 @@ async fn test_vid_task() {
     let message = Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     };
     let vid_proposal = Proposal {
         data: VidDisperse {
@@ -64,6 +66,7 @@ async fn test_vid_task() {
             common: vid_disperse.common,
         },
         signature: message.signature.clone(),
+        _pd: PhantomData,
     };
 
     // Every event input is seen on the event stream in the output.
