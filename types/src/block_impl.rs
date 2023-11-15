@@ -148,7 +148,7 @@ impl BlockPayload for VIDBlockPayload {
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
-    ) -> Result<(Self, Self::Metadata), BlockError> {
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
         let txns_vec: Vec<VIDTransaction> = transactions.into_iter().collect();
         let encoded = VIDTransaction::encode(txns_vec.clone())?;
         Ok((
@@ -192,7 +192,7 @@ impl BlockPayload for VIDBlockPayload {
         (Self::genesis(), ())
     }
 
-    fn encode(&self) -> Result<Self::Encode<'_>, BlockError> {
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
         Ok(VIDTransaction::encode(self.transactions.clone())?.into_iter())
     }
 

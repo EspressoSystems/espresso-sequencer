@@ -69,7 +69,7 @@ pub trait BlockPayload:
     /// If the transaction length conversion fails.
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
-    ) -> Result<(Self, Self::Metadata), BlockError>;
+    ) -> Result<(Self, Self::Metadata), Self::Error>;
 
     /// Build a payload with the encoded transaction bytes and metadata.
     ///
@@ -85,7 +85,7 @@ pub trait BlockPayload:
     ///
     /// # Errors
     /// If the transaction length conversion fails.
-    fn encode(&self) -> Result<Self::Encode<'_>, BlockError>;
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error>;
 
     /// List of transaction commitments.
     fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;
