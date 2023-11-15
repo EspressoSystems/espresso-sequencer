@@ -193,7 +193,6 @@ pub trait RunDA<
     /// get the anchored view
     /// Note: sequencing leaf does not have state, so does not return state
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
-        let genesis_block = TYPES::BlockPayload::genesis();
         let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis()
             .expect("Couldn't generate genesis block");
 
