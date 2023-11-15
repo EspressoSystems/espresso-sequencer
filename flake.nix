@@ -18,10 +18,7 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.nixpkgs-cross-overlay = {
-    url = "github:alekseysidorov/nixpkgs-cross-overlay";
-    inputs.flake-utils.follows = "flake-utils";
-  };
+  inputs.nixpkgs-cross-overlay.url = "github:alekseysidorov/nixpkgs-cross-overlay";
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
@@ -42,6 +39,8 @@
         RUST_BACKTRACE = 1;
         RUSTFLAGS =
           " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+        # Use a distinct target dir for builds from within nix shells.
+        CARGO_TARGET_DIR = "target/nix";
 
         solhintPkg = { buildNpmPackage, fetchFromGitHub }:
           buildNpmPackage rec {
@@ -76,9 +75,9 @@
               inherit overlays localSystem crossSystem;
             };
           in
-          import ./cross-shell.nix { 
+          import ./cross-shell.nix {
             inherit pkgs;
-            inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS;
+            inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
           };
       in
       with pkgs;
@@ -189,20 +188,20 @@
                 solc
                 nodePackages.prettier
                 solhint
-		(python3.withPackages (ps: with ps; [ black ]))
+                (python3.withPackages (ps: with ps; [ black ]))
 
               ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ]
-                ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
+              ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
               ;
               shellHook = ''
                 # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
                 # with rustup installations.
                 export CARGO_HOME=$HOME/.cargo-nix
-                export PATH="$PWD/target/release:$PATH"
+                export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
               '' + self.checks.${system}.pre-commit-check.shellHook;
               RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
               FOUNDRY_SOLC = "${solc}/bin/solc";
-              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS;
+              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
             };
         devShells.crossShell = crossShell { config = "x86_64-unknown-linux-musl"; };
         devShells.armCrossShell = crossShell { config = "aarch64-unknown-linux-musl"; };
@@ -222,7 +221,7 @@
                 protobuf # to compile libp2p-autonat
                 stableToolchain
               ];
-              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS;
+              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
             };
       }
     );
