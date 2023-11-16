@@ -68,6 +68,7 @@ contract LightClient {
         }
 
         genesisState = genesis;
+        finalizedState = genesis;
         currentEpoch = 0;
         stakeTable = IStakeTable(stakeTableAddr);
         // TODO: (alex) initialized stake table or at least store its contract address ref here
@@ -83,7 +84,10 @@ contract LightClient {
         LightClientState calldata newState,
         IPlonkVerifier.PlonkProof calldata proof
     ) external {
-        if (newState.viewNum <= finalizedState.viewNum) {
+        if (
+            newState.viewNum <= finalizedState.viewNum
+                || newState.blockHeight <= finalizedState.blockHeight
+        ) {
             revert OutdatedState();
         }
         uint64 epochEndingBlockHeight = (currentEpoch + 1) * BLOCKS_PER_EPOCH - 1;
@@ -93,16 +97,16 @@ contract LightClient {
         ) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
-        // Sanity check (unnecessary under our threat model, just defense in depth)
-        if (newState.blockHeight <= finalizedState.blockHeight) {
-            revert InvalidArgs();
-        }
         // format validity check
         BN254.validateScalarField(newState.blockComm);
         BN254.validateScalarField(newState.feeLedgerComm);
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
+        // sanity check on the threshold
+        if (newState.threshold <= stakeTable.totalVotingStake() * 2 / 3) {
+            revert InvalidArgs();
+        }
 
         // check plonk proof
         // TODO: (alex) replace the vk with the correct one
@@ -110,19 +114,20 @@ contract LightClient {
         uint256[] memory publicInput = preparePublicInput(newState);
         PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
 
-        // upon successful verification, update state
-        if (newState.blockHeight == epochEndingBlockHeight) {
+        // upon successful verification, update state.
+        // If the newState is in a new epoch, only then should we increment the `currentEpoch`, and
+        // update the stake table. The `finalizedState` (before update) should have the
+        // `epochEndingBlockHeight`
+        if (finalizedState.blockHeight == epochEndingBlockHeight) {
             bytes32 newStakeTableComm = keccak256(
                 abi.encodePacked(
-                    newState.stakeTableBlsKeyComm,
-                    newState.stakeTableSchnorrKeyComm,
-                    newState.stakeTableAmountComm
+                    finalizedState.stakeTableBlsKeyComm,
+                    finalizedState.stakeTableSchnorrKeyComm,
+                    finalizedState.stakeTableAmountComm
                 )
             );
 
             stakeTable.advanceEpoch(newStakeTableComm);
-        }
-        if (finalizedState.blockHeight == epochEndingBlockHeight) {
             currentEpoch += 1;
         }
 
