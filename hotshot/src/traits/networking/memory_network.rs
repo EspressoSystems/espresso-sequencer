@@ -4,7 +4,6 @@
 //! integration tests.
 
 use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
-use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::async_spawn,
     channel::{bounded, Receiver, SendError, Sender},
@@ -33,7 +32,6 @@ use snafu::ResultExt;
 use std::{
     collections::BTreeSet,
     fmt::Debug,
-    marker::PhantomData,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -242,7 +240,7 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
     }
 }
 
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
     for MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>
 {
     fn generator(
@@ -450,28 +448,19 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
 
 /// memory identity communication channel
 #[derive(Clone, Debug)]
-pub struct MemoryCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
+pub struct MemoryCommChannel<TYPES: NodeType>(
     Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>,
-    PhantomData<(I, MEMBERSHIP)>,
 );
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    MemoryCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> MemoryCommChannel<TYPES> {
     /// create new communication channel
     #[must_use]
     pub fn new(network: Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
-        Self(network, PhantomData)
+        Self(network)
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES>>
-    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for MemoryCommChannel<TYPES>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
 {
@@ -485,14 +474,14 @@ where
         let generator = <MemoryNetwork<
             Message<TYPES>,
             TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        > as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
             da_committee_size,
             is_da
         );
-        Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
+        Box::new(move |node_id| Self(generator(node_id).into()))
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {
@@ -501,9 +490,7 @@ where
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
-    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for MemoryCommChannel<TYPES>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
 {
@@ -561,13 +548,9 @@ where
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        MEMBERSHIP,
-        MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    > for MemoryCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType>
+    TestableChannelImplementation<TYPES, MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>
+    for MemoryCommChannel<TYPES>
 {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>

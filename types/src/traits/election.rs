@@ -96,7 +96,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     /// The committee eligible to make decisions.
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
-    type Networking: CommunicationChannel<TYPES, M, Self::Membership>;
+    type Networking: CommunicationChannel<TYPES>;
 
     /// Join a [`ConsensusExchange`] with the given identity (`pk` and `sk`).
     fn create(
@@ -163,7 +163,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
 pub struct CommitteeExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -184,7 +184,7 @@ pub struct CommitteeExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > CommitteeExchangeType<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -201,7 +201,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -256,7 +256,7 @@ pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYP
 pub struct VIDExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -277,7 +277,7 @@ pub struct VIDExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > VIDExchangeType<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -294,7 +294,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -355,7 +355,7 @@ pub trait QuorumExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<
 pub struct QuorumExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -376,7 +376,7 @@ pub struct QuorumExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > QuorumExchangeType<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -400,7 +400,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for QuorumExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -453,7 +453,7 @@ pub trait ViewSyncExchangeType<TYPES: NodeType, M: NetworkMsg>:
 pub struct ViewSyncExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -474,7 +474,7 @@ pub struct ViewSyncExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ViewSyncExchangeType<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -483,7 +483,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for ViewSyncExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -531,7 +531,7 @@ impl<
 pub struct TimeoutExchange<
     TYPES: NodeType,
     MEMBERSHIP: Membership<TYPES>,
-    NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+    NETWORK: CommunicationChannel<TYPES>,
     M: NetworkMsg,
 > {
     /// The network being used by this exchange.
@@ -552,7 +552,7 @@ pub struct TimeoutExchange<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -564,7 +564,7 @@ pub trait TimeoutExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > TimeoutExchangeType<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
@@ -573,7 +573,7 @@ impl<
 impl<
         TYPES: NodeType,
         MEMBERSHIP: Membership<TYPES>,
-        NETWORK: CommunicationChannel<TYPES, M, MEMBERSHIP>,
+        NETWORK: CommunicationChannel<TYPES>,
         M: NetworkMsg,
     > ConsensusExchange<TYPES, M> for TimeoutExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {

@@ -16,10 +16,10 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type DANetwork = Libp2pCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type VIDNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type QuorumNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes, NodeImpl, DemoMembership>;
+pub type DANetwork = Libp2pCommChannel<DemoTypes>;
+pub type VIDNetwork = Libp2pCommChannel<DemoTypes>;
+pub type QuorumNetwork = Libp2pCommChannel<DemoTypes>;
+pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
@@ -38,4 +38,4 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = Libp2pDARun<DemoTypes, NodeImpl>;
+pub type ThisRun = Libp2pDARun<DemoTypes>;

@@ -16,10 +16,10 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type DANetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type VIDNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type QuorumNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type ViewSyncNetwork = WebCommChannel<DemoTypes, NodeImpl, DemoMembership>;
+pub type DANetwork = WebCommChannel<DemoTypes>;
+pub type VIDNetwork = WebCommChannel<DemoTypes>;
+pub type QuorumNetwork = WebCommChannel<DemoTypes>;
+pub type ViewSyncNetwork = WebCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
@@ -38,4 +38,4 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl>;
+pub type ThisRun = WebServerDARun<DemoTypes>;

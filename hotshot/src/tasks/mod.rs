@@ -67,7 +67,7 @@ pub async fn add_network_message_task<
 ) -> TaskRunner
 // This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
 where
-    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
+    EXCHANGE::Networking: CommunicationChannel<TYPES>,
 {
     let channel = exchange.network().clone();
     let broadcast_stream = GeneratedStream::<Messages<TYPES>>::new(Arc::new(move || {
@@ -163,7 +163,7 @@ pub async fn add_network_event_task<
 ) -> TaskRunner
 // This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
 where
-    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
+    EXCHANGE::Networking: CommunicationChannel<TYPES>,
 {
     let filter =
         NetworkEventTaskState::<TYPES, <EXCHANGE as ConsensusExchange<_, _>>::Networking>::filter(

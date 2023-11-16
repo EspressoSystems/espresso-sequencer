@@ -39,11 +39,7 @@ pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 /// spin up and down nodes, execute rounds
 pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>
 where
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
-    >,
+    QuorumCommChannel<TYPES, I>: CommunicationChannel<TYPES>,
 {
     pub(crate) launcher: TestLauncher<TYPES, I>,
     pub(crate) nodes: Vec<Node<TYPES, I>>,
@@ -55,11 +51,7 @@ where
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
 where
     SystemContext<TYPES, I>: HotShotType<TYPES, I>,
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
-    >,
+    QuorumCommChannel<TYPES, I>: CommunicationChannel<TYPES>,
 {
     /// excecute test
     pub async fn run_test(mut self)

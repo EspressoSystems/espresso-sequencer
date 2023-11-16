@@ -59,10 +59,10 @@ impl NodeType for Test {
 pub struct TestImpl {}
 
 pub type ThisMembership = GeneralStaticCommittee<Test, <Test as NodeType>::SignatureKey>;
-pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
+pub type DANetwork = MemoryCommChannel<Test>;
+pub type QuorumNetwork = MemoryCommChannel<Test>;
+pub type ViewSyncNetwork = MemoryCommChannel<Test>;
+pub type VIDNetwork = MemoryCommChannel<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;

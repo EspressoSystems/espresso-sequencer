@@ -144,6 +144,9 @@ pub trait ExchangesType<TYPES: NodeType, MESSAGE: NetworkMsg>: Send + Sync {
     /// Get the timeout exchange
     fn timeout_exchange(&self) -> &Self::TimeoutExchange;
 
+    // type QuorumNetwork: CommunicationChannel<TYPES>;
+    // type CommitteeNetwork: CommunicationChannel<TYPES>;
+
     /// Protocol for exchanging quorum proposals and votes.
     type QuorumExchange: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
@@ -483,26 +486,11 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
-    CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES>>,
-    QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES>>,
-    QuorumCommChannel<TYPES, I>: TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        QuorumMembership<TYPES, I>,
-        QuorumNetwork<TYPES, I>,
-    >,
-    CommitteeCommChannel<TYPES, I>: TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        CommitteeMembership<TYPES, I>,
-        QuorumNetwork<TYPES, I>,
-    >,
-    ViewSyncCommChannel<TYPES, I>: TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        ViewSyncMembership<TYPES, I>,
-        QuorumNetwork<TYPES, I>,
-    >,
+    CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES>,
+    QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES>,
+    QuorumCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
+    CommitteeCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
+    ViewSyncCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
     TYPES::StateType: TestableState,
     TYPES::BlockPayload: TestableBlock,
     I::Storage: TestableStorage<TYPES>,
@@ -576,25 +564,16 @@ pub type ViewSyncMembership<TYPES, I> =
     <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
 /// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as CommunicationChannel<
-    TYPES,
-    Message<TYPES>,
-    QuorumMembership<TYPES, I>,
->>::NETWORK;
+pub type QuorumNetwork<TYPES, I> =
+    <QuorumCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
 /// Type for the underlying committee `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type CommitteeNetwork<TYPES, I> = <CommitteeCommChannel<TYPES, I> as CommunicationChannel<
-    TYPES,
-    Message<TYPES>,
-    CommitteeMembership<TYPES, I>,
->>::NETWORK;
+pub type CommitteeNetwork<TYPES, I> =
+    <CommitteeCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
 /// Type for the underlying view sync `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type ViewSyncNetwork<TYPES, I> = <ViewSyncCommChannel<TYPES, I> as CommunicationChannel<
-    TYPES,
-    Message<TYPES>,
-    ViewSyncMembership<TYPES, I>,
->>::NETWORK;
+pub type ViewSyncNetwork<TYPES, I> =
+    <ViewSyncCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
 /// Trait with all the type definitions that are used in the current hotshot setup.
 pub trait NodeType:

@@ -13,9 +13,7 @@ use hotshot_types::{
     traits::{
         election::ConsensusExchange,
         network::CommunicationChannel,
-        node_implementation::{
-            ExchangesType, NodeType, QuorumCommChannel, QuorumEx, QuorumNetwork,
-        },
+        node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumNetwork},
     },
     HotShotConfig,
 };
@@ -80,11 +78,7 @@ pub type Hook = Box<
 /// generators for resources used by each node
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>
 where
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
-    >,
+    QuorumCommChannel<TYPES, I>: CommunicationChannel<TYPES>,
 {
     // generate channels
     pub channel_generator: Generator<Networks<TYPES, I>>,

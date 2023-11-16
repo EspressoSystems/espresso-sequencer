@@ -133,10 +133,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 }
 
 /// network event task state
-pub struct NetworkEventTaskState<
-    TYPES: NodeType,
-    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
-> {
+pub struct NetworkEventTaskState<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> {
     /// comm channel
     pub channel: COMMCHANNEL,
     /// event stream
@@ -146,17 +143,13 @@ pub struct NetworkEventTaskState<
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
 }
 
-impl<
-        TYPES: NodeType,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
-    > TS for NetworkEventTaskState<TYPES, COMMCHANNEL>
+impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>> TS
+    for NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
 }
 
-impl<
-        TYPES: NodeType,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
-    > NetworkEventTaskState<TYPES, COMMCHANNEL>
+impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
+    NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
     /// Handle the given event.
     ///

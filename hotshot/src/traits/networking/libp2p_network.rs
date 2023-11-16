@@ -2,7 +2,6 @@
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
 use super::NetworkingMetricsValue;
-use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::{async_block_on, async_sleep, async_spawn},
     channel::{unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
@@ -125,7 +124,7 @@ pub struct Libp2pNetwork<M: NetworkMsg, K: SignatureKey + 'static> {
     inner: Arc<Libp2pNetworkInner<M, K>>,
 }
 
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
     for Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
@@ -749,18 +748,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
 /// libp2p identity communication channel
 #[derive(Clone, Debug)]
-pub struct Libp2pCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
+pub struct Libp2pCommChannel<TYPES: NodeType>(
     Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>,
-    PhantomData<(TYPES, I, MEMBERSHIP)>,
+    PhantomData<TYPES>,
 );
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    Libp2pCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> Libp2pCommChannel<TYPES> {
     /// create a new libp2p communication channel
     #[must_use]
     pub fn new(network: Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
@@ -768,9 +761,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES>>
-    for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for Libp2pCommChannel<TYPES>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
 {
@@ -793,7 +784,7 @@ where
         let generator = <Libp2pNetwork<
             Message<TYPES>,
             TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        > as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
@@ -812,9 +803,7 @@ where
 // top
 // we don't really want to make this the default implementation because that forces it to require ConnectedNetwork to be implemented. The struct we implement over might use multiple ConnectedNetworks
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
-    for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for Libp2pCommChannel<TYPES>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
 {
@@ -888,13 +877,9 @@ where
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        MEMBERSHIP,
-        Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    > for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType>
+    TestableChannelImplementation<TYPES, Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>
+    for Libp2pCommChannel<TYPES>
 {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
