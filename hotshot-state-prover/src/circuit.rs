@@ -2,25 +2,20 @@
 
 use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
+use ark_std::borrow::Borrow;
 use ethereum_types::U256;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_types::traits::{
-    stake_table::{SnapshotVersion, StakeTableScheme},
-    state::LightClientState,
-};
+use hotshot_types::traits::state::LightClientState;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
     circuit::{
         rescue::RescueNativeGadget,
-        signature::schnorr::{SignatureGadget, SignatureVar, VerKeyVar},
+        signature::schnorr::{SignatureGadget, VerKeyVar},
     },
     rescue::RescueParameter,
-    signatures::{
-        bls_over_bn254::VerKey as BLSVerKey,
-        schnorr::{Signature, VerKey as SchnorrVerKey},
-    },
+    signatures::schnorr::{Signature, VerKey as SchnorrVerKey},
 };
-use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use jf_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
 
 /// Lossy conversion of a U256 into a field element.
 pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
@@ -115,73 +110,122 @@ impl AsRef<[Variable]> for LightClientStateVar {
 }
 
 /// A function that takes as input:
-/// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
+/// - a list of stake table entries (`Vec<(SchnorrVerKey, Amount)>`)
+/// - a bit vector indicates the signers
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
-/// - a bit vector indicates the signers
 /// - a quorum threshold
-/// checks that
+/// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
+/// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
+/// It checks that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all signed schnorr signatures are valid
-/// returns
+/// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
 /// - A PlonkError if any error happens when building the circuit
-pub(crate) fn build_state_verifier_circuit<F, ST, P>(
-    stake_table: &ST,
-    sigs: &[Signature<P>],
+pub(crate) fn build_state_verifier_circuit<F, P, STIter, BitIter, SigIter>(
+    stake_table_entries: STIter,
+    signer_bit_vec: BitIter,
+    signatures: SigIter,
     lightclient_state: &LightClientState<F>,
-    signer_bit_vec: &[bool],
     threshold: &U256,
 ) -> Result<(PlonkCircuit<F>, Vec<F>), PlonkError>
 where
     F: RescueParameter,
-    ST: StakeTableScheme<Key = BLSVerKey, Amount = U256, Aux = SchnorrVerKey<P>>,
     P: TECurveConfig<BaseField = F>,
+    STIter: IntoIterator,
+    STIter::Item: Borrow<(SchnorrVerKey<P>, U256)>,
+    STIter::IntoIter: ExactSizeIterator,
+    BitIter: IntoIterator,
+    BitIter::Item: Borrow<bool>,
+    BitIter::IntoIter: ExactSizeIterator,
+    SigIter: IntoIterator,
+    SigIter::Item: Borrow<Signature<P>>,
+    SigIter::IntoIter: ExactSizeIterator,
 {
+    let stake_table_entries = stake_table_entries.into_iter();
+    let signer_bit_vec = signer_bit_vec.into_iter();
+    let signatures = signatures.into_iter();
+    if stake_table_entries.len() > STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Number of input stake table entries {} exceeds the capacity {}",
+                stake_table_entries.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
+    if signer_bit_vec.len() != STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Length of input bit vector {} exceeds the capacity {}",
+                signer_bit_vec.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
+    if signatures.len() != STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Number of input signatures {} exceeds the capacity {}",
+                signatures.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
+
     let mut circuit = PlonkCircuit::new_turbo_plonk();
 
     // creating variables for stake table entries
-    let mut stake_table_var = stake_table
-        .try_iter(SnapshotVersion::LastEpochStart)?
-        .map(|(_bls_ver_key, amount, schnorr_ver_key)| {
-            let schnorr_ver_key = circuit.create_signature_vk_variable(&schnorr_ver_key)?;
-            let stake_amount = circuit.create_variable(u256_to_field::<F>(&amount))?;
+    let stake_table_entries_pad_len = STAKE_TABLE_CAPACITY - stake_table_entries.len();
+    let mut stake_table_var = stake_table_entries
+        .map(|item| {
+            let item = item.borrow();
+            let schnorr_ver_key = circuit.create_signature_vk_variable(&item.0)?;
+            let stake_amount = circuit.create_variable(u256_to_field::<F>(&item.1))?;
             Ok(StakeTableEntryVar {
                 schnorr_ver_key,
                 stake_amount,
             })
         })
         .collect::<Result<Vec<_>, CircuitError>>()?;
-    let dummy_ver_key_var = VerKeyVar(circuit.neutral_point_variable());
-    stake_table_var.resize(
-        STAKE_TABLE_CAPACITY,
-        StakeTableEntryVar {
-            schnorr_ver_key: dummy_ver_key_var,
-            stake_amount: 0,
-        },
+    stake_table_var.extend(
+        (0..stake_table_entries_pad_len)
+            .map(|_| {
+                let schnorr_ver_key =
+                    circuit.create_signature_vk_variable(&SchnorrVerKey::<P>::default())?;
+                let stake_amount = circuit.create_variable(F::default())?;
+                Ok(StakeTableEntryVar {
+                    schnorr_ver_key,
+                    stake_amount,
+                })
+            })
+            .collect::<Result<Vec<_>, CircuitError>>()?,
     );
 
     // creating variables for signatures
-    let mut sig_vars = sigs
-        .iter()
-        .map(|sig| circuit.create_signature_variable(sig))
+    let sig_pad_len = STAKE_TABLE_CAPACITY - signatures.len();
+    let mut sig_vars = signatures
+        .map(|sig| circuit.create_signature_variable(sig.borrow()))
         .collect::<Result<Vec<_>, CircuitError>>()?;
-    sig_vars.resize(
-        STAKE_TABLE_CAPACITY,
-        SignatureVar {
-            s: circuit.zero(),
-            R: circuit.neutral_point_variable(),
-        },
+    sig_vars.extend(
+        (0..sig_pad_len)
+            .map(|_| circuit.create_signature_variable(&Signature::<P>::default()))
+            .collect::<Result<Vec<_>, CircuitError>>()?,
     );
 
     // creating Boolean variables for the bit vector
+    let bit_vec_pad_len = STAKE_TABLE_CAPACITY - signer_bit_vec.len();
     let mut signer_bit_vec_var = signer_bit_vec
-        .iter()
-        .map(|&b| circuit.create_boolean_variable(b))
+        .map(|b| circuit.create_boolean_variable(*b.borrow()))
         .collect::<Result<Vec<_>, CircuitError>>()?;
-    signer_bit_vec_var.resize(STAKE_TABLE_CAPACITY, BoolVar(circuit.zero()));
+    signer_bit_vec_var.extend(
+        (0..bit_vec_pad_len)
+            .map(|_| circuit.create_boolean_variable(false))
+            .collect::<Result<Vec<_>, CircuitError>>()?,
+    );
 
     let threshold = u256_to_field::<F>(threshold);
     let threshold_var = circuit.create_public_variable(threshold)?;
@@ -308,6 +352,12 @@ mod tests {
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(&bls_keys, &schnorr_keys);
 
+        let entries = st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .collect::<Vec<_>>();
+
         let block_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
                 [0];
@@ -355,20 +405,20 @@ mod tests {
             .collect::<Vec<_>>();
         // good path
         let (circuit, public_inputs) = build_state_verifier_circuit(
-            &st,
+            &entries,
+            &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
         assert!(circuit.check_circuit_satisfiability(&public_inputs).is_ok());
 
         let (circuit, public_inputs) = build_state_verifier_circuit(
-            &st,
+            &entries,
+            &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(10u32),
         )
         .unwrap();
@@ -391,10 +441,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let (bad_circuit, public_inputs) = build_state_verifier_circuit(
-            &st,
+            &entries,
+            &bad_bit_vec,
             &bad_bit_masked_sigs,
             &lightclient_state,
-            &bad_bit_vec,
             &U256::from(25u32),
         )
         .unwrap();
@@ -422,10 +472,10 @@ mod tests {
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
         let (bad_circuit, public_inputs) = build_state_verifier_circuit(
-            &st,
+            &entries,
+            &bit_vec,
             &sig_for_bad_state,
             &bad_lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
@@ -454,10 +504,10 @@ mod tests {
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
         let (bad_circuit, public_inputs) = build_state_verifier_circuit(
-            &st,
+            &entries,
+            &bit_vec,
             &wrong_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
