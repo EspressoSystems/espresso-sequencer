@@ -4,28 +4,27 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use clap::Parser;
-use futures::{future::BoxFuture, FutureExt, StreamExt};
+use data_source::{SequencerDataSource, SubmitDataSource};
+use futures::{future::BoxFuture, FutureExt, StreamExt, TryFutureExt};
 use hotshot::{types::Event, types::SystemContextHandle};
 use hotshot_query_service::{
     availability::{
-        self, AvailabilityDataSource, BlockQueryData, Error as AvailabilityError,
-        Options as AvailabilityOptions,
+        self, AvailabilityDataSource, BlockHash, Error as AvailabilityError,
+        Options as AvailabilityOptions, QueryBlockSnafu,
     },
-    data_source::{QueryData, UpdateDataSource},
-    status::{self, StatusDataSource},
+    data_source::{ExtensibleDataSource, UpdateDataSource, VersionedDataSource},
+    status::{self, StatusDataSource, UpdateStatusData},
     Error,
 };
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
-use std::{
-    borrow::Borrow,
-    collections::BTreeMap,
-    io,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use tide_disco::{Api, App, StatusCode};
+use snafu::ResultExt;
+use std::sync::Arc;
+use tide_disco::{Api, App};
+
+mod data_source;
+pub mod fs;
 
 /// The minimal HTTP API.
 ///
@@ -38,59 +37,39 @@ pub struct HttpOptions {
     pub port: u16,
 }
 
-/// Options for the query API module backed by the file system.
-#[derive(Parser, Clone, Debug)]
-pub struct FsQueryOptions {
-    /// Storage path for HotShot query service data.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub storage_path: PathBuf,
-
-    /// Create new query storage instead of opening existing one.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
-    pub reset_store: bool,
-}
-
 /// Options for the submission API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct SubmitOptions;
 
 impl SubmitOptions {
-    fn init<S, N: network::Type>(
-        self,
-        app: &mut App<S, hotshot_query_service::Error>,
-    ) -> io::Result<()>
+    fn init<S, N: network::Type>(self, app: &mut App<S, Error>) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + Borrow<SystemContextHandle<SeqTypes, Node<N>>>,
+        S::State: Send + Sync + SubmitDataSource<N>,
     {
         // Include API specification in binary
-        let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))?;
 
         // Initialize submit API
-        let mut submit_api = Api::<S, hotshot_query_service::Error>::new(toml)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        let mut submit_api = Api::<S, Error>::new(toml)?;
 
         // Define submit route for submit API
-        submit_api
-            .post("submit", |req, state| {
-                async move {
-                    let state = Borrow::<SystemContextHandle<SeqTypes, Node<N>>>::borrow(state);
-                    state
-                        .submit_transaction(
-                            req.body_auto::<Transaction>()
-                                .map_err(|err| Error::internal(err.to_string()))?,
-                        )
-                        .await
-                        .map_err(|err| Error::internal(err.to_string()))
-                }
-                .boxed()
-            })
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        submit_api.post("submit", |req, state| {
+            async move {
+                state
+                    .handle()
+                    .submit_transaction(
+                        req.body_auto::<Transaction>()
+                            .map_err(|err| Error::internal(err.to_string()))?,
+                    )
+                    .await
+                    .map_err(|err| Error::internal(err.to_string()))
+            }
+            .boxed()
+        })?;
 
         // Register modules in app
-        app.register_module("submit", submit_api)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        app.register_module("submit", submit_api)?;
         Ok(())
     }
 }
@@ -98,7 +77,7 @@ impl SubmitOptions {
 #[derive(Clone, Debug)]
 pub struct Options {
     pub http: HttpOptions,
-    pub query_fs: Option<FsQueryOptions>,
+    pub query_fs: Option<fs::Options>,
     pub submit: Option<SubmitOptions>,
 }
 
@@ -114,7 +93,7 @@ impl From<HttpOptions> for Options {
 
 impl Options {
     /// Add a query API module backed by the file system.
-    pub fn query_fs(mut self, opt: FsQueryOptions) -> Self {
+    pub fn query_fs(mut self, opt: fs::Options) -> Self {
         self.query_fs = Some(opt);
         self
     }
@@ -128,34 +107,14 @@ impl Options {
     pub async fn serve<N: network::Type>(
         self,
         init_handle: HandleFromMetrics<N>,
-    ) -> io::Result<SequencerNode<N>> {
+    ) -> anyhow::Result<SequencerNode<N>> {
         // The server state type depends on whether we are running a query API or not, so we handle
         // the two cases differently.
-        let (handle, node_index, update_task) = if let Some(query) = self.query_fs {
-            type StateType<N> = Arc<RwLock<AppState<N>>>;
+        let node = if let Some(opt) = self.query_fs {
+            type WebState<N> = Arc<RwLock<AppState<N, fs::DataSource<N>>>>;
 
-            let storage_path = Path::new(&query.storage_path);
-            let query_state = {
-                if query.reset_store {
-                    QueryData::create(storage_path, ())
-                } else {
-                    QueryData::open(storage_path, ())
-                }
-            }
-            .expect("Failed to initialize query data storage");
-
-            // Index blocks by timestamp.
-            let mut blocks_by_time = BTreeMap::new();
-            for (i, block) in query_state.get_nth_block_iter(0).enumerate() {
-                index_block_by_time(
-                    &mut blocks_by_time,
-                    &block.unwrap_or_else(|| {
-                        panic!("block {i} is missing, cannot build timestamp index")
-                    }),
-                );
-            }
-
-            let metrics: Box<dyn Metrics> = query_state.metrics();
+            let ds = <fs::DataSource<N> as SequencerDataSource<N>>::create(opt).await?;
+            let metrics = ds.populate_metrics();
 
             // Start up handle
             let (mut handle, node_index) = init_handle(metrics).await;
@@ -167,13 +126,9 @@ impl Options {
             // the first events emitted by consensus.
             let mut events = handle.get_event_stream(Default::default()).await.0;
 
-            let state = Arc::new(RwLock::new(AppState::<N> {
-                submit_state: handle.clone(),
-                query_state,
-                blocks_by_time,
-            }));
-
-            let mut app = App::<_, hotshot_query_service::Error>::with_state(state.clone());
+            let state: WebState<N> =
+                Arc::new(RwLock::new(ExtensibleDataSource::new(ds, handle.clone())));
+            let mut app = App::<_, Error>::with_state(state.clone());
 
             // Initialize submit API
             if let Some(submit) = self.submit {
@@ -182,26 +137,20 @@ impl Options {
 
             // Initialize availability and status APIs
             let mut options: AvailabilityOptions = Default::default();
-            let availability_extension =
-                toml::from_str::<toml::value::Value>(include_str!("../api/availability.toml"))
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+            let availability_extension = toml::from_str(include_str!("../api/availability.toml"))?;
             options.extensions.push(availability_extension);
             let mut availability_api =
-                availability::define_api::<StateType<N>, SeqTypes, Node<N>>(&options)
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-            let status_api = status::define_api::<StateType<N>>(&Default::default())
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+                availability::define_api::<WebState<N>, SeqTypes, Node<N>>(&options)?;
+            let status_api = status::define_api::<WebState<N>>(&Default::default())?;
 
             availability_api
                 .get("getnamespaceproof", |req, state| {
                     async move {
-                        let height: u64 = req.integer_param("height")?;
+                        let height: usize = req.integer_param("height")?;
                         let namespace: u64 = req.integer_param("namespace")?;
-                        let block = state
-                            .get_nth_block_iter(height as usize)
-                            .next()
-                            .ok_or(AvailabilityError::InvalidLeafHeight { height })?
-                            .ok_or(AvailabilityError::MissingBlock { height })?;
+                        let block = state.get_block(height).await.context(QueryBlockSnafu {
+                            resource: height.to_string(),
+                        })?;
 
                         let proof = block.block().get_namespace_proof(namespace.into());
                         Ok(NamespaceProofQueryData {
@@ -215,105 +164,55 @@ impl Options {
                         })
                     }
                     .boxed()
-                })
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                })?
                 .get("getheader", |req, state| {
                     async move {
-                        let height: u64 = req.integer_param("height")?;
-                        let block = state
-                            .get_nth_block_iter(height as usize)
-                            .next()
-                            .ok_or(AvailabilityError::InvalidLeafHeight { height })?
-                            .ok_or(AvailabilityError::MissingBlock { height })?;
+                        let height: usize = req.integer_param("height")?;
+                        let block = state.get_block(height).await.context(QueryBlockSnafu {
+                            resource: height.to_string(),
+                        })?;
                         Ok(block.block().header())
                     }
                     .boxed()
-                })
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
+                })?
                 .get("gettimestampwindow", |req, state| {
                     async move {
-                        let first_block = if let Some(height) = req.opt_integer_param("height")? {
-                            height
+                        let end = req.integer_param("end")?;
+                        let res = if let Some(height) = req.opt_integer_param("height")? {
+                            state.inner().window_from::<usize>(height, end).await
                         } else if let Some(hash) = req.opt_blob_param("hash")? {
-                            state.get_block_index_by_hash(hash).ok_or(
-                                AvailabilityError::UnknownBlockHash {
-                                    hash: hash.to_string(),
-                                },
-                            )?
+                            state
+                                .inner()
+                                .window_from::<BlockHash<SeqTypes>>(hash, end)
+                                .await
                         } else {
                             let start: u64 = req.integer_param("start")?;
-
-                            // Find the minimum timestamp which is at least `start`, and all the
-                            // blocks with that timestamp.
-                            let blocks = state
-                                .blocks_by_time
-                                .range(start..)
-                                .next()
-                                .ok_or_else(|| AvailabilityError::Custom {
-                                    status: StatusCode::NotFound,
-                                    message: format!("no blocks with timestamp at least {start}"),
-                                })?
-                                .1;
-                            // Multiple blocks can have the same timestamp (when truncated to
-                            // seconds); we want the first one. It is an invariant that any
-                            // timestamp which has an entry in `blocks_by_time` has a non-empty list
-                            // associated with it, so this indexing is safe.
-                            blocks[0]
+                            state.inner().window(start, end).await
                         };
-
-                        let mut res = TimeWindowQueryData::new(first_block);
-
-                        // Include the block just before the start of the window, if there is one.
-                        if first_block > 0 {
-                            let prev = state
-                                .get_nth_block_iter(first_block as usize - 1)
-                                .next()
-                                .ok_or(AvailabilityError::InvalidLeafHeight {
-                                    height: first_block - 1,
-                                })?
-                                .ok_or(AvailabilityError::MissingBlock {
-                                    height: first_block - 1,
-                                })?;
-                            res.prev = Some(prev.block().header());
-                        }
-
-                        // Add blocks to the window, starting from `first_block`, until we reach the
-                        // end of the requested time window.
-                        let end = req.integer_param("end")?;
-                        for (i, block) in state.get_nth_block_iter(first_block as usize).enumerate()
-                        {
-                            let height = first_block + i as u64;
-                            let block = block.ok_or(AvailabilityError::MissingBlock { height })?;
-                            let header = block.block().header();
-                            if header.timestamp() >= end {
-                                res.next = Some(header);
-                                break;
-                            }
-                            res.window.push(header);
-                        }
-
-                        Ok(res)
+                        res.map_err(|err| AvailabilityError::Custom {
+                            message: err.to_string(),
+                            status: err.status(),
+                        })
                     }
                     .boxed()
-                })
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
+                })?;
 
             // Register modules in app
-            app.register_module("availability", availability_api)
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?
-                .register_module("status", status_api)
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, Error::internal(err)))?;
+            app.register_module("availability", availability_api)?
+                .register_module("status", status_api)?;
 
-            let task = spawn(async move {
+            let update_task = spawn(async move {
                 futures::join!(
-                    app.serve(format!("0.0.0.0:{}", self.http.port)),
+                    app.serve(format!("0.0.0.0:{}", self.http.port))
+                        .map_err(anyhow::Error::from),
                     async move {
                         tracing::debug!("waiting for event");
                         while let Some(event) = events.next().await {
                             tracing::info!("got event {:?}", event);
 
                             // If update results in an error, program state is unrecoverable
-                            if let Err(err) = state.write().await.update(&event).await {
+                            if let Err(err) = update_state(&mut *state.write().await, &event).await
+                            {
                                 tracing::error!(
                                     "failed to update event {:?}: {}; updater task will exit",
                                     event,
@@ -328,50 +227,41 @@ impl Options {
                 .0
             });
 
-            (handle, node_index, task)
+            SequencerNode {
+                handle,
+                node_index,
+                update_task,
+            }
         } else {
             let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
-            let mut app =
-                App::<_, hotshot_query_service::Error>::with_state(RwLock::new(handle.clone()));
+            let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone()));
 
             // Initialize submit API
             if let Some(submit) = self.submit {
                 submit.init::<_, N>(&mut app)?;
             }
 
-            (
+            SequencerNode {
                 handle,
                 node_index,
-                spawn(app.serve(format!("0.0.0.0:{}", self.http.port))),
-            )
+                update_task: spawn(
+                    app.serve(format!("0.0.0.0:{}", self.http.port))
+                        .map_err(anyhow::Error::from),
+                ),
+            }
         };
 
         // Start consensus.
-        handle.hotshot.start_consensus().await;
-
-        Ok(SequencerNode {
-            handle,
-            update_task,
-            node_index,
-        })
+        node.handle.hotshot.start_consensus().await;
+        Ok(node)
     }
-}
-
-fn index_block_by_time(
-    blocks_by_time: &mut BTreeMap<u64, Vec<u64>>,
-    block: &BlockQueryData<SeqTypes>,
-) {
-    blocks_by_time
-        .entry(block.block().timestamp())
-        .or_default()
-        .push(block.height());
 }
 
 type NodeIndex = u64;
 
 pub struct SequencerNode<N: network::Type> {
     pub handle: SystemContextHandle<SeqTypes, Node<N>>,
-    pub update_task: JoinHandle<io::Result<()>>,
+    pub update_task: JoinHandle<anyhow::Result<()>>,
     pub node_index: NodeIndex,
 }
 
@@ -381,52 +271,33 @@ pub type HandleFromMetrics<N> = Box<
     ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, Node<N>>, NodeIndex)>,
 >;
 
-struct AppState<N: network::Type> {
-    submit_state: SystemContextHandle<SeqTypes, Node<N>>,
-    query_state: QueryData<SeqTypes, Node<N>, ()>,
-    blocks_by_time: BTreeMap<u64, Vec<u64>>,
-}
+type AppState<N, D> = ExtensibleDataSource<D, SystemContextHandle<SeqTypes, Node<N>>>;
 
-impl<N: network::Type> Borrow<SystemContextHandle<SeqTypes, Node<N>>> for AppState<N> {
-    fn borrow(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
-        &self.submit_state
+impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
+    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self.as_ref()
     }
 }
 
-impl<N: network::Type> AppState<N> {
-    async fn update(&mut self, event: &Event<SeqTypes, Leaf>) -> Result<(), io::Error> {
-        // Remember the current block height, so we can update our local index
-        // based on any new blocks that get added.
-        let prev_block_height = self
-            .block_height()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-        self.query_state
-            .update(event)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-        self.query_state
-            .commit_version()
-            .await
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-        // Update index.
-        for (i, block) in self
-            .query_state
-            .get_nth_block_iter(prev_block_height)
-            .enumerate()
-        {
-            let Some(block) = block else {
-                tracing::warn!(
-                    "missing block {}, index may be out of date",
-                    prev_block_height + i
-                );
-                continue;
-            };
-            index_block_by_time(&mut self.blocks_by_time, &block);
-        }
-
-        Ok(())
+impl<N: network::Type> SubmitDataSource<N> for SystemContextHandle<SeqTypes, Node<N>> {
+    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self
     }
+}
+
+async fn update_state<N: network::Type, D: SequencerDataSource<N> + Send + Sync>(
+    state: &mut AppState<N, D>,
+    event: &Event<SeqTypes, Leaf>,
+) -> anyhow::Result<()> {
+    // Remember the current block height, so we can update our local index
+    // based on any new blocks that get added.
+    let prev_block_height = state.block_height().await?;
+
+    state.update(event).await?;
+    state.inner_mut().refresh_indices(prev_block_height).await?;
+    state.commit().await?;
+
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -455,94 +326,6 @@ impl TimeWindowQueryData {
     }
 }
 
-impl<N: network::Type> AvailabilityDataSource<SeqTypes, Node<N>> for AppState<N> {
-    type Error =
-        <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<SeqTypes, Node<N>>>::Error;
-
-    type LeafIterType<'a> = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
-        SeqTypes,
-        Node<N>,
-    >>::LeafIterType<'a>;
-
-    type BlockIterType<'a> = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
-        SeqTypes,
-        Node<N>,
-    >>::BlockIterType<'a>;
-
-    type LeafStreamType = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
-        SeqTypes,
-        Node<N>,
-    >>::LeafStreamType;
-    type BlockStreamType = <QueryData<SeqTypes, Node<N>, ()> as AvailabilityDataSource<
-        SeqTypes,
-        Node<N>,
-    >>::BlockStreamType;
-
-    fn get_nth_leaf_iter(&self, n: usize) -> Self::LeafIterType<'_> {
-        self.query_state.get_nth_leaf_iter(n)
-    }
-
-    fn get_nth_block_iter(&self, n: usize) -> Self::BlockIterType<'_> {
-        self.query_state.get_nth_block_iter(n)
-    }
-
-    fn get_leaf_index_by_hash(
-        &self,
-        hash: hotshot_query_service::availability::LeafHash<SeqTypes, Node<N>>,
-    ) -> Option<u64> {
-        self.query_state.get_leaf_index_by_hash(hash)
-    }
-
-    fn get_block_index_by_hash(
-        &self,
-        hash: hotshot_query_service::availability::BlockHash<SeqTypes>,
-    ) -> Option<u64> {
-        self.query_state.get_block_index_by_hash(hash)
-    }
-
-    fn get_txn_index_by_hash(
-        &self,
-        hash: hotshot_query_service::availability::TransactionHash<SeqTypes>,
-    ) -> Option<(u64, u64)> {
-        self.query_state.get_txn_index_by_hash(hash)
-    }
-
-    fn get_block_ids_by_proposer_id(
-        &self,
-        id: &hotshot_types::traits::signature_key::EncodedPublicKey,
-    ) -> Vec<u64> {
-        self.query_state.get_block_ids_by_proposer_id(id)
-    }
-
-    fn subscribe_leaves(&self, height: usize) -> Result<Self::LeafStreamType, Self::Error> {
-        self.query_state.subscribe_leaves(height)
-    }
-
-    fn subscribe_blocks(&self, height: usize) -> Result<Self::BlockStreamType, Self::Error> {
-        self.query_state.subscribe_blocks(height)
-    }
-}
-
-impl<N: network::Type> StatusDataSource for AppState<N> {
-    type Error = <QueryData<SeqTypes, Node<N>, ()> as StatusDataSource>::Error;
-
-    fn block_height(&self) -> Result<usize, Self::Error> {
-        self.query_state.block_height()
-    }
-
-    fn mempool_info(&self) -> Result<hotshot_query_service::status::MempoolQueryData, Self::Error> {
-        self.query_state.mempool_info()
-    }
-
-    fn success_rate(&self) -> Result<f64, Self::Error> {
-        self.query_state.success_rate()
-    }
-
-    fn export_metrics(&self) -> Result<String, Self::Error> {
-        self.query_state.export_metrics()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -554,6 +337,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use futures::FutureExt;
+    use hotshot_query_service::availability::BlockQueryData;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -589,7 +373,7 @@ mod test {
     async fn submit_test_with_query_module() {
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        submit_test_helper(Some(FsQueryOptions {
+        submit_test_helper(Some(fs::Options {
             storage_path,
             reset_store: true,
         }))
@@ -601,7 +385,7 @@ mod test {
         submit_test_helper(None).await
     }
 
-    async fn submit_test_helper(query_opt: Option<FsQueryOptions>) {
+    async fn submit_test_helper(query_opt: Option<fs::Options>) {
         setup_logging();
         setup_backtrace();
 
@@ -660,7 +444,7 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
         Options::from(HttpOptions { port })
-            .query_fs(FsQueryOptions {
+            .query_fs(fs::Options {
                 storage_path,
                 reset_store: true,
             })

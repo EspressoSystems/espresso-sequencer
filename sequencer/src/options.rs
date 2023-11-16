@@ -138,7 +138,7 @@ macro_rules! module {
 }
 
 module!("http", api::HttpOptions);
-module!("query-fs", api::FsQueryOptions, requires: "http");
+module!("query-fs", api::fs::Options, requires: "http");
 module!("submit", api::SubmitOptions, requires: "http");
 module!("commitment-task", CommitmentTaskOptions);
 
@@ -189,11 +189,11 @@ enum SequencerModule {
     /// * submit: add transaction submission endpoints
     Http(Module<api::HttpOptions>),
     /// Alias for query-fs.
-    Query(Module<api::FsQueryOptions>),
+    Query(Module<api::fs::Options>),
     /// Run the query service API module, backed by the file system.
     ///
     /// This modules requires the http module to be started.
-    QueryFs(Module<api::FsQueryOptions>),
+    QueryFs(Module<api::fs::Options>),
     /// Run the transaction submission API module.
     ///
     /// This modules requires the http module to be started.
@@ -204,7 +204,7 @@ enum SequencerModule {
 #[derive(Clone, Debug, Default)]
 pub struct Modules {
     pub http: Option<api::HttpOptions>,
-    pub query_fs: Option<api::FsQueryOptions>,
+    pub query_fs: Option<api::fs::Options>,
     pub submit: Option<api::SubmitOptions>,
     pub commitment_task: Option<CommitmentTaskOptions>,
 }
