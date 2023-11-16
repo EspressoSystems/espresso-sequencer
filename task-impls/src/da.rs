@@ -29,7 +29,7 @@ use hotshot_types::{
     },
     utils::ViewInner,
     vote::HasViewNumber,
-    vote::VoteAccumulator2,
+    vote::VoteAccumulator,
 };
 
 use snafu::Snafu;
@@ -82,7 +82,7 @@ where
     #[allow(clippy::type_complexity)]
     /// Accumulates DA votes
     pub accumulator:
-        Either<VoteAccumulator2<TYPES, DAVote<TYPES>, DACertificate<TYPES>>, DACertificate<TYPES>>,
+        Either<VoteAccumulator<TYPES, DAVote<TYPES>, DACertificate<TYPES>>, DACertificate<TYPES>>,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
@@ -284,7 +284,7 @@ where
                     };
 
                 if view > collection_view {
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.committee_exchange.total_nodes()],

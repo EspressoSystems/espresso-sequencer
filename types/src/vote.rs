@@ -74,7 +74,7 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
 }
 
 /// Accumulates votes until a certificate is formed.  This implementation works for all simple vote and certificate pairs
-pub struct VoteAccumulator2<
+pub struct VoteAccumulator<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
@@ -90,7 +90,7 @@ pub struct VoteAccumulator2<
 }
 
 impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOTE::Commitment>>
-    VoteAccumulator2<TYPES, VOTE, CERT>
+    VoteAccumulator<TYPES, VOTE, CERT>
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.

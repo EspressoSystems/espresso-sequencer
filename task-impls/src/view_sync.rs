@@ -19,7 +19,7 @@ use hotshot_types::{
         ViewSyncPreCommitVote,
     },
     traits::network::ConsensusIntentEvent,
-    vote::{Certificate, HasViewNumber, Vote, VoteAccumulator2},
+    vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
 
 use bitvec::prelude::*;
@@ -181,7 +181,7 @@ pub struct ViewSyncRelayTaskState<
 
     /// Vote accumulator
     #[allow(clippy::type_complexity)]
-    pub accumulator: Either<VoteAccumulator2<TYPES, VOTE, CERTIFICATE>, CERTIFICATE>,
+    pub accumulator: Either<VoteAccumulator<TYPES, VOTE, CERTIFICATE>, CERTIFICATE>,
     /// Our node id; for logging
     pub id: u64,
 }
@@ -317,7 +317,7 @@ where
                     return;
                 }
 
-                let new_accumulator = VoteAccumulator2 {
+                let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],
@@ -403,7 +403,7 @@ where
                     return;
                 }
 
-                let new_accumulator = VoteAccumulator2 {
+                let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],
@@ -489,7 +489,7 @@ where
                     return;
                 }
 
-                let new_accumulator = VoteAccumulator2 {
+                let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
                     signers: bitvec![0; self.exchange.total_nodes()],

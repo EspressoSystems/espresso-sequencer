@@ -28,7 +28,7 @@ use hotshot_types::{
     simple_certificate::VIDCertificate,
     simple_vote::{VIDData, VIDVote},
     traits::network::CommunicationChannel,
-    vote::{HasViewNumber, VoteAccumulator2},
+    vote::{HasViewNumber, VoteAccumulator},
 };
 
 use snafu::Snafu;
@@ -82,7 +82,7 @@ where
     #[allow(clippy::type_complexity)]
     /// Accumulates VID votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>,
+        VoteAccumulator<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>,
         VIDCertificate<TYPES>,
     >,
     /// the current view
@@ -207,7 +207,7 @@ where
                     };
 
                 if view > collection_view {
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.vid_exchange.total_nodes()],

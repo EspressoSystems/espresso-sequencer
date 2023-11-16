@@ -34,7 +34,7 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote::{Certificate, HasViewNumber, VoteAccumulator2},
+    vote::{Certificate, HasViewNumber, VoteAccumulator},
 };
 use tracing::warn;
 
@@ -135,14 +135,14 @@ where
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
+        VoteAccumulator<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
         QuorumCertificate<TYPES>,
     >,
 
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
     pub timeout_accumulator: Either<
-        VoteAccumulator2<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
+        VoteAccumulator<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
         TimeoutCertificate<TYPES>,
     >,
     /// View which this vote collection task is collecting votes in
@@ -909,7 +909,7 @@ where
 
                 if vote.get_view_number() > collection_view {
                     // Todo check if we are the leader
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.quorum_exchange.total_nodes()],
@@ -921,7 +921,7 @@ where
 
                     // TODO Create default functions for accumulators
                     // https://github.com/EspressoSystems/HotShot/issues/1797
-                    let timeout_accumulator = VoteAccumulator2 {
+                    let timeout_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.timeout_exchange.total_nodes()],
@@ -994,7 +994,7 @@ where
 
                 if vote.get_view_number() > collection_view {
                     // Todo check if we are the leader
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.timeout_exchange.total_nodes()],
@@ -1004,7 +1004,7 @@ where
                     let timeout_accumulator =
                         new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
 
-                    let quorum_accumulator = VoteAccumulator2 {
+                    let quorum_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
                         signers: bitvec![0; self.quorum_exchange.total_nodes()],
