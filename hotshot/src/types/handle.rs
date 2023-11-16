@@ -1,6 +1,6 @@
 //! Provides an event-streaming handle for a [`HotShot`] running in the background
 
-use crate::QuorumCertificate2;
+use crate::QuorumCertificate;
 use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
 use async_lock::RwLock;
@@ -143,7 +143,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         if let Ok(anchor_leaf) = self.storage().get_anchored_view().await {
             if anchor_leaf.view_number == TYPES::Time::genesis() {
                 let leaf = Leaf::from_stored_view(anchor_leaf);
-                let mut qc = QuorumCertificate2::<TYPES>::genesis();
+                let mut qc = QuorumCertificate::<TYPES>::genesis();
                 qc.data = QuorumData {
                     leaf_commit: leaf.commit(),
                 };

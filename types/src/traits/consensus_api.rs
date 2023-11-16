@@ -5,7 +5,7 @@ use crate::{
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{
         network::NetworkError,
         node_implementation::{NodeImplementation, NodeType},
@@ -92,7 +92,7 @@ pub trait ConsensusSharedApi<TYPES: NodeType, I: NodeImplementation<TYPES>>: Sen
         &self,
         view_number: TYPES::Time,
         leaf_views: Vec<Leaf<TYPES>>,
-        decide_qc: QuorumCertificate2<TYPES>,
+        decide_qc: QuorumCertificate<TYPES>,
     ) {
         self.send_event(Event {
             view_number,

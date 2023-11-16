@@ -5,12 +5,11 @@
 
 use crate::data::QuorumProposal;
 use crate::simple_certificate::{
-    DACertificate2, VIDCertificate2, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+    DACertificate, VIDCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
     ViewSyncPreCommitCertificate2,
 };
 use crate::simple_vote::{
-    DAVote2, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
-    ViewSyncPreCommitVote,
+    DAVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
 };
 use crate::vote2::HasViewNumber;
 use crate::{
@@ -198,15 +197,15 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     /// Proposal for the DA committee.
     DAProposal(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Vote from the DA committee.
-    DAVote(DAVote2<TYPES>, TYPES::SignatureKey),
+    DAVote(DAVote<TYPES>, TYPES::SignatureKey),
     /// Certificate for the DA.
-    DACertificate(DACertificate2<TYPES>, TYPES::SignatureKey),
+    DACertificate(DACertificate<TYPES>, TYPES::SignatureKey),
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vote from VID storage node. Like [`DAVote`]
-    VidVote(VIDVote2<TYPES>, TYPES::SignatureKey),
+    VidVote(VIDVote<TYPES>, TYPES::SignatureKey),
     /// Certificate for VID. Like [`DACertificate`]
-    VidCertificate(VIDCertificate2<TYPES>, TYPES::SignatureKey),
+    VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
@@ -312,7 +311,7 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
     ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2<TYPES>),
 
     /// Message with a Timeout vote
-    TimeoutVote(TimeoutVote2<TYPES>),
+    TimeoutVote(TimeoutVote<TYPES>),
 
     /// Internal ONLY message indicating a view interrupt.
     #[serde(skip)]
@@ -327,10 +326,10 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
     DAProposal(Proposal<TYPES, DAProposal<TYPES>>),
 
     /// vote for data availability committee
-    DAVote(DAVote2<TYPES>),
+    DAVote(DAVote<TYPES>),
 
     /// Certificate data is available
-    DACertificate(DACertificate2<TYPES>),
+    DACertificate(DACertificate<TYPES>),
 
     /// Initiate VID dispersal.
     ///
@@ -341,11 +340,11 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
     /// Vote for VID disperse data
     ///
     /// Like [`DAVote`].
-    VidVote(VIDVote2<TYPES>),
+    VidVote(VIDVote<TYPES>),
     /// VID certificate data is available
     ///
     /// Like [`DACertificate`]
-    VidCertificate(VIDCertificate2<TYPES>),
+    VidCertificate(VIDCertificate<TYPES>),
 }
 
 /// Messages for sequencing consensus.

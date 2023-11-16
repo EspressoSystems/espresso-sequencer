@@ -20,7 +20,7 @@ use hotshot_types::{
     data::Leaf,
     error::RoundTimedoutState,
     event::{Event, EventType},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
@@ -92,7 +92,7 @@ pub struct RoundResult<TYPES: NodeType> {
     /// id -> (leaf, qc)
     // TODO GG: isn't it infeasible to store a Vec<Leaf<TYPES>>?
     #[allow(clippy::type_complexity)]
-    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>)>,
+    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
@@ -186,7 +186,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>),
+        result: (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>),
         maybe_block_size: Option<u64>,
     ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());

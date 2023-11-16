@@ -115,7 +115,7 @@ mod test {
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
-        simple_certificate::QuorumCertificate2,
+        simple_certificate::QuorumCertificate,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
     use std::{fmt::Debug, hash::Hash, marker::PhantomData};
@@ -159,7 +159,7 @@ mod test {
         };
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate2 {
+            QuorumCertificate {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
                 data,
                 vote_commitment: commit,

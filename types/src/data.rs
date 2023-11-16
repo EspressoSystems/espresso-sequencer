@@ -4,7 +4,7 @@
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
 use crate::{
-    simple_certificate::{QuorumCertificate2, TimeoutCertificate2},
+    simple_certificate::{QuorumCertificate, TimeoutCertificate},
     traits::{
         block_contents::BlockHeader,
         node_implementation::NodeType,
@@ -168,10 +168,10 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES>,
+    pub justify_qc: QuorumCertificate<TYPES>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
-    pub timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
+    pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,
@@ -264,7 +264,7 @@ pub struct Leaf<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES>,
+    pub justify_qc: QuorumCertificate<TYPES>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -325,7 +325,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
     pub fn new(
         view_number: TYPES::Time,
-        justify_qc: QuorumCertificate2<TYPES>,
+        justify_qc: QuorumCertificate<TYPES>,
         payload: TYPES::BlockPayload,
     ) -> Self {
         Self {
@@ -351,7 +351,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         self.block_header.block_number()
     }
     /// The QC linking this leaf to its parent in the chain.
-    pub fn get_justify_qc(&self) -> QuorumCertificate2<TYPES> {
+    pub fn get_justify_qc(&self) -> QuorumCertificate<TYPES> {
         self.justify_qc.clone()
     }
     /// Commitment to this leaf's parent.

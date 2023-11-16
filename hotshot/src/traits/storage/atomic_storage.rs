@@ -34,7 +34,7 @@ where
     blocks: HashMapStore<Commitment<STATE::BlockPayload>, STATE::BlockPayload>,
 
     /// The [`QuorumCertificate`]s stored by this [`AtomicStorage`]
-    qcs: DualKeyValueStore<QuorumCertificate2<STATE>>,
+    qcs: DualKeyValueStore<QuorumCertificate<STATE>>,
 
     /// The [`Leaf`s stored by this [`AtomicStorage`]
     ///
@@ -149,12 +149,12 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
     async fn get_qc(
         &self,
         hash: &Commitment<STATE::BlockPayload>,
-    ) -> StorageResult<Option<QuorumCertificate2<STATE>>> {
+    ) -> StorageResult<Option<QuorumCertificate<STATE>>> {
         Ok(self.inner.qcs.load_by_key_1_ref(hash).await)
     }
 
     #[instrument(name = "AtomicStorage::get_newest_qc", skip_all)]
-    async fn get_newest_qc(&self) -> StorageResult<Option<QuorumCertificate2<STATE>>> {
+    async fn get_newest_qc(&self) -> StorageResult<Option<QuorumCertificate<STATE>>> {
         Ok(self.inner.qcs.load_latest(|qc| qc.get_view_number()).await)
     }
 
@@ -162,7 +162,7 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
     async fn get_qc_for_view(
         &self,
         view: TYPES::Time,
-    ) -> StorageResult<Option<QuorumCertificate2<STATE>>> {
+    ) -> StorageResult<Option<QuorumCertificate<STATE>>> {
         Ok(self.inner.qcs.load_by_key_2(view).await)
     }
 
@@ -242,7 +242,7 @@ impl<'a, STATE: StateContents + 'static> StorageUpdater<'a, STATE>
     }
 
     #[instrument(name = "AtomicStorage::insert_qc", skip_all)]
-    async fn insert_qc(&mut self, qc: QuorumCertificate2<STATE>) -> StorageResult {
+    async fn insert_qc(&mut self, qc: QuorumCertificate<STATE>) -> StorageResult {
         self.inner.qcs.insert(qc).await
     }
 

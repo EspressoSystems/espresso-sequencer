@@ -17,7 +17,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
@@ -129,7 +129,7 @@ async fn build_quorum_proposal_and_signature(
     let proposal = QuorumProposal::<TestTypes> {
         block_header,
         view_number: ViewNumber::new(view),
-        justify_qc: QuorumCertificate2::genesis(),
+        justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
     };

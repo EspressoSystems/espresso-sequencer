@@ -25,8 +25,8 @@ use hotshot_types::{
     utils::ViewInner,
 };
 use hotshot_types::{
-    simple_certificate::VIDCertificate2,
-    simple_vote::{VIDData, VIDVote2},
+    simple_certificate::VIDCertificate,
+    simple_vote::{VIDData, VIDVote},
     traits::network::CommunicationChannel,
     vote2::{HasViewNumber, VoteAccumulator2},
 };
@@ -82,8 +82,8 @@ where
     #[allow(clippy::type_complexity)]
     /// Accumulates VID votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, VIDVote2<TYPES>, VIDCertificate2<TYPES>>,
-        VIDCertificate2<TYPES>,
+        VoteAccumulator2<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>,
+        VIDCertificate<TYPES>,
     >,
     /// the current view
     pub cur_view: TYPES::Time,
@@ -304,7 +304,7 @@ where
                 }
 
                 // Generate and send vote
-                let vote = VIDVote2::create_signed_vote(
+                let vote = VIDVote::create_signed_vote(
                     VIDData {
                         payload_commit: payload_commitment,
                     },

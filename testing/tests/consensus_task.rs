@@ -88,7 +88,7 @@ async fn build_vote(
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::simple_certificate::QuorumCertificate2;
+    use hotshot_types::simple_certificate::QuorumCertificate;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -101,7 +101,7 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate2::<TestTypes>::genesis();
+    let qc = QuorumCertificate::<TestTypes>::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));

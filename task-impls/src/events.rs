@@ -6,11 +6,11 @@ use hotshot_types::{
     data::{DAProposal, Leaf, QuorumProposal, VidDisperse},
     message::Proposal,
     simple_certificate::{
-        DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::node_implementation::NodeType,
@@ -26,15 +26,15 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// A quorum vote has been received from the network; handled by the consensus task
     QuorumVoteRecv(QuorumVote<TYPES>),
     /// A timeout vote recevied from the network; handled by consensus task
-    TimeoutVoteRecv(TimeoutVote2<TYPES>),
+    TimeoutVoteRecv(TimeoutVote<TYPES>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
-    TimeoutVoteSend(TimeoutVote2<TYPES>),
+    TimeoutVoteSend(TimeoutVote<TYPES>),
     /// A DA proposal has been received from the network; handled by the DA task
     DAProposalRecv(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
-    DAVoteRecv(DAVote2<TYPES>),
+    DAVoteRecv(DAVote<TYPES>),
     /// A Data Availability Certificate (DAC) has been recieved by the network; handled by the consensus task
-    DACRecv(DACertificate2<TYPES>),
+    DACRecv(DACertificate<TYPES>),
     /// Send a quorum proposal to the network; emitted by the leader in the consensus task
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
@@ -42,11 +42,11 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DAProposalSend(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
-    DAVoteSend(DAVote2<TYPES>),
+    DAVoteSend(DAVote<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
-    QCFormed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
+    QCFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
-    DACSend(DACertificate2<TYPES>, TYPES::SignatureKey),
+    DACSend(DACertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
     ViewChange(TYPES::Time),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
@@ -105,17 +105,17 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
     ///
     /// Like [`DAVoteSend`]
-    VidVoteSend(VIDVote2<TYPES>),
+    VidVoteSend(VIDVote<TYPES>),
     /// A VID vote has been received by the network; handled by the DA task
     ///
     /// Like [`DAVoteRecv`]
-    VidVoteRecv(VIDVote2<TYPES>),
+    VidVoteRecv(VIDVote<TYPES>),
     /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
     ///
     /// Like [`DACSend`]
-    VidCertSend(VIDCertificate2<TYPES>, TYPES::SignatureKey),
+    VidCertSend(VIDCertificate<TYPES>, TYPES::SignatureKey),
     /// A VID cert has been recieved by the network; handled by the consensus task
     ///
     /// Like [`DACRecv`]
-    VidCertRecv(VIDCertificate2<TYPES>),
+    VidCertRecv(VIDCertificate<TYPES>),
 }

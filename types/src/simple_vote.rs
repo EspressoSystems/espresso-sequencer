@@ -208,11 +208,11 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 /// Quorum vote Alias
 pub type QuorumVote<TYPES> = SimpleVote<TYPES, QuorumData<TYPES>>;
 /// DA vote type alias
-pub type DAVote2<TYPES> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
+pub type DAVote<TYPES> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
 /// VID vote type alias
-pub type VIDVote2<TYPES> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
+pub type VIDVote<TYPES> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
 /// Timeout Vote type alias
-pub type TimeoutVote2<TYPES> = SimpleVote<TYPES, TimeoutData<TYPES>>;
+pub type TimeoutVote<TYPES> = SimpleVote<TYPES, TimeoutData<TYPES>>;
 /// View Sync Commit Vote type alias
 pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>>;
 /// View Sync Pre Commit Vote type alias

@@ -93,7 +93,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> HasViewNumber<TYPES>
         self.view_number
     }
 }
-impl<TYPES: NodeType> Display for QuorumCertificate2<TYPES> {
+impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -103,7 +103,7 @@ impl<TYPES: NodeType> Display for QuorumCertificate2<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> QuorumCertificate2<TYPES> {
+impl<TYPES: NodeType> QuorumCertificate<TYPES> {
     #[must_use]
     /// Creat the Genisis certificate
     pub fn genesis() -> Self {
@@ -123,14 +123,13 @@ impl<TYPES: NodeType> QuorumCertificate2<TYPES> {
 }
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
-pub type QuorumCertificate2<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
+pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
 /// Type alias for a DA certificate over `DAData`
-pub type DACertificate2<TYPES> =
-    SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
+pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
 /// Type alias for a Timeout certificate over a view number
-pub type TimeoutCertificate2<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
+pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
 /// type alias for a VID certificate
-pub type VIDCertificate2<TYPES> =
+pub type VIDCertificate<TYPES> =
     SimpleCertificate<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
 
 // TODO ED Update this to use the correct threshold instead of the default `success_threshold`

@@ -51,7 +51,7 @@ use hotshot_task::{
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 use hotshot_types::{
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{election::ViewSyncExchangeType, node_implementation::TimeoutEx},
 };
 
@@ -235,7 +235,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.inner
             .internal_event_stream
             .publish(HotShotEvent::QCFormed(either::Left(
-                QuorumCertificate2::genesis(),
+                QuorumCertificate::genesis(),
             )))
             .await;
     }
@@ -941,7 +941,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// If we are unable to apply the genesis block to the default state
     pub fn from_genesis(genesis_payload: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
         let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate2::<TYPES>::genesis();
+        let justify_qc = QuorumCertificate::<TYPES>::genesis();
 
         Ok(Self {
             inner: Leaf::new(time, justify_qc, genesis_payload),

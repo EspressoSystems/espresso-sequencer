@@ -21,10 +21,8 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal},
-    simple_certificate::{
-        DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
-    },
-    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2},
+    simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
@@ -109,10 +107,10 @@ pub struct ConsensusTaskState<
     pub output_event_stream: ChannelStream<Event<TYPES>>,
 
     /// All the DA certs we've received for current and future views.
-    pub da_certs: HashMap<TYPES::Time, DACertificate2<TYPES>>,
+    pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// All the VID certs we've received for current and future views.
-    pub vid_certs: HashMap<TYPES::Time, VIDCertificate2<TYPES>>,
+    pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -137,15 +135,15 @@ where
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, QuorumVote<TYPES>, QuorumCertificate2<TYPES>>,
-        QuorumCertificate2<TYPES>,
+        VoteAccumulator2<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
+        QuorumCertificate<TYPES>,
     >,
 
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
     pub timeout_accumulator: Either<
-        VoteAccumulator2<TYPES, TimeoutVote2<TYPES>, TimeoutCertificate2<TYPES>>,
-        TimeoutCertificate2<TYPES>,
+        VoteAccumulator2<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
+        TimeoutCertificate<TYPES>,
     >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
@@ -1156,7 +1154,7 @@ where
                     return;
                 }
 
-                let vote = TimeoutVote2::create_signed_vote(
+                let vote = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
                     self.timeout_exchange.public_key(),
@@ -1184,9 +1182,9 @@ where
     #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate2<TYPES>,
+        _qc: QuorumCertificate<TYPES>,
         view: TYPES::Time,
-        timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
+        timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
         if !self.quorum_exchange.is_leader(view) {
             error!(

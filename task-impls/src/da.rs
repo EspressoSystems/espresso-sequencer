@@ -12,12 +12,12 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::simple_certificate::DACertificate2;
+use hotshot_types::simple_certificate::DACertificate;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
     message::{Message, Proposal},
-    simple_vote::{DAData, DAVote2},
+    simple_vote::{DAData, DAVote},
     traits::{
         consensus_api::ConsensusApi,
         election::{CommitteeExchangeType, ConsensusExchange, Membership},
@@ -81,10 +81,8 @@ where
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulates DA votes
-    pub accumulator: Either<
-        VoteAccumulator2<TYPES, DAVote2<TYPES>, DACertificate2<TYPES>>,
-        DACertificate2<TYPES>,
-    >,
+    pub accumulator:
+        Either<VoteAccumulator2<TYPES, DAVote<TYPES>, DACertificate<TYPES>>, DACertificate<TYPES>>,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
@@ -229,7 +227,7 @@ where
                     return None;
                 }
                 // Generate and send vote
-                let vote = DAVote2::create_signed_vote(
+                let vote = DAVote::create_signed_vote(
                     DAData {
                         payload_commit: payload_commitment,
                     },

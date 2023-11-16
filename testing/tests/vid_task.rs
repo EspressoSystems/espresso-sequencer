@@ -13,7 +13,7 @@ use hotshot_types::{
         node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
-use hotshot_types::{simple_vote::VIDVote2, traits::election::VIDExchangeType};
+use hotshot_types::{simple_vote::VIDVote, traits::election::VIDExchangeType};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -86,7 +86,7 @@ async fn test_vid_task() {
         1,
     );
 
-    let vid_vote = VIDVote2::create_signed_vote(
+    let vid_vote = VIDVote::create_signed_vote(
         hotshot_types::simple_vote::VIDData {
             payload_commit: block.commit(),
         },
