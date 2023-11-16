@@ -81,6 +81,7 @@ use hotshot_types::{
 use snafu::ResultExt;
 use std::{
     collections::{BTreeMap, HashMap},
+    marker::PhantomData,
     num::NonZeroUsize,
     sync::Arc,
     time::Duration,
@@ -100,6 +101,18 @@ pub const H_512: usize = 64;
 /// Length, in bytes, of a 256 bit hash
 pub const H_256: usize = 32;
 
+/// Bundle of the networks used in consensus
+pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Newtork for reaching all nodes
+    pub quorum_netowrk: I::QuorumNetwork,
+
+    /// Network for reaching the DA committee
+    pub da_network: I::CommitteeNetwork,
+
+    /// Phantom for TYPES and I
+    pub _pd: PhantomData<(TYPES, I)>, //TODO: Do we need seperate networks for Viewsync/VID?
+}
+
 /// Holds the state needed to participate in `HotShot` consensus
 pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The public key of this node
@@ -111,14 +124,14 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Configuration items for this hotshot instance
     config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 
-    /// Networking interface for this hotshot instance
-    // networking: I::Networking,
-
     /// This `HotShot` instance's storage backend
     storage: I::Storage,
 
     /// This `HotShot` instance's way to interact with the nodes needed to form a quorum and/or DA certificate.
     pub exchanges: Arc<I::Exchanges>,
+
+    /// Networks used by the instance of hotshot
+    pub networks: Arc<Networks<TYPES, I>>,
 
     // pub quorum_network: Arc<I::QuorumNetwork>;
     // pub committee_network: Arc<I::CommitteeNetwork>;
@@ -158,7 +171,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Creates a new hotshot with the given configuration options and sets it up with the given
     /// genesis block
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(private_key, storage, exchanges, initializer, metrics))]
+    #[instrument(skip(private_key, storage, exchanges, networks, initializer, metrics))]
     pub async fn new(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -166,6 +179,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
+        networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
@@ -223,6 +237,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             config,
             storage,
             exchanges: Arc::new(exchanges),
+            networks: Arc::new(networks),
             event_sender: RwLock::default(),
             _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
@@ -361,6 +376,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
         exchanges: I::Exchanges,
+        networks: Networks<TYPES, I>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<
@@ -381,6 +397,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             config,
             storage,
             exchanges,
+            networks,
             initializer,
             metrics,
         )

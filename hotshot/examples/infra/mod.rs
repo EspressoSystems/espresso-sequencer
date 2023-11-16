@@ -12,7 +12,7 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotType, SystemContext,
+    HotShotType, Networks, SystemContext,
 };
 use hotshot_orchestrator::{
     self,
@@ -47,32 +47,13 @@ use libp2p_networking::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use std::marker::PhantomData;
 use std::{collections::BTreeSet, sync::Arc};
 use std::{num::NonZeroUsize, str::FromStr};
-// use libp2p::{
-//     identity::{
-//         ed25519::{Keypair as EdKeypair, SecretKey},
-//         Keypair,
-//     },
-//     multiaddr::{self, Protocol},
-//     Multiaddr,
-// };
+
 use libp2p_identity::PeerId;
-// use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
 use std::{fmt::Debug, net::Ipv4Addr};
-use std::{
-    //collections::{BTreeSet, VecDeque},
-    fs,
-    mem,
-    net::IpAddr,
-    //num::NonZeroUsize,
-    //str::FromStr,
-    //sync::Arc,
-    //time::{Duration, Instant},
-    time::Instant,
-};
-//use surf_disco::error::ClientError;
-//use surf_disco::Client;
+use std::{fs, mem, net::IpAddr, time::Instant};
 use tracing::{debug, error, info, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -162,6 +143,8 @@ pub trait RunDA<
     VIDNETWORK: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
+        QuorumNetwork = QUORUMNETWORK,
+        CommitteeNetwork = DANETWORK,
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES>,
@@ -220,7 +203,11 @@ pub trait RunDA<
         >>::Membership::default_election_config(
             config.config.da_committee_size.try_into().unwrap(),
         );
-
+        let networks_bundle = Networks {
+            quorum_netowrk: quorum_network.clone(),
+            da_network: da_network.clone(),
+            _pd: PhantomData,
+        };
         let exchanges = NODE::Exchanges::create(
             known_nodes_with_stake.clone(),
             (quorum_election_config, committee_election_config),
@@ -242,6 +229,7 @@ pub trait RunDA<
             config.config,
             MemoryStorage::empty(),
             exchanges,
+            networks_bundle,
             initializer,
             ConsensusMetricsValue::new(),
         )
@@ -387,6 +375,8 @@ impl<
         >,
         NODE: NodeImplementation<
             TYPES,
+            QuorumNetwork = WebCommChannel<TYPES>,
+            CommitteeNetwork = WebCommChannel<TYPES>,
             Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES>,
@@ -513,6 +503,8 @@ impl<
         >,
         NODE: NodeImplementation<
             TYPES,
+            QuorumNetwork = Libp2pCommChannel<TYPES>,
+            CommitteeNetwork = Libp2pCommChannel<TYPES>,
             Exchanges = Exchanges<
                 TYPES,
                 Message<TYPES>,
@@ -724,6 +716,8 @@ pub async fn main_entry_point<
     VIDNETWORK: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
+        QuorumNetwork = QUORUMNETWORK,
+        CommitteeNetwork = DANETWORK,
         Exchanges = Exchanges<
             TYPES,
             Message<TYPES>,

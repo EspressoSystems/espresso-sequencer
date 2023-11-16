@@ -7,7 +7,7 @@ use crate::{
     spinning_task::UpDown,
     test_launcher::{Networks, TestLauncher},
 };
-use hotshot::types::SystemContextHandle;
+use hotshot::{traits::NodeImplementation, types::SystemContextHandle};
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
 use hotshot_task::{
@@ -19,12 +19,17 @@ use hotshot_types::{
     traits::{
         election::{ConsensusExchange, Membership},
         network::CommunicationChannel,
-        node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumEx},
+        node_implementation::{
+            CommitteeCommChannel, ExchangesType, NodeType, QuorumCommChannel, QuorumEx,
+        },
         signature_key::SignatureKey,
     },
     HotShotConfig, ValidatorConfig,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+};
 
 #[allow(deprecated)]
 use tracing::info;
@@ -52,6 +57,11 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
 where
     SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     QuorumCommChannel<TYPES, I>: CommunicationChannel<TYPES>,
+    I: NodeImplementation<
+        TYPES,
+        QuorumNetwork = QuorumCommChannel<TYPES, I>,
+        CommitteeNetwork = CommitteeCommChannel<TYPES, I>,
+    >,
 {
     /// excecute test
     pub async fn run_test(mut self)
@@ -187,6 +197,11 @@ where
             Message<TYPES>,
             ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
         >,
+        I: NodeImplementation<
+            TYPES,
+            QuorumNetwork = QuorumCommChannel<TYPES, I>,
+            CommitteeNetwork = CommitteeCommChannel<TYPES, I>,
+        >,
     {
         let mut results = vec![];
         for i in 0..total {
@@ -232,6 +247,11 @@ where
             Message<TYPES>,
             ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
         >,
+        I: NodeImplementation<
+            TYPES,
+            QuorumNetwork = QuorumCommChannel<TYPES, I>,
+            CommitteeNetwork = CommitteeCommChannel<TYPES, I>,
+        >,
     {
         let node_id = self.next_node_id;
         self.next_node_id += 1;
@@ -247,6 +267,11 @@ where
             >>::Membership::default_election_config(config.total_nodes.get() as u64)
         });
         let committee_election_config = I::committee_election_config_generator();
+        let network_bundle = hotshot::Networks {
+            quorum_netowrk: networks.0.clone(),
+            da_network: networks.1.clone(),
+            _pd: PhantomData,
+        };
         let exchanges = I::Exchanges::create(
             known_nodes_with_stake.clone(),
             (
@@ -265,6 +290,7 @@ where
             config,
             storage,
             exchanges,
+            network_bundle,
             initializer,
             ConsensusMetricsValue::new(),
         )

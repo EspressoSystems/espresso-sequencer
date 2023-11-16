@@ -8,7 +8,7 @@ use commit::Committable;
 use hotshot::{
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
-    HotShotConsensusApi, HotShotInitializer, SystemContext,
+    HotShotConsensusApi, HotShotInitializer, Networks, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
@@ -65,6 +65,11 @@ pub async fn build_system_handle(
             Message<TestTypes>,
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
+    let networks_bundle = Networks {
+        quorum_netowrk: networks.0.clone(),
+        da_network: networks.1.clone(),
+        _pd: PhantomData,
+    };
     let exchanges = <MemoryImpl as NodeImplementation<TestTypes>>::Exchanges::create(
         known_nodes_with_stake.clone(),
         (quorum_election_config, committee_election_config),
@@ -73,6 +78,7 @@ pub async fn build_system_handle(
         public_key.get_stake_table_entry(1u64),
         private_key.clone(),
     );
+
     SystemContext::init(
         public_key,
         private_key,
@@ -80,6 +86,7 @@ pub async fn build_system_handle(
         config,
         storage,
         exchanges,
+        networks_bundle,
         initializer,
         ConsensusMetricsValue::new(),
     )
