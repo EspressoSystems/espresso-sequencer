@@ -238,10 +238,10 @@ where
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
         payload_commitment: Some(VIDBlockPayload::genesis().commit()),
-        quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
-        timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
+        // quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
+        // timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
-        committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
+        // committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
         _pd: PhantomData,
         vote_collector: None,
         timeout_task: async_spawn(async move {}),
@@ -251,15 +251,20 @@ where
         vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
+        public_key: todo!(),
+        private_key: todo!(),
+        quorum_network: todo!(),
+        committee_network: todo!(),
+        timeout_membership: todo!(),
+        quorum_membership: todo!(),
+        committee_membership: todo!(),
     };
     consensus_state
-        .quorum_exchange
-        .network()
+        .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
         .await;
     consensus_state
-        .quorum_exchange
-        .network()
+        .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForProposal(1))
         .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
