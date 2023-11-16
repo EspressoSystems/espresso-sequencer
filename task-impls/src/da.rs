@@ -14,7 +14,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{DAProposal, Leaf, ProposalType},
+    data::DAProposal,
     message::{Message, Proposal, SequencingMessage},
     simple_vote::{DAData, DAVote2},
     traits::{
@@ -45,8 +45,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a DA task
 pub struct DATaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
@@ -60,7 +60,7 @@ pub struct DATaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -76,10 +76,8 @@ pub struct DATaskState<
 }
 
 /// Struct to maintain DA Vote Collection task state
-pub struct DAVoteCollectionTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> where
+pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
+where
     CommitteeEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -103,16 +101,14 @@ pub struct DAVoteCollectionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for DAVoteCollectionTaskState<TYPES, I>
-where
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>>(
+async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     mut state: DAVoteCollectionTaskState<TYPES, I>,
     event: HotShotEvent<TYPES, I>,
 ) -> (
@@ -175,12 +171,8 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>:
@@ -208,6 +200,14 @@ where
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
 
+                // stop polling for the received proposal
+                self.committee_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
+                        *proposal.data.view_number,
+                    ))
+                    .await;
+
                 if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
                     return None;
@@ -231,49 +231,49 @@ where
                     return None;
                 }
 
-                let vote_token = self.committee_exchange.make_vote_token(view);
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for DA committee on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        // Generate and send vote
-                        let vote = DAVote2::create_signed_vote(
-                            DAData {
-                                payload_commit: payload_commitment,
-                            },
-                            view,
-                            self.committee_exchange.public_key(),
-                            self.committee_exchange.private_key(),
-                        );
-
-                        // ED Don't think this is necessary?
-                        // self.cur_view = view;
-
-                        debug!("Sending vote to the DA leader {:?}", vote.get_view_number());
-                        self.event_stream
-                            .publish(HotShotEvent::DAVoteSend(vote))
-                            .await;
-                        let mut consensus = self.consensus.write().await;
-
-                        // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                        // there is already a view there: the replica task may have inserted a `Leaf` view which
-                        // contains strictly more information.
-                        consensus.state_map.entry(view).or_insert(View {
-                            view_inner: ViewInner::DA {
-                                block: payload_commitment,
-                            },
-                        });
-
-                        // Record the block payload we have promised to make available.
-                        consensus
-                            .saved_block_payloads
-                            .insert(proposal.data.block_payload);
-                    }
+                if !self
+                    .committee_exchange
+                    .membership()
+                    .has_stake(self.committee_exchange.public_key())
+                {
+                    debug!(
+                        "We were not chosen for consensus committee on {:?}",
+                        self.cur_view
+                    );
+                    return None;
                 }
+                // Generate and send vote
+                let vote = DAVote2::create_signed_vote(
+                    DAData {
+                        payload_commit: payload_commitment,
+                    },
+                    view,
+                    self.committee_exchange.public_key(),
+                    self.committee_exchange.private_key(),
+                );
+
+                // ED Don't think this is necessary?
+                // self.cur_view = view;
+
+                debug!("Sending vote to the DA leader {:?}", vote.get_view_number());
+                self.event_stream
+                    .publish(HotShotEvent::DAVoteSend(vote))
+                    .await;
+                let mut consensus = self.consensus.write().await;
+
+                // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                // there is already a view there: the replica task may have inserted a `Leaf` view which
+                // contains strictly more information.
+                consensus.state_map.entry(view).or_insert(View {
+                    view_inner: ViewInner::DA {
+                        block: payload_commitment,
+                    },
+                });
+
+                // Record the block payload we have promised to make available.
+                consensus
+                    .saved_block_payloads
+                    .insert(proposal.data.block_payload);
             }
             HotShotEvent::DAVoteRecv(vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
@@ -411,7 +411,11 @@ where
                 };
                 debug!("Sending DA proposal for view {:?}", data.view_number);
 
-                let message = Proposal { data, signature };
+                let message = Proposal {
+                    data,
+                    signature,
+                    _pd: PhantomData,
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))
@@ -459,12 +463,8 @@ where
 /// task state implementation for DA Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TS for DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>:

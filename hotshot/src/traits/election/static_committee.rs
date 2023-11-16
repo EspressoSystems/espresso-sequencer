@@ -2,13 +2,10 @@
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use espresso_systems_common::hotshot::tag;
 use hotshot_signature_key::bn254::BLSPubKey;
-use hotshot_types::{
-    data::LeafType,
-    traits::{
-        election::{Checked, ElectionConfig, ElectionError, Membership, VoteToken},
-        node_implementation::NodeType,
-        signature_key::{EncodedSignature, SignatureKey},
-    },
+use hotshot_types::traits::{
+    election::{Checked, ElectionConfig, ElectionError, Membership, VoteToken},
+    node_implementation::NodeType,
+    signature_key::{EncodedSignature, SignatureKey},
 };
 #[allow(deprecated)]
 use serde::{Deserialize, Serialize};
@@ -18,23 +15,19 @@ use tracing::debug;
 /// Dummy implementation of [`Membership`]
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct GeneralStaticCommittee<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey> {
+pub struct GeneralStaticCommittee<T, PUBKEY: SignatureKey> {
     /// All the nodes participating and their stake
     nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
     /// The nodes on the static committee and their stake
     committee_nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
     /// Node type phantom
     _type_phantom: PhantomData<T>,
-    /// Leaf phantom
-    _leaf_phantom: PhantomData<LEAF>,
 }
 
 /// static committee using a vrf kp
-pub type StaticCommittee<T, LEAF> = GeneralStaticCommittee<T, LEAF, BLSPubKey>;
+pub type StaticCommittee<T> = GeneralStaticCommittee<T, BLSPubKey>;
 
-impl<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey>
-    GeneralStaticCommittee<T, LEAF, PUBKEY>
-{
+impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
     /// Creates a new dummy elector
     #[must_use]
     pub fn new(_nodes: &[PUBKEY], nodes_with_stake: Vec<PUBKEY::StakeTableEntry>) -> Self {
@@ -42,7 +35,6 @@ impl<T, LEAF: LeafType<NodeType = T>, PUBKEY: SignatureKey>
             nodes_with_stake: nodes_with_stake.clone(),
             committee_nodes_with_stake: nodes_with_stake,
             _type_phantom: PhantomData,
-            _leaf_phantom: PhantomData,
         }
     }
 }
@@ -85,8 +77,8 @@ pub struct StaticElectionConfig {
 
 impl ElectionConfig for StaticElectionConfig {}
 
-impl<TYPES, LEAF: LeafType<NodeType = TYPES>, PUBKEY: SignatureKey + 'static> Membership<TYPES>
-    for GeneralStaticCommittee<TYPES, LEAF, PUBKEY>
+impl<TYPES, PUBKEY: SignatureKey + 'static> Membership<TYPES>
+    for GeneralStaticCommittee<TYPES, PUBKEY>
 where
     TYPES: NodeType<
         SignatureKey = PUBKEY,
@@ -105,7 +97,6 @@ where
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
-
     /// Simply make the partial signature
     fn make_vote_token(
         &self,
@@ -123,6 +114,22 @@ where
         message.extend_from_slice(&[0u8; 32 - 8]);
         let signature = PUBKEY::sign(private_key, &message);
         Ok(Some(StaticVoteToken { signature, pub_key }))
+    }
+    fn has_stake(&self, pub_key: &PUBKEY) -> bool {
+        let entry = pub_key.get_stake_table_entry(1u64);
+        self.committee_nodes_with_stake.contains(&entry)
+    }
+
+    fn get_stake(
+        &self,
+        pub_key: &<TYPES as NodeType>::SignatureKey,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        let entry = pub_key.get_stake_table_entry(1u64);
+        if self.committee_nodes_with_stake.contains(&entry) {
+            Some(entry)
+        } else {
+            None
+        }
     }
 
     fn validate_vote_token(
@@ -158,7 +165,6 @@ where
             nodes_with_stake: keys_qc,
             committee_nodes_with_stake,
             _type_phantom: PhantomData,
-            _leaf_phantom: PhantomData,
         }
     }
 

@@ -15,8 +15,7 @@ use hotshot::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::ViewSyncCertificate,
-    data::{Leaf, QuorumProposal, ViewNumber},
+    data::ViewNumber,
     message::{Message, SequencingMessage},
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
@@ -63,7 +62,7 @@ pub struct WebImpl;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]
 pub struct CombinedImpl;
 
-pub type StaticMembership = StaticCommittee<TestTypes, Leaf<TestTypes>>;
+pub type StaticMembership = StaticCommittee<TestTypes>;
 
 pub type StaticMemoryDAComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -102,8 +101,6 @@ pub type SequencingLibp2pExchange = Exchanges<
     Message<TestTypes, Libp2pImpl>,
     QuorumExchange<
         TestTypes,
-        <Libp2pImpl as NodeImplementation<TestTypes>>::Leaf,
-        QuorumProposal<TestTypes, Leaf<TestTypes>>,
         StaticMembership,
         StaticLibp2pQuorumComm,
         Message<TestTypes, Libp2pImpl>,
@@ -116,7 +113,6 @@ pub type SequencingLibp2pExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticLibp2pViewSyncComm,
         Message<TestTypes, Libp2pImpl>,
@@ -125,8 +121,7 @@ pub type SequencingLibp2pExchange = Exchanges<
 >;
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
-    type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
+    type Storage = MemoryStorage<TestTypes>;
     type Exchanges = SequencingLibp2pExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -143,13 +138,7 @@ impl NodeImplementation<TestTypes> for Libp2pImpl {
     }
 }
 
-impl
-    TestableExchange<
-        TestTypes,
-        <Libp2pImpl as NodeImplementation<TestTypes>>::Leaf,
-        Message<TestTypes, Libp2pImpl>,
-    > for SequencingLibp2pExchange
-{
+impl TestableExchange<TestTypes, Message<TestTypes, Libp2pImpl>> for SequencingLibp2pExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -228,8 +217,6 @@ pub type SequencingMemoryExchange = Exchanges<
     Message<TestTypes, MemoryImpl>,
     QuorumExchange<
         TestTypes,
-        <MemoryImpl as NodeImplementation<TestTypes>>::Leaf,
-        QuorumProposal<TestTypes, Leaf<TestTypes>>,
         StaticMembership,
         StaticMemoryQuorumComm,
         Message<TestTypes, MemoryImpl>,
@@ -242,7 +229,6 @@ pub type SequencingMemoryExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticMemoryViewSyncComm,
         Message<TestTypes, MemoryImpl>,
@@ -250,13 +236,7 @@ pub type SequencingMemoryExchange = Exchanges<
     VIDExchange<TestTypes, StaticMembership, StaticMemoryVIDComm, Message<TestTypes, MemoryImpl>>,
 >;
 
-impl
-    TestableExchange<
-        TestTypes,
-        <MemoryImpl as NodeImplementation<TestTypes>>::Leaf,
-        Message<TestTypes, MemoryImpl>,
-    > for SequencingMemoryExchange
-{
+impl TestableExchange<TestTypes, Message<TestTypes, MemoryImpl>> for SequencingMemoryExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -344,8 +324,7 @@ impl
 }
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
-    type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
+    type Storage = MemoryStorage<TestTypes>;
     type Exchanges = SequencingMemoryExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -370,18 +349,10 @@ impl NodeImplementation<TestTypes> for MemoryImpl {
 pub type SequencingWebExchanges = Exchanges<
     TestTypes,
     Message<TestTypes, WebImpl>,
-    QuorumExchange<
-        TestTypes,
-        <WebImpl as NodeImplementation<TestTypes>>::Leaf,
-        QuorumProposal<TestTypes, Leaf<TestTypes>>,
-        StaticMembership,
-        StaticWebQuorumComm,
-        Message<TestTypes, WebImpl>,
-    >,
+    QuorumExchange<TestTypes, StaticMembership, StaticWebQuorumComm, Message<TestTypes, WebImpl>>,
     CommitteeExchange<TestTypes, StaticMembership, StaticWebDAComm, Message<TestTypes, WebImpl>>,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticWebViewSyncComm,
         Message<TestTypes, WebImpl>,
@@ -389,13 +360,7 @@ pub type SequencingWebExchanges = Exchanges<
     VIDExchange<TestTypes, StaticMembership, StaticWebVIDComm, Message<TestTypes, WebImpl>>,
 >;
 
-impl
-    TestableExchange<
-        TestTypes,
-        <WebImpl as NodeImplementation<TestTypes>>::Leaf,
-        Message<TestTypes, WebImpl>,
-    > for SequencingWebExchanges
-{
+impl TestableExchange<TestTypes, Message<TestTypes, WebImpl>> for SequencingWebExchanges {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -485,8 +450,7 @@ impl
 }
 
 impl NodeImplementation<TestTypes> for WebImpl {
-    type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
+    type Storage = MemoryStorage<TestTypes>;
     type Exchanges = SequencingWebExchanges;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -508,8 +472,6 @@ pub type CombinedExchange = Exchanges<
     Message<TestTypes, CombinedImpl>,
     QuorumExchange<
         TestTypes,
-        <CombinedImpl as NodeImplementation<TestTypes>>::Leaf,
-        QuorumProposal<TestTypes, Leaf<TestTypes>>,
         StaticMembership,
         StaticCombinedQuorumComm,
         Message<TestTypes, CombinedImpl>,
@@ -522,7 +484,6 @@ pub type CombinedExchange = Exchanges<
     >,
     ViewSyncExchange<
         TestTypes,
-        ViewSyncCertificate<TestTypes>,
         StaticMembership,
         StaticCombinedViewSyncComm,
         Message<TestTypes, CombinedImpl>,
@@ -536,8 +497,7 @@ pub type CombinedExchange = Exchanges<
 >;
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
-    type Storage = MemoryStorage<TestTypes, Leaf<TestTypes>>;
-    type Leaf = Leaf<TestTypes>;
+    type Storage = MemoryStorage<TestTypes>;
     type Exchanges = CombinedExchange;
     type ConsensusMessage = SequencingMessage<TestTypes, Self>;
 
@@ -554,13 +514,7 @@ impl NodeImplementation<TestTypes> for CombinedImpl {
     }
 }
 
-impl
-    TestableExchange<
-        TestTypes,
-        <CombinedImpl as NodeImplementation<TestTypes>>::Leaf,
-        Message<TestTypes, CombinedImpl>,
-    > for CombinedExchange
-{
+impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,

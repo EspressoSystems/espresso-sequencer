@@ -15,11 +15,10 @@ use hotshot_task::{
 use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, ProposalType},
     message::{Message, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
-        election::ConsensusExchange,
+        election::{ConsensusExchange, Membership},
         node_implementation::{NodeImplementation, NodeType, VIDEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
@@ -45,8 +44,8 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    A: ConsensusApi<TYPES, I> + 'static,
 > where
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
@@ -60,7 +59,7 @@ pub struct VIDTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// the VID exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
@@ -76,10 +75,8 @@ pub struct VIDTaskState<
 }
 
 /// Struct to maintain VID Vote Collection task state
-pub struct VIDVoteCollectionTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
-> where
+pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
+where
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -99,11 +96,9 @@ pub struct VIDVoteCollectionTaskState<
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>> TS
-    for VIDVoteCollectionTaskState<TYPES, I>
-where
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
@@ -117,7 +112,7 @@ async fn vote_handle<TYPES, I>(
 )
 where
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>>,
+    I: NodeImplementation<TYPES>,
     VIDEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
@@ -174,12 +169,8 @@ where
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>:
@@ -274,6 +265,14 @@ where
                     disperse.data.get_view_number()
                 );
 
+                // stop polling for the received disperse
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
+
                 // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
                 let view = disperse.data.get_view_number();
 
@@ -301,54 +300,60 @@ where
                     return None;
                 }
 
-                let vote_token = self.vid_exchange.make_vote_token(view);
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for VID quorum on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        // Generate and send vote
-                        let vote = VIDVote2::create_signed_vote(
-                            VIDData {
-                                payload_commit: payload_commitment,
-                            },
-                            view,
-                            self.vid_exchange.public_key(),
-                            self.vid_exchange.private_key(),
-                        );
-
-                        // ED Don't think this is necessary?
-                        // self.cur_view = view;
-
-                        debug!(
-                            "Sending vote to the VID leader {:?}",
-                            vote.get_view_number()
-                        );
-                        self.event_stream
-                            .publish(HotShotEvent::VidVoteSend(vote))
-                            .await;
-                        let mut consensus = self.consensus.write().await;
-
-                        // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                        // there is already a view there: the replica task may have inserted a `Leaf` view which
-                        // contains strictly more information.
-                        consensus.state_map.entry(view).or_insert(View {
-                            view_inner: ViewInner::DA {
-                                block: payload_commitment,
-                            },
-                        });
-
-                        // Record the block we have promised to make available.
-                        // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                        // consensus.saved_block_payloads.insert(proposal.data.block_payload);
-                    }
+                if !self
+                    .vid_exchange
+                    .membership()
+                    .has_stake(self.vid_exchange.public_key())
+                {
+                    debug!(
+                        "We were not chosen for consensus committee on {:?}",
+                        self.cur_view
+                    );
+                    return None;
                 }
+
+                // Generate and send vote
+                let vote = VIDVote2::create_signed_vote(
+                    VIDData {
+                        payload_commit: payload_commitment,
+                    },
+                    view,
+                    self.vid_exchange.public_key(),
+                    self.vid_exchange.private_key(),
+                );
+
+                // ED Don't think this is necessary?
+                // self.cur_view = view;
+
+                debug!(
+                    "Sending vote to the VID leader {:?}",
+                    vote.get_view_number()
+                );
+                self.event_stream
+                    .publish(HotShotEvent::VidVoteSend(vote))
+                    .await;
+                let mut consensus = self.consensus.write().await;
+
+                // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                // there is already a view there: the replica task may have inserted a `Leaf` view which
+                // contains strictly more information.
+                consensus.state_map.entry(view).or_insert(View {
+                    view_inner: ViewInner::DA {
+                        block: payload_commitment,
+                    },
+                });
+
+                // Record the block we have promised to make available.
+                // TODO https://github.com/EspressoSystems/HotShot/issues/1692
+                // consensus.saved_block_payloads.insert(proposal.data.block_payload);
             }
-            HotShotEvent::VidCertRecv(_) => {
-                // RM TODO
+            HotShotEvent::VidCertRecv(cert) => {
+                self.vid_exchange
+                    .network()
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDCertificate(
+                        *cert.view_number,
+                    ))
+                    .await;
             }
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
@@ -418,12 +423,8 @@ where
 /// task state implementation for VID Task
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
+        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        A: ConsensusApi<TYPES, I> + 'static,
     > TS for VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>:

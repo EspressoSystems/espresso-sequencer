@@ -15,7 +15,7 @@ use super::{
     State,
 };
 use crate::{
-    data::{Leaf, LeafType, TestableLeaf},
+    data::{Leaf, TestableLeaf},
     message::{ConsensusMessageType, Message, SequencingMessage},
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
@@ -114,11 +114,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ChannelMaps<TYPES, I> {
 pub trait NodeImplementation<TYPES: NodeType>:
     Send + Sync + Debug + Clone + Eq + Hash + 'static + Serialize + for<'de> Deserialize<'de>
 {
-    /// Leaf type for this consensus implementation
-    type Leaf: LeafType<NodeType = TYPES>;
-
     /// Storage type for this consensus implementation
-    type Storage: Storage<TYPES, Self::Leaf> + Clone;
+    type Storage: Storage<TYPES> + Clone;
 
     /// Consensus message type.
     type ConsensusMessage: ConsensusMessageType<TYPES, Self>
@@ -135,7 +132,7 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Consensus type selected exchanges.
     ///
     /// Implements either `ValidatingExchangesType` or `ExchangesType`.
-    type Exchanges: ExchangesType<TYPES, Self::Leaf, Message<TYPES, Self>>;
+    type Exchanges: ExchangesType<TYPES, Message<TYPES, Self>>;
 
     /// Create channels for sending/recv-ing proposals and votes for quorum and committee
     /// exchanges, the latter of which is only applicable for sequencing consensus.
@@ -147,9 +144,7 @@ pub trait NodeImplementation<TYPES: NodeType>:
 /// Contains the protocols for exchanging proposals and votes.
 #[allow(clippy::type_complexity)]
 #[async_trait]
-pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSAGE: NetworkMsg>:
-    Send + Sync
-{
+pub trait ExchangesType<TYPES: NodeType, MESSAGE: NetworkMsg>: Send + Sync {
     /// Protocol for exchanging data availability proposals and votes.
     type CommitteeExchange: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
@@ -163,7 +158,7 @@ pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSA
     fn timeout_exchange(&self) -> &Self::TimeoutExchange;
 
     /// Protocol for exchanging quorum proposals and votes.
-    type QuorumExchange: QuorumExchangeType<TYPES, LEAF, MESSAGE> + Clone + Debug;
+    type QuorumExchange: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
     /// Protocol for exchanging view sync proposals and votes.
     type ViewSyncExchange: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug;
@@ -207,8 +202,8 @@ pub trait ExchangesType<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSA
 }
 
 /// an exchange that is testable
-pub trait TestableExchange<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, MESSAGE: NetworkMsg>:
-    ExchangesType<TYPES, LEAF, MESSAGE>
+pub trait TestableExchange<TYPES: NodeType, MESSAGE: NetworkMsg>:
+    ExchangesType<TYPES, MESSAGE>
 {
     /// generate communication channels
     #[allow(clippy::type_complexity)]
@@ -233,7 +228,7 @@ pub trait TestableExchange<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>, ME
 pub struct Exchanges<
     TYPES: NodeType,
     MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, Leaf<TYPES>, MESSAGE> + Clone + Debug,
+    QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
@@ -255,33 +250,23 @@ pub struct Exchanges<
     // It is here to avoid needing to instantiate it where all the other exchanges are instantiated
     // https://github.com/EspressoSystems/HotShot/issues/1799
     #[allow(clippy::type_complexity)]
-    pub timeout_exchange: TimeoutExchange<
-        TYPES,
-        <<Exchanges<
+    pub timeout_exchange:
+        TimeoutExchange<
             TYPES,
+            <<Exchanges<
+                TYPES,
+                MESSAGE,
+                QUORUMEXCHANGE,
+                COMMITTEEEXCHANGE,
+                VIEWSYNCEXCHANGE,
+                VIDEXCHANGE,
+            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+                TYPES,
+                MESSAGE,
+            >>::Membership,
+            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
             MESSAGE,
-            QUORUMEXCHANGE,
-            COMMITTEEEXCHANGE,
-            VIEWSYNCEXCHANGE,
-            VIDEXCHANGE,
-        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
-            TYPES,
-            MESSAGE,
-        >>::Proposal,
-        <<Exchanges<
-            TYPES,
-            MESSAGE,
-            QUORUMEXCHANGE,
-            COMMITTEEEXCHANGE,
-            VIEWSYNCEXCHANGE,
-            VIDEXCHANGE,
-        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
-            TYPES,
-            MESSAGE,
-        >>::Membership,
-        <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-        MESSAGE,
-    >,
+        >,
 
     /// Phantom data
     _phantom: PhantomData<(TYPES, MESSAGE)>,
@@ -289,12 +274,12 @@ pub struct Exchanges<
 
 #[async_trait]
 impl<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-    ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>
+    ExchangesType<TYPES, MESSAGE>
     for Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
 where
     TYPES: NodeType,
     MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, Leaf<TYPES>, MESSAGE> + Clone + Debug,
+    QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
@@ -304,33 +289,23 @@ where
     type ViewSyncExchange = VIEWSYNCEXCHANGE;
     type VIDExchange = VIDEXCHANGE;
     #[allow(clippy::type_complexity)]
-    type TimeoutExchange = TimeoutExchange<
-        TYPES,
-        <<Exchanges<
+    type TimeoutExchange =
+        TimeoutExchange<
             TYPES,
+            <<Exchanges<
+                TYPES,
+                MESSAGE,
+                QUORUMEXCHANGE,
+                COMMITTEEEXCHANGE,
+                VIEWSYNCEXCHANGE,
+                VIDEXCHANGE,
+            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+                TYPES,
+                MESSAGE,
+            >>::Membership,
+            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
             MESSAGE,
-            QUORUMEXCHANGE,
-            COMMITTEEEXCHANGE,
-            VIEWSYNCEXCHANGE,
-            VIDEXCHANGE,
-        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
-            TYPES,
-            MESSAGE,
-        >>::Proposal,
-        <<Exchanges<
-            TYPES,
-            MESSAGE,
-            QUORUMEXCHANGE,
-            COMMITTEEEXCHANGE,
-            VIEWSYNCEXCHANGE,
-            VIDEXCHANGE,
-        > as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<
-            TYPES,
-            MESSAGE,
-        >>::Membership,
-        <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-        MESSAGE,
-    >;
+        >;
 
     type ElectionConfigs = (TYPES::ElectionConfigType, TYPES::ElectionConfigType);
 
@@ -364,7 +339,22 @@ where
             sk.clone(),
         );
         #[allow(clippy::type_complexity)]
-        let timeout_exchange: TimeoutExchange<TYPES, <<Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Proposal, <<Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE> as ExchangesType<TYPES, Leaf<TYPES>, MESSAGE>>::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Membership, <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking, MESSAGE> = TimeoutExchange::create(
+        let timeout_exchange: TimeoutExchange<
+            TYPES,
+            <<Exchanges<
+                TYPES,
+                MESSAGE,
+                QUORUMEXCHANGE,
+                COMMITTEEEXCHANGE,
+                VIEWSYNCEXCHANGE,
+                VIDEXCHANGE,
+            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+                TYPES,
+                MESSAGE,
+            >>::Membership,
+            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+            MESSAGE,
+        > = TimeoutExchange::create(
             entries.clone(),
             configs.0.clone(),
             networks.0,
@@ -431,35 +421,30 @@ where
 /// Alias for the [`QuorumExchange`] type.
 pub type QuorumEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    <I as NodeImplementation<TYPES>>::Leaf,
     Message<TYPES, I>,
 >>::QuorumExchange;
 
 /// Alias for `TimeoutExchange` type
 pub type TimeoutEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    <I as NodeImplementation<TYPES>>::Leaf,
     Message<TYPES, I>,
 >>::TimeoutExchange;
 
 /// Alias for the [`CommitteeExchange`] type.
 pub type CommitteeEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    <I as NodeImplementation<TYPES>>::Leaf,
     Message<TYPES, I>,
 >>::CommitteeExchange;
 
 /// Alias for the [`VIDExchange`] type.
 pub type VIDEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    <I as NodeImplementation<TYPES>>::Leaf,
     Message<TYPES, I>,
 >>::VIDExchange;
 
 /// Alias for the [`ViewSyncExchange`] type.
 pub type ViewSyncEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    <I as NodeImplementation<TYPES>>::Leaf,
     Message<TYPES, I>,
 >>::ViewSyncExchange;
 
@@ -487,7 +472,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
     /// otherwise panics
     /// `padding` is the bytes of padding to add to the transaction
     fn leaf_create_random_transaction(
-        leaf: &Self::Leaf,
+        leaf: &Leaf<TYPES>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
@@ -505,7 +490,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
     fn construct_tmp_storage() -> Result<Self::Storage, StorageError>;
 
     /// Return the full internal state. This is useful for debugging.
-    async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES, Self::Leaf>;
+    async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES>;
 }
 
 #[async_trait]
@@ -536,8 +521,7 @@ where
     >,
     TYPES::StateType: TestableState,
     TYPES::BlockPayload: TestableBlock,
-    I::Storage: TestableStorage<TYPES, I::Leaf>,
-    I::Leaf: TestableLeaf<NodeType = TYPES>,
+    I::Storage: TestableStorage<TYPES>,
 {
     type CommitteeElectionConfig = TYPES::ElectionConfigType;
 
@@ -555,11 +539,11 @@ where
     }
 
     fn leaf_create_random_transaction(
-        leaf: &Self::Leaf,
+        leaf: &Leaf<TYPES>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
-        <Self::Leaf as TestableLeaf>::create_random_transaction(leaf, rng, padding)
+        Leaf::create_random_transaction(leaf, rng, padding)
     }
 
     fn block_genesis() -> TYPES::BlockPayload {
@@ -571,29 +555,13 @@ where
     }
 
     fn construct_tmp_storage() -> Result<Self::Storage, StorageError> {
-        <I::Storage as TestableStorage<TYPES, I::Leaf>>::construct_tmp_storage()
+        <I::Storage as TestableStorage<TYPES>>::construct_tmp_storage()
     }
 
-    async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES, Self::Leaf> {
-        <I::Storage as TestableStorage<TYPES, I::Leaf>>::get_full_state(storage).await
+    async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES> {
+        <I::Storage as TestableStorage<TYPES>>::get_full_state(storage).await
     }
 }
-
-/// A proposal to append a new leaf to the log which is output by consensus.
-pub type QuorumProposalType<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A proposal to provide data availability for a new leaf.
-pub type CommitteeProposalType<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A proposal to sync the view.
-pub type ViewSyncProposalType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Proposal;
-
-/// A vote on a [`ViewSyncProposal`].
-pub type ViewSyncVoteType<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ViewSyncExchangeType<TYPES, Message<TYPES, I>>>::Vote;
 
 /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
 pub type QuorumCommChannel<TYPES, I> =
@@ -620,7 +588,8 @@ pub type CommitteeMembership<TYPES, I> =
     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
 /// Protocol for determining membership in a view sync committee.
-pub type ViewSyncMembership<TYPES, I> = QuorumMembership<TYPES, I>;
+pub type ViewSyncMembership<TYPES, I> =
+    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
 
 /// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
 pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as CommunicationChannel<

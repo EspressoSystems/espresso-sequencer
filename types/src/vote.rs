@@ -295,7 +295,7 @@ impl<TYPES: NodeType> ViewSyncVoteAccumulator<TYPES> {
 
         if *commit_stake_casted >= u64::from(self.success_threshold) {
             let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                stake_table_entries.clone(),
+                stake_table_entries,
                 U256::from(self.success_threshold.get()),
             );
 
@@ -310,7 +310,7 @@ impl<TYPES: NodeType> ViewSyncVoteAccumulator<TYPES> {
 
         if *finalize_stake_casted >= u64::from(self.success_threshold) {
             let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
-                stake_table_entries.clone(),
+                stake_table_entries,
                 U256::from(self.success_threshold.get()),
             );
 

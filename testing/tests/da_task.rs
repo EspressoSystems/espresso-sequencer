@@ -14,7 +14,7 @@ use hotshot_types::{
         node_implementation::ExchangesType, state::ConsensusTime,
     },
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -56,6 +56,7 @@ async fn test_da_task() {
     let message = Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     };
 
     // TODO for now reuse the same block payload commitment and signature as DA committee
