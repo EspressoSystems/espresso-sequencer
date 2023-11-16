@@ -2,7 +2,7 @@
 
 use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -26,7 +26,6 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
-    data::Leaf,
     event::Event,
     message::{Message, Messages},
     traits::{
@@ -223,24 +222,9 @@ pub async fn add_consensus_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<Leaf<TYPES>>,
-        Membership = TYPES::Membership,
-    >,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::Time>,
-        Membership = TYPES::Membership,
-    >,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
+    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     let consensus = handle.hotshot.get_consensus();
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
@@ -324,12 +308,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     // build the vid task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
@@ -387,12 +366,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     // build the da task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {

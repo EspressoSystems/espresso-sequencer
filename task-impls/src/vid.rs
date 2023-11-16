@@ -3,7 +3,6 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::Commitment;
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -47,8 +46,7 @@ pub struct VIDTaskState<
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// The state's api
     pub api: A,
@@ -77,8 +75,7 @@ pub struct VIDTaskState<
 /// Struct to maintain VID Vote Collection task state
 pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// the vid exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
@@ -97,8 +94,7 @@ where
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>
 {
 }
 
@@ -113,12 +109,7 @@ async fn vote_handle<TYPES, I>(
 where
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
@@ -174,12 +165,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     VIDTaskState<TYPES, I, A>
 where
-    VIDEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
@@ -429,8 +415,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for VIDTaskState<TYPES, I, A>
 where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 

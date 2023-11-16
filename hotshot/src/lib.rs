@@ -43,7 +43,7 @@ use async_compatibility_layer::{
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use custom_debug::Debug;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
@@ -604,32 +604,16 @@ impl<
         I: NodeImplementation<TYPES>,
     > HotShotType<TYPES, I> for SystemContext<TYPES, I>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES>,
-            Commitment = Commitment<Leaf<TYPES>>,
-            Membership = TYPES::Membership,
-        > + 'static,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES>,
-            Commitment = Commitment<TYPES::BlockPayload>,
-            Membership = TYPES::Membership,
-        > + 'static,
+    QuorumEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
+    CommitteeEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
     ViewSyncEx<TYPES, I>:
         ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
-    VIDEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES>,
-            Commitment = Commitment<TYPES::BlockPayload>,
-            Membership = TYPES::Membership,
-        > + 'static,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES>,
-            Commitment = Commitment<TYPES::Time>,
-            Membership = TYPES::Membership,
-        > + 'static,
+    VIDEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
+    TimeoutEx<TYPES, I>:
+        ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
 {
     fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
         &self.inner.consensus

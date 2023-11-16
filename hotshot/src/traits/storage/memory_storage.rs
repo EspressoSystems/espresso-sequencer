@@ -107,9 +107,7 @@ impl<TYPES: NodeType> Storage<TYPES> for MemoryStorage<TYPES> {
 
 #[cfg(test)]
 mod test {
-    use crate::traits::election::static_committee::{
-        GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-    };
+    use crate::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 
     use super::*;
     use commit::Committable;
@@ -143,7 +141,6 @@ mod test {
         type BlockHeader = VIDBlockHeader;
         type BlockPayload = VIDBlockPayload;
         type SignatureKey = BLSPubKey;
-        type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
         type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;

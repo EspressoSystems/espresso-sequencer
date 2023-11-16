@@ -3,7 +3,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -46,8 +46,7 @@ pub struct DATaskState<
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// The state's api
     pub api: A,
@@ -76,8 +75,7 @@ pub struct DATaskState<
 /// Struct to maintain DA Vote Collection task state
 pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -96,8 +94,7 @@ where
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>
 {
 }
 
@@ -110,12 +107,7 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     DAVoteCollectionTaskState<TYPES, I>,
 )
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     match event {
         HotShotEvent::DAVoteRecv(vote) => {
@@ -170,12 +162,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES>,
-        Commitment = Commitment<TYPES::BlockPayload>,
-        Membership = TYPES::Membership,
-    >,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
@@ -463,8 +450,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 

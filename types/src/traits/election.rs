@@ -7,14 +7,11 @@ use super::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedSignature,
 };
-use crate::{certificate::AssembledSignature, data::Leaf};
+use crate::data::Leaf;
 
-use crate::{
-    traits::{
-        network::{CommunicationChannel, NetworkMsg},
-        signature_key::SignatureKey,
-    },
-    vote::{ViewSyncData, VoteType},
+use crate::traits::{
+    network::{CommunicationChannel, NetworkMsg},
+    signature_key::SignatureKey,
 };
 use bincode::Options;
 use commit::{Commitment, CommitmentBounds, Committable};
@@ -149,41 +146,6 @@ pub trait ElectionConfig:
 {
 }
 
-/// A certificate of some property which has been signed by a quroum of nodes.
-pub trait SignedCertificate<TYPES: NodeType, TIME, TOKEN, COMMITMENT>
-where
-    Self: Send + Sync + Clone + Serialize + for<'a> Deserialize<'a>,
-    COMMITMENT: CommitmentBounds,
-    TOKEN: VoteToken,
-{
-    /// `VoteType` that is used in this certificate
-    type Vote: VoteType<TYPES, COMMITMENT>;
-
-    /// Build a QC from the threshold signature and commitment
-    // TODO ED Rename this function and rework this function parameters
-    // Assumes last vote was valid since it caused a QC to form.
-    // Removes need for relay on other cert specific fields
-    fn create_certificate(signatures: AssembledSignature<TYPES>, vote: Self::Vote) -> Self;
-
-    /// Get the view number.
-    fn view_number(&self) -> TIME;
-
-    /// Get signatures.
-    fn signatures(&self) -> AssembledSignature<TYPES>;
-
-    // TODO (da) the following functions should be refactored into a QC-specific trait.
-    // TODO ED Make an issue for this
-
-    /// Get the leaf commitment.
-    fn leaf_commitment(&self) -> COMMITMENT;
-
-    /// Get whether the certificate is for the genesis block.
-    fn is_genesis(&self) -> bool;
-
-    /// To be used only for generating the genesis quorum certificate; will fail if used anywhere else
-    fn genesis() -> Self;
-}
-
 /// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
@@ -209,17 +171,6 @@ pub trait Membership<TYPES: NodeType>:
     /// The members of the committee for view `view_number`.
     fn get_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
-    /// Attempts to generate a vote token for self
-    ///
-    /// Returns `None` if the number of seats would be zero
-    /// # Errors
-    /// TODO tbd
-    fn make_vote_token(
-        &self,
-        view_number: TYPES::Time,
-        priv_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Result<Option<TYPES::VoteTokenType>, ElectionError>;
-
     /// Check if a key has stake
     fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;
 
@@ -229,16 +180,6 @@ pub trait Membership<TYPES: NodeType>:
         &self,
         pub_key: &TYPES::SignatureKey,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
-
-    /// Checks the claims of a received vote token
-    ///
-    /// # Errors
-    /// TODO tbd
-    fn validate_vote_token(
-        &self,
-        pub_key: TYPES::SignatureKey,
-        token: Checked<TYPES::VoteTokenType>,
-    ) -> Result<Checked<TYPES::VoteTokenType>, ElectionError>;
 
     /// Returns the number of total nodes in the committee
     fn total_nodes(&self) -> usize;
@@ -260,8 +201,6 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     type Membership: Membership<TYPES>;
     /// Network used by [`Membership`](Self::Membership) to communicate.
     type Networking: CommunicationChannel<TYPES, M, Self::Membership>;
-    /// Commitments to items which are the subject of proposals and decisions.
-    type Commitment: CommitmentBounds;
 
     /// Join a [`ConsensusExchange`] with the given identity (`pk` and `sk`).
     fn create(
@@ -372,7 +311,6 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockPayload>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -466,7 +404,6 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockPayload>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -573,7 +510,6 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<Leaf<TYPES>>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -657,7 +593,6 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<ViewSyncData<TYPES>>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -748,7 +683,6 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::Time>;
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -782,10 +716,4 @@ impl<
     fn private_key(&self) -> &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey {
         &self.private_key
     }
-}
-
-/// Testable implementation of a [`Membership`]. Will expose a method to generate a vote token used for testing.
-pub trait TestableElection<TYPES: NodeType>: Membership<TYPES> {
-    /// Generate a vote token used for testing.
-    fn generate_test_vote_token() -> TYPES::VoteTokenType;
 }

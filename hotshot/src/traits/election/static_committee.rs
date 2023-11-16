@@ -1,11 +1,9 @@
 // use ark_bls12_381::Parameters as Param381;
-use commit::{Commitment, Committable, RawCommitmentBuilder};
-use espresso_systems_common::hotshot::tag;
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::traits::{
-    election::{Checked, ElectionConfig, ElectionError, Membership, VoteToken},
+    election::{ElectionConfig, Membership},
     node_implementation::NodeType,
-    signature_key::{EncodedSignature, SignatureKey},
+    signature_key::SignatureKey,
 };
 #[allow(deprecated)]
 use serde::{Deserialize, Serialize};
@@ -39,35 +37,6 @@ impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-#[serde(bound(deserialize = ""))]
-/// Vote token for a static committee
-pub struct StaticVoteToken<K: SignatureKey> {
-    /// signature
-    signature: EncodedSignature,
-    /// public key
-    pub_key: K,
-}
-
-impl<PUBKEY: SignatureKey> VoteToken for StaticVoteToken<PUBKEY> {
-    fn vote_count(&self) -> NonZeroU64 {
-        NonZeroU64::new(1).unwrap()
-    }
-}
-
-impl<PUBKEY: SignatureKey> Committable for StaticVoteToken<PUBKEY> {
-    fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new("StaticVoteToken")
-            .var_size_field("signature", &self.signature.0)
-            .var_size_field("pub_key", &self.pub_key.to_bytes().0)
-            .finalize()
-    }
-
-    fn tag() -> String {
-        tag::STATIC_VOTE_TOKEN.to_string()
-    }
-}
-
 /// configuration for static committee. stub for now
 #[derive(Default, Clone, Serialize, Deserialize, core::fmt::Debug)]
 pub struct StaticElectionConfig {
@@ -80,11 +49,7 @@ impl ElectionConfig for StaticElectionConfig {}
 impl<TYPES, PUBKEY: SignatureKey + 'static> Membership<TYPES>
     for GeneralStaticCommittee<TYPES, PUBKEY>
 where
-    TYPES: NodeType<
-        SignatureKey = PUBKEY,
-        VoteTokenType = StaticVoteToken<PUBKEY>,
-        ElectionConfigType = StaticElectionConfig,
-    >,
+    TYPES: NodeType<SignatureKey = PUBKEY, ElectionConfigType = StaticElectionConfig>,
 {
     /// Clone the public key and corresponding stake table for current elected committee
     fn get_committee_qc_stake_table(&self) -> Vec<PUBKEY::StakeTableEntry> {
@@ -97,24 +62,7 @@ where
         let res = self.nodes_with_stake[index].clone();
         TYPES::SignatureKey::get_public_key(&res)
     }
-    /// Simply make the partial signature
-    fn make_vote_token(
-        &self,
-        view_number: TYPES::Time,
-        private_key: &<PUBKEY as SignatureKey>::PrivateKey,
-    ) -> std::result::Result<Option<StaticVoteToken<PUBKEY>>, ElectionError> {
-        let pub_key = PUBKEY::from_private(private_key);
-        let entry = pub_key.get_stake_table_entry(1u64);
-        if !self.committee_nodes_with_stake.contains(&entry) {
-            return Ok(None);
-        }
-        let mut message: Vec<u8> = vec![];
-        message.extend(view_number.to_le_bytes());
-        // Change the length from 8 to 32 to make it consistent with other commitments, use defined constant? instead of 32.
-        message.extend_from_slice(&[0u8; 32 - 8]);
-        let signature = PUBKEY::sign(private_key, &message);
-        Ok(Some(StaticVoteToken { signature, pub_key }))
-    }
+
     fn has_stake(&self, pub_key: &PUBKEY) -> bool {
         let entry = pub_key.get_stake_table_entry(1u64);
         self.committee_nodes_with_stake.contains(&entry)
@@ -129,24 +77,6 @@ where
             Some(entry)
         } else {
             None
-        }
-    }
-
-    fn validate_vote_token(
-        &self,
-        pub_key: PUBKEY,
-        token: Checked<TYPES::VoteTokenType>,
-    ) -> Result<Checked<TYPES::VoteTokenType>, ElectionError> {
-        match token {
-            Checked::Valid(t) | Checked::Unchecked(t) => {
-                let entry = pub_key.get_stake_table_entry(1u64);
-                if self.committee_nodes_with_stake.contains(&entry) {
-                    Ok(Checked::Valid(t))
-                } else {
-                    Ok(Checked::Inval(t))
-                }
-            }
-            Checked::Inval(t) => Ok(Checked::Inval(t)),
         }
     }
 

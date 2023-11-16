@@ -7,7 +7,7 @@ use super::{
     block_contents::{BlockHeader, Transaction},
     election::{
         CommitteeExchangeType, ConsensusExchange, ElectionConfig, QuorumExchangeType,
-        TimeoutExchange, TimeoutExchangeType, VIDExchangeType, ViewSyncExchangeType, VoteToken,
+        TimeoutExchange, TimeoutExchangeType, VIDExchangeType, ViewSyncExchangeType,
     },
     network::{CommunicationChannel, NetworkMsg, TestableNetworkingImplementation},
     state::{ConsensusTime, TestableBlock, TestableState},
@@ -625,8 +625,6 @@ pub trait NodeType:
     type BlockPayload: BlockPayload<Transaction = Self::Transaction>;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
-    /// The vote token that this hotshot setup is using.
-    type VoteTokenType: VoteToken;
     /// The transaction type that this hotshot setup is using.
     ///
     /// This should be equal to `BlockPayload::Transaction`

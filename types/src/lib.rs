@@ -13,7 +13,6 @@ use displaydoc::Display;
 use std::{num::NonZeroUsize, time::Duration};
 use traits::{election::ElectionConfig, signature_key::SignatureKey};
 pub mod block_impl;
-pub mod certificate;
 pub mod consensus;
 pub mod data;
 pub mod error;
@@ -23,7 +22,6 @@ pub mod simple_certificate;
 pub mod simple_vote;
 pub mod traits;
 pub mod utils;
-pub mod vote;
 pub mod vote2;
 /// the type of consensus to run. Either:
 /// wait for a signal to start a view,

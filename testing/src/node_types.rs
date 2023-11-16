@@ -6,7 +6,7 @@ use std::{marker::PhantomData, sync::Arc};
 use hotshot::{
     demo::DemoState,
     traits::{
-        election::static_committee::{StaticCommittee, StaticElectionConfig, StaticVoteToken},
+        election::static_committee::{StaticCommittee, StaticElectionConfig},
         implementations::{
             CombinedCommChannel, Libp2pCommChannel, Libp2pNetwork, MemoryCommChannel,
             MemoryNetwork, MemoryStorage, WebCommChannel, WebServerNetwork,
@@ -46,7 +46,6 @@ impl NodeType for TestTypes {
     type BlockHeader = VIDBlockHeader;
     type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
-    type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;

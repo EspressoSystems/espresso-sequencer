@@ -3,9 +3,7 @@ use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
 use hotshot::demo::DemoState;
-use hotshot::traits::election::static_committee::{
-    GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-};
+use hotshot::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 use hotshot::traits::implementations::{
     MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
 };
@@ -20,7 +18,6 @@ use hotshot_types::traits::election::{
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
 use hotshot_types::traits::node_implementation::{ChannelMaps, Exchanges, NodeType};
-use hotshot_types::vote::ViewSyncVote;
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
@@ -52,7 +49,6 @@ impl NodeType for Test {
     type BlockHeader = VIDBlockHeader;
     type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
-    type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
@@ -67,8 +63,6 @@ pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
 pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-
-pub type ThisViewSyncVote = ViewSyncVote<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;
