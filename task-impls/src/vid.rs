@@ -18,7 +18,7 @@ use hotshot_types::{
     message::Message,
     traits::{
         consensus_api::ConsensusApi,
-        election::ConsensusExchange,
+        election::{ConsensusExchange, Membership},
         node_implementation::{NodeImplementation, NodeType, VIDEx},
         signature_key::SignatureKey,
         state::ConsensusTime,
@@ -297,51 +297,52 @@ where
                     return None;
                 }
 
-                let vote_token = self.vid_exchange.make_vote_token(view);
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for VID quorum on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        // Generate and send vote
-                        let vote = VIDVote2::create_signed_vote(
-                            VIDData {
-                                payload_commit: payload_commitment,
-                            },
-                            view,
-                            self.vid_exchange.public_key(),
-                            self.vid_exchange.private_key(),
-                        );
-
-                        // ED Don't think this is necessary?
-                        // self.cur_view = view;
-
-                        debug!(
-                            "Sending vote to the VID leader {:?}",
-                            vote.get_view_number()
-                        );
-                        self.event_stream
-                            .publish(HotShotEvent::VidVoteSend(vote))
-                            .await;
-                        let mut consensus = self.consensus.write().await;
-
-                        // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                        // there is already a view there: the replica task may have inserted a `Leaf` view which
-                        // contains strictly more information.
-                        consensus.state_map.entry(view).or_insert(View {
-                            view_inner: ViewInner::DA {
-                                block: payload_commitment,
-                            },
-                        });
-
-                        // Record the block we have promised to make available.
-                        // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                        // consensus.saved_block_payloads.insert(proposal.data.block_payload);
-                    }
+                if !self
+                    .vid_exchange
+                    .membership()
+                    .has_stake(self.vid_exchange.public_key())
+                {
+                    debug!(
+                        "We were not chosen for consensus committee on {:?}",
+                        self.cur_view
+                    );
+                    return None;
                 }
+
+                // Generate and send vote
+                let vote = VIDVote2::create_signed_vote(
+                    VIDData {
+                        payload_commit: payload_commitment,
+                    },
+                    view,
+                    self.vid_exchange.public_key(),
+                    self.vid_exchange.private_key(),
+                );
+
+                // ED Don't think this is necessary?
+                // self.cur_view = view;
+
+                debug!(
+                    "Sending vote to the VID leader {:?}",
+                    vote.get_view_number()
+                );
+                self.event_stream
+                    .publish(HotShotEvent::VidVoteSend(vote))
+                    .await;
+                let mut consensus = self.consensus.write().await;
+
+                // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                // there is already a view there: the replica task may have inserted a `Leaf` view which
+                // contains strictly more information.
+                consensus.state_map.entry(view).or_insert(View {
+                    view_inner: ViewInner::DA {
+                        block: payload_commitment,
+                    },
+                });
+
+                // Record the block we have promised to make available.
+                // TODO https://github.com/EspressoSystems/HotShot/issues/1692
+                // consensus.saved_block_payloads.insert(proposal.data.block_payload);
             }
             HotShotEvent::VidCertRecv(cert) => {
                 self.vid_exchange
