@@ -1,5 +1,6 @@
 pub mod api;
 mod block;
+mod block2;
 mod chain_variables;
 pub mod hotshot_commitment;
 pub mod options;
@@ -16,10 +17,7 @@ use hotshot::{
         election::static_committee::{
             GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
         },
-        implementations::{
-            MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, WebCommChannel,
-            WebServerNetwork,
-        },
+        implementations::{MemoryCommChannel, MemoryStorage, WebCommChannel, WebServerNetwork},
         NodeImplementation,
     },
     types::{Message, SignatureKey, SystemContextHandle},
@@ -336,25 +334,6 @@ impl CommChannels<network::Web> {
     }
 }
 
-impl CommChannels<network::Memory> {
-    fn memory(
-        master_map: Arc<MasterMap<Message<SeqTypes, Node<network::Memory>>, PubKey>>,
-        pub_key: PubKey,
-    ) -> Self {
-        let network = Arc::new(MemoryNetwork::new(
-            pub_key,
-            Box::<NoMetrics>::default(),
-            master_map,
-            None,
-        ));
-        Self {
-            da: MemoryCommChannel::new(network.clone()),
-            quorum: MemoryCommChannel::new(network.clone()),
-            view_sync: MemoryCommChannel::new(network),
-        }
-    }
-}
-
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
@@ -469,6 +448,7 @@ pub mod testing {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use either::Either;
     use futures::{Stream, StreamExt};
+    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
     use hotshot_signature_key::bn254::BN254Priv;
     use hotshot_types::{
@@ -544,6 +524,25 @@ pub mod testing {
 
                 (quorum_chan, committee_chan, view_sync_chan)
             })
+        }
+    }
+
+    impl CommChannels<network::Memory> {
+        fn memory(
+            master_map: Arc<MasterMap<Message<SeqTypes, Node<network::Memory>>, PubKey>>,
+            pub_key: PubKey,
+        ) -> Self {
+            let network = Arc::new(MemoryNetwork::new(
+                pub_key,
+                Box::<NoMetrics>::default(),
+                master_map,
+                None,
+            ));
+            Self {
+                da: MemoryCommChannel::new(network.clone()),
+                quorum: MemoryCommChannel::new(network.clone()),
+                view_sync: MemoryCommChannel::new(network),
+            }
         }
     }
 
