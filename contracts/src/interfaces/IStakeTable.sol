@@ -68,7 +68,7 @@ interface IStakeTable {
     // === Queuing Stats ===
 
     /// @notice Get the next available epoch for new registration
-    function nextRegisterationEpoch() external view returns (uint64);
+    function nextRegistrationEpoch() external view returns (uint64);
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view returns (uint64);
     /// @notice Get the next available epoch for exit
@@ -84,7 +84,6 @@ interface IStakeTable {
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
     /// @param stakeType The type of staking (native or restaking)
-    /// @param blsSig The BLS signature that authenticates the `blsVK` field
     /// @param maxWait The maximum epoch the sender is waiting to wait to be included (cannot be
     /// smaller than the current epoch)
     ///
@@ -97,7 +96,6 @@ interface IStakeTable {
         EdOnBN254.EdOnBN254Point calldata schnorrVK,
         uint64 amount,
         StakeType stakeType,
-        bytes calldata blsSig,
         uint64 maxWait
     ) external returns (bool);
 

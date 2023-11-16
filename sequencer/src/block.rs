@@ -6,7 +6,6 @@ use ark_serialize::CanonicalSerialize;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot::traits::Block as HotShotBlock;
 use hotshot_query_service::QueryableBlock;
-use hotshot_types::traits::state::TestableBlock;
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeScheme,
@@ -204,7 +203,7 @@ impl HotShotBlock for Block {
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl TestableBlock for Block {
+impl hotshot_types::traits::state::TestableBlock for Block {
     fn genesis() -> Self {
         Block::genesis()
     }

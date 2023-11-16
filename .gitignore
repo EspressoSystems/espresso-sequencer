@@ -16,7 +16,7 @@ target/
 .idea
 
 # vscode stuff
-.vscode
+.vscode/settings.json
 
 node_modules/
 
