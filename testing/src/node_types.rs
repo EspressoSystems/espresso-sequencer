@@ -109,6 +109,8 @@ pub type SequencingLibp2pExchange = Exchanges<
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
     type Storage = MemoryStorage<TestTypes>;
+    type QuorumNetwork = StaticLibp2pQuorumComm;
+    type CommitteeNetwork = StaticLibp2pDAComm;
     type Exchanges = SequencingLibp2pExchange;
 
     fn new_channel_maps(
@@ -284,6 +286,8 @@ impl TestableExchange<TestTypes, Message<TestTypes>> for SequencingMemoryExchang
 
 impl NodeImplementation<TestTypes> for MemoryImpl {
     type Storage = MemoryStorage<TestTypes>;
+    type QuorumNetwork = StaticMemoryQuorumComm;
+    type CommitteeNetwork = StaticMemoryDAComm;
     type Exchanges = SequencingMemoryExchange;
 
     fn new_channel_maps(
@@ -392,6 +396,8 @@ impl TestableExchange<TestTypes, Message<TestTypes>> for SequencingWebExchanges 
 
 impl NodeImplementation<TestTypes> for WebImpl {
     type Storage = MemoryStorage<TestTypes>;
+    type QuorumNetwork = StaticWebQuorumComm;
+    type CommitteeNetwork = StaticWebDAComm;
     type Exchanges = SequencingWebExchanges;
 
     fn new_channel_maps(
@@ -415,6 +421,8 @@ pub type CombinedExchange = Exchanges<
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
     type Storage = MemoryStorage<TestTypes>;
+    type QuorumNetwork = StaticCombinedQuorumComm;
+    type CommitteeNetwork = StaticCombinedDAComm;
     type Exchanges = CombinedExchange;
 
     fn new_channel_maps(

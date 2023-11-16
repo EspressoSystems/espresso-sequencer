@@ -66,6 +66,8 @@ pub type VIDNetwork = MemoryCommChannel<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;
+    type QuorumNetwork = QuorumNetwork;
+    type CommitteeNetwork = DANetwork;
     type Exchanges = Exchanges<
         Test,
         Message<Test>,

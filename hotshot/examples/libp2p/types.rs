@@ -23,6 +23,8 @@ pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
+    type QuorumNetwork = QuorumNetwork;
+    type CommitteeNetwork = DANetwork;
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes>,

@@ -121,6 +121,11 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Implements either `ValidatingExchangesType` or `ExchangesType`.
     type Exchanges: ExchangesType<TYPES, Message<TYPES>>;
 
+    /// Network for all nodes
+    type QuorumNetwork: CommunicationChannel<TYPES>;
+    /// Network for those in the DA committee
+    type CommitteeNetwork: CommunicationChannel<TYPES>;
+
     /// Create channels for sending/recv-ing proposals and votes for quorum and committee
     /// exchanges, the latter of which is only applicable for sequencing consensus.
     fn new_channel_maps(

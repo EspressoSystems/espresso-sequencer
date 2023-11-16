@@ -23,6 +23,8 @@ pub type ViewSyncNetwork = WebCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
+    type CommitteeNetwork = DANetwork;
+    type QuorumNetwork = QuorumNetwork;
     type Exchanges = Exchanges<
         DemoTypes,
         Message<DemoTypes>,

@@ -120,6 +120,8 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// This `HotShot` instance's way to interact with the nodes needed to form a quorum and/or DA certificate.
     pub exchanges: Arc<I::Exchanges>,
 
+    // pub quorum_network: Arc<I::QuorumNetwork>;
+    // pub committee_network: Arc<I::CommitteeNetwork>;
     /// Sender for [`Event`]s
     event_sender: RwLock<Option<BroadcastSender<Event<TYPES>>>>,
 
