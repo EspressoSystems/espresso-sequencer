@@ -165,12 +165,7 @@ where
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
-}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I> {}
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "Quorum Vote Collection Task", level = "error")]
 
@@ -180,11 +175,7 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     VoteCollectionTaskState<TYPES, I>,
-)
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+) {
     match event {
         HotShotEvent::QuorumVoteRecv(vote) => {
             // For the case where we receive votes after we've made a certificate
@@ -288,11 +279,6 @@ impl<
         I: NodeImplementation<TYPES>,
         A: ConsensusApi<TYPES, I> + 'static,
     > ConsensusTaskState<TYPES, I, A>
-where
-    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
 
@@ -1308,10 +1294,6 @@ impl<
         I: NodeImplementation<TYPES>,
         A: ConsensusApi<TYPES, I>,
     > TS for ConsensusTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 
@@ -1342,13 +1324,7 @@ pub async fn sequencing_consensus_handle<
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     ConsensusTaskState<TYPES, I, A>,
-)
-where
-    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) {
     if let HotShotEvent::Shutdown = event {
         (Some(HotShotTaskCompleted::ShutDown), state)
     } else {

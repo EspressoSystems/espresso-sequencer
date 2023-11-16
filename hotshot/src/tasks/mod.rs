@@ -29,11 +29,11 @@ use hotshot_types::{
     event::Event,
     message::{Message, Messages},
     traits::{
+        consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, ViewSyncExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, TimeoutEx, VIDEx,
-            ViewSyncEx,
+            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, VIDEx, ViewSyncEx,
         },
         state::ConsensusTime,
     },
@@ -220,12 +220,7 @@ pub async fn add_consensus_task<
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
     output_stream: ChannelStream<Event<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) -> TaskRunner {
     let consensus = handle.hotshot.get_consensus();
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -238,10 +233,7 @@ where
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
         payload_commitment: Some(VIDBlockPayload::genesis().commit()),
-        // quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
-        // timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
-        // committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
         _pd: PhantomData,
         vote_collector: None,
         timeout_task: async_spawn(async move {}),
@@ -251,13 +243,13 @@ where
         vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
-        public_key: todo!(),
-        private_key: todo!(),
-        quorum_network: todo!(),
-        committee_network: todo!(),
-        timeout_membership: todo!(),
-        quorum_membership: todo!(),
-        committee_membership: todo!(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
+        quorum_network: c_api.inner.networks.quorum_network.clone().into(),
+        committee_network: c_api.inner.networks.da_network.clone().into(),
+        timeout_membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        committee_membership: c_api.inner.memberships.da_membership.clone().into(),
     };
     consensus_state
         .quorum_network

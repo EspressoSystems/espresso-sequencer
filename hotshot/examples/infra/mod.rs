@@ -204,7 +204,7 @@ pub trait RunDA<
             config.config.da_committee_size.try_into().unwrap(),
         );
         let networks_bundle = Networks {
-            quorum_netowrk: quorum_network.clone(),
+            quorum_network: quorum_network.clone(),
             da_network: da_network.clone(),
             _pd: PhantomData,
         };

@@ -104,7 +104,7 @@ pub const H_256: usize = 32;
 /// Bundle of the networks used in consensus
 pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Newtork for reaching all nodes
-    pub quorum_netowrk: I::QuorumNetwork,
+    pub quorum_network: I::QuorumNetwork,
 
     /// Network for reaching the DA committee
     pub da_network: I::CommitteeNetwork,

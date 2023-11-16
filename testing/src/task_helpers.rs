@@ -66,7 +66,7 @@ pub async fn build_system_handle(
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
     let networks_bundle = Networks {
-        quorum_netowrk: networks.0.clone(),
+        quorum_network: networks.0.clone(),
         da_network: networks.1.clone(),
         _pd: PhantomData,
     };

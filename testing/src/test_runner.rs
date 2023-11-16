@@ -268,7 +268,7 @@ where
         });
         let committee_election_config = I::committee_election_config_generator();
         let network_bundle = hotshot::Networks {
-            quorum_netowrk: networks.0.clone(),
+            quorum_network: networks.0.clone(),
             da_network: networks.1.clone(),
             _pd: PhantomData,
         };
