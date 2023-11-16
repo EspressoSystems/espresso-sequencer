@@ -113,6 +113,18 @@ pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub _pd: PhantomData<(TYPES, I)>, //TODO: Do we need seperate networks for Viewsync/VID?
 }
 
+/// Bundle of all the memberships a consensus instance uses
+pub struct Memberships<TYPES: NodeType> {
+    /// Quorum Membership
+    pub quorum_membership: TYPES::Membership,
+    /// DA
+    pub da_membership: TYPES::Membership,
+    /// VID
+    pub vid_membership: TYPES::Membership,
+    /// View Sync
+    pub view_sync_membership: TYPES::Membership,
+}
+
 /// Holds the state needed to participate in `HotShot` consensus
 pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The public key of this node
@@ -132,6 +144,9 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Networks used by the instance of hotshot
     pub networks: Arc<Networks<TYPES, I>>,
+
+    /// Memberships used by consensus
+    pub memberships: Arc<Memberships<TYPES>>,
 
     // pub quorum_network: Arc<I::QuorumNetwork>;
     // pub committee_network: Arc<I::CommitteeNetwork>;
@@ -228,6 +243,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         };
         let consensus = Arc::new(RwLock::new(consensus));
 
+        let memberships = Memberships {
+            quorum_membership: exchanges.quorum_exchange().membership().clone(),
+            da_membership: exchanges.committee_exchange().membership().clone(),
+            vid_membership: exchanges.vid_exchange().membership().clone(),
+            view_sync_membership: exchanges.view_sync_exchange().membership().clone(),
+        };
+
         let inner: Arc<SystemContextInner<TYPES, I>> = Arc::new(SystemContextInner {
             id: nonce,
             channel_maps: I::new_channel_maps(start_view),
@@ -238,6 +260,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage,
             exchanges: Arc::new(exchanges),
             networks: Arc::new(networks),
+            memberships: Arc::new(memberships),
             event_sender: RwLock::default(),
             _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
