@@ -13,12 +13,9 @@ use crate::traits::{
     network::{CommunicationChannel, NetworkMsg},
     signature_key::SignatureKey,
 };
-use bincode::Options;
-use commit::{Commitment, CommitmentBounds, Committable};
+use commit::Commitment;
 use derivative::Derivative;
 
-use hotshot_utils::bincode::bincode_opts;
-use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, marker::PhantomData, num::NonZeroU64};
 
@@ -31,107 +28,6 @@ pub enum ElectionError {
     /// NOTE: it would be better to make Election polymorphic over
     /// the election error and then have specific math errors
     MathError,
-}
-
-/// For items that will always have the same validity outcome on a successful check,
-/// allows for the case of "not yet possible to check" where the check might be
-/// attempted again at a later point in time, but saves on repeated checking when
-/// the outcome is already knowable.
-///
-/// This would be a useful general utility.
-#[derive(Clone)]
-pub enum Checked<T> {
-    /// This item has been checked, and is valid
-    Valid(T),
-    /// This item has been checked, and is not valid
-    Inval(T),
-    /// This item has not been checked
-    Unchecked(T),
-}
-
-/// Data to vote on for different types of votes.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[serde(bound(deserialize = ""))]
-pub enum VoteData<COMMITMENT>
-where
-    COMMITMENT: CommitmentBounds,
-{
-    /// Vote to provide availability for a block.
-    DA(COMMITMENT),
-    /// Vote to append a leaf to the log.
-    Yes(COMMITMENT),
-    /// Vote to reject a leaf from the log.
-    No(COMMITMENT),
-    /// Vote to time out and proceed to the next view.
-    Timeout(COMMITMENT),
-    /// Vote for VID proposal
-    VID(COMMITMENT),
-    /// Vote to pre-commit the view sync.
-    ViewSyncPreCommit(COMMITMENT),
-    /// Vote to commit the view sync.
-    ViewSyncCommit(COMMITMENT),
-    /// Vote to finalize the view sync.
-    ViewSyncFinalize(COMMITMENT),
-}
-
-/// Make different types of `VoteData` committable
-impl<COMMITMENT> Committable for VoteData<COMMITMENT>
-where
-    COMMITMENT: CommitmentBounds,
-{
-    fn commit(&self) -> Commitment<Self> {
-        let (tag, commit) = match self {
-            VoteData::DA(c) => ("DA BlockPayload Commit", c),
-            VoteData::VID(c) => ("VID Proposal Commit", c),
-            VoteData::Yes(c) => ("Yes Vote Commit", c),
-            VoteData::No(c) => ("No Vote Commit", c),
-            VoteData::Timeout(c) => ("Timeout View Number Commit", c),
-            VoteData::ViewSyncPreCommit(c) => ("ViewSyncPreCommit", c),
-            VoteData::ViewSyncCommit(c) => ("ViewSyncCommit", c),
-            VoteData::ViewSyncFinalize(c) => ("ViewSyncFinalize", c),
-        };
-        commit::RawCommitmentBuilder::new(tag)
-            .var_size_bytes(commit.as_ref())
-            .finalize()
-    }
-
-    fn tag() -> String {
-        ("VOTE_DATA_COMMIT").to_string()
-    }
-}
-
-impl<COMMITMENT> VoteData<COMMITMENT>
-where
-    COMMITMENT: CommitmentBounds,
-{
-    #[must_use]
-    /// Convert vote data into bytes.
-    ///
-    /// # Panics
-    /// Panics if the serialization fails.
-    pub fn as_bytes(&self) -> Vec<u8> {
-        bincode_opts().serialize(&self).unwrap()
-    }
-}
-
-/// Proof of this entity's right to vote, and of the weight of those votes
-pub trait VoteToken:
-    Clone
-    + Debug
-    + Send
-    + Sync
-    + serde::Serialize
-    + for<'de> serde::Deserialize<'de>
-    + PartialEq
-    + Hash
-    + Eq
-{
-    // type StakeTable;
-    // type KeyPair: SignatureKey;
-    // type ConsensusTime: ConsensusTime;
-
-    /// the count, which validation will confirm
-    fn vote_count(&self) -> NonZeroU64;
 }
 
 /// election config
