@@ -1,7 +1,8 @@
-use super::{SequencerDataSource, TimeWindowQueryData};
+use super::{
+    data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Fs as Options,
+};
 use crate::{network, Node, SeqTypes};
 use async_trait::async_trait;
-use clap::Parser;
 use futures::StreamExt;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId, BlockQueryData, ResourceId},
@@ -9,22 +10,7 @@ use hotshot_query_service::{
     NotFoundSnafu, QueryResult,
 };
 use snafu::OptionExt;
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
-
-/// Options for the query API module backed by the file system.
-#[derive(Parser, Clone, Debug)]
-pub struct Options {
-    /// Storage path for HotShot query service data.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub storage_path: PathBuf,
-
-    /// Create new query storage instead of opening existing one.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
-    pub reset_store: bool,
-}
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Clone, Debug, Default)]
 pub struct Index {

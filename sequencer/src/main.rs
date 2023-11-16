@@ -49,7 +49,7 @@ async fn main() {
 
             // Save the port if we are running a query API. This can be used later when starting the
             // commitment task; otherwise the user must give us the URL of an external query API.
-            let query_api_port = if opt.query_fs.is_some() {
+            let query_api_port = if opt.has_query_module() {
                 Some(opt.http.port)
             } else {
                 None

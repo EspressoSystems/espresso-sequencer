@@ -1,4 +1,4 @@
-use super::TimeWindowQueryData;
+use super::endpoints::TimeWindowQueryData;
 use crate::{network, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;

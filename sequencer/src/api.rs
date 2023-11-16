@@ -1,328 +1,38 @@
-use crate::{network, transaction::Transaction, Header, Leaf, NamespaceProofType, Node, SeqTypes};
-use async_std::{
-    sync::RwLock,
-    task::{spawn, JoinHandle},
-};
-use clap::Parser;
-use data_source::{SequencerDataSource, SubmitDataSource};
-use futures::{future::BoxFuture, FutureExt, StreamExt, TryFutureExt};
-use hotshot::{types::Event, types::SystemContextHandle};
-use hotshot_query_service::{
-    availability::{
-        self, AvailabilityDataSource, BlockHash, Error as AvailabilityError,
-        Options as AvailabilityOptions, QueryBlockSnafu,
-    },
-    data_source::{ExtensibleDataSource, UpdateDataSource, VersionedDataSource},
-    status::{self, StatusDataSource, UpdateStatusData},
-    Error,
-};
-use hotshot_types::traits::metrics::{Metrics, NoMetrics};
-use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
-use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
-use std::sync::Arc;
-use tide_disco::{Api, App};
+use crate::{network, Node, SeqTypes};
+use async_std::task::JoinHandle;
+use data_source::SubmitDataSource;
+use hotshot::types::SystemContextHandle;
+use hotshot_query_service::data_source::ExtensibleDataSource;
 
 mod data_source;
+mod endpoints;
 pub mod fs;
+pub mod options;
+mod update;
 
-/// The minimal HTTP API.
-///
-/// The API automatically includes health and version endpoints. Additional API modules can be
-/// added by including the query-api or submit-api modules.
-#[derive(Parser, Clone, Debug)]
-pub struct HttpOptions {
-    /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    pub port: u16,
-}
-
-/// Options for the submission API module.
-#[derive(Parser, Clone, Copy, Debug, Default)]
-pub struct SubmitOptions;
-
-impl SubmitOptions {
-    fn init<S, N: network::Type>(self, app: &mut App<S, Error>) -> anyhow::Result<()>
-    where
-        S: 'static + Send + Sync + tide_disco::method::WriteState,
-        S::State: Send + Sync + SubmitDataSource<N>,
-    {
-        // Include API specification in binary
-        let toml = toml::from_str::<toml::value::Value>(include_str!("../api/submit.toml"))?;
-
-        // Initialize submit API
-        let mut submit_api = Api::<S, Error>::new(toml)?;
-
-        // Define submit route for submit API
-        submit_api.post("submit", |req, state| {
-            async move {
-                state
-                    .handle()
-                    .submit_transaction(
-                        req.body_auto::<Transaction>()
-                            .map_err(|err| Error::internal(err.to_string()))?,
-                    )
-                    .await
-                    .map_err(|err| Error::internal(err.to_string()))
-            }
-            .boxed()
-        })?;
-
-        // Register modules in app
-        app.register_module("submit", submit_api)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Options {
-    pub http: HttpOptions,
-    pub query_fs: Option<fs::Options>,
-    pub submit: Option<SubmitOptions>,
-}
-
-impl From<HttpOptions> for Options {
-    fn from(http: HttpOptions) -> Self {
-        Self {
-            http,
-            query_fs: None,
-            submit: None,
-        }
-    }
-}
-
-impl Options {
-    /// Add a query API module backed by the file system.
-    pub fn query_fs(mut self, opt: fs::Options) -> Self {
-        self.query_fs = Some(opt);
-        self
-    }
-
-    /// Add a submit API module.
-    pub fn submit(mut self, opt: SubmitOptions) -> Self {
-        self.submit = Some(opt);
-        self
-    }
-
-    pub async fn serve<N: network::Type>(
-        self,
-        init_handle: HandleFromMetrics<N>,
-    ) -> anyhow::Result<SequencerNode<N>> {
-        // The server state type depends on whether we are running a query API or not, so we handle
-        // the two cases differently.
-        let node = if let Some(opt) = self.query_fs {
-            type WebState<N> = Arc<RwLock<AppState<N, fs::DataSource<N>>>>;
-
-            let ds = <fs::DataSource<N> as SequencerDataSource<N>>::create(opt).await?;
-            let metrics = ds.populate_metrics();
-
-            // Start up handle
-            let (mut handle, node_index) = init_handle(metrics).await;
-
-            // Get an event stream from the handle to use for populating the query data with
-            // consensus events.
-            //
-            // We must do this _before_ starting consensus on the handle, otherwise we could miss
-            // the first events emitted by consensus.
-            let mut events = handle.get_event_stream(Default::default()).await.0;
-
-            let state: WebState<N> =
-                Arc::new(RwLock::new(ExtensibleDataSource::new(ds, handle.clone())));
-            let mut app = App::<_, Error>::with_state(state.clone());
-
-            // Initialize submit API
-            if let Some(submit) = self.submit {
-                submit.init(&mut app)?;
-            }
-
-            // Initialize availability and status APIs
-            let mut options: AvailabilityOptions = Default::default();
-            let availability_extension = toml::from_str(include_str!("../api/availability.toml"))?;
-            options.extensions.push(availability_extension);
-            let mut availability_api =
-                availability::define_api::<WebState<N>, SeqTypes, Node<N>>(&options)?;
-            let status_api = status::define_api::<WebState<N>>(&Default::default())?;
-
-            availability_api
-                .get("getnamespaceproof", |req, state| {
-                    async move {
-                        let height: usize = req.integer_param("height")?;
-                        let namespace: u64 = req.integer_param("namespace")?;
-                        let block = state.get_block(height).await.context(QueryBlockSnafu {
-                            resource: height.to_string(),
-                        })?;
-
-                        let proof = block.block().get_namespace_proof(namespace.into());
-                        Ok(NamespaceProofQueryData {
-                            transactions: proof
-                                .get_namespace_leaves()
-                                .into_iter()
-                                .cloned()
-                                .collect(),
-                            proof,
-                            header: block.block().header(),
-                        })
-                    }
-                    .boxed()
-                })?
-                .get("getheader", |req, state| {
-                    async move {
-                        let height: usize = req.integer_param("height")?;
-                        let block = state.get_block(height).await.context(QueryBlockSnafu {
-                            resource: height.to_string(),
-                        })?;
-                        Ok(block.block().header())
-                    }
-                    .boxed()
-                })?
-                .get("gettimestampwindow", |req, state| {
-                    async move {
-                        let end = req.integer_param("end")?;
-                        let res = if let Some(height) = req.opt_integer_param("height")? {
-                            state.inner().window_from::<usize>(height, end).await
-                        } else if let Some(hash) = req.opt_blob_param("hash")? {
-                            state
-                                .inner()
-                                .window_from::<BlockHash<SeqTypes>>(hash, end)
-                                .await
-                        } else {
-                            let start: u64 = req.integer_param("start")?;
-                            state.inner().window(start, end).await
-                        };
-                        res.map_err(|err| AvailabilityError::Custom {
-                            message: err.to_string(),
-                            status: err.status(),
-                        })
-                    }
-                    .boxed()
-                })?;
-
-            // Register modules in app
-            app.register_module("availability", availability_api)?
-                .register_module("status", status_api)?;
-
-            let update_task = spawn(async move {
-                futures::join!(
-                    app.serve(format!("0.0.0.0:{}", self.http.port))
-                        .map_err(anyhow::Error::from),
-                    async move {
-                        tracing::debug!("waiting for event");
-                        while let Some(event) = events.next().await {
-                            tracing::info!("got event {:?}", event);
-
-                            // If update results in an error, program state is unrecoverable
-                            if let Err(err) = update_state(&mut *state.write().await, &event).await
-                            {
-                                tracing::error!(
-                                    "failed to update event {:?}: {}; updater task will exit",
-                                    event,
-                                    err
-                                );
-                                panic!();
-                            }
-                        }
-                        tracing::warn!("end of HotShot event stream, updater task will exit");
-                    }
-                )
-                .0
-            });
-
-            SequencerNode {
-                handle,
-                node_index,
-                update_task,
-            }
-        } else {
-            let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
-            let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone()));
-
-            // Initialize submit API
-            if let Some(submit) = self.submit {
-                submit.init::<_, N>(&mut app)?;
-            }
-
-            SequencerNode {
-                handle,
-                node_index,
-                update_task: spawn(
-                    app.serve(format!("0.0.0.0:{}", self.http.port))
-                        .map_err(anyhow::Error::from),
-                ),
-            }
-        };
-
-        // Start consensus.
-        node.handle.hotshot.start_consensus().await;
-        Ok(node)
-    }
-}
+pub use options::Options;
 
 type NodeIndex = u64;
 
+pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
+
 pub struct SequencerNode<N: network::Type> {
-    pub handle: SystemContextHandle<SeqTypes, Node<N>>,
+    pub handle: Consensus<N>,
     pub update_task: JoinHandle<anyhow::Result<()>>,
     pub node_index: NodeIndex,
 }
 
-pub type HandleFromMetrics<N> = Box<
-    dyn FnOnce(
-        Box<dyn Metrics>,
-    ) -> BoxFuture<'static, (SystemContextHandle<SeqTypes, Node<N>>, NodeIndex)>,
->;
-
-type AppState<N, D> = ExtensibleDataSource<D, SystemContextHandle<SeqTypes, Node<N>>>;
+type AppState<N, D> = ExtensibleDataSource<D, Consensus<N>>;
 
 impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
-    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+    fn handle(&self) -> &Consensus<N> {
         self.as_ref()
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for SystemContextHandle<SeqTypes, Node<N>> {
-    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
+    fn handle(&self) -> &Consensus<N> {
         self
-    }
-}
-
-async fn update_state<N: network::Type, D: SequencerDataSource<N> + Send + Sync>(
-    state: &mut AppState<N, D>,
-    event: &Event<SeqTypes, Leaf>,
-) -> anyhow::Result<()> {
-    // Remember the current block height, so we can update our local index
-    // based on any new blocks that get added.
-    let prev_block_height = state.block_height().await?;
-
-    state.update(event).await?;
-    state.inner_mut().refresh_indices(prev_block_height).await?;
-    state.commit().await?;
-
-    Ok(())
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProofType,
-    pub header: Header,
-    pub transactions: Vec<Transaction>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimeWindowQueryData {
-    pub from: u64,
-    pub window: Vec<Header>,
-    pub prev: Option<Header>,
-    pub next: Option<Header>,
-}
-
-impl TimeWindowQueryData {
-    fn new(from: u64) -> Self {
-        Self {
-            from,
-            window: vec![],
-            prev: None,
-            next: None,
-        }
     }
 }
 
@@ -331,11 +41,11 @@ mod test {
     use super::*;
     use crate::{
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
-        transaction::Transaction,
-        vm::VmId,
+        Header, Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
+    use endpoints::TimeWindowQueryData;
     use futures::FutureExt;
     use hotshot_query_service::availability::BlockQueryData;
     use hotshot_types::traits::metrics::Metrics;
@@ -361,7 +71,7 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
-        let options = Options::from(HttpOptions { port });
+        let options = Options::from(options::Http { port });
         options.serve(init_handle).await.unwrap();
 
         client.connect(None).await;
@@ -373,7 +83,7 @@ mod test {
     async fn submit_test_with_query_module() {
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        submit_test_helper(Some(fs::Options {
+        submit_test_helper(Some(options::Fs {
             storage_path,
             reset_store: true,
         }))
@@ -385,7 +95,7 @@ mod test {
         submit_test_helper(None).await
     }
 
-    async fn submit_test_helper(query_opt: Option<fs::Options>) {
+    async fn submit_test_helper(query_opt: Option<options::Fs>) {
         setup_logging();
         setup_backtrace();
 
@@ -405,7 +115,7 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
-        let mut options = Options::from(HttpOptions { port }).submit(Default::default());
+        let mut options = Options::from(options::Http { port }).submit(Default::default());
         if let Some(query) = query_opt {
             options = options.query_fs(query);
         }
@@ -443,8 +153,8 @@ mod test {
         let storage_path = tmp_dir.path().join("tmp_storage");
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
-        Options::from(HttpOptions { port })
-            .query_fs(fs::Options {
+        Options::from(options::Http { port })
+            .query_fs(options::Fs {
                 storage_path,
                 reset_store: true,
             })
