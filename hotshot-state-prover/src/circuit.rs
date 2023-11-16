@@ -391,15 +391,7 @@ mod tests {
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg = [
-            F::from(lightclient_state.view_number as u64),
-            F::from(lightclient_state.block_height as u64),
-            lightclient_state.block_comm,
-            lightclient_state.fee_ledger_comm,
-            lightclient_state.stake_table_comm.0,
-            lightclient_state.stake_table_comm.1,
-            lightclient_state.stake_table_comm.2,
-        ];
+        let state_msg = lightclient_state.to_array();
 
         let sigs = schnorr_keys
             .iter()
@@ -478,15 +470,7 @@ mod tests {
         // bad path: bad stake table commitment
         let mut bad_lightclient_state = lightclient_state.clone();
         bad_lightclient_state.stake_table_comm.1 = F::default();
-        let bad_state_msg = [
-            F::from(bad_lightclient_state.view_number as u64),
-            F::from(bad_lightclient_state.block_height as u64),
-            bad_lightclient_state.block_comm,
-            bad_lightclient_state.fee_ledger_comm,
-            bad_lightclient_state.stake_table_comm.0,
-            bad_lightclient_state.stake_table_comm.1,
-            bad_lightclient_state.stake_table_comm.2,
-        ];
+        let bad_state_msg = bad_lightclient_state.to_array
         let sig_for_bad_state = schnorr_keys
             .iter()
             .map(|(key, _)| {
@@ -510,15 +494,7 @@ mod tests {
         let mut wrong_light_client_state = lightclient_state.clone();
         // state with a different bls key commitment
         wrong_light_client_state.stake_table_comm.0 = F::default();
-        let wrong_state_msg = [
-            F::from(wrong_light_client_state.view_number as u64),
-            F::from(wrong_light_client_state.block_height as u64),
-            wrong_light_client_state.block_comm,
-            wrong_light_client_state.fee_ledger_comm,
-            wrong_light_client_state.stake_table_comm.0,
-            wrong_light_client_state.stake_table_comm.1,
-            wrong_light_client_state.stake_table_comm.2,
-        ];
+        let wrong_state_msg = wrong_light_client_state.to_array();
         let wrong_sigs = schnorr_keys
             .iter()
             .map(|(key, _)| {

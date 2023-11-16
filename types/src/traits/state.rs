@@ -234,3 +234,18 @@ pub struct LightClientState<F: PrimeField> {
     /// Commitment for the stake table
     pub stake_table_comm: (F, F, F),
 }
+
+impl<F: PrimeField> LightClientState<F> {
+    /// Return an array of field elements
+    pub fn to_array(&self) -> [F; 7] {
+        [
+            F::from(self.view_number as u64),
+            F::from(self.block_height as u64),
+            self.block_comm,
+            self.fee_ledger_comm,
+            self.stake_table_comm.0,
+            self.stake_table_comm.1,
+            self.stake_table_comm.2,
+        ]
+    }
+}

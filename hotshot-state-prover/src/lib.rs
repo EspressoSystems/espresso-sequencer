@@ -19,7 +19,7 @@ use hotshot_types::traits::{
 use jf_plonk::{
     errors::PlonkError,
     proof_system::{PlonkKzgSnark, UniversalSNARK},
-    transcript::StandardTranscript,
+    transcript::SolidityTranscript,
 };
 use jf_primitives::signatures::schnorr::Signature;
 use jf_relation::PlonkCircuit;
@@ -86,7 +86,7 @@ where
         lightclient_state,
         threshold,
     )?;
-    let proof = PlonkKzgSnark::<Bn254>::prove::<_, _, StandardTranscript>(rng, &circuit, pk, None)?;
+    let proof = PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(rng, &circuit, pk, None)?;
     Ok((proof, public_inputs))
 }
 
@@ -133,7 +133,7 @@ mod tests {
     use jf_plonk::{
         errors::PlonkError,
         proof_system::{PlonkKzgSnark, UniversalSNARK},
-        transcript::StandardTranscript,
+        transcript::SolidityTranscript,
     };
     use jf_primitives::{
         crhf::{VariableLengthRescueCRHF, CRHF},
@@ -244,15 +244,7 @@ mod tests {
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg = [
-            BaseField::from(lightclient_state.view_number as u64),
-            BaseField::from(lightclient_state.block_height as u64),
-            lightclient_state.block_comm,
-            lightclient_state.fee_ledger_comm,
-            lightclient_state.stake_table_comm.0,
-            lightclient_state.stake_table_comm.1,
-            lightclient_state.stake_table_comm.2,
-        ];
+        let state_msg = lightclient_state.to_array();
 
         let sigs = schnorr_keys
             .iter()
@@ -297,7 +289,7 @@ mod tests {
         assert!(result.is_ok());
 
         let (proof, public_inputs) = result.unwrap();
-        assert!(PlonkKzgSnark::<Bn254>::verify::<StandardTranscript>(
+        assert!(PlonkKzgSnark::<Bn254>::verify::<SolidityTranscript>(
             &vk,
             public_inputs.as_ref(),
             &proof,
