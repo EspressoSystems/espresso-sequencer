@@ -47,7 +47,7 @@ pub struct TransactionTaskState<
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// The state's api
     pub api: A,
@@ -70,7 +70,7 @@ pub struct TransactionTaskState<
     pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// This state's ID
     pub id: u64,
@@ -85,14 +85,14 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
 
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsRecv(transactions) => {
@@ -287,7 +287,7 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
@@ -358,7 +358,7 @@ where
     }
 
     /// Event filter for the transaction task
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::TransactionsRecv(_)
@@ -373,14 +373,14 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for TransactionTaskState<TYPES, I, A>
 where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 
 /// Type alias for DA Task Types
 pub type TransactionsTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     TransactionTaskState<TYPES, I, A>,
 >;

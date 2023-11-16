@@ -35,10 +35,7 @@ async fn test_view_sync_task() {
         relay: 0,
         round: <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
     };
-    let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<
-        TestTypes,
-        hotshot_testing::node_types::StaticMembership,
-    >::create_signed_vote(
+    let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes>::create_signed_vote(
         vote_data,
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
         view_sync_exchange.public_key(),

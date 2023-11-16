@@ -304,7 +304,7 @@ pub trait ConsensusExchange<TYPES: NodeType, M: NetworkMsg>: Send + Sync {
     }
 
     /// The committee which votes on proposals.
-    fn membership(&self) -> &Self::Membership;
+    fn membership(&self) -> &TYPES::Membership;
 
     /// This participant's public key.
     fn public_key(&self) -> &TYPES::SignatureKey;
@@ -336,7 +336,7 @@ pub struct CommitteeExchange<
     /// The network being used by this exchange.
     network: NETWORK,
     /// The committee which votes on proposals.
-    membership: MEMBERSHIP,
+    membership: TYPES::Membership,
     /// This participant's public key.
     public_key: TYPES::SignatureKey,
     /// Entry with public key and staking value for certificate aggregation
@@ -355,7 +355,7 @@ impl<
         M: NetworkMsg,
     > CommitteeExchangeType<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
-    /// Sign a DA proposal.
+    /// Sign a DA proposal.Self as ConsensusExchange<TYPES, M>
     fn sign_da_proposal(
         &self,
         payload_commitment: &Commitment<TYPES::BlockPayload>,
@@ -384,8 +384,7 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership =
-            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        let membership = <TYPES as NodeType>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -406,7 +405,7 @@ impl<
             .make_vote_token(view_number, &self.private_key)
     }
 
-    fn membership(&self) -> &Self::Membership {
+    fn membership(&self) -> &TYPES::Membership {
         &self.membership
     }
     fn public_key(&self) -> &TYPES::SignatureKey {
@@ -438,7 +437,7 @@ pub struct VIDExchange<
     /// The network being used by this exchange.
     network: NETWORK,
     /// The committee which votes on proposals.
-    membership: MEMBERSHIP,
+    membership: TYPES::Membership,
     /// This participant's public key.
     public_key: TYPES::SignatureKey,
     /// Entry with public key and staking value for certificate aggregation
@@ -486,8 +485,7 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership =
-            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        let membership = <TYPES as NodeType>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -508,7 +506,7 @@ impl<
             .make_vote_token(view_number, &self.private_key)
     }
 
-    fn membership(&self) -> &Self::Membership {
+    fn membership(&self) -> &TYPES::Membership {
         &self.membership
     }
     fn public_key(&self) -> &TYPES::SignatureKey {
@@ -546,7 +544,7 @@ pub struct QuorumExchange<
     /// The network being used by this exchange.
     network: NETWORK,
     /// The committee which votes on proposals.
-    membership: MEMBERSHIP,
+    membership: TYPES::Membership,
     /// This participant's public key.
     public_key: TYPES::SignatureKey,
     /// Entry with public key and staking value for certificate aggregation
@@ -601,8 +599,7 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership =
-            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        let membership = <TYPES as NodeType>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -617,7 +614,7 @@ impl<
         &self.network
     }
 
-    fn membership(&self) -> &Self::Membership {
+    fn membership(&self) -> &TYPES::Membership {
         &self.membership
     }
     fn public_key(&self) -> &TYPES::SignatureKey {
@@ -646,7 +643,7 @@ pub struct ViewSyncExchange<
     /// The network being used by this exchange.
     network: NETWORK,
     /// The committee which votes on proposals.
-    membership: MEMBERSHIP,
+    membership: TYPES::Membership,
     /// This participant's public key.
     public_key: TYPES::SignatureKey,
     /// Entry with public key and staking value for certificate aggregation in the stake table.
@@ -686,8 +683,7 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership =
-            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        let membership = <TYPES as NodeType>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -702,7 +698,7 @@ impl<
         &self.network
     }
 
-    fn membership(&self) -> &Self::Membership {
+    fn membership(&self) -> &TYPES::Membership {
         &self.membership
     }
     fn public_key(&self) -> &TYPES::SignatureKey {
@@ -726,7 +722,7 @@ pub struct TimeoutExchange<
     /// The network being used by this exchange.
     network: NETWORK,
     /// The committee which votes on proposals.
-    membership: MEMBERSHIP,
+    membership: TYPES::Membership,
     /// This participant's public key.
     public_key: TYPES::SignatureKey,
     /// Entry with public key and staking value for certificate aggregation in the stake table.
@@ -778,8 +774,7 @@ impl<
         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Self {
-        let membership =
-            <Self as ConsensusExchange<TYPES, M>>::Membership::create_election(entries, config);
+        let membership = <TYPES as NodeType>::Membership::create_election(entries, config);
         Self {
             network,
             membership,
@@ -794,7 +789,7 @@ impl<
         &self.network
     }
 
-    fn membership(&self) -> &Self::Membership {
+    fn membership(&self) -> &TYPES::Membership {
         &self.membership
     }
     fn public_key(&self) -> &TYPES::SignatureKey {

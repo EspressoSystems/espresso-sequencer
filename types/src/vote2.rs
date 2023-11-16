@@ -24,8 +24,6 @@ use crate::{
 
 /// A simple vote that has a signer and commitment to the data voted on.
 pub trait Vote2<TYPES: NodeType>: HasViewNumber<TYPES> {
-    /// The membership of those that send this vote type
-    type Membership: Membership<TYPES>;
     /// Type of data commitment this vote uses.
     type Commitment: Voteable;
 
@@ -102,7 +100,7 @@ impl<
     ///
     /// # Panics
     /// Panics if the vote comes from a node not in the stake table
-    pub fn accumulate(mut self, vote: &VOTE, membership: &VOTE::Membership) -> Either<Self, CERT> {
+    pub fn accumulate(mut self, vote: &VOTE, membership: &TYPES::Membership) -> Either<Self, CERT> {
         let key = vote.get_signing_key();
 
         let vote_commitment = vote.get_data_commitment();

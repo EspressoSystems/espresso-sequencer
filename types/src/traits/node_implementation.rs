@@ -37,18 +37,18 @@ use std::{
 
 /// struct containing messages for a view to send to a replica or DA committee member.
 #[derive(Clone)]
-pub struct ViewQueue<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct ViewQueue<TYPES: NodeType> {
     /// to send networking events to a replica or DA committee member.
-    pub sender_chan: UnboundedSender<ProcessedSequencingMessage<TYPES, I>>,
+    pub sender_chan: UnboundedSender<ProcessedSequencingMessage<TYPES>>,
 
     /// to recv networking events for a replica or DA committee member.
-    pub receiver_chan: Arc<Mutex<UnboundedReceiver<ProcessedSequencingMessage<TYPES, I>>>>,
+    pub receiver_chan: Arc<Mutex<UnboundedReceiver<ProcessedSequencingMessage<TYPES>>>>,
 
     /// `true` if this queue has already received a proposal
     pub has_received_proposal: Arc<AtomicBool>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Default for ViewQueue<TYPES, I> {
+impl<TYPES: NodeType> Default for ViewQueue<TYPES> {
     /// create new view queue
     fn default() -> Self {
         let (s, r) = unbounded();
@@ -61,17 +61,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Default for ViewQueue<TYPES,
 }
 
 /// metadata for sending information to the leader, replica, or DA committee member.
-pub struct SendToTasks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct SendToTasks<TYPES: NodeType> {
     /// the current view number
     /// this should always be in sync with `Consensus`
     pub cur_view: TYPES::Time,
 
     /// a map from view number to ViewQueue
     /// one of (replica|next leader)'s' task for view i will be listening on the channel in here
-    pub channel_map: BTreeMap<TYPES::Time, ViewQueue<TYPES, I>>,
+    pub channel_map: BTreeMap<TYPES::Time, ViewQueue<TYPES>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SendToTasks<TYPES, I> {
+impl<TYPES: NodeType> SendToTasks<TYPES> {
     /// create new sendtosasks
     #[must_use]
     pub fn new(view_num: TYPES::Time) -> Self {
@@ -84,15 +84,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SendToTasks<TYPES, I> {
 
 /// Channels for sending/recv-ing proposals and votes.
 #[derive(Clone)]
-pub struct ChannelMaps<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct ChannelMaps<TYPES: NodeType> {
     /// Channel for the next consensus leader or DA leader.
-    pub proposal_channel: Arc<RwLock<SendToTasks<TYPES, I>>>,
+    pub proposal_channel: Arc<RwLock<SendToTasks<TYPES>>>,
 
     /// Channel for the replica or DA committee member.
-    pub vote_channel: Arc<RwLock<SendToTasks<TYPES, I>>>,
+    pub vote_channel: Arc<RwLock<SendToTasks<TYPES>>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ChannelMaps<TYPES, I> {
+impl<TYPES: NodeType> ChannelMaps<TYPES> {
     /// Create channels starting from a given view.
     pub fn new(start_view: TYPES::Time) -> Self {
         Self {
@@ -119,13 +119,13 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Consensus type selected exchanges.
     ///
     /// Implements either `ValidatingExchangesType` or `ExchangesType`.
-    type Exchanges: ExchangesType<TYPES, Message<TYPES, Self>>;
+    type Exchanges: ExchangesType<TYPES, Message<TYPES>>;
 
     /// Create channels for sending/recv-ing proposals and votes for quorum and committee
     /// exchanges, the latter of which is only applicable for sequencing consensus.
     fn new_channel_maps(
         start_view: TYPES::Time,
-    ) -> (ChannelMaps<TYPES, Self>, Option<ChannelMaps<TYPES, Self>>);
+    ) -> (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>);
 }
 
 /// Contains the protocols for exchanging proposals and votes.
@@ -408,31 +408,31 @@ where
 /// Alias for the [`QuorumExchange`] type.
 pub type QuorumEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
 >>::QuorumExchange;
 
 /// Alias for `TimeoutExchange` type
 pub type TimeoutEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
 >>::TimeoutExchange;
 
 /// Alias for the [`CommitteeExchange`] type.
 pub type CommitteeEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
 >>::CommitteeExchange;
 
 /// Alias for the [`VIDExchange`] type.
 pub type VIDEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
 >>::VIDExchange;
 
 /// Alias for the [`ViewSyncExchange`] type.
 pub type ViewSyncEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
 >>::ViewSyncExchange;
 
 /// extra functions required on a node implementation to be usable by hotshot-testing
@@ -483,23 +483,23 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
-    CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES, I>>,
-    QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES, I>>,
+    CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES>>,
+    QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES, Message<TYPES>>,
     QuorumCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         QuorumMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
     CommitteeCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         CommitteeMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
     ViewSyncCommChannel<TYPES, I>: TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         ViewSyncMembership<TYPES, I>,
         QuorumNetwork<TYPES, I>,
     >,
@@ -549,50 +549,50 @@ where
 
 /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
 pub type QuorumCommChannel<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking;
+    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
 /// Communication channel for [`ViewSyncProposalType`] and [`ViewSyncVote`].
 pub type ViewSyncCommChannel<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking;
+    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
 /// Communication channel for [`CommitteeProposalType`] and [`DAVote`].
 pub type CommitteeCommChannel<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking;
+    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
 /// Protocol for determining membership in a consensus committee.
 pub type QuorumMembership<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
 /// TYPE aliase for the membership of VID exchange
 pub type VIDMembership<TYPES, I> =
-    <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+    <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
 /// Protocol for determining membership in a DA committee.
 pub type CommitteeMembership<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
 /// Protocol for determining membership in a view sync committee.
 pub type ViewSyncMembership<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership;
+    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
 /// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
 pub type QuorumNetwork<TYPES, I> = <QuorumCommChannel<TYPES, I> as CommunicationChannel<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
     QuorumMembership<TYPES, I>,
 >>::NETWORK;
 
 /// Type for the underlying committee `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
 pub type CommitteeNetwork<TYPES, I> = <CommitteeCommChannel<TYPES, I> as CommunicationChannel<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
     CommitteeMembership<TYPES, I>,
 >>::NETWORK;
 
 /// Type for the underlying view sync `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
 pub type ViewSyncNetwork<TYPES, I> = <ViewSyncCommChannel<TYPES, I> as CommunicationChannel<
     TYPES,
-    Message<TYPES, I>,
+    Message<TYPES>,
     ViewSyncMembership<TYPES, I>,
 >>::NETWORK;
 

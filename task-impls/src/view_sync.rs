@@ -18,7 +18,7 @@ use hotshot_types::{
         ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitData,
         ViewSyncPreCommitVote,
     },
-    traits::{network::ConsensusIntentEvent, node_implementation::ViewSyncMembership},
+    traits::network::ConsensusIntentEvent,
     vote2::{Certificate2, HasViewNumber, Vote2, VoteAccumulator2},
 };
 
@@ -67,12 +67,12 @@ pub struct ViewSyncTaskState<
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
 > where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
 {
     /// Registry to register sub tasks
     pub registry: GlobalRegistry,
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// View HotShot is currently in
     pub current_view: TYPES::Time,
     /// View HotShot wishes to be in
@@ -106,15 +106,15 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
 {
 }
 
 /// Types for the main view sync task
 pub type ViewSyncTaskStateTypes<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     ViewSyncTaskState<TYPES, I, A>,
 >;
 
@@ -124,7 +124,7 @@ pub struct ViewSyncReplicaTaskState<
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
 {
     /// Timeout for view sync rounds
     pub view_sync_timeout: Duration,
@@ -148,21 +148,22 @@ pub struct ViewSyncReplicaTaskState<
     /// HotShot consensus API
     pub api: A,
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for ViewSyncReplicaTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
 }
 
 /// Types for view sync replica state
 pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
     ViewSyncTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     ViewSyncReplicaTaskState<TYPES, I, A>,
 >;
 
@@ -174,7 +175,7 @@ pub struct ViewSyncRelayTaskState<
     CERTIFICATE: Certificate2<TYPES, Voteable = VOTE::Commitment>,
 > {
     /// Event stream to publish events to
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// View sync exchange
     pub exchange: Arc<ViewSyncEx<TYPES, I>>,
 
@@ -200,8 +201,8 @@ impl<
 /// Types used by the view sync relay task
 pub type ViewSyncRelayTaskStateTypes<TYPES, I, VOTE, CERTIFICATE> = HSTWithEvent<
     ViewSyncTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     ViewSyncRelayTaskState<TYPES, I, VOTE, CERTIFICATE>,
 >;
 
@@ -211,12 +212,13 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
     > ViewSyncTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
     #[allow(clippy::type_complexity)]
     /// Handles incoming events for the main view sync task
-    pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
+    pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match &event {
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
                 info!("Received view sync cert for phase {:?}", certificate);
@@ -325,7 +327,7 @@ where
                 let mut relay_state = ViewSyncRelayTaskState::<
                     TYPES,
                     I,
-                    ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                    ViewSyncPreCommitVote<TYPES>,
                     ViewSyncPreCommitCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
@@ -350,7 +352,7 @@ where
                           state: ViewSyncRelayTaskState<
                         TYPES,
                         I,
-                        ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncPreCommitVote<TYPES>,
                         ViewSyncPreCommitCertificate2<TYPES>,
                     >| {
                         async move { state.handle_event(event).await }.boxed()
@@ -362,7 +364,7 @@ where
                     ViewSyncRelayTaskStateTypes<
                         TYPES,
                         I,
-                        ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncPreCommitVote<TYPES>,
                         ViewSyncPreCommitCertificate2<TYPES>,
                     >,
                 >::new(name)
@@ -411,7 +413,7 @@ where
                 let mut relay_state = ViewSyncRelayTaskState::<
                     TYPES,
                     I,
-                    ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                    ViewSyncCommitVote<TYPES>,
                     ViewSyncCommitCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
@@ -436,7 +438,7 @@ where
                           state: ViewSyncRelayTaskState<
                         TYPES,
                         I,
-                        ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncCommitVote<TYPES>,
                         ViewSyncCommitCertificate2<TYPES>,
                     >| {
                         async move { state.handle_event(event).await }.boxed()
@@ -448,7 +450,7 @@ where
                     ViewSyncRelayTaskStateTypes<
                         TYPES,
                         I,
-                        ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncCommitVote<TYPES>,
                         ViewSyncCommitCertificate2<TYPES>,
                     >,
                 >::new(name)
@@ -497,7 +499,7 @@ where
                 let mut relay_state = ViewSyncRelayTaskState::<
                     TYPES,
                     I,
-                    ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                    ViewSyncFinalizeVote<TYPES>,
                     ViewSyncFinalizeCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
@@ -522,7 +524,7 @@ where
                           state: ViewSyncRelayTaskState<
                         TYPES,
                         I,
-                        ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncFinalizeVote<TYPES>,
                         ViewSyncFinalizeCertificate2<TYPES>,
                     >| {
                         async move { state.handle_event(event).await }.boxed()
@@ -534,7 +536,7 @@ where
                     ViewSyncRelayTaskStateTypes<
                         TYPES,
                         I,
-                        ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+                        ViewSyncFinalizeVote<TYPES>,
                         ViewSyncFinalizeCertificate2<TYPES>,
                     >,
                 >::new(name)
@@ -719,7 +721,7 @@ where
     }
 
     /// Filter view sync related events.
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(_)
@@ -739,13 +741,14 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     ViewSyncReplicaTaskState<TYPES, I, A>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Replica Task", level = "error")]
     /// Handle incoming events for the view sync replica task
     pub async fn handle_event(
         mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncReplicaTaskState<TYPES, I, A>,
@@ -785,17 +788,16 @@ where
                     self.relay = certificate.get_data().relay;
                 }
 
-                let vote =
-                    ViewSyncCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
-                        ViewSyncCommitData {
-                            relay: certificate.get_data().relay,
-                            round: self.next_view,
-                        },
-                        self.next_view,
-                        self.exchange.public_key(),
-                        self.exchange.private_key(),
-                    );
-                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncCommitVote(vote);
+                let vote = ViewSyncCommitVote::<TYPES>::create_signed_vote(
+                    ViewSyncCommitData {
+                        relay: certificate.get_data().relay,
+                        round: self.next_view,
+                    },
+                    self.next_view,
+                    self.exchange.public_key(),
+                    self.exchange.private_key(),
+                );
+                let message = GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
                     self.event_stream
@@ -854,17 +856,16 @@ where
                     self.relay = certificate.get_data().relay;
                 }
 
-                let vote =
-                    ViewSyncFinalizeVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
-                        ViewSyncFinalizeData {
-                            relay: certificate.get_data().relay,
-                            round: self.next_view,
-                        },
-                        self.next_view,
-                        self.exchange.public_key(),
-                        self.exchange.private_key(),
-                    );
-                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncFinalizeVote(vote);
+                let vote = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
+                    ViewSyncFinalizeData {
+                        relay: certificate.get_data().relay,
+                        round: self.next_view,
+                    },
+                    self.next_view,
+                    self.exchange.public_key(),
+                    self.exchange.private_key(),
+                );
+                let message = GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncFinalizeVote(vote) = message {
                     self.event_stream
@@ -938,14 +939,16 @@ where
                     return (None, self);
                 }
 
-                let vote =
-                ViewSyncPreCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
-                    ViewSyncPreCommitData { relay: 0, round: view_number},
+                let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
+                    ViewSyncPreCommitData {
+                        relay: 0,
+                        round: view_number,
+                    },
                     view_number,
                     self.exchange.public_key(),
                     self.exchange.private_key(),
                 );
-                let message = GeneralConsensusMessage::<TYPES, I>::ViewSyncPreCommitVote(vote);
+                let message = GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 
                 if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
                     self.event_stream
@@ -980,8 +983,7 @@ where
                     self.relay += 1;
                     match self.phase {
                         ViewSyncPhase::None => {
-                            let vote =
-                            ViewSyncPreCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
+                            let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
                                 ViewSyncPreCommitData {
                                     relay: self.relay,
                                     round: self.next_view,
@@ -991,7 +993,7 @@ where
                                 self.exchange.private_key(),
                             );
                             let message =
-                                GeneralConsensusMessage::<TYPES, I>::ViewSyncPreCommitVote(vote);
+                                GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 
                             if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
                                 self.event_stream
@@ -1000,8 +1002,7 @@ where
                             }
                         }
                         ViewSyncPhase::PreCommit => {
-                            let vote =
-                            ViewSyncCommitVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
+                            let vote = ViewSyncCommitVote::<TYPES>::create_signed_vote(
                                 ViewSyncCommitData {
                                     relay: self.relay,
                                     round: self.next_view,
@@ -1011,7 +1012,7 @@ where
                                 self.exchange.private_key(),
                             );
                             let message =
-                                GeneralConsensusMessage::<TYPES, I>::ViewSyncCommitVote(vote);
+                                GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
 
                             if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
                                 self.event_stream
@@ -1020,8 +1021,7 @@ where
                             }
                         }
                         ViewSyncPhase::Commit => {
-                            let vote =
-                            ViewSyncFinalizeVote::<TYPES, ViewSyncMembership<TYPES, I>>::create_signed_vote(
+                            let vote = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
                                 ViewSyncFinalizeData {
                                     relay: self.relay,
                                     round: self.next_view,
@@ -1031,7 +1031,7 @@ where
                                 self.exchange.private_key(),
                             );
                             let message =
-                                GeneralConsensusMessage::<TYPES, I>::ViewSyncFinalizeVote(vote);
+                                GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
 
                             if let GeneralConsensusMessage::ViewSyncFinalizeVote(vote) = message {
                                 self.event_stream
@@ -1073,24 +1073,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     ViewSyncRelayTaskState<
         TYPES,
         I,
-        ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+        ViewSyncPreCommitVote<TYPES>,
         ViewSyncPreCommitCertificate2<TYPES>,
     >
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
     #[allow(clippy::type_complexity)]
     pub async fn handle_event(
         mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncRelayTaskState<
             TYPES,
             I,
-            ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+            ViewSyncPreCommitVote<TYPES>,
             ViewSyncPreCommitCertificate2<TYPES>,
         >,
     ) {
@@ -1142,27 +1143,23 @@ where
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    ViewSyncRelayTaskState<
-        TYPES,
-        I,
-        ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
-        ViewSyncCommitCertificate2<TYPES>,
-    >
+    ViewSyncRelayTaskState<TYPES, I, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
     #[allow(clippy::type_complexity)]
     pub async fn handle_event(
         mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncRelayTaskState<
             TYPES,
             I,
-            ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>,
+            ViewSyncCommitVote<TYPES>,
             ViewSyncCommitCertificate2<TYPES>,
         >,
     ) {
@@ -1216,24 +1213,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     ViewSyncRelayTaskState<
         TYPES,
         I,
-        ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+        ViewSyncFinalizeVote<TYPES>,
         ViewSyncFinalizeCertificate2<TYPES>,
     >
 where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
+    ViewSyncEx<TYPES, I>:
+        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
     #[allow(clippy::type_complexity)]
     pub async fn handle_event(
         mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> (
         std::option::Option<HotShotTaskCompleted>,
         ViewSyncRelayTaskState<
             TYPES,
             I,
-            ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>,
+            ViewSyncFinalizeVote<TYPES>,
             ViewSyncFinalizeCertificate2<TYPES>,
         >,
     ) {

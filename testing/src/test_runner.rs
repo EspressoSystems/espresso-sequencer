@@ -41,8 +41,8 @@ pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>
 where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
+        Message<TYPES>,
+        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
     >,
 {
     pub(crate) launcher: TestLauncher<TYPES, I>,
@@ -57,8 +57,8 @@ where
     SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
+        Message<TYPES>,
+        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
     >,
 {
     /// excecute test
@@ -66,7 +66,7 @@ where
     where
         I::Exchanges: ExchangesType<
             TYPES,
-            Message<TYPES, I>,
+            Message<TYPES>,
             ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
         >,
     {
@@ -192,7 +192,7 @@ where
     where
         I::Exchanges: ExchangesType<
             TYPES,
-            Message<TYPES, I>,
+            Message<TYPES>,
             ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
         >,
     {
@@ -237,7 +237,7 @@ where
     where
         I::Exchanges: ExchangesType<
             TYPES,
-            Message<TYPES, I>,
+            Message<TYPES>,
             ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
         >,
     {
@@ -251,7 +251,7 @@ where
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
             <QuorumEx<TYPES,I> as ConsensusExchange<
                 TYPES,
-                Message<TYPES, I>,
+                Message<TYPES>,
             >>::Membership::default_election_config(config.total_nodes.get() as u64)
         });
         let committee_election_config = I::committee_election_config_generator();

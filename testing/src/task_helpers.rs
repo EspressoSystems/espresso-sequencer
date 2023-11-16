@@ -33,7 +33,7 @@ pub async fn build_system_handle(
     node_id: u64,
 ) -> (
     SystemContextHandle<TestTypes, MemoryImpl>,
-    ChannelStream<HotShotEvent<TestTypes, MemoryImpl>>,
+    ChannelStream<HotShotEvent<TestTypes>>,
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 
@@ -55,14 +55,14 @@ pub async fn build_system_handle(
     let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
         <QuorumEx<TestTypes, MemoryImpl> as ConsensusExchange<
             TestTypes,
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
 
     let committee_election_config = config.election_config.clone().unwrap_or_else(|| {
         <CommitteeEx<TestTypes, MemoryImpl> as ConsensusExchange<
             TestTypes,
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
         >>::Membership::default_election_config(config.total_nodes.get() as u64)
     });
     let exchanges = <MemoryImpl as NodeImplementation<TestTypes>>::Exchanges::create(

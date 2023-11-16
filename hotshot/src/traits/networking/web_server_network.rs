@@ -48,7 +48,7 @@ pub struct WebCommChannel<
     I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
-    Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
+    Arc<WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>>,
     PhantomData<(MEMBERSHIP, I)>,
 );
 
@@ -57,9 +57,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 {
     /// Create new communication channel
     #[must_use]
-    pub fn new(
-        network: Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    ) -> Self {
+    pub fn new(network: Arc<WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>>) -> Self {
         Self(network, PhantomData)
     }
 }
@@ -591,15 +589,15 @@ impl<
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
     for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
-    type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
+    type NETWORK = WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>;
     /// Blocks until node is successfully initialized
     /// into the network
     async fn wait_for_ready(&self) {
         <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::wait_for_ready(&self.0)
         .await;
@@ -609,7 +607,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// nonblocking
     async fn is_ready(&self) -> bool {
         <WebServerNetwork<_, _, _,> as ConnectedNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::is_ready(&self.0)
         .await
@@ -625,7 +623,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     {
         let closure = async move {
             <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::shut_down(&self.0)
             .await;
@@ -637,8 +635,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// blocking
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        _election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        _election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
         self.0.broadcast_message(message, BTreeSet::new()).await
     }
@@ -647,7 +645,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// blocking
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -660,14 +658,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
     {
         let closure = async move {
             <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::recv_msgs(&self.0, transmit_type)
             .await
@@ -677,7 +675,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::inject_consensus_info(&self.0, event)
         .await;
@@ -1204,9 +1202,8 @@ impl<
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>
 {
     fn generator(
         expected_node_count: usize,
@@ -1256,7 +1253,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES>>
     for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generator(
@@ -1267,7 +1264,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <WebServerNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
             TYPES,
         > as TestableNetworkingImplementation<_, _>>::generator(
@@ -1288,14 +1285,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         MEMBERSHIP,
-        WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
+        WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>,
     > for WebCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network() -> Box<
-        dyn Fn(Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>) -> Self
-            + 'static,
+        dyn Fn(Arc<WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>>) -> Self + 'static,
     > {
         Box::new(move |network| WebCommChannel::new(network))
     }

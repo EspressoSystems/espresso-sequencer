@@ -184,7 +184,7 @@ impl TestMetadata {
     ) -> TestLauncher<TYPES, I>
     where
         I: NodeImplementation<TYPES>,
-        <I as NodeImplementation<TYPES>>::Exchanges: TestableExchange<TYPES, Message<TYPES, I>>,
+        <I as NodeImplementation<TYPES>>::Exchanges: TestableExchange<TYPES, Message<TYPES>>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
@@ -240,7 +240,7 @@ impl TestMetadata {
             // TODO what's the difference between this and the second config?
             election_config: Some(<QuorumEx<TYPES, I> as ConsensusExchange<
                 TYPES,
-                Message<TYPES, I>,
+                Message<TYPES>,
             >>::Membership::default_election_config(
                 total_nodes as u64
             )),

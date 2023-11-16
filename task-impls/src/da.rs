@@ -12,6 +12,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
+use hotshot_types::simple_certificate::DACertificate2;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
@@ -30,9 +31,6 @@ use hotshot_types::{
     vote2::HasViewNumber,
     vote2::VoteAccumulator2,
 };
-use hotshot_types::{
-    simple_certificate::DACertificate2, traits::node_implementation::CommitteeMembership,
-};
 
 use snafu::Snafu;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
@@ -49,7 +47,7 @@ pub struct DATaskState<
     A: ConsensusApi<TYPES, I> + 'static,
 > where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// The state's api
     pub api: A,
@@ -69,7 +67,7 @@ pub struct DATaskState<
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// This state's ID
     pub id: u64,
@@ -79,45 +77,45 @@ pub struct DATaskState<
 pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulates DA votes
     pub accumulator: Either<
-        VoteAccumulator2<
-            TYPES,
-            DAVote2<TYPES, CommitteeMembership<TYPES, I>>,
-            DACertificate2<TYPES>,
-        >,
+        VoteAccumulator2<TYPES, DAVote2<TYPES>, DACertificate2<TYPES>>,
         DACertificate2<TYPES>,
     >,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// the id of this task state
     pub id: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
 async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     mut state: DAVoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES>,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     DAVoteCollectionTaskState<TYPES, I>,
 )
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES>,
+        Commitment = Commitment<TYPES::BlockPayload>,
+        Membership = TYPES::Membership,
+    >,
 {
     match event {
         HotShotEvent::DAVoteRecv(vote) => {
@@ -172,14 +170,18 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES>,
+        Commitment = Commitment<TYPES::BlockPayload>,
+        Membership = TYPES::Membership,
+    >,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::DAProposalRecv(proposal, sender) => {
@@ -444,7 +446,7 @@ where
     }
 
     /// Filter the DA event.
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::DAProposalRecv(_, _)
@@ -462,22 +464,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     for DATaskState<TYPES, I, A>
 where
     CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 
 /// Type alias for DA Vote Collection Types
 pub type DAVoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     DAVoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for DA Task Types
 pub type DATaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     DATaskState<TYPES, I, A>,
 >;

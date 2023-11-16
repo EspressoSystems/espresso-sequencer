@@ -12,7 +12,6 @@ use hotshot_testing::{
 };
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::simple_vote::QuorumVote;
-use hotshot_types::traits::node_implementation::QuorumMembership;
 use hotshot_types::vote2::Certificate2;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
@@ -27,7 +26,7 @@ use std::collections::HashMap;
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     proposal: QuorumProposal<TestTypes>,
-) -> GeneralConsensusMessage<TestTypes, MemoryImpl> {
+) -> GeneralConsensusMessage<TestTypes> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
@@ -68,7 +67,7 @@ async fn build_vote(
         timestamp: 0,
         proposer_id: quorum_exchange.get_leader(view).to_bytes(),
     };
-    let vote = QuorumVote::<TestTypes, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+    let vote = QuorumVote::<TestTypes>::create_signed_vote(
         QuorumData {
             leaf_commit: leaf.commit(),
         },
@@ -76,7 +75,7 @@ async fn build_vote(
         quorum_exchange.public_key(),
         quorum_exchange.private_key(),
     );
-    GeneralConsensusMessage::<TestTypes, MemoryImpl>::Vote(vote)
+    GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }
 
 #[cfg(test)]

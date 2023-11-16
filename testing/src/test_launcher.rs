@@ -30,20 +30,20 @@ use super::{
 pub type Networks<TYPES, I> = (
     <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
         TYPES,
-        Message<TYPES, I>,
-    >>::QuorumExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+        Message<TYPES>,
+    >>::QuorumExchange as ConsensusExchange<TYPES, Message<TYPES>>>::Networking,
     <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
         TYPES,
-        Message<TYPES, I>,
-    >>::CommitteeExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+        Message<TYPES>,
+    >>::CommitteeExchange as ConsensusExchange<TYPES, Message<TYPES>>>::Networking,
     <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
         TYPES,
-        Message<TYPES, I>,
-    >>::ViewSyncExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+        Message<TYPES>,
+    >>::ViewSyncExchange as ConsensusExchange<TYPES, Message<TYPES>>>::Networking,
     <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
         TYPES,
-        Message<TYPES, I>,
-    >>::VIDExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+        Message<TYPES>,
+    >>::VIDExchange as ConsensusExchange<TYPES, Message<TYPES>>>::Networking,
 );
 
 /// Wrapper for a function that takes a `node_id` and returns an instance of `T`.
@@ -82,8 +82,8 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
 where
     QuorumCommChannel<TYPES, I>: CommunicationChannel<
         TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
+        Message<TYPES>,
+        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership,
     >,
 {
     // generate channels

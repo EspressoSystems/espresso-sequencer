@@ -252,7 +252,7 @@ pub trait CommunicationChannel<TYPES: NodeType, M: NetworkMsg, MEMBERSHIP: Membe
     async fn broadcast_message(
         &self,
         message: M,
-        election: &MEMBERSHIP,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError>;
 
     /// Sends a direct message to a specific node

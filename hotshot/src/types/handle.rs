@@ -48,7 +48,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// method is needed to generate new receivers to expose to the user
     pub(crate) output_event_stream: ChannelStream<Event<TYPES>>,
     /// access to the internal ev ent stream, in case we need to, say, shut something down
-    pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub(crate) internal_event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// registry for controlling tasks
     pub(crate) registry: GlobalRegistry,
 
@@ -100,8 +100,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// NOTE: this is only used for sanity checks in our tests
     pub async fn get_internal_event_stream_known_impl(
         &mut self,
-        filter: FilterEvent<HotShotEvent<TYPES, I>>,
-    ) -> (UnboundedStream<HotShotEvent<TYPES, I>>, StreamId) {
+        filter: FilterEvent<HotShotEvent<TYPES>>,
+    ) -> (UnboundedStream<HotShotEvent<TYPES>>, StreamId) {
         self.internal_event_stream.subscribe(filter).await
     }
 
@@ -243,7 +243,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
 
     /// Wrapper around `HotShotConsensusApi`'s `send_broadcast_consensus_message` function
     #[cfg(feature = "hotshot-testing")]
-    pub async fn send_broadcast_consensus_message(&self, msg: SequencingMessage<TYPES, I>) {
+    pub async fn send_broadcast_consensus_message(&self, msg: SequencingMessage<TYPES>) {
         let _result = self
             .hotshot
             .send_broadcast_message(MessageKind::from_consensus_message(msg))
@@ -254,7 +254,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     #[cfg(feature = "hotshot-testing")]
     pub async fn send_direct_consensus_message(
         &self,
-        msg: SequencingMessage<TYPES, I>,
+        msg: SequencingMessage<TYPES>,
         recipient: TYPES::SignatureKey,
     ) {
         let _result = self

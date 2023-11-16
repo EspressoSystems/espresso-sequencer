@@ -125,11 +125,10 @@ pub struct Libp2pNetwork<M: NetworkMsg, K: SignatureKey + 'static> {
     inner: Arc<Libp2pNetworkInner<M, K>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
     /// with the purpose of generating libp2p networks.
@@ -755,7 +754,7 @@ pub struct Libp2pCommChannel<
     I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
-    Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
+    Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>,
     PhantomData<(TYPES, I, MEMBERSHIP)>,
 );
 
@@ -764,16 +763,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 {
     /// create a new libp2p communication channel
     #[must_use]
-    pub fn new(network: Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self {
+    pub fn new(network: Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
         Self(network, PhantomData)
     }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES>>
     for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
     /// with the purpose of generating libp2p networks.
@@ -792,7 +791,7 @@ where
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <Libp2pNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         > as TestableNetworkingImplementation<_, _>>::generator(
             expected_node_count,
@@ -814,12 +813,12 @@ where
 // we don't really want to make this the default implementation because that forces it to require ConnectedNetwork to be implemented. The struct we implement over might use multiple ConnectedNetworks
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
     for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
-    type NETWORK = Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>;
+    type NETWORK = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
@@ -842,10 +841,10 @@ where
 
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        membership: &MEMBERSHIP,
+        message: Message<TYPES>,
+        membership: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
-        let recipients = <MEMBERSHIP as Membership<TYPES>>::get_committee(
+        let recipients = <TYPES as NodeType>::Membership::get_committee(
             membership,
             message.kind.get_view_number(),
         );
@@ -854,7 +853,7 @@ where
 
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -863,7 +862,7 @@ where
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -882,7 +881,7 @@ where
 
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         <Libp2pNetwork<_, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::inject_consensus_info(&self.0, event)
         .await;
@@ -892,13 +891,13 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         MEMBERSHIP,
-        Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
+        Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
     > for Libp2pCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network(
-    ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>
+    ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {
         Box::new(move |network| Libp2pCommChannel::new(network))
     }

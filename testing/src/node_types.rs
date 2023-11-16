@@ -73,7 +73,7 @@ type StaticLibp2pDAComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMembers
 
 type StaticWebDAComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedDAComm = CombinedCommChannel<TestTypes, CombinedImpl, StaticMembership>;
+type StaticCombinedDAComm = CombinedCommChannel<TestTypes, StaticMembership>;
 
 pub type StaticMemoryQuorumComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -81,7 +81,7 @@ type StaticLibp2pQuorumComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMem
 
 type StaticWebQuorumComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedQuorumComm = CombinedCommChannel<TestTypes, CombinedImpl, StaticMembership>;
+type StaticCombinedQuorumComm = CombinedCommChannel<TestTypes, StaticMembership>;
 
 pub type StaticMemoryViewSyncComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -89,7 +89,7 @@ type StaticLibp2pViewSyncComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticM
 
 type StaticWebViewSyncComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedViewSyncComm = CombinedCommChannel<TestTypes, CombinedImpl, StaticMembership>;
+type StaticCombinedViewSyncComm = CombinedCommChannel<TestTypes, StaticMembership>;
 
 pub type StaticMemoryVIDComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -97,30 +97,15 @@ type StaticLibp2pVIDComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMember
 
 type StaticWebVIDComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedVIDComm = CombinedCommChannel<TestTypes, CombinedImpl, StaticMembership>;
+type StaticCombinedVIDComm = CombinedCommChannel<TestTypes, StaticMembership>;
 
 pub type SequencingLibp2pExchange = Exchanges<
     TestTypes,
-    Message<TestTypes, Libp2pImpl>,
-    QuorumExchange<
-        TestTypes,
-        StaticMembership,
-        StaticLibp2pQuorumComm,
-        Message<TestTypes, Libp2pImpl>,
-    >,
-    CommitteeExchange<
-        TestTypes,
-        StaticMembership,
-        StaticLibp2pDAComm,
-        Message<TestTypes, Libp2pImpl>,
-    >,
-    ViewSyncExchange<
-        TestTypes,
-        StaticMembership,
-        StaticLibp2pViewSyncComm,
-        Message<TestTypes, Libp2pImpl>,
-    >,
-    VIDExchange<TestTypes, StaticMembership, StaticLibp2pVIDComm, Message<TestTypes, Libp2pImpl>>,
+    Message<TestTypes>,
+    QuorumExchange<TestTypes, StaticMembership, StaticLibp2pQuorumComm, Message<TestTypes>>,
+    CommitteeExchange<TestTypes, StaticMembership, StaticLibp2pDAComm, Message<TestTypes>>,
+    ViewSyncExchange<TestTypes, StaticMembership, StaticLibp2pViewSyncComm, Message<TestTypes>>,
+    VIDExchange<TestTypes, StaticMembership, StaticLibp2pVIDComm, Message<TestTypes>>,
 >;
 
 impl NodeImplementation<TestTypes> for Libp2pImpl {
@@ -129,10 +114,7 @@ impl NodeImplementation<TestTypes> for Libp2pImpl {
 
     fn new_channel_maps(
         start_view: <TestTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<TestTypes, Self>,
-        Option<ChannelMaps<TestTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
         (
             ChannelMaps::new(start_view),
             Some(ChannelMaps::new(start_view)),
@@ -140,7 +122,7 @@ impl NodeImplementation<TestTypes> for Libp2pImpl {
     }
 }
 
-impl TestableExchange<TestTypes, Message<TestTypes, Libp2pImpl>> for SequencingLibp2pExchange {
+impl TestableExchange<TestTypes, Message<TestTypes>> for SequencingLibp2pExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -152,28 +134,28 @@ impl TestableExchange<TestTypes, Message<TestTypes, Libp2pImpl>> for SequencingL
             ) -> (
                 <Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
             ) + 'static,
     > {
         let network_generator = Arc::new(<Libp2pNetwork<
-            Message<TestTypes, Libp2pImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, Libp2pImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -187,25 +169,25 @@ impl TestableExchange<TestTypes, Message<TestTypes, Libp2pImpl>> for SequencingL
             let quorum_chan =
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let committee_chan =
                 <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let view_sync_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let vid_chan =
                 <<Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, Libp2pImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network);
 
@@ -216,29 +198,14 @@ impl TestableExchange<TestTypes, Message<TestTypes, Libp2pImpl>> for SequencingL
 
 pub type SequencingMemoryExchange = Exchanges<
     TestTypes,
-    Message<TestTypes, MemoryImpl>,
-    QuorumExchange<
-        TestTypes,
-        StaticMembership,
-        StaticMemoryQuorumComm,
-        Message<TestTypes, MemoryImpl>,
-    >,
-    CommitteeExchange<
-        TestTypes,
-        StaticMembership,
-        StaticMemoryDAComm,
-        Message<TestTypes, MemoryImpl>,
-    >,
-    ViewSyncExchange<
-        TestTypes,
-        StaticMembership,
-        StaticMemoryViewSyncComm,
-        Message<TestTypes, MemoryImpl>,
-    >,
-    VIDExchange<TestTypes, StaticMembership, StaticMemoryVIDComm, Message<TestTypes, MemoryImpl>>,
+    Message<TestTypes>,
+    QuorumExchange<TestTypes, StaticMembership, StaticMemoryQuorumComm, Message<TestTypes>>,
+    CommitteeExchange<TestTypes, StaticMembership, StaticMemoryDAComm, Message<TestTypes>>,
+    ViewSyncExchange<TestTypes, StaticMembership, StaticMemoryViewSyncComm, Message<TestTypes>>,
+    VIDExchange<TestTypes, StaticMembership, StaticMemoryVIDComm, Message<TestTypes>>,
 >;
 
-impl TestableExchange<TestTypes, Message<TestTypes, MemoryImpl>> for SequencingMemoryExchange {
+impl TestableExchange<TestTypes, Message<TestTypes>> for SequencingMemoryExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -250,28 +217,28 @@ impl TestableExchange<TestTypes, Message<TestTypes, MemoryImpl>> for SequencingM
             ) -> (
                 <Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
             ) + 'static,
     > {
         let network_generator = Arc::new(<MemoryNetwork<
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -280,11 +247,11 @@ impl TestableExchange<TestTypes, Message<TestTypes, MemoryImpl>> for SequencingM
             false,
         ));
         let network_da_generator = Arc::new(<MemoryNetwork<
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, MemoryImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -298,25 +265,25 @@ impl TestableExchange<TestTypes, Message<TestTypes, MemoryImpl>> for SequencingM
             let quorum_chan =
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let committee_chan =
                 <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da.clone());
             let view_sync_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da);
             let vid_chan =
                 <<Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, MemoryImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network);
 
@@ -331,10 +298,7 @@ impl NodeImplementation<TestTypes> for MemoryImpl {
 
     fn new_channel_maps(
         start_view: <TestTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<TestTypes, Self>,
-        Option<ChannelMaps<TestTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
         (
             ChannelMaps::new(start_view),
             Some(ChannelMaps::new(start_view)),
@@ -349,19 +313,14 @@ impl NodeImplementation<TestTypes> for MemoryImpl {
 
 pub type SequencingWebExchanges = Exchanges<
     TestTypes,
-    Message<TestTypes, WebImpl>,
-    QuorumExchange<TestTypes, StaticMembership, StaticWebQuorumComm, Message<TestTypes, WebImpl>>,
-    CommitteeExchange<TestTypes, StaticMembership, StaticWebDAComm, Message<TestTypes, WebImpl>>,
-    ViewSyncExchange<
-        TestTypes,
-        StaticMembership,
-        StaticWebViewSyncComm,
-        Message<TestTypes, WebImpl>,
-    >,
-    VIDExchange<TestTypes, StaticMembership, StaticWebVIDComm, Message<TestTypes, WebImpl>>,
+    Message<TestTypes>,
+    QuorumExchange<TestTypes, StaticMembership, StaticWebQuorumComm, Message<TestTypes>>,
+    CommitteeExchange<TestTypes, StaticMembership, StaticWebDAComm, Message<TestTypes>>,
+    ViewSyncExchange<TestTypes, StaticMembership, StaticWebViewSyncComm, Message<TestTypes>>,
+    VIDExchange<TestTypes, StaticMembership, StaticWebVIDComm, Message<TestTypes>>,
 >;
 
-impl TestableExchange<TestTypes, Message<TestTypes, WebImpl>> for SequencingWebExchanges {
+impl TestableExchange<TestTypes, Message<TestTypes>> for SequencingWebExchanges {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -373,29 +332,29 @@ impl TestableExchange<TestTypes, Message<TestTypes, WebImpl>> for SequencingWebE
             ) -> (
                 <Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
             ) + 'static,
     > {
         let network_generator = Arc::new(<WebServerNetwork<
-            Message<TestTypes, WebImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
             _,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, WebImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -404,12 +363,12 @@ impl TestableExchange<TestTypes, Message<TestTypes, WebImpl>> for SequencingWebE
             false,
         ));
         let network_da_generator = Arc::new(<WebServerNetwork<
-            Message<TestTypes, WebImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
             TestTypes,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, WebImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -423,25 +382,25 @@ impl TestableExchange<TestTypes, Message<TestTypes, WebImpl>> for SequencingWebE
             let quorum_chan =
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let committee_chan =
                 <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da.clone());
             let view_sync_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network);
             let vid_chan =
                 <<Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, WebImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da);
 
@@ -456,10 +415,7 @@ impl NodeImplementation<TestTypes> for WebImpl {
 
     fn new_channel_maps(
         start_view: <TestTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<TestTypes, Self>,
-        Option<ChannelMaps<TestTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
         (
             ChannelMaps::new(start_view),
             Some(ChannelMaps::new(start_view)),
@@ -469,31 +425,11 @@ impl NodeImplementation<TestTypes> for WebImpl {
 
 pub type CombinedExchange = Exchanges<
     TestTypes,
-    Message<TestTypes, CombinedImpl>,
-    QuorumExchange<
-        TestTypes,
-        StaticMembership,
-        StaticCombinedQuorumComm,
-        Message<TestTypes, CombinedImpl>,
-    >,
-    CommitteeExchange<
-        TestTypes,
-        StaticMembership,
-        StaticCombinedDAComm,
-        Message<TestTypes, CombinedImpl>,
-    >,
-    ViewSyncExchange<
-        TestTypes,
-        StaticMembership,
-        StaticCombinedViewSyncComm,
-        Message<TestTypes, CombinedImpl>,
-    >,
-    VIDExchange<
-        TestTypes,
-        StaticMembership,
-        StaticCombinedVIDComm,
-        Message<TestTypes, CombinedImpl>,
-    >,
+    Message<TestTypes>,
+    QuorumExchange<TestTypes, StaticMembership, StaticCombinedQuorumComm, Message<TestTypes>>,
+    CommitteeExchange<TestTypes, StaticMembership, StaticCombinedDAComm, Message<TestTypes>>,
+    ViewSyncExchange<TestTypes, StaticMembership, StaticCombinedViewSyncComm, Message<TestTypes>>,
+    VIDExchange<TestTypes, StaticMembership, StaticCombinedVIDComm, Message<TestTypes>>,
 >;
 
 impl NodeImplementation<TestTypes> for CombinedImpl {
@@ -502,10 +438,7 @@ impl NodeImplementation<TestTypes> for CombinedImpl {
 
     fn new_channel_maps(
         start_view: <TestTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<TestTypes, Self>,
-        Option<ChannelMaps<TestTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<TestTypes>, Option<ChannelMaps<TestTypes>>) {
         (
             ChannelMaps::new(start_view),
             Some(ChannelMaps::new(start_view)),
@@ -513,7 +446,7 @@ impl NodeImplementation<TestTypes> for CombinedImpl {
     }
 }
 
-impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedExchange {
+impl TestableExchange<TestTypes, Message<TestTypes>> for CombinedExchange {
     #[allow(clippy::arc_with_non_send_sync)]
     fn gen_comm_channels(
         expected_node_count: usize,
@@ -525,29 +458,29 @@ impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedE
             ) -> (
                 <Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
                 <Self::VIDExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking,
             ) + 'static,
     > {
         let web_server_network_generator = Arc::new(<WebServerNetwork<
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
             _,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -557,12 +490,12 @@ impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedE
         ));
 
         let web_server_network_da_generator = Arc::new(<WebServerNetwork<
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
             TestTypes,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -572,11 +505,11 @@ impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedE
         ));
 
         let libp2p_network_generator = Arc::new(<Libp2pNetwork<
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
             <TestTypes as NodeType>::SignatureKey,
         > as TestableNetworkingImplementation<
             TestTypes,
-            Message<TestTypes, CombinedImpl>,
+            Message<TestTypes>,
         >>::generator(
             expected_node_count,
             num_bootstrap,
@@ -606,26 +539,26 @@ impl TestableExchange<TestTypes, Message<TestTypes, CombinedImpl>> for CombinedE
             let quorum_chan =
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network.clone());
             let committee_chan =
                 <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da.clone());
             let view_sync_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network);
 
             let vid_chan =
                 <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<
                     TestTypes,
-                    Message<TestTypes, CombinedImpl>,
+                    Message<TestTypes>,
                 >>::Networking as TestableChannelImplementation<_, _, _, _>>::generate_network(
                 )(network_da);
             (quorum_chan, committee_chan, view_sync_chan, vid_chan)

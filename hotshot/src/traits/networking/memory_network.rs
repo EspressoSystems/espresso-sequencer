@@ -242,9 +242,8 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>
 {
     fn generator(
         _expected_node_count: usize,
@@ -456,7 +455,7 @@ pub struct MemoryCommChannel<
     I: NodeImplementation<TYPES>,
     MEMBERSHIP: Membership<TYPES>,
 >(
-    Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
+    Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>,
     PhantomData<(I, MEMBERSHIP)>,
 );
 
@@ -465,16 +464,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 {
     /// create new communication channel
     #[must_use]
-    pub fn new(network: Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self {
+    pub fn new(network: Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
         Self(network, PhantomData)
     }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES>>
     for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     fn generator(
         expected_node_count: usize,
@@ -484,7 +483,7 @@ where
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <MemoryNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
         > as TestableNetworkingImplementation<_, _>>::generator(
             expected_node_count,
@@ -503,12 +502,12 @@ where
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
+    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
     for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
-    type NETWORK = MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>;
+    type NETWORK = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
@@ -531,10 +530,10 @@ where
 
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
-        let recipients = <MEMBERSHIP as Membership<TYPES>>::get_committee(
+        let recipients = <TYPES as NodeType>::Membership::get_committee(
             election,
             message.kind.get_view_number(),
         );
@@ -543,7 +542,7 @@ where
 
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -552,7 +551,7 @@ where
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -565,13 +564,13 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         MEMBERSHIP,
-        MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
+        MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>,
     > for MemoryCommChannel<TYPES, I, MEMBERSHIP>
 {
     fn generate_network(
-    ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>
+    ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {
         Box::new(move |network| MemoryCommChannel::new(network))
     }

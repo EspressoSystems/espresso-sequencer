@@ -595,7 +595,7 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     OverallSafetyTaskErr,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
-    (usize, Either<Event<TYPES>, HotShotEvent<TYPES, I>>),
-    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES, I>>>>,
+    (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
+    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES>>>>,
     OverallSafetyTask<TYPES, I>,
 >;

@@ -28,20 +28,17 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
     type Exchanges = Exchanges<
         DemoTypes,
-        Message<DemoTypes, Self>,
-        QuorumExchange<DemoTypes, DemoMembership, QuorumNetwork, Message<DemoTypes, Self>>,
-        CommitteeExchange<DemoTypes, DemoMembership, DANetwork, Message<DemoTypes, Self>>,
-        ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes, Self>>,
-        VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes, Self>>,
+        Message<DemoTypes>,
+        QuorumExchange<DemoTypes, DemoMembership, QuorumNetwork, Message<DemoTypes>>,
+        CommitteeExchange<DemoTypes, DemoMembership, DANetwork, Message<DemoTypes>>,
+        ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes>>,
+        VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes>>,
     >;
 
     fn new_channel_maps(
         start_view: <DemoTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<DemoTypes, Self>,
-        Option<ChannelMaps<DemoTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<DemoTypes>, Option<ChannelMaps<DemoTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl, DemoMembership>;
+pub type ThisRun = WebServerDARun<DemoTypes, NodeImpl>;

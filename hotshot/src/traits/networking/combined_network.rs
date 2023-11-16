@@ -1,10 +1,7 @@
 //! Networking Implementation that has a primary and a fallback newtork.  If the primary
 //! Errors we will use the backup to send or receive
 use super::NetworkError;
-use crate::{
-    traits::implementations::{Libp2pNetwork, WebServerNetwork},
-    NodeImplementation,
-};
+use crate::traits::implementations::{Libp2pNetwork, WebServerNetwork};
 use async_lock::RwLock;
 use hotshot_constants::{
     COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
@@ -103,13 +100,9 @@ fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
 /// A communication channel with 2 networks, where we can fall back to the slower network if the
 /// primary fails
 #[derive(Clone, Debug)]
-pub struct CombinedCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
-> {
+pub struct CombinedCommChannel<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> {
     /// The two networks we'll use for send/recv
-    networks: Arc<CombinedNetworks<TYPES, I, MEMBERSHIP>>,
+    networks: Arc<CombinedNetworks<TYPES, MEMBERSHIP>>,
 
     /// Last n seen messages to prevent processing duplicates
     message_cache: Arc<RwLock<Cache>>,
@@ -118,12 +111,10 @@ pub struct CombinedCommChannel<
     primary_down: Arc<AtomicU64>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CombinedCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> CombinedCommChannel<TYPES, MEMBERSHIP> {
     /// Constructor
     #[must_use]
-    pub fn new(networks: Arc<CombinedNetworks<TYPES, I, MEMBERSHIP>>) -> Self {
+    pub fn new(networks: Arc<CombinedNetworks<TYPES, MEMBERSHIP>>) -> Self {
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
@@ -133,13 +124,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 
     /// Get a ref to the primary network
     #[must_use]
-    pub fn primary(&self) -> &WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES> {
+    pub fn primary(&self) -> &WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES> {
         &self.networks.0
     }
 
     /// Get a ref to the backup network
     #[must_use]
-    pub fn secondary(&self) -> &Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey> {
+    pub fn secondary(&self) -> &Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
         &self.networks.1
     }
 }
@@ -148,19 +139,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 /// We need this so we can impl `TestableNetworkingImplementation`
 /// on the tuple
 #[derive(Debug, Clone)]
-pub struct CombinedNetworks<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
-    pub WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
-    pub Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
+pub struct CombinedNetworks<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>(
+    pub WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>,
+    pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
     pub PhantomData<MEMBERSHIP>,
 );
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for CombinedNetworks<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for CombinedNetworks<TYPES, MEMBERSHIP>
 {
     fn generator(
         expected_node_count: usize,
@@ -171,7 +158,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generators = (
             <WebServerNetwork<
-                Message<TYPES, I>,
+                Message<TYPES>,
                 TYPES::SignatureKey,
                 TYPES,
             > as TestableNetworkingImplementation<_, _>>::generator(
@@ -181,7 +168,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
                 da_committee_size,
                 is_da
             ),
-            <Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey> as TestableNetworkingImplementation<_, _>>::generator(
+            <Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> as TestableNetworkingImplementation<_, _>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
@@ -202,9 +189,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for CombinedCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
+    TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for CombinedCommChannel<TYPES, MEMBERSHIP>
 {
     fn generator(
         expected_node_count: usize,
@@ -213,16 +200,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
         da_committee_size: usize,
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <CombinedNetworks<
-            TYPES,
-            I,
-            MEMBERSHIP,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        let generator = <CombinedNetworks<TYPES, MEMBERSHIP> as TestableNetworkingImplementation<
+            _,
+            _,
+        >>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
             da_committee_size,
-            is_da
+            is_da,
         );
         Box::new(move |node_id| Self {
             networks: generator(node_id).into(),
@@ -240,11 +226,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
-    for CombinedCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
+    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
+    for CombinedCommChannel<TYPES, MEMBERSHIP>
 {
-    type NETWORK = CombinedNetworks<TYPES, I, MEMBERSHIP>;
+    type NETWORK = CombinedNetworks<TYPES, MEMBERSHIP>;
 
     async fn wait_for_ready(&self) {
         join!(
@@ -270,11 +256,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
         let recipients =
-            <MEMBERSHIP as Membership<TYPES>>::get_committee(election, message.get_view_number());
+            <TYPES as NodeType>::Membership::get_committee(election, message.get_view_number());
 
         // broadcast optimistically on both networks, but if the primary network is down, skip it
         if self.primary_down.load(Ordering::Relaxed) < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
@@ -304,7 +290,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         // DM optimistically on both networks, but if the primary network is down, skip it
@@ -334,7 +320,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -380,21 +366,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
-        <WebServerNetwork<_, _, _> as ConnectedNetwork<Message<TYPES, I>,TYPES::SignatureKey>>::
+        <WebServerNetwork<_, _, _> as ConnectedNetwork<Message<TYPES>,TYPES::SignatureKey>>::
             inject_consensus_info(self.primary(), event.clone()).await;
 
-        <Libp2pNetwork<_, _> as ConnectedNetwork<Message<TYPES, I>,TYPES::SignatureKey>>::
+        <Libp2pNetwork<_, _> as ConnectedNetwork<Message<TYPES>,TYPES::SignatureKey>>::
             inject_consensus_info(self.secondary(), event).await;
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
+impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
     TestableChannelImplementation<
         TYPES,
-        Message<TYPES, I>,
+        Message<TYPES>,
         MEMBERSHIP,
-        CombinedNetworks<TYPES, I, MEMBERSHIP>,
-    > for CombinedCommChannel<TYPES, I, MEMBERSHIP>
+        CombinedNetworks<TYPES, MEMBERSHIP>,
+    > for CombinedCommChannel<TYPES, MEMBERSHIP>
 {
     fn generate_network() -> Box<dyn Fn(Arc<Self::NETWORK>) -> Self + 'static> {
         Box::new(move |network| CombinedCommChannel::new(network))

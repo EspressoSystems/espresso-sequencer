@@ -12,7 +12,7 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
+use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
     consensus::{Consensus, View},
     message::Message,
@@ -48,7 +48,7 @@ pub struct VIDTaskState<
     A: ConsensusApi<TYPES, I> + 'static,
 > where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// The state's api
     pub api: A,
@@ -68,7 +68,7 @@ pub struct VIDTaskState<
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// This state's ID
     pub id: u64,
@@ -78,34 +78,34 @@ pub struct VIDTaskState<
 pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     /// the vid exchange
     pub vid_exchange: Arc<VIDEx<TYPES, I>>,
     #[allow(clippy::type_complexity)]
     /// Accumulates VID votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, VIDVote2<TYPES, VIDMembership<TYPES, I>>, VIDCertificate2<TYPES>>,
+        VoteAccumulator2<TYPES, VIDVote2<TYPES>, VIDCertificate2<TYPES>>,
         VIDCertificate2<TYPES>,
     >,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// the id of this task state
     pub id: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>
 {
 }
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "VID Vote Collection Task", level = "error")]
 async fn vote_handle<TYPES, I>(
     mut state: VIDVoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES>,
 ) -> (
     Option<HotShotTaskCompleted>,
     VIDVoteCollectionTaskState<TYPES, I>,
@@ -113,8 +113,12 @@ async fn vote_handle<TYPES, I>(
 where
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES>,
+        Commitment = Commitment<TYPES::BlockPayload>,
+        Membership = TYPES::Membership,
+    >,
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
@@ -170,14 +174,18 @@ where
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     VIDTaskState<TYPES, I, A>
 where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<
+        TYPES,
+        Message<TYPES>,
+        Commitment = Commitment<TYPES::BlockPayload>,
+        Membership = TYPES::Membership,
+    >,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::VidVoteRecv(vote) => {
@@ -404,7 +412,7 @@ where
     }
 
     /// Filter the VID event.
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::Shutdown
@@ -421,22 +429,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     for VIDTaskState<TYPES, I, A>
 where
     VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+        ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
 }
 
 /// Type alias for VID Vote Collection Types
 pub type VIDVoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     VIDVoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for VID Task Types
 pub type VIDTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     VIDTaskState<TYPES, I, A>,
 >;

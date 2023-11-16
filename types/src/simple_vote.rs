@@ -1,6 +1,6 @@
 //! Implementations of the simple vote types.
 
-use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{fmt::Debug, hash::Hash};
 
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use crate::{
     data::Leaf,
     traits::{
-        election::Membership,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
     },
@@ -88,30 +87,23 @@ mod sealed {
 
 /// A simple yes vote over some votable type.  
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
-pub struct SimpleVote<TYPES: NodeType, DATA: Voteable, MEMBERSHIP: Membership<TYPES>> {
+pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     /// The signature share associated with this vote
     pub signature: (EncodedPublicKey, EncodedSignature),
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
     pub view_number: TYPES::Time,
-    /// phantom data for `MEMBERSHIP`
-    _pd: PhantomData<MEMBERSHIP>,
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>> HasViewNumber<TYPES>
-    for SimpleVote<TYPES, DATA, MEMBERSHIP>
-{
+impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleVote<TYPES, DATA> {
     fn get_view_number(&self) -> <TYPES as NodeType>::Time {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>> Vote2<TYPES>
-    for SimpleVote<TYPES, DATA, MEMBERSHIP>
-{
+impl<TYPES: NodeType, DATA: Voteable + 'static> Vote2<TYPES> for SimpleVote<TYPES, DATA> {
     type Commitment = DATA;
-    type Membership = MEMBERSHIP;
 
     fn get_signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
         <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
@@ -130,9 +122,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>> V
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
-    SimpleVote<TYPES, DATA, MEMBERSHIP>
-{
+impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     /// Creates and signs a simple vote
     pub fn create_signed_vote(
         data: DATA,
@@ -145,7 +135,6 @@ impl<TYPES: NodeType, DATA: Voteable + 'static, MEMBERSHIP: Membership<TYPES>>
             signature: (pub_key.to_bytes(), signature),
             data,
             view_number: view,
-            _pd: PhantomData,
         }
     }
 }
@@ -217,16 +206,16 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
 /// Quorum vote Alias
-pub type QuorumVote<TYPES, M> = SimpleVote<TYPES, QuorumData<TYPES>, M>;
+pub type QuorumVote<TYPES> = SimpleVote<TYPES, QuorumData<TYPES>>;
 /// DA vote type alias
-pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;
+pub type DAVote2<TYPES> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
 /// VID vote type alias
-pub type VIDVote2<TYPES, M> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>, M>;
+pub type VIDVote2<TYPES> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
 /// Timeout Vote type alias
-pub type TimeoutVote2<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;
+pub type TimeoutVote2<TYPES> = SimpleVote<TYPES, TimeoutData<TYPES>>;
 /// View Sync Commit Vote type alias
-pub type ViewSyncCommitVote<TYPES, M> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>, M>;
+pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>>;
 /// View Sync Pre Commit Vote type alias
-pub type ViewSyncPreCommitVote<TYPES, M> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>, M>;
+pub type ViewSyncPreCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>>;
 /// View Sync Finalize Vote type alias
-pub type ViewSyncFinalizeVote<TYPES, M> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>, M>;
+pub type ViewSyncFinalizeVote<TYPES> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>>;

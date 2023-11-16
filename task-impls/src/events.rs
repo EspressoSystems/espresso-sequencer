@@ -13,39 +13,36 @@ use hotshot_types::{
         DAVote2, QuorumVote, TimeoutVote2, VIDVote2, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
-    traits::node_implementation::{
-        CommitteeMembership, NodeImplementation, NodeType, QuorumMembership, VIDMembership,
-        ViewSyncMembership,
-    },
+    traits::node_implementation::NodeType,
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub enum HotShotEvent<TYPES: NodeType> {
     /// Shutdown the task
     Shutdown,
     /// A quorum proposal has been received from the network; handled by the consensus task
     QuorumProposalRecv(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// A quorum vote has been received from the network; handled by the consensus task
-    QuorumVoteRecv(QuorumVote<TYPES, QuorumMembership<TYPES, I>>),
+    QuorumVoteRecv(QuorumVote<TYPES>),
     /// A timeout vote recevied from the network; handled by consensus task
-    TimeoutVoteRecv(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
+    TimeoutVoteRecv(TimeoutVote2<TYPES>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
-    TimeoutVoteSend(TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>),
+    TimeoutVoteSend(TimeoutVote2<TYPES>),
     /// A DA proposal has been received from the network; handled by the DA task
     DAProposalRecv(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
-    DAVoteRecv(DAVote2<TYPES, CommitteeMembership<TYPES, I>>),
+    DAVoteRecv(DAVote2<TYPES>),
     /// A Data Availability Certificate (DAC) has been recieved by the network; handled by the consensus task
     DACRecv(DACertificate2<TYPES>),
     /// Send a quorum proposal to the network; emitted by the leader in the consensus task
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
-    QuorumVoteSend(QuorumVote<TYPES, QuorumMembership<TYPES, I>>),
+    QuorumVoteSend(QuorumVote<TYPES>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DAProposalSend(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
-    DAVoteSend(DAVote2<TYPES, CommitteeMembership<TYPES, I>>),
+    DAVoteSend(DAVote2<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
     QCFormed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
@@ -56,18 +53,18 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     ViewSyncTimeout(TYPES::Time, u64, ViewSyncPhase),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES>),
     /// Receive a `ViewSyncCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES>),
     /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
-    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES>),
 
     /// Send a `ViewSyncPreCommitVote` from the network; emitted by a replica in the view sync task
-    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES>),
     /// Send a `ViewSyncCommitVote` from the network; emitted by a replica in the view sync task
-    ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES>),
     /// Send a `ViewSyncFinalizeVote` from the network; emitted by a replica in the view sync task
-    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES, ViewSyncMembership<TYPES, I>>),
+    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES>),
 
     /// Receive a `ViewSyncPreCommitCertificate2` from the network; received by a replica in the view sync task
     ViewSyncPreCommitCertificate2Recv(ViewSyncPreCommitCertificate2<TYPES>),
@@ -108,11 +105,11 @@ pub enum HotShotEvent<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
     ///
     /// Like [`DAVoteSend`]
-    VidVoteSend(VIDVote2<TYPES, VIDMembership<TYPES, I>>),
+    VidVoteSend(VIDVote2<TYPES>),
     /// A VID vote has been received by the network; handled by the DA task
     ///
     /// Like [`DAVoteRecv`]
-    VidVoteRecv(VIDVote2<TYPES, VIDMembership<TYPES, I>>),
+    VidVoteRecv(VIDVote2<TYPES>),
     /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
     ///
     /// Like [`DACSend`]

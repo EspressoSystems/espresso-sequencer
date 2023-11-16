@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
@@ -75,16 +74,16 @@ impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;
     type Exchanges = Exchanges<
         Test,
-        Message<Test, Self>,
-        QuorumExchange<Test, ThisMembership, QuorumNetwork, Message<Test, Self>>,
-        CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test, Self>>,
-        ViewSyncExchange<Test, ThisMembership, ViewSyncNetwork, Message<Test, Self>>,
-        VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test, Self>>,
+        Message<Test>,
+        QuorumExchange<Test, ThisMembership, QuorumNetwork, Message<Test>>,
+        CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test>>,
+        ViewSyncExchange<Test, ThisMembership, ViewSyncNetwork, Message<Test>>,
+        VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test>>,
     >;
 
     fn new_channel_maps(
         start_view: <Test as NodeType>::Time,
-    ) -> (ChannelMaps<Test, Self>, Option<ChannelMaps<Test, Self>>) {
+    ) -> (ChannelMaps<Test>, Option<ChannelMaps<Test>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
@@ -94,7 +93,7 @@ impl NodeImplementation<Test> for TestImpl {
 /// derive EQ on `VoteType<TYPES>` and thereby message
 /// we are only sending data messages, though so we compare key and
 /// data message
-fn fake_message_eq(message_1: Message<Test, TestImpl>, message_2: Message<Test, TestImpl>) {
+fn fake_message_eq(message_1: Message<Test>, message_2: Message<Test>) {
     assert_eq!(message_1.sender, message_2.sender);
     if let MessageKind::Data(DataMessage::SubmitTransaction(d_1, _)) = message_1.kind {
         if let MessageKind::Data(DataMessage::SubmitTransaction(d_2, _)) = message_2.kind {
@@ -114,7 +113,7 @@ fn get_pubkey() -> BLSPubKey {
 }
 
 /// create a message
-fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test, TestImpl>> {
+fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test>> {
     let mut messages = Vec::new();
     for _ in 0..num_messages {
         // create a random transaction from seed
@@ -128,7 +127,6 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
                 VIDTransaction(bytes.to_vec()),
                 <ViewNumber as ConsensusTime>::new(0),
             )),
-            _phantom: PhantomData,
         };
         messages.push(message);
     }
@@ -144,8 +142,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
 #[instrument]
 async fn memory_network_spawn_single() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key = get_pubkey();
 }
@@ -159,8 +156,7 @@ async fn memory_network_spawn_single() {
 #[instrument]
 async fn memory_network_spawn_double() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key_1 = get_pubkey();
     let _pub_key_2 = get_pubkey();
@@ -178,8 +174,7 @@ async fn memory_network_direct_queue() {
     // Create some dummy messages
 
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
 
     let pub_key_1 = get_pubkey();
@@ -198,7 +193,7 @@ async fn memory_network_direct_queue() {
         Option::None,
     );
 
-    let first_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
     // Test 1 -> 2
     // Send messages
@@ -216,7 +211,7 @@ async fn memory_network_direct_queue() {
         fake_message_eq(sent_message, recv_message);
     }
 
-    let second_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 200, pub_key_2);
+    let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
 
     // Test 2 -> 1
     // Send messages
@@ -245,8 +240,7 @@ async fn memory_network_direct_queue() {
 async fn memory_network_broadcast_queue() {
     setup_logging();
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
@@ -263,7 +257,7 @@ async fn memory_network_broadcast_queue() {
         Option::None,
     );
 
-    let first_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
     // Test 1 -> 2
     // Send messages
@@ -284,7 +278,7 @@ async fn memory_network_broadcast_queue() {
         fake_message_eq(sent_message, recv_message);
     }
 
-    let second_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 200, pub_key_2);
+    let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
 
     // Test 2 -> 1
     // Send messages
@@ -316,8 +310,7 @@ async fn memory_network_broadcast_queue() {
 async fn memory_network_test_in_flight_message_count() {
     setup_logging();
 
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
@@ -335,7 +328,7 @@ async fn memory_network_test_in_flight_message_count() {
     );
 
     // Create some dummy messages
-    let messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
     let broadcast_recipients = BTreeSet::from([pub_key_1, pub_key_2]);
 
     assert_eq!(network1.in_flight_message_count(), Some(0));

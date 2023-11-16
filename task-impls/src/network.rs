@@ -14,12 +14,12 @@ use hotshot_types::{
     traits::{
         election::Membership,
         network::{CommunicationChannel, TransmitType},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::NodeType,
     },
     vote2::{HasViewNumber, Vote2},
 };
 use snafu::Snafu;
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 use tracing::error;
 use tracing::instrument;
 
@@ -37,16 +37,16 @@ pub enum NetworkTaskKind {
 }
 
 /// the network message task state
-pub struct NetworkMessageTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct NetworkMessageTaskState<TYPES: NodeType> {
     /// event stream (used for publishing)
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for NetworkMessageTaskState<TYPES, I> {}
+impl<TYPES: NodeType> TS for NetworkMessageTaskState<TYPES> {}
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkMessageTaskState<TYPES, I> {
+impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
     /// Handle the message.
-    pub async fn handle_messages(&mut self, messages: Vec<Message<TYPES, I>>) {
+    pub async fn handle_messages(&mut self, messages: Vec<Message<TYPES>>) {
         // We will send only one event for a vector of transactions.
         let mut transactions = Vec::new();
         for message in messages {
@@ -122,7 +122,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkMessageTaskState<TYPE
                         transactions.push(transaction);
                     }
                 },
-                MessageKind::_Unreachable(_) => unimplemented!(),
             };
         }
         if !transactions.is_empty() {
@@ -136,36 +135,28 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkMessageTaskState<TYPE
 /// network event task state
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
-    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
+    COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
 > {
     /// comm channel
     pub channel: COMMCHANNEL,
     /// event stream
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// view number
     pub view: TYPES::Time,
-    /// phantom data
-    pub phantom: PhantomData<MEMBERSHIP>,
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
 }
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
-    > TS for NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
+    > TS for NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
 }
 
 impl<
         TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
-    > NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>
+        COMMCHANNEL: CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>,
+    > NetworkEventTaskState<TYPES, COMMCHANNEL>
 {
     /// Handle the given event.
     ///
@@ -177,13 +168,13 @@ impl<
 
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
-        membership: &MEMBERSHIP,
+        event: HotShotEvent<TYPES>,
+        membership: &TYPES::Membership,
     ) -> Option<HotShotTaskCompleted> {
         let (sender, message_kind, transmit_type, recipient) = match event.clone() {
             HotShotEvent::QuorumProposalSend(proposal, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::Proposal(proposal),
                 ))),
                 TransmitType::Broadcast,
@@ -193,7 +184,7 @@ impl<
             // ED Each network task is subscribed to all these message types.  Need filters per network task
             HotShotEvent::QuorumVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::Vote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -201,7 +192,7 @@ impl<
             ),
             HotShotEvent::VidDisperseSend(proposal, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::VidDisperseMsg(proposal),
                 ))), // TODO not a CommitteeConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
                 TransmitType::Broadcast, // TODO not a broadcast https://github.com/EspressoSystems/HotShot/issues/1696
@@ -209,7 +200,7 @@ impl<
             ),
             HotShotEvent::DAProposalSend(proposal, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::DAProposal(proposal),
                 ))),
                 TransmitType::Broadcast,
@@ -217,7 +208,7 @@ impl<
             ),
             HotShotEvent::VidVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::VidVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -225,7 +216,7 @@ impl<
             ),
             HotShotEvent::DAVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::DAVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -233,7 +224,7 @@ impl<
             ),
             HotShotEvent::VidCertSend(certificate, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::VidCertificate(certificate),
                 ))),
                 TransmitType::Broadcast,
@@ -242,7 +233,7 @@ impl<
             // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
             HotShotEvent::DACSend(certificate, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Right(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
                     CommitteeConsensusMessage::DACertificate(certificate),
                 ))),
                 TransmitType::Broadcast,
@@ -250,7 +241,7 @@ impl<
             ),
             HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -258,7 +249,7 @@ impl<
             ),
             HotShotEvent::ViewSyncCommitVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -266,7 +257,7 @@ impl<
             ),
             HotShotEvent::ViewSyncFinalizeVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -274,7 +265,7 @@ impl<
             ),
             HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncPreCommitCertificate(certificate.clone()),
                 ))),
                 TransmitType::Broadcast,
@@ -282,7 +273,7 @@ impl<
             ),
             HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncCommitCertificate(certificate.clone()),
                 ))),
                 TransmitType::Broadcast,
@@ -291,7 +282,7 @@ impl<
 
             HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => (
                 sender,
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate.clone()),
                 ))),
                 TransmitType::Broadcast,
@@ -299,7 +290,7 @@ impl<
             ),
             HotShotEvent::TimeoutVoteSend(vote) => (
                 vote.get_signing_key(),
-                MessageKind::<TYPES, I>::from_consensus_message(SequencingMessage(Left(
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
                     GeneralConsensusMessage::TimeoutVote(vote.clone()),
                 ))),
                 TransmitType::Direct,
@@ -322,7 +313,6 @@ impl<
         let message = Message {
             sender,
             kind: message_kind,
-            _phantom: PhantomData,
         };
         let transmit_result = match transmit_type {
             TransmitType::Direct => {
@@ -342,7 +332,7 @@ impl<
     }
 
     /// network filter
-    pub fn filter(task_kind: NetworkTaskKind) -> FilterEvent<HotShotEvent<TYPES, I>> {
+    pub fn filter(task_kind: NetworkTaskKind) -> FilterEvent<HotShotEvent<TYPES>> {
         match task_kind {
             NetworkTaskKind::Quorum => FilterEvent(Arc::new(Self::quorum_filter)),
             NetworkTaskKind::Committee => FilterEvent(Arc::new(Self::committee_filter)),
@@ -352,7 +342,7 @@ impl<
     }
 
     /// quorum filter
-    fn quorum_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    fn quorum_filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::QuorumProposalSend(_, _)
@@ -365,7 +355,7 @@ impl<
     }
 
     /// committee filter
-    fn committee_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    fn committee_filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::DAProposalSend(_, _)
@@ -376,7 +366,7 @@ impl<
     }
 
     /// vid filter
-    fn vid_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    fn vid_filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::Shutdown
@@ -388,7 +378,7 @@ impl<
     }
 
     /// view sync filter
-    fn view_sync_filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    fn view_sync_filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
@@ -408,18 +398,18 @@ impl<
 pub struct NetworkTaskError {}
 
 /// networking message task types
-pub type NetworkMessageTaskTypes<TYPES, I> = HSTWithMessage<
+pub type NetworkMessageTaskTypes<TYPES> = HSTWithMessage<
     NetworkTaskError,
-    Either<Messages<TYPES, I>, Messages<TYPES, I>>,
+    Either<Messages<TYPES>, Messages<TYPES>>,
     // A combination of broadcast and direct streams.
-    Merge<GeneratedStream<Messages<TYPES, I>>, GeneratedStream<Messages<TYPES, I>>>,
-    NetworkMessageTaskState<TYPES, I>,
+    Merge<GeneratedStream<Messages<TYPES>>, GeneratedStream<Messages<TYPES>>>,
+    NetworkMessageTaskState<TYPES>,
 >;
 
 /// network event task types
-pub type NetworkEventTaskTypes<TYPES, I, MEMBERSHIP, COMMCHANNEL> = HSTWithEvent<
+pub type NetworkEventTaskTypes<TYPES, COMMCHANNEL> = HSTWithEvent<
     NetworkTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
-    NetworkEventTaskState<TYPES, I, MEMBERSHIP, COMMCHANNEL>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
+    NetworkEventTaskState<TYPES, COMMCHANNEL>,
 >;
