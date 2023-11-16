@@ -114,9 +114,9 @@ fn build_dummy_circuit_for_preprocessing(
 mod tests {
     use super::{
         utils::{key_pairs_for_testing, stake_table_for_testing},
-        BLSVerKey, BaseField, SchnorrVerKey, UniversalSrs,
+        BaseField, UniversalSrs,
     };
-    use crate::{circuit::build, generate_state_update_proof, preprocess};
+    use crate::{build_dummy_circuit_for_preprocessing, generate_state_update_proof, preprocess};
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
     use ark_ed_on_bn254::EdwardsConfig as Config;
@@ -125,13 +125,11 @@ mod tests {
         One,
     };
     use ethereum_types::U256;
-    use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::traits::{
         stake_table::{SnapshotVersion, StakeTableScheme},
         state::LightClientState,
     };
     use jf_plonk::{
-        errors::PlonkError,
         proof_system::{PlonkKzgSnark, UniversalSNARK},
         transcript::SolidityTranscript,
     };
@@ -140,6 +138,7 @@ mod tests {
         errors::PrimitivesError,
         signatures::{schnorr::Signature, SchnorrSignatureScheme, SignatureScheme},
     };
+    use jf_relation::Circuit;
     use jf_utils::test_rng;
 
     // FIXME(Chengyu): see <https://github.com/EspressoSystems/jellyfish/issues/249>
@@ -195,29 +194,6 @@ mod tests {
         Ok(pp)
     }
 
-    /// Internal function for helping generate the proving/verifying key
-    fn get_num_of_gates() -> Result<usize, PlonkError> {
-        use ark_ed_on_bn254::EdwardsConfig;
-        use jf_relation::Circuit;
-        let st = StakeTable::<BLSVerKey, SchnorrVerKey, BaseField>::new();
-        let lightclient_state = LightClientState {
-            view_number: 0,
-            block_height: 0,
-            block_comm: BaseField::default(),
-            fee_ledger_comm: BaseField::default(),
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
-        };
-        Ok(build::<BaseField, EdwardsConfig, _, _, _>(
-            &[],
-            &[],
-            &[],
-            &lightclient_state,
-            &U256::zero(),
-        )?
-        .0
-        .num_gates())
-    }
-
     #[test]
     fn test_proof_generation() {
         let num_validators = 10;
@@ -269,7 +245,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         // good path
-        let num_gates = get_num_of_gates().unwrap();
+        let num_gates = build_dummy_circuit_for_preprocessing()
+            .unwrap()
+            .0
+            .num_gates();
         let test_srs = universal_setup_for_testing(num_gates + 2, &mut prng).unwrap();
         ark_std::println!("Number of constraint in the circuit: {}", num_gates);
 
