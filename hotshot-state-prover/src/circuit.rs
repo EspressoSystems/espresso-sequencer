@@ -157,7 +157,7 @@ where
             ),
         )));
     }
-    if signer_bit_vec.len() != STAKE_TABLE_CAPACITY {
+    if signer_bit_vec.len() > STAKE_TABLE_CAPACITY {
         return Err(PlonkError::CircuitError(CircuitError::ParameterError(
             format!(
                 "Length of input bit vector {} exceeds the capacity {}",
@@ -166,7 +166,7 @@ where
             ),
         )));
     }
-    if signatures.len() != STAKE_TABLE_CAPACITY {
+    if signatures.len() > STAKE_TABLE_CAPACITY {
         return Err(PlonkError::CircuitError(CircuitError::ParameterError(
             format!(
                 "Number of input signatures {} exceeds the capacity {}",
