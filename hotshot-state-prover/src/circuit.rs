@@ -228,9 +228,9 @@ where
     );
 
     let threshold = u256_to_field::<F>(threshold);
-    let threshold_var = circuit.create_public_variable(threshold)?;
+    let threshold_pub_var = circuit.create_public_variable(threshold)?;
 
-    let lightclient_state_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
+    let lightclient_state_pub_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
 
     let view_number_f = F::from(lightclient_state.view_number as u64);
     let block_height_f = F::from(lightclient_state.block_height as u64);
@@ -267,7 +267,7 @@ where
         )?);
     }
     let acc_amount_var = circuit.sum(&signed_amount_var)?;
-    circuit.enforce_leq(threshold_var, acc_amount_var)?;
+    circuit.enforce_leq(threshold_pub_var, acc_amount_var)?;
 
     // checking the commitment for the list of schnorr keys
     let schnorr_ver_key_preimage_vars = stake_table_var
@@ -281,7 +281,9 @@ where
     )?[0];
     circuit.enforce_equal(
         schnorr_ver_key_comm,
-        lightclient_state_var.stake_table_comm().schnorr_keys_comm,
+        lightclient_state_pub_var
+            .stake_table_comm()
+            .schnorr_keys_comm,
     )?;
 
     // checking the commitment for the list of stake amounts
@@ -296,7 +298,9 @@ where
     )?[0];
     circuit.enforce_equal(
         stake_amount_comm,
-        lightclient_state_var.stake_table_comm().stake_amount_comm,
+        lightclient_state_pub_var
+            .stake_table_comm()
+            .stake_amount_comm,
     )?;
 
     // checking all signatures
@@ -307,7 +311,7 @@ where
             SignatureGadget::<_, P>::check_signature_validity(
                 &mut circuit,
                 &entry.schnorr_ver_key,
-                lightclient_state_var.as_ref(),
+                lightclient_state_pub_var.as_ref(),
                 &sig,
             )
         })
