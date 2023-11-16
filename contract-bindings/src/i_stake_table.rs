@@ -199,9 +199,9 @@ pub mod i_stake_table {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("nextRegisterationEpoch"),
+                    ::std::borrow::ToOwned::to_owned("nextRegistrationEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("nextRegisterationEpoch",),
+                        name: ::std::borrow::ToOwned::to_owned("nextRegistrationEpoch",),
                         inputs: ::std::vec![],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                             name: ::std::string::String::new(),
@@ -285,13 +285,6 @@ pub mod i_stake_table {
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("enum IStakeTable.StakeType",),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blsSig"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("bytes"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -515,12 +508,12 @@ pub mod i_stake_table {
                 .method_hash([59, 9, 194, 103], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `nextRegisterationEpoch` (0x4942a4e6) function
-        pub fn next_registeration_epoch(
+        ///Calls the contract's `nextRegistrationEpoch` (0x2c530584) function
+        pub fn next_registration_epoch(
             &self,
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([73, 66, 164, 230], ())
+                .method_hash([44, 83, 5, 132], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `numPendingExit` (0xbf8248dd) function
@@ -537,20 +530,19 @@ pub mod i_stake_table {
                 .method_hash([22, 254, 254, 215], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `register` (0x096fbae3) function
+        ///Calls the contract's `register` (0x7b04b626) function
         pub fn register(
             &self,
             bls_vk: G1Point,
             schnorr_vk: EdOnBN254Point,
             amount: u64,
             stake_type: u8,
-            bls_sig: ::ethers::core::types::Bytes,
             max_wait: u64,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
                 .method_hash(
-                    [9, 111, 186, 227],
-                    (bls_vk, schnorr_vk, amount, stake_type, bls_sig, max_wait),
+                    [123, 4, 182, 38],
+                    (bls_vk, schnorr_vk, amount, stake_type, max_wait),
                 )
                 .expect("method not found (this should never happen)")
         }
@@ -721,7 +713,7 @@ pub mod i_stake_table {
     )]
     #[ethcall(name = "nextExitEpoch", abi = "nextExitEpoch()")]
     pub struct NextExitEpochCall;
-    ///Container type for all input parameters for the `nextRegisterationEpoch` function with signature `nextRegisterationEpoch()` and selector `0x4942a4e6`
+    ///Container type for all input parameters for the `nextRegistrationEpoch` function with signature `nextRegistrationEpoch()` and selector `0x2c530584`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -734,8 +726,8 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "nextRegisterationEpoch", abi = "nextRegisterationEpoch()")]
-    pub struct NextRegisterationEpochCall;
+    #[ethcall(name = "nextRegistrationEpoch", abi = "nextRegistrationEpoch()")]
+    pub struct NextRegistrationEpochCall;
     ///Container type for all input parameters for the `numPendingExit` function with signature `numPendingExit()` and selector `0xbf8248dd`
     #[derive(
         Clone,
@@ -766,7 +758,7 @@ pub mod i_stake_table {
     )]
     #[ethcall(name = "numPendingRegistrations", abi = "numPendingRegistrations()")]
     pub struct NumPendingRegistrationsCall;
-    ///Container type for all input parameters for the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)` and selector `0x096fbae3`
+    ///Container type for all input parameters for the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,uint64)` and selector `0x7b04b626`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -781,14 +773,13 @@ pub mod i_stake_table {
     )]
     #[ethcall(
         name = "register",
-        abi = "register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)"
+        abi = "register((uint256,uint256),(uint256,uint256),uint64,uint8,uint64)"
     )]
     pub struct RegisterCall {
         pub bls_vk: G1Point,
         pub schnorr_vk: EdOnBN254Point,
         pub amount: u64,
         pub stake_type: u8,
-        pub bls_sig: ::ethers::core::types::Bytes,
         pub max_wait: u64,
     }
     ///Container type for all input parameters for the `totalKeys` function with signature `totalKeys()` and selector `0x488bdabc`
@@ -890,7 +881,7 @@ pub mod i_stake_table {
         FullLookup(FullLookupCall),
         Lookup(LookupCall),
         NextExitEpoch(NextExitEpochCall),
-        NextRegisterationEpoch(NextRegisterationEpochCall),
+        NextRegistrationEpoch(NextRegistrationEpochCall),
         NumPendingExit(NumPendingExitCall),
         NumPendingRegistrations(NumPendingRegistrationsCall),
         Register(RegisterCall),
@@ -931,9 +922,9 @@ pub mod i_stake_table {
                 return Ok(Self::NextExitEpoch(decoded));
             }
             if let Ok(decoded) =
-                <NextRegisterationEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+                <NextRegistrationEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
-                return Ok(Self::NextRegisterationEpoch(decoded));
+                return Ok(Self::NextRegistrationEpoch(decoded));
             }
             if let Ok(decoded) =
                 <NumPendingExitCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -982,7 +973,7 @@ pub mod i_stake_table {
                 Self::FullLookup(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Lookup(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NextExitEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::NextRegisterationEpoch(element) => {
+                Self::NextRegistrationEpoch(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::NumPendingExit(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -1010,7 +1001,7 @@ pub mod i_stake_table {
                 Self::FullLookup(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Lookup(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NextExitEpoch(element) => ::core::fmt::Display::fmt(element, f),
-                Self::NextRegisterationEpoch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NextRegistrationEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NumPendingExit(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NumPendingRegistrations(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Register(element) => ::core::fmt::Display::fmt(element, f),
@@ -1057,9 +1048,9 @@ pub mod i_stake_table {
             Self::NextExitEpoch(value)
         }
     }
-    impl ::core::convert::From<NextRegisterationEpochCall> for IStakeTableCalls {
-        fn from(value: NextRegisterationEpochCall) -> Self {
-            Self::NextRegisterationEpoch(value)
+    impl ::core::convert::From<NextRegistrationEpochCall> for IStakeTableCalls {
+        fn from(value: NextRegistrationEpochCall) -> Self {
+            Self::NextRegistrationEpoch(value)
         }
     }
     impl ::core::convert::From<NumPendingExitCall> for IStakeTableCalls {
@@ -1200,7 +1191,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct NextExitEpochReturn(pub u64);
-    ///Container type for all return fields from the `nextRegisterationEpoch` function with signature `nextRegisterationEpoch()` and selector `0x4942a4e6`
+    ///Container type for all return fields from the `nextRegistrationEpoch` function with signature `nextRegistrationEpoch()` and selector `0x2c530584`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1213,7 +1204,7 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    pub struct NextRegisterationEpochReturn(pub u64);
+    pub struct NextRegistrationEpochReturn(pub u64);
     ///Container type for all return fields from the `numPendingExit` function with signature `numPendingExit()` and selector `0xbf8248dd`
     #[derive(
         Clone,
@@ -1242,7 +1233,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct NumPendingRegistrationsReturn(pub u64);
-    ///Container type for all return fields from the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)` and selector `0x096fbae3`
+    ///Container type for all return fields from the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,uint64)` and selector `0x7b04b626`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
