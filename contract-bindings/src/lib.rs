@@ -13,6 +13,7 @@ pub mod ed_on_bn254;
 pub mod hot_shot;
 pub mod i_plonk_verifier;
 pub mod i_stake_table;
+pub mod light_client;
 pub mod plonk_verifier;
 pub mod polynomial_eval;
 pub mod shared_types;
