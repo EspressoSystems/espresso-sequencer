@@ -58,6 +58,21 @@ pub struct LightClientStateVar {
     vars: [Variable; 7],
 }
 
+#[derive(Clone, Debug)]
+pub struct PublicInputs<F: PrimeField>(Vec<F>);
+
+impl<F: PrimeField> AsRef<[F]> for PublicInputs<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F: PrimeField> From<Vec<F>> for PublicInputs<F> {
+    fn from(v: Vec<F>) -> Self {
+        Self(v)
+    }
+}
+
 impl LightClientStateVar {
     pub fn new<F: PrimeField>(
         circuit: &mut PlonkCircuit<F>,
@@ -125,13 +140,13 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
 /// - A PlonkError if any error happens when building the circuit
-pub(crate) fn build_state_verifier_circuit<F, P, STIter, BitIter, SigIter>(
+pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
     signatures: SigIter,
     lightclient_state: &LightClientState<F>,
     threshold: &U256,
-) -> Result<(PlonkCircuit<F>, Vec<F>), PlonkError>
+) -> Result<(PlonkCircuit<F>, PublicInputs<F>), PlonkError>
 where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
@@ -328,12 +343,12 @@ where
     circuit.enforce_true(sig_ver_result.0)?;
 
     circuit.finalize_for_arithmetization()?;
-    Ok((circuit, public_inputs))
+    Ok((circuit, public_inputs.into()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_state_verifier_circuit, LightClientState};
+    use super::{build, LightClientState};
     use crate::utils::{key_pairs_for_testing, stake_table_for_testing};
     use ark_ed_on_bn254::EdwardsConfig as Config;
     use ethereum_types::U256;
@@ -408,7 +423,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         // good path
-        let (circuit, public_inputs) = build_state_verifier_circuit(
+        let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -416,9 +431,11 @@ mod tests {
             &U256::from(26u32),
         )
         .unwrap();
-        assert!(circuit.check_circuit_satisfiability(&public_inputs).is_ok());
+        assert!(circuit
+            .check_circuit_satisfiability(public_inputs.as_ref())
+            .is_ok());
 
-        let (circuit, public_inputs) = build_state_verifier_circuit(
+        let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -426,7 +443,9 @@ mod tests {
             &U256::from(10u32),
         )
         .unwrap();
-        assert!(circuit.check_circuit_satisfiability(&public_inputs).is_ok());
+        assert!(circuit
+            .check_circuit_satisfiability(public_inputs.as_ref())
+            .is_ok());
 
         // bad path: total weight doesn't meet the threshold
         // bit vector with total weight 23
@@ -444,7 +463,7 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        let (bad_circuit, public_inputs) = build_state_verifier_circuit(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bad_bit_vec,
             &bad_bit_masked_sigs,
@@ -453,7 +472,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
 
         // bad path: bad stake table commitment
@@ -475,7 +494,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build_state_verifier_circuit(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &sig_for_bad_state,
@@ -484,7 +503,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
 
         // bad path: incorrect signatures
@@ -507,7 +526,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build_state_verifier_circuit(
+        let (bad_circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &wrong_sigs,
@@ -516,7 +535,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
     }
 }

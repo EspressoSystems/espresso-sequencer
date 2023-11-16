@@ -9,7 +9,7 @@ use ark_std::{
     borrow::Borrow,
     rand::{CryptoRng, RngCore},
 };
-use circuit::build_state_verifier_circuit;
+use circuit::PublicInputs;
 use ethereum_types::U256;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::traits::{
@@ -63,9 +63,10 @@ pub fn generate_state_update_proof<ST, R, BitIter, SigIter>(
     signatures: SigIter,
     lightclient_state: &LightClientState<BaseField>,
     threshold: &U256,
-) -> Result<(Proof, Vec<BaseField>), PlonkError>
+) -> Result<(Proof, PublicInputs<BaseField>), PlonkError>
 where
     ST: StakeTableScheme<Key = BLSVerKey, Amount = U256, Aux = SchnorrVerKey>,
+    ST::IntoIter: ExactSizeIterator,
     R: CryptoRng + RngCore,
     BitIter: IntoIterator,
     BitIter::Item: Borrow<bool>,
@@ -77,9 +78,8 @@ where
     let stake_table_entries = stake_table
         .try_iter(SnapshotVersion::LastEpochStart)
         .unwrap()
-        .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
-        .collect::<Vec<_>>();
-    let (circuit, public_inputs) = build_state_verifier_circuit(
+        .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount));
+    let (circuit, public_inputs) = circuit::build(
         stake_table_entries,
         signer_bit_vec,
         signatures,
@@ -92,7 +92,7 @@ where
 
 /// Internal function for helping generate the proving/verifying key
 fn build_dummy_circuit_for_preprocessing(
-) -> Result<(PlonkCircuit<BaseField>, Vec<BaseField>), PlonkError> {
+) -> Result<(PlonkCircuit<BaseField>, PublicInputs<BaseField>), PlonkError> {
     let st = StakeTable::<BLSVerKey, SchnorrVerKey, BaseField>::new();
     let lightclient_state = LightClientState {
         view_number: 0,
@@ -101,7 +101,7 @@ fn build_dummy_circuit_for_preprocessing(
         fee_ledger_comm: BaseField::default(),
         stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
     };
-    build_state_verifier_circuit::<BaseField, EdwardsConfig, _, _, _>(
+    circuit::build::<BaseField, EdwardsConfig, _, _, _>(
         &[],
         &[],
         &[],
@@ -116,7 +116,7 @@ mod tests {
         utils::{key_pairs_for_testing, stake_table_for_testing},
         BLSVerKey, BaseField, SchnorrVerKey, UniversalSrs,
     };
-    use crate::{circuit::build_state_verifier_circuit, generate_state_update_proof, preprocess};
+    use crate::{circuit::build, generate_state_update_proof, preprocess};
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
     use ark_ed_on_bn254::EdwardsConfig as Config;
@@ -207,17 +207,15 @@ mod tests {
             fee_ledger_comm: BaseField::default(),
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        Ok(
-            build_state_verifier_circuit::<BaseField, EdwardsConfig, _, _, _>(
-                &[],
-                &[],
-                &[],
-                &lightclient_state,
-                &U256::zero(),
-            )?
-            .0
-            .num_gates(),
-        )
+        Ok(build::<BaseField, EdwardsConfig, _, _, _>(
+            &[],
+            &[],
+            &[],
+            &lightclient_state,
+            &U256::zero(),
+        )?
+        .0
+        .num_gates())
     }
 
     #[test]
@@ -301,7 +299,7 @@ mod tests {
         let (proof, public_inputs) = result.unwrap();
         assert!(PlonkKzgSnark::<Bn254>::verify::<StandardTranscript>(
             &vk,
-            &public_inputs,
+            public_inputs.as_ref(),
             &proof,
             None
         )
