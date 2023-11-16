@@ -1,13 +1,10 @@
 use commit::Committable;
 use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::{
-    node_types::{MemoryImpl, TestTypes},
-    task_helpers::vid_init,
-};
+use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
     block_impl::VIDTransaction,
-    data::{DAProposal, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote2},
     traits::{
         consensus_api::ConsensusSharedApi, election::ConsensusExchange,
@@ -39,12 +36,11 @@ async fn test_da_task() {
     };
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let vid = vid_init();
-    let txn = vec![0u8];
-    let vid_disperse = vid.disperse(&txn).unwrap();
-    let payload_commitment = vid_disperse.commit;
+    let transactions = vec![VIDTransaction(vec![0])];
+    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
+    let payload_commitment = VIDBlockPayload::vid_commitment(&encoded_txns);
     let block = VIDBlockPayload {
-        transactions: vec![VIDTransaction(txn)],
+        transactions,
         payload_commitment,
     };
 
@@ -69,17 +65,24 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
+    input.push(HotShotEvent::BlockReady(
+        block.clone(),
+        (),
+        ViewNumber::new(2),
+    ));
     input.push(HotShotEvent::DAProposalRecv(message.clone(), pub_key));
 
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
         1,
     );
-    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        1,
+    );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let da_vote = DAVote2::create_signed_vote(
         DAData {
