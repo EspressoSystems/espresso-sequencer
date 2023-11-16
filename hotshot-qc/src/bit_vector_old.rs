@@ -12,7 +12,7 @@ use ark_std::{
 use bitvec::prelude::*;
 use ethereum_types::U256;
 use generic_array::GenericArray;
-use hotshot_types::traits::qc::QuorumCertificate;
+use hotshot_types::traits::{qc::QuorumCertificate, signature_key::StakeTableEntryType};
 use jf_primitives::{
     errors::{PrimitivesError, PrimitivesError::ParameterError},
     signatures::AggregateableSignatureSchemes,
@@ -33,6 +33,12 @@ pub struct StakeTableEntry<V> {
     pub stake_key: V,
     /// Stake table value
     pub stake_amount: U256,
+}
+
+impl<V> StakeTableEntryType for StakeTableEntry<V> {
+    fn get_stake(&self) -> U256 {
+        self.stake_amount
+    }
 }
 
 /// Public parameters of [`BitVectorQC`]

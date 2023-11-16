@@ -28,7 +28,7 @@ use hotshot_types::{
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType},
+        election::{ConsensusExchange, Membership, QuorumExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType, QuorumEx, TimeoutEx},
         signature_key::SignatureKey,
@@ -38,7 +38,6 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote2::{Certificate2, HasViewNumber, VoteAccumulator2},
 };
-
 use tracing::warn;
 
 use snafu::Snafu;
@@ -341,76 +340,75 @@ where
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
 
     async fn vote_if_able(&self) -> bool {
+        if !self
+            .quorum_exchange
+            .membership()
+            .has_stake(self.quorum_exchange.public_key())
+        {
+            debug!(
+                "We were not chosen for consensus committee on {:?}",
+                self.cur_view
+            );
+            return false;
+        }
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
             if proposal.justify_qc.is_genesis && proposal.view_number == TYPES::Time::new(1) {
                 // warn!("Proposal is genesis!");
 
                 let view = TYPES::Time::new(*proposal.view_number);
-                let vote_token = self.quorum_exchange.make_vote_token(view);
+                let justify_qc = proposal.justify_qc.clone();
+                let parent = if justify_qc.is_genesis {
+                    self.genesis_leaf().await
+                } else {
+                    self.consensus
+                        .read()
+                        .await
+                        .saved_leaves
+                        .get(&justify_qc.get_data().leaf_commit)
+                        .cloned()
+                };
 
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for consensus committee on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        let justify_qc = proposal.justify_qc.clone();
-                        let parent = if justify_qc.is_genesis {
-                            self.genesis_leaf().await
-                        } else {
-                            self.consensus
-                                .read()
-                                .await
-                                .saved_leaves
-                                .get(&justify_qc.get_data().leaf_commit)
-                                .cloned()
-                        };
-
-                        // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                        let Some(parent) = parent else {
-                            error!(
+                // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
+                let Some(parent) = parent else {
+                    error!(
                                 "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
                                 justify_qc.get_data().leaf_commit,
                                 proposal.view_number,
                             );
-                            return false;
-                        };
-                        let parent_commitment = parent.commit();
+                    return false;
+                };
+                let parent_commitment = parent.commit();
 
-                        let leaf: Leaf<_> = Leaf {
-                            view_number: view,
-                            justify_qc: proposal.justify_qc.clone(),
-                            parent_commitment,
-                            block_header: proposal.block_header.clone(),
-                            block_payload: None,
-                            rejected: Vec::new(),
-                            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                            proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
-                        };
-                        let vote = QuorumVote::<TYPES>::create_signed_vote(
-                            QuorumData {
-                                leaf_commit: leaf.commit(),
-                            },
-                            view,
-                            self.quorum_exchange.public_key(),
-                            self.quorum_exchange.private_key(),
-                        );
-                        let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
+                let leaf: Leaf<_> = Leaf {
+                    view_number: view,
+                    justify_qc: proposal.justify_qc.clone(),
+                    parent_commitment,
+                    block_header: proposal.block_header.clone(),
+                    block_payload: None,
+                    rejected: Vec::new(),
+                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                    proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
+                };
+                let vote = QuorumVote::<TYPES>::create_signed_vote(
+                    QuorumData {
+                        leaf_commit: leaf.commit(),
+                    },
+                    view,
+                    self.quorum_exchange.public_key(),
+                    self.quorum_exchange.private_key(),
+                );
+                let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
-                        if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.get_view_number() + 1
-                            );
-                            self.event_stream
-                                .publish(HotShotEvent::QuorumVoteSend(vote))
-                                .await;
-                            return true;
-                        }
-                    }
+                if let GeneralConsensusMessage::Vote(vote) = message {
+                    debug!(
+                        "Sending vote to next quorum leader {:?}",
+                        vote.get_view_number() + 1
+                    );
+                    self.event_stream
+                        .publish(HotShotEvent::QuorumVoteSend(vote))
+                        .await;
+                    return true;
                 }
             }
 
@@ -418,85 +416,77 @@ where
             // ED Need to update the view number this is stored under?
             if let Some(cert) = self.da_certs.get(&(proposal.get_view_number())) {
                 let view = cert.view_number;
-                let vote_token = self.quorum_exchange.make_vote_token(view);
                 // TODO: do some of this logic without the vote token check, only do that when voting.
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for consensus committee on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        let justify_qc = proposal.justify_qc.clone();
-                        let parent = if justify_qc.is_genesis {
-                            self.genesis_leaf().await
-                        } else {
-                            self.consensus
-                                .read()
-                                .await
-                                .saved_leaves
-                                .get(&justify_qc.get_data().leaf_commit)
-                                .cloned()
-                        };
+                let justify_qc = proposal.justify_qc.clone();
+                let parent = if justify_qc.is_genesis {
+                    self.genesis_leaf().await
+                } else {
+                    self.consensus
+                        .read()
+                        .await
+                        .saved_leaves
+                        .get(&justify_qc.get_data().leaf_commit)
+                        .cloned()
+                };
 
-                        // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                        let Some(parent) = parent else {
-                            error!(
+                // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
+                let Some(parent) = parent else {
+                    error!(
                                 "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
                                 justify_qc.get_data().leaf_commit,
                                 proposal.view_number,
                             );
-                            return false;
-                        };
-                        let parent_commitment = parent.commit();
+                    return false;
+                };
+                let parent_commitment = parent.commit();
 
-                        let leaf: Leaf<_> = Leaf {
-                            view_number: view,
-                            justify_qc: proposal.justify_qc.clone(),
-                            parent_commitment,
-                            block_header: proposal.block_header.clone(),
-                            block_payload: None,
-                            rejected: Vec::new(),
-                            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                            proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
-                        };
+                let leaf: Leaf<_> = Leaf {
+                    view_number: view,
+                    justify_qc: proposal.justify_qc.clone(),
+                    parent_commitment,
+                    block_header: proposal.block_header.clone(),
+                    block_payload: None,
+                    rejected: Vec::new(),
+                    timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
+                    proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
+                };
 
-                        // Validate the DAC.
-                        let message = if cert.is_valid_cert(self.committee_exchange.membership()) {
-                            // Validate the block payload commitment for non-genesis DAC.
-                            if !cert.is_genesis
-                                && cert.get_data().payload_commit
-                                    != proposal.block_header.payload_commitment()
-                            {
-                                error!("Block payload commitment does not equal parent commitment");
-                                return false;
-                            }
-                            let vote = QuorumVote::<TYPES>::create_signed_vote(
-                                QuorumData {
-                                    leaf_commit: leaf.commit(),
-                                },
-                                view,
-                                self.quorum_exchange.public_key(),
-                                self.quorum_exchange.private_key(),
-                            );
-                            GeneralConsensusMessage::<TYPES>::Vote(vote)
-                        } else {
-                            error!("Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}", cert, self.cur_view );
-                            return false;
-                        };
-
-                        if let GeneralConsensusMessage::Vote(vote) = message {
-                            debug!(
-                                "Sending vote to next quorum leader {:?}",
-                                vote.get_view_number()
-                            );
-                            self.event_stream
-                                .publish(HotShotEvent::QuorumVoteSend(vote))
-                                .await;
-                            return true;
-                        }
+                // Validate the DAC.
+                let message = if cert.is_valid_cert(self.committee_exchange.membership()) {
+                    // Validate the block payload commitment for non-genesis DAC.
+                    if !cert.is_genesis
+                        && cert.get_data().payload_commit
+                            != proposal.block_header.payload_commitment()
+                    {
+                        error!("Block payload commitment does not equal parent commitment");
+                        return false;
                     }
+                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                        QuorumData {
+                            leaf_commit: leaf.commit(),
+                        },
+                        view,
+                        self.quorum_exchange.public_key(),
+                        self.quorum_exchange.private_key(),
+                    );
+                    GeneralConsensusMessage::<TYPES>::Vote(vote)
+                } else {
+                    error!(
+                        "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
+                        cert, self.cur_view
+                    );
+                    return false;
+                };
+
+                if let GeneralConsensusMessage::Vote(vote) = message {
+                    debug!(
+                        "Sending vote to next quorum leader {:?}",
+                        vote.get_view_number()
+                    );
+                    self.event_stream
+                        .publish(HotShotEvent::QuorumVoteSend(vote))
+                        .await;
+                    return true;
                 }
             }
             info!(
@@ -1182,28 +1172,28 @@ where
                 if self.cur_view >= view {
                     return;
                 }
-                let vote_token = self.timeout_exchange.make_vote_token(view);
-
-                match vote_token {
-                    Err(e) => {
-                        error!("Failed to generate vote token for {:?} {:?}", view, e);
-                    }
-                    Ok(None) => {
-                        debug!("We were not chosen for consensus committee on {:?}", view);
-                    }
-                    Ok(Some(_vote_token)) => {
-                        let vote = TimeoutVote2::create_signed_vote(
-                            TimeoutData { view },
-                            view,
-                            self.timeout_exchange.public_key(),
-                            self.timeout_exchange.private_key(),
-                        );
-
-                        self.event_stream
-                            .publish(HotShotEvent::TimeoutVoteSend(vote))
-                            .await;
-                    }
+                if !self
+                    .timeout_exchange
+                    .membership()
+                    .has_stake(self.timeout_exchange.public_key())
+                {
+                    debug!(
+                        "We were not chosen for consensus committee on {:?}",
+                        self.cur_view
+                    );
+                    return;
                 }
+
+                let vote = TimeoutVote2::create_signed_vote(
+                    TimeoutData { view },
+                    view,
+                    self.timeout_exchange.public_key(),
+                    self.timeout_exchange.private_key(),
+                );
+
+                self.event_stream
+                    .publish(HotShotEvent::TimeoutVoteSend(vote))
+                    .await;
                 debug!(
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
