@@ -142,6 +142,7 @@
                 types_or = [ "markdown" ];
                 pass_filenames = true;
               };
+              nixpkgs-fmt.enable = true;
             };
           };
         };
@@ -176,6 +177,7 @@
 
                 # Tools
                 nixWithFlakes
+                nixpkgs-fmt
                 entr
 
                 # Figures
