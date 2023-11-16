@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: "0 0 * * MON"
   workflow_dispatch:
-  pull_request: # TODO remove
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
