@@ -28,7 +28,7 @@ use hotshot_types::{
     simple_certificate::VIDCertificate,
     simple_vote::{VIDData, VIDVote},
     traits::network::CommunicationChannel,
-    vote2::{HasViewNumber, VoteAccumulator2},
+    vote::{HasViewNumber, VoteAccumulator2},
 };
 
 use snafu::Snafu;

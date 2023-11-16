@@ -19,7 +19,7 @@ use crate::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote2::{Certificate2, HasViewNumber},
+    vote::{Certificate, HasViewNumber},
 };
 
 use serde::{Deserialize, Serialize};
@@ -41,7 +41,7 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
     pub _pd: PhantomData<TYPES>,
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
     for SimpleCertificate<TYPES, VOTEABLE>
 {
     type Voteable = VOTEABLE;

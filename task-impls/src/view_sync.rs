@@ -19,7 +19,7 @@ use hotshot_types::{
         ViewSyncPreCommitVote,
     },
     traits::network::ConsensusIntentEvent,
-    vote2::{Certificate2, HasViewNumber, Vote2, VoteAccumulator2},
+    vote::{Certificate, HasViewNumber, Vote, VoteAccumulator2},
 };
 
 use bitvec::prelude::*;
@@ -171,8 +171,8 @@ pub type ViewSyncReplicaTaskStateTypes<TYPES, I, A> = HSTWithEvent<
 pub struct ViewSyncRelayTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    VOTE: Vote2<TYPES>,
-    CERTIFICATE: Certificate2<TYPES, Voteable = VOTE::Commitment>,
+    VOTE: Vote<TYPES>,
+    CERTIFICATE: Certificate<TYPES, Voteable = VOTE::Commitment>,
 > {
     /// Event stream to publish events to
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
@@ -189,8 +189,8 @@ pub struct ViewSyncRelayTaskState<
 impl<
         TYPES: NodeType,
         I: NodeImplementation<TYPES>,
-        VOTE: Vote2<TYPES> + std::marker::Send + std::marker::Sync + 'static,
-        CERTIFICATE: Certificate2<TYPES, Voteable = VOTE::Commitment>
+        VOTE: Vote<TYPES> + std::marker::Send + std::marker::Sync + 'static,
+        CERTIFICATE: Certificate<TYPES, Voteable = VOTE::Commitment>
             + std::marker::Send
             + std::marker::Sync
             + 'static,

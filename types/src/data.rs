@@ -13,7 +13,7 @@ use crate::{
         storage::StoredView,
         BlockPayload, State,
     },
-    vote2::{Certificate2, HasViewNumber},
+    vote::{Certificate, HasViewNumber},
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};

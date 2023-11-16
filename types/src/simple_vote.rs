@@ -11,7 +11,7 @@ use crate::{
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
     },
-    vote2::{HasViewNumber, Vote2},
+    vote::{HasViewNumber, Vote},
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -102,7 +102,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleV
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static> Vote2<TYPES> for SimpleVote<TYPES, DATA> {
+impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES, DATA> {
     type Commitment = DATA;
 
     fn get_signing_key(&self) -> <TYPES as NodeType>::SignatureKey {

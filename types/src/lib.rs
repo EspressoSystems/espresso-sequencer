@@ -22,7 +22,7 @@ pub mod simple_certificate;
 pub mod simple_vote;
 pub mod traits;
 pub mod utils;
-pub mod vote2;
+pub mod vote;
 /// the type of consensus to run. Either:
 /// wait for a signal to start a view,
 /// or constantly run

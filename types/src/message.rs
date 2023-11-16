@@ -11,7 +11,7 @@ use crate::simple_certificate::{
 use crate::simple_vote::{
     DAVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
 };
-use crate::vote2::HasViewNumber;
+use crate::vote::HasViewNumber;
 use crate::{
     data::{DAProposal, VidDisperse},
     simple_vote::QuorumVote,

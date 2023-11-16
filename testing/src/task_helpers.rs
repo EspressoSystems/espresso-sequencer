@@ -26,7 +26,7 @@ use hotshot_types::{
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
     },
-    vote2::HasViewNumber,
+    vote::HasViewNumber,
 };
 
 pub async fn build_system_handle(

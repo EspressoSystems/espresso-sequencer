@@ -12,7 +12,7 @@ use hotshot_testing::{
 };
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::simple_vote::QuorumVote;
-use hotshot_types::vote2::Certificate2;
+use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,

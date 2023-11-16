@@ -16,7 +16,7 @@ use hotshot_types::{
         network::{CommunicationChannel, TransmitType},
         node_implementation::NodeType,
     },
-    vote2::{HasViewNumber, Vote2},
+    vote::{HasViewNumber, Vote},
 };
 use snafu::Snafu;
 use std::sync::Arc;

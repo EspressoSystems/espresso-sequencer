@@ -34,7 +34,7 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote2::{Certificate2, HasViewNumber, VoteAccumulator2},
+    vote::{Certificate, HasViewNumber, VoteAccumulator2},
 };
 use tracing::warn;
 

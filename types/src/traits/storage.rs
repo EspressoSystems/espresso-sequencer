@@ -2,7 +2,7 @@
 
 use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use crate::{
-    data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote2::HasViewNumber,
+    data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote::HasViewNumber,
 };
 use async_trait::async_trait;
 use commit::Commitment;

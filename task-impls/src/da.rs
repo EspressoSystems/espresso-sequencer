@@ -28,8 +28,8 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
-    vote2::HasViewNumber,
-    vote2::VoteAccumulator2,
+    vote::HasViewNumber,
+    vote::VoteAccumulator2,
 };
 
 use snafu::Snafu;

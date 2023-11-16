@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// A simple vote that has a signer and commitment to the data voted on.
-pub trait Vote2<TYPES: NodeType>: HasViewNumber<TYPES> {
+pub trait Vote<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// Type of data commitment this vote uses.
     type Commitment: Voteable;
 
@@ -50,7 +50,7 @@ The certificate formed from the collection of signatures a committee.
 The committee is defined by the `Membership` associated type.
 The votes all must be over the `Commitment` associated type.
 */
-pub trait Certificate2<TYPES: NodeType>: HasViewNumber<TYPES> {
+pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
 
@@ -76,8 +76,8 @@ pub trait Certificate2<TYPES: NodeType>: HasViewNumber<TYPES> {
 /// Accumulates votes until a certificate is formed.  This implementation works for all simple vote and certificate pairs
 pub struct VoteAccumulator2<
     TYPES: NodeType,
-    VOTE: Vote2<TYPES>,
-    CERT: Certificate2<TYPES, Voteable = VOTE::Commitment>,
+    VOTE: Vote<TYPES>,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 > {
     /// Map of all signatures accumlated so far
     pub vote_outcomes: VoteMap2<Commitment<VOTE::Commitment>>,
@@ -89,11 +89,8 @@ pub struct VoteAccumulator2<
     pub phantom: PhantomData<(TYPES, VOTE, CERT)>,
 }
 
-impl<
-        TYPES: NodeType,
-        VOTE: Vote2<TYPES>,
-        CERT: Certificate2<TYPES, Voteable = VOTE::Commitment>,
-    > VoteAccumulator2<TYPES, VOTE, CERT>
+impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOTE::Commitment>>
+    VoteAccumulator2<TYPES, VOTE, CERT>
 {
     /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.
