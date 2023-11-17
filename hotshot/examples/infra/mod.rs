@@ -848,7 +848,6 @@ impl<
                 >,
             >,
             Storage = MemoryStorage<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
     RunDA<

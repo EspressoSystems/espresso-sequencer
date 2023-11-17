@@ -4,7 +4,7 @@ use hotshot::{
     traits::implementations::{CombinedCommChannel, MemoryStorage},
 };
 use hotshot_types::{
-    message::{Message, SequencingMessage},
+    message::Message,
     traits::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
@@ -34,7 +34,6 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes, Self>>,
         VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes, Self>>,
     >;
-    type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
 
     fn new_channel_maps(
         start_view: <DemoTypes as NodeType>::Time,
