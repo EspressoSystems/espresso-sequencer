@@ -56,7 +56,6 @@ use hotshot_types::{
 };
 
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
     data::Leaf,
     error::StorageSnafu,
@@ -612,11 +611,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 #[async_trait]
 impl<
-        TYPES: NodeType<
-            BlockHeader = VIDBlockHeader,
-            BlockPayload = VIDBlockPayload,
-            Transaction = VIDTransaction,
-        >,
+        TYPES: NodeType,
         I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
         MEMBERSHIP: Membership<TYPES>,
     > HotShotType<TYPES, I> for SystemContext<TYPES, I>
@@ -979,12 +974,9 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(genesis_payload: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
-        let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate2::<TYPES>::genesis();
-
+    pub fn from_genesis() -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
-            inner: Leaf::new(time, justify_qc, genesis_payload),
+            inner: Leaf::genesis(),
         })
     }
 
