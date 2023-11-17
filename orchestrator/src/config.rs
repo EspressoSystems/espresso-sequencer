@@ -68,7 +68,7 @@ pub struct NetworkConfig<KEY: SignatureKey, ELECTIONCONFIG: ElectionConfig> {
     pub propose_max_round_time: Duration,
     pub node_index: u64,
     pub seed: [u8; 32],
-    pub padding: usize,
+    pub transaction_size: usize,
     pub start_delay_seconds: u64,
     pub key_type_name: String,
     pub election_config_type_name: String,
@@ -85,7 +85,7 @@ impl<K: SignatureKey, E: ElectionConfig> Default for NetworkConfig<K, E> {
             transactions_per_round: default_transactions_per_round(),
             node_index: 0,
             seed: [0u8; 32],
-            padding: default_padding(),
+            transaction_size: default_transaction_size(),
             libp2p_config: None,
             config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
@@ -112,8 +112,8 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     pub node_index: u64,
     #[serde(default)]
     pub seed: [u8; 32],
-    #[serde(default = "default_padding")]
-    pub padding: usize,
+    #[serde(default = "default_transaction_size")]
+    pub transaction_size: usize,
     #[serde(default = "default_start_delay_seconds")]
     pub start_delay_seconds: u64,
     #[serde(default)]
@@ -141,7 +141,7 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkC
             propose_max_round_time: val.config.propose_max_round_time,
             propose_min_round_time: val.config.propose_min_round_time,
             seed: val.seed,
-            padding: val.padding,
+            transaction_size: val.transaction_size,
             libp2p_config: val.libp2p_config.map(|libp2p_config| Libp2pConfig {
                 num_bootstrap_nodes: val.config.num_bootstrap,
                 index_ports: libp2p_config.index_ports,
@@ -179,8 +179,10 @@ impl<K: SignatureKey, E: ElectionConfig> From<NetworkConfigFile<K>> for NetworkC
 pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// Total number of nodes in the network
     pub total_nodes: NonZeroUsize,
+    #[serde(skip)]
     /// My own public key, secret key, stake value
     pub my_own_validator_config: ValidatorConfig<KEY>,
+    #[serde(skip)]
     /// The known nodes' public key and stake value
     pub known_nodes_with_stake: Vec<KEY::StakeTableEntry>,
     /// Number of committee nodes
@@ -283,7 +285,7 @@ fn default_rounds() -> usize {
 fn default_transactions_per_round() -> usize {
     10
 }
-fn default_padding() -> usize {
+fn default_transaction_size() -> usize {
     100
 }
 

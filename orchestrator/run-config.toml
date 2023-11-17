@@ -1,5 +1,6 @@
-rounds = 10
-transactions_per_round = 12
+rounds = 100
+transactions_per_round = 1
+transaction_size = 1749
 node_index = 0
 seed = [
     0,
@@ -35,21 +36,7 @@ seed = [
     0,
     0,
 ]
-padding = 10
-start_delay_seconds = 60
-
-[libp2p_config]
-index_ports = true
-bootstrap_mesh_n_high = 4
-bootstrap_mesh_n_low = 4
-bootstrap_mesh_outbound_min = 2
-bootstrap_mesh_n = 4
-mesh_n_high = 4
-mesh_n_low = 4
-mesh_outbound_min = 2
-mesh_n = 4
-online_time = 10
-base_port = 9000
+start_delay_seconds = 0
 
 [config]
 total_nodes = 10
@@ -64,6 +51,35 @@ timeout_ratio = [
 round_start_delay = 1
 start_delay = 1
 num_bootstrap = 5
+
+[libp2p_config]
+index_ports = true
+bootstrap_mesh_n_high = 4
+bootstrap_mesh_n_low = 4
+bootstrap_mesh_outbound_min = 2
+bootstrap_mesh_n = 4
+mesh_n_high = 4
+mesh_n_low = 4
+mesh_outbound_min = 2
+mesh_n = 4
+online_time = 10
+base_port = 9000
+
+[web_server_config]
+host = "127.0.0.1"
+port = 9000
+
+[da_web_server_config]
+host = "127.0.0.1"
+port = 9001
+
+[web_server_config.wait_between_polls]
+secs = 0
+nanos = 100000000 # 10 ms
+
+[da_web_server_config.wait_between_polls]
+secs = 0
+nanos = 100000000 # 10 ms
 
 [config.propose_min_round_time]
 secs = 0

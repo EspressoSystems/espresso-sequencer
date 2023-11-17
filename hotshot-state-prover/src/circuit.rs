@@ -1,28 +1,21 @@
 //! Circuit implementation for verifying light client state update
 
-use std::marker::PhantomData;
-
 use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
+use ark_std::borrow::Borrow;
 use ethereum_types::U256;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_types::traits::{
-    stake_table::{SnapshotVersion, StakeTableScheme},
-    state::LightClientState,
-};
+use hotshot_types::traits::state::LightClientState;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
     circuit::{
         rescue::RescueNativeGadget,
-        signature::schnorr::{SignatureGadget, SignatureVar, VerKeyVar},
+        signature::schnorr::{SignatureGadget, VerKeyVar},
     },
     rescue::RescueParameter,
-    signatures::{
-        bls_over_bn254::VerKey as BLSVerKey,
-        schnorr::{Signature, VerKey as SchnorrVerKey},
-    },
+    signatures::schnorr::{Signature, VerKey as SchnorrVerKey},
 };
-use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use jf_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
 
 /// Lossy conversion of a U256 into a field element.
 pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
@@ -59,10 +52,72 @@ pub struct LightClientStateVar {
     /// Private list holding all variables
     ///  vars[0]: view number
     ///  vars[1]: block height
-    ///  vars[2]: block commitment
+    ///  vars[2]: block commitment root
     ///  vars[3]: fee ledger commitment
     ///  vars[4-6]: stake table commitment
     vars: [Variable; 7],
+}
+
+#[derive(Clone, Debug)]
+pub struct PublicInput<F: PrimeField>(Vec<F>);
+
+impl<F: PrimeField> AsRef<[F]> for PublicInput<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F: PrimeField> From<Vec<F>> for PublicInput<F> {
+    fn from(v: Vec<F>) -> Self {
+        Self(v)
+    }
+}
+
+impl<F: PrimeField> PublicInput<F> {
+    /// Return the threshold
+    pub fn threshold(&self) -> F {
+        self.0[0]
+    }
+
+    /// Return the view number of the light client state
+    pub fn view_number(&self) -> F {
+        self.0[1]
+    }
+
+    /// Return the block height of the light client state
+    pub fn block_height(&self) -> F {
+        self.0[2]
+    }
+
+    /// Return the block commitment root of the light client state
+    pub fn block_comm_root(&self) -> F {
+        self.0[3]
+    }
+
+    /// Return the fee ledger commitment of the light client state
+    pub fn fee_ledger_comm(&self) -> F {
+        self.0[4]
+    }
+
+    /// Return the stake table commitment of the light client state
+    pub fn stake_table_comm(&self) -> (F, F, F) {
+        (self.0[5], self.0[6], self.0[7])
+    }
+
+    /// Return the bls key commitment of the light client state
+    pub fn bls_key_comm(&self) -> F {
+        self.0[5]
+    }
+
+    /// Return the schnorr key commitment of the light client state
+    pub fn schnorr_key_comm(&self) -> F {
+        self.0[6]
+    }
+
+    /// Return the stake amount commitment of the light client state
+    pub fn stake_amount_comm(&self) -> F {
+        self.0[7]
+    }
 }
 
 impl LightClientStateVar {
@@ -76,7 +131,7 @@ impl LightClientStateVar {
             vars: [
                 circuit.create_public_variable(view_number_f)?,
                 circuit.create_public_variable(block_height_f)?,
-                circuit.create_public_variable(state.block_comm)?,
+                circuit.create_public_variable(state.block_comm_root)?,
                 circuit.create_public_variable(state.fee_ledger_comm)?,
                 circuit.create_public_variable(state.stake_table_comm.0)?,
                 circuit.create_public_variable(state.stake_table_comm.1)?,
@@ -93,7 +148,7 @@ impl LightClientStateVar {
         self.vars[1]
     }
 
-    pub fn block_comm(&self) -> Variable {
+    pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
     }
 
@@ -116,236 +171,261 @@ impl AsRef<[Variable]> for LightClientStateVar {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct StateUpdateBuilder<F: RescueParameter>(PhantomData<F>);
-
-impl<F> StateUpdateBuilder<F>
+/// A function that takes as input:
+/// - a list of stake table entries (`Vec<(SchnorrVerKey, Amount)>`)
+/// - a bit vector indicates the signers
+/// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
+/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
+/// - a quorum threshold
+/// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
+/// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
+/// It checks that
+/// - the signer's accumulated weight exceeds the quorum threshold
+/// - the stake table corresponds to the one committed in the light client state
+/// - all signed schnorr signatures are valid
+/// and returns
+/// - A circuit for proof generation
+/// - A list of public inputs for verification
+/// - A PlonkError if any error happens when building the circuit
+pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
+    stake_table_entries: STIter,
+    signer_bit_vec: BitIter,
+    signatures: SigIter,
+    lightclient_state: &LightClientState<F>,
+    threshold: &U256,
+) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
 where
     F: RescueParameter,
+    P: TECurveConfig<BaseField = F>,
+    STIter: IntoIterator,
+    STIter::Item: Borrow<(SchnorrVerKey<P>, U256)>,
+    STIter::IntoIter: ExactSizeIterator,
+    BitIter: IntoIterator,
+    BitIter::Item: Borrow<bool>,
+    BitIter::IntoIter: ExactSizeIterator,
+    SigIter: IntoIterator,
+    SigIter::Item: Borrow<Signature<P>>,
+    SigIter::IntoIter: ExactSizeIterator,
 {
-    /// A function that takes as input:
-    /// - stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
-    /// - schnorr signatures of the updated states (`Vec<SchnorrSignature>`)
-    /// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
-    /// - signer bit vector
-    /// - quorum threshold
-    /// checks that
-    /// - the signer's accumulated weight exceeds the quorum threshold
-    /// - the commitment of the stake table
-    /// - all schnorr signatures are valid
-    pub fn build<ST, P>(
-        stake_table: &ST,
-        sigs: &[Signature<P>],
-        lightclient_state: &LightClientState<F>,
-        signer_bit_vec: &[bool],
-        threshold: &U256,
-    ) -> Result<(PlonkCircuit<F>, Vec<F>), PlonkError>
-    where
-        ST: StakeTableScheme<Key = BLSVerKey, Amount = U256, Aux = SchnorrVerKey<P>>,
-        P: TECurveConfig<BaseField = F>,
-    {
-        let mut circuit = PlonkCircuit::new_turbo_plonk();
+    let stake_table_entries = stake_table_entries.into_iter();
+    let signer_bit_vec = signer_bit_vec.into_iter();
+    let signatures = signatures.into_iter();
+    if stake_table_entries.len() > STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Number of input stake table entries {} exceeds the capacity {}",
+                stake_table_entries.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
+    if signer_bit_vec.len() > STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Length of input bit vector {} exceeds the capacity {}",
+                signer_bit_vec.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
+    if signatures.len() > STAKE_TABLE_CAPACITY {
+        return Err(PlonkError::CircuitError(CircuitError::ParameterError(
+            format!(
+                "Number of input signatures {} exceeds the capacity {}",
+                signatures.len(),
+                STAKE_TABLE_CAPACITY,
+            ),
+        )));
+    }
 
-        // creating variables for stake table entries
-        let mut stake_table_var = stake_table
-            .try_iter(SnapshotVersion::LastEpochStart)?
-            .map(|(_bls_ver_key, amount, schnorr_ver_key)| {
-                let schnorr_ver_key = circuit.create_signature_vk_variable(&schnorr_ver_key)?;
-                let stake_amount = circuit.create_variable(u256_to_field::<F>(&amount))?;
+    let mut circuit = PlonkCircuit::new_turbo_plonk();
+
+    // creating variables for stake table entries
+    let stake_table_entries_pad_len = STAKE_TABLE_CAPACITY - stake_table_entries.len();
+    let mut stake_table_var = stake_table_entries
+        .map(|item| {
+            let item = item.borrow();
+            let schnorr_ver_key = circuit.create_signature_vk_variable(&item.0)?;
+            let stake_amount = circuit.create_variable(u256_to_field::<F>(&item.1))?;
+            Ok(StakeTableEntryVar {
+                schnorr_ver_key,
+                stake_amount,
+            })
+        })
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    stake_table_var.extend(
+        (0..stake_table_entries_pad_len)
+            .map(|_| {
+                let schnorr_ver_key =
+                    circuit.create_signature_vk_variable(&SchnorrVerKey::<P>::default())?;
+                let stake_amount = circuit.create_variable(F::default())?;
                 Ok(StakeTableEntryVar {
                     schnorr_ver_key,
                     stake_amount,
                 })
             })
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        let dummy_ver_key_var = VerKeyVar(circuit.neutral_point_variable());
-        stake_table_var.resize(
-            STAKE_TABLE_CAPACITY,
-            StakeTableEntryVar {
-                schnorr_ver_key: dummy_ver_key_var,
-                stake_amount: 0,
-            },
-        );
+            .collect::<Result<Vec<_>, CircuitError>>()?,
+    );
 
-        // creating variables for signatures
-        let mut sig_vars = sigs
-            .iter()
-            .map(|sig| circuit.create_signature_variable(sig))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        sig_vars.resize(
-            STAKE_TABLE_CAPACITY,
-            SignatureVar {
-                s: circuit.zero(),
-                R: circuit.neutral_point_variable(),
-            },
-        );
+    // creating variables for signatures
+    let sig_pad_len = STAKE_TABLE_CAPACITY - signatures.len();
+    let mut sig_vars = signatures
+        .map(|sig| circuit.create_signature_variable(sig.borrow()))
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    sig_vars.extend(
+        (0..sig_pad_len)
+            .map(|_| circuit.create_signature_variable(&Signature::<P>::default()))
+            .collect::<Result<Vec<_>, CircuitError>>()?,
+    );
 
-        // creating Boolean variables for the bit vector
-        let mut signer_bit_vec_var = signer_bit_vec
-            .iter()
-            .map(|&b| circuit.create_boolean_variable(b))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        signer_bit_vec_var.resize(STAKE_TABLE_CAPACITY, BoolVar(circuit.zero()));
+    // creating Boolean variables for the bit vector
+    let bit_vec_pad_len = STAKE_TABLE_CAPACITY - signer_bit_vec.len();
+    let mut signer_bit_vec_var = signer_bit_vec
+        .map(|b| circuit.create_boolean_variable(*b.borrow()))
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    signer_bit_vec_var.extend(
+        (0..bit_vec_pad_len)
+            .map(|_| circuit.create_boolean_variable(false))
+            .collect::<Result<Vec<_>, CircuitError>>()?,
+    );
 
-        let threshold = u256_to_field::<F>(threshold);
-        let threshold_var = circuit.create_public_variable(threshold)?;
+    let threshold = u256_to_field::<F>(threshold);
+    let threshold_pub_var = circuit.create_public_variable(threshold)?;
 
-        let lightclient_state_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
+    let lightclient_state_pub_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
 
-        let view_number_f = F::from(lightclient_state.view_number as u64);
-        let block_height_f = F::from(lightclient_state.block_height as u64);
-        let public_inputs = vec![
-            threshold,
-            view_number_f,
-            block_height_f,
-            lightclient_state.block_comm,
-            lightclient_state.fee_ledger_comm,
-            lightclient_state.stake_table_comm.0,
-            lightclient_state.stake_table_comm.1,
-            lightclient_state.stake_table_comm.2,
-        ];
+    let view_number_f = F::from(lightclient_state.view_number as u64);
+    let block_height_f = F::from(lightclient_state.block_height as u64);
+    let public_inputs = vec![
+        threshold,
+        view_number_f,
+        block_height_f,
+        lightclient_state.block_comm_root,
+        lightclient_state.fee_ledger_comm,
+        lightclient_state.stake_table_comm.0,
+        lightclient_state.stake_table_comm.1,
+        lightclient_state.stake_table_comm.2,
+    ];
 
-        // Checking whether the accumulated weight exceeds the quorum threshold
-        let mut signed_amount_var = (0..STAKE_TABLE_CAPACITY / 2)
-            .map(|i| {
-                circuit.mul_add(
-                    &[
-                        stake_table_var[2 * i].stake_amount,
-                        signer_bit_vec_var[2 * i].0,
-                        stake_table_var[2 * i + 1].stake_amount,
-                        signer_bit_vec_var[2 * i + 1].0,
-                    ],
-                    &[F::one(), F::one()],
-                )
-            })
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        // Adding the last if STAKE_TABLE_CAPACITY is not a multiple of 2
-        if STAKE_TABLE_CAPACITY % 2 == 1 {
-            signed_amount_var.push(circuit.mul(
-                stake_table_var[STAKE_TABLE_CAPACITY - 1].stake_amount,
-                signer_bit_vec_var[STAKE_TABLE_CAPACITY - 1].0,
-            )?);
-        }
-        let acc_amount_var = circuit.sum(&signed_amount_var)?;
-        circuit.enforce_leq(threshold_var, acc_amount_var)?;
-
-        // checking the commitment for the list of schnorr keys
-        let schnorr_ver_key_preimage_vars = stake_table_var
-            .iter()
-            .flat_map(|var| [var.schnorr_ver_key.0.get_x(), var.schnorr_ver_key.0.get_y()])
-            .collect::<Vec<_>>();
-        let schnorr_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
-            &mut circuit,
-            &schnorr_ver_key_preimage_vars,
-            1,
-        )?[0];
-        circuit.enforce_equal(
-            schnorr_ver_key_comm,
-            lightclient_state_var.stake_table_comm().schnorr_keys_comm,
-        )?;
-
-        // checking the commitment for the list of stake amounts
-        let stake_amount_preimage_vars = stake_table_var
-            .iter()
-            .map(|var| var.stake_amount)
-            .collect::<Vec<_>>();
-        let stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
-            &mut circuit,
-            &stake_amount_preimage_vars,
-            1,
-        )?[0];
-        circuit.enforce_equal(
-            stake_amount_comm,
-            lightclient_state_var.stake_table_comm().stake_amount_comm,
-        )?;
-
-        // checking all signatures
-        let verification_result_vars = stake_table_var
-            .iter()
-            .zip(sig_vars)
-            .map(|(entry, sig)| {
-                SignatureGadget::<_, P>::check_signature_validity(
-                    &mut circuit,
-                    &entry.schnorr_ver_key,
-                    lightclient_state_var.as_ref(),
-                    &sig,
-                )
-            })
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        let bit_x_result_vars = signer_bit_vec_var
-            .iter()
-            .zip(verification_result_vars)
-            .map(|(&bit, result)| {
-                let neg_bit = circuit.logic_neg(bit)?;
-                circuit.logic_or(neg_bit, result)
-            })
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-        let sig_ver_result = circuit.logic_and_all(&bit_x_result_vars)?;
-        circuit.enforce_true(sig_ver_result.0)?;
-
-        circuit.finalize_for_arithmetization()?;
-        Ok((circuit, public_inputs))
+    // Checking whether the accumulated weight exceeds the quorum threshold
+    let mut signed_amount_var = (0..STAKE_TABLE_CAPACITY / 2)
+        .map(|i| {
+            circuit.mul_add(
+                &[
+                    stake_table_var[2 * i].stake_amount,
+                    signer_bit_vec_var[2 * i].0,
+                    stake_table_var[2 * i + 1].stake_amount,
+                    signer_bit_vec_var[2 * i + 1].0,
+                ],
+                &[F::one(), F::one()],
+            )
+        })
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    // Adding the last if STAKE_TABLE_CAPACITY is not a multiple of 2
+    if STAKE_TABLE_CAPACITY % 2 == 1 {
+        signed_amount_var.push(circuit.mul(
+            stake_table_var[STAKE_TABLE_CAPACITY - 1].stake_amount,
+            signer_bit_vec_var[STAKE_TABLE_CAPACITY - 1].0,
+        )?);
     }
+    let acc_amount_var = circuit.sum(&signed_amount_var)?;
+    circuit.enforce_leq(threshold_pub_var, acc_amount_var)?;
+
+    // checking the commitment for the list of schnorr keys
+    let schnorr_ver_key_preimage_vars = stake_table_var
+        .iter()
+        .flat_map(|var| [var.schnorr_ver_key.0.get_x(), var.schnorr_ver_key.0.get_y()])
+        .collect::<Vec<_>>();
+    let schnorr_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+        &mut circuit,
+        &schnorr_ver_key_preimage_vars,
+        1,
+    )?[0];
+    circuit.enforce_equal(
+        schnorr_ver_key_comm,
+        lightclient_state_pub_var
+            .stake_table_comm()
+            .schnorr_keys_comm,
+    )?;
+
+    // checking the commitment for the list of stake amounts
+    let stake_amount_preimage_vars = stake_table_var
+        .iter()
+        .map(|var| var.stake_amount)
+        .collect::<Vec<_>>();
+    let stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+        &mut circuit,
+        &stake_amount_preimage_vars,
+        1,
+    )?[0];
+    circuit.enforce_equal(
+        stake_amount_comm,
+        lightclient_state_pub_var
+            .stake_table_comm()
+            .stake_amount_comm,
+    )?;
+
+    // checking all signatures
+    let verification_result_vars = stake_table_var
+        .iter()
+        .zip(sig_vars)
+        .map(|(entry, sig)| {
+            SignatureGadget::<_, P>::check_signature_validity(
+                &mut circuit,
+                &entry.schnorr_ver_key,
+                lightclient_state_pub_var.as_ref(),
+                &sig,
+            )
+        })
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    let bit_x_result_vars = signer_bit_vec_var
+        .iter()
+        .zip(verification_result_vars)
+        .map(|(&bit, result)| {
+            let neg_bit = circuit.logic_neg(bit)?;
+            circuit.logic_or(neg_bit, result)
+        })
+        .collect::<Result<Vec<_>, CircuitError>>()?;
+    let sig_ver_result = circuit.logic_and_all(&bit_x_result_vars)?;
+    circuit.enforce_true(sig_ver_result.0)?;
+
+    circuit.finalize_for_arithmetization()?;
+    Ok((circuit, public_inputs.into()))
+}
+
+/// Internal function to build a dummy circuit
+pub(crate) fn build_for_preprocessing<F, P>(
+) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
+where
+    F: RescueParameter,
+    P: TECurveConfig<BaseField = F>,
+{
+    let lightclient_state = LightClientState {
+        view_number: 0,
+        block_height: 0,
+        block_comm_root: F::default(),
+        fee_ledger_comm: F::default(),
+        stake_table_comm: (F::default(), F::default(), F::default()),
+    };
+    build::<F, P, _, _, _>(&[], &[], &[], &lightclient_state, &U256::zero())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{LightClientState, StateUpdateBuilder};
+    use super::{build, LightClientState};
+    use crate::utils::{key_pairs_for_testing, stake_table_for_testing};
     use ark_ed_on_bn254::EdwardsConfig as Config;
-    use ark_std::rand::{CryptoRng, RngCore};
     use ethereum_types::U256;
-    use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     use jf_primitives::{
         crhf::{VariableLengthRescueCRHF, CRHF},
         errors::PrimitivesError,
-        signatures::{
-            bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-            schnorr::Signature,
-            SchnorrSignatureScheme, SignatureScheme,
-        },
+        signatures::{schnorr::Signature, SchnorrSignatureScheme, SignatureScheme},
     };
     use jf_relation::Circuit;
     use jf_utils::test_rng;
 
     type F = ark_ed_on_bn254::Fq;
-    type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<Config>;
-    type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
-
-    fn key_pairs_for_testing<R: CryptoRng + RngCore>(
-        num_validators: usize,
-        prng: &mut R,
-    ) -> (Vec<BLSVerKey>, Vec<(SchnorrSignKey, SchnorrVerKey)>) {
-        let bls_keys = (0..num_validators)
-            .map(|_| {
-                BLSOverBN254CurveSignatureScheme::key_gen(&(), prng)
-                    .unwrap()
-                    .1
-            })
-            .collect::<Vec<_>>();
-        let schnorr_keys = (0..num_validators)
-            .map(|_| SchnorrSignatureScheme::key_gen(&(), prng).unwrap())
-            .collect::<Vec<_>>();
-        (bls_keys, schnorr_keys)
-    }
-
-    fn stake_table_for_testing(
-        bls_keys: &[BLSVerKey],
-        schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
-    ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-        let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
-        // Registering keys
-        bls_keys.iter().enumerate().zip(schnorr_keys).for_each(
-            |((i, bls_key), (_, schnorr_key))| {
-                st.register(*bls_key, U256::from((i + 1) as u32), schnorr_key.clone())
-                    .unwrap()
-            },
-        );
-        // Freeze the stake table
-        st.advance();
-        st.advance();
-        st
-    }
 
     #[test]
     fn test_circuit_building() {
@@ -355,7 +435,13 @@ mod tests {
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(&bls_keys, &schnorr_keys);
 
-        let block_comm =
+        let entries = st
+            .try_iter(SnapshotVersion::LastEpochStart)
+            .unwrap()
+            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .collect::<Vec<_>>();
+
+        let block_comm_root =
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
                 [0];
         let fee_ledger_comm =
@@ -365,19 +451,11 @@ mod tests {
         let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
-            block_comm,
+            block_comm_root,
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg = [
-            F::from(lightclient_state.view_number as u64),
-            F::from(lightclient_state.block_height as u64),
-            lightclient_state.block_comm,
-            lightclient_state.fee_ledger_comm,
-            lightclient_state.stake_table_comm.0,
-            lightclient_state.stake_table_comm.1,
-            lightclient_state.stake_table_comm.2,
-        ];
+        let state_msg: [F; 7] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()
@@ -401,25 +479,29 @@ mod tests {
             })
             .collect::<Vec<_>>();
         // good path
-        let (circuit, public_inputs) = StateUpdateBuilder::<F>::build(
-            &st,
+        let (circuit, public_inputs) = build(
+            &entries,
+            &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
-        assert!(circuit.check_circuit_satisfiability(&public_inputs).is_ok());
+        assert!(circuit
+            .check_circuit_satisfiability(public_inputs.as_ref())
+            .is_ok());
 
-        let (circuit, public_inputs) = StateUpdateBuilder::<F>::build(
-            &st,
+        let (circuit, public_inputs) = build(
+            &entries,
+            &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(10u32),
         )
         .unwrap();
-        assert!(circuit.check_circuit_satisfiability(&public_inputs).is_ok());
+        assert!(circuit
+            .check_circuit_satisfiability(public_inputs.as_ref())
+            .is_ok());
 
         // bad path: total weight doesn't meet the threshold
         // bit vector with total weight 23
@@ -437,30 +519,22 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        let (bad_circuit, public_inputs) = StateUpdateBuilder::<F>::build(
-            &st,
+        let (bad_circuit, public_inputs) = build(
+            &entries,
+            &bad_bit_vec,
             &bad_bit_masked_sigs,
             &lightclient_state,
-            &bad_bit_vec,
             &U256::from(25u32),
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
 
         // bad path: bad stake table commitment
         let mut bad_lightclient_state = lightclient_state.clone();
         bad_lightclient_state.stake_table_comm.1 = F::default();
-        let bad_state_msg = [
-            F::from(bad_lightclient_state.view_number as u64),
-            F::from(bad_lightclient_state.block_height as u64),
-            bad_lightclient_state.block_comm,
-            bad_lightclient_state.fee_ledger_comm,
-            bad_lightclient_state.stake_table_comm.0,
-            bad_lightclient_state.stake_table_comm.1,
-            bad_lightclient_state.stake_table_comm.2,
-        ];
+        let bad_state_msg: [F; 7] = bad_lightclient_state.clone().into();
         let sig_for_bad_state = schnorr_keys
             .iter()
             .map(|(key, _)| {
@@ -468,31 +542,23 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = StateUpdateBuilder::<F>::build(
-            &st,
+        let (bad_circuit, public_inputs) = build(
+            &entries,
+            &bit_vec,
             &sig_for_bad_state,
             &bad_lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
 
         // bad path: incorrect signatures
         let mut wrong_light_client_state = lightclient_state.clone();
         // state with a different bls key commitment
         wrong_light_client_state.stake_table_comm.0 = F::default();
-        let wrong_state_msg = [
-            F::from(wrong_light_client_state.view_number as u64),
-            F::from(wrong_light_client_state.block_height as u64),
-            wrong_light_client_state.block_comm,
-            wrong_light_client_state.fee_ledger_comm,
-            wrong_light_client_state.stake_table_comm.0,
-            wrong_light_client_state.stake_table_comm.1,
-            wrong_light_client_state.stake_table_comm.2,
-        ];
+        let wrong_state_msg: [F; 7] = wrong_light_client_state.into();
         let wrong_sigs = schnorr_keys
             .iter()
             .map(|(key, _)| {
@@ -500,16 +566,16 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = StateUpdateBuilder::<F>::build(
-            &st,
+        let (bad_circuit, public_inputs) = build(
+            &entries,
+            &bit_vec,
             &wrong_sigs,
             &lightclient_state,
-            &bit_vec,
             &U256::from(26u32),
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(&public_inputs)
+            .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
     }
 }

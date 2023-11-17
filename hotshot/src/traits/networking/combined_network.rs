@@ -33,7 +33,7 @@ use hotshot_types::{
         node_implementation::NodeType,
     },
 };
-use std::{collections::hash_map::DefaultHasher, marker::PhantomData, sync::Arc};
+use std::{collections::hash_map::DefaultHasher, sync::Arc};
 
 use std::hash::Hash;
 
@@ -100,9 +100,9 @@ fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
 /// A communication channel with 2 networks, where we can fall back to the slower network if the
 /// primary fails
 #[derive(Clone, Debug)]
-pub struct CombinedCommChannel<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> {
+pub struct CombinedCommChannel<TYPES: NodeType> {
     /// The two networks we'll use for send/recv
-    networks: Arc<CombinedNetworks<TYPES, MEMBERSHIP>>,
+    networks: Arc<CombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
     message_cache: Arc<RwLock<Cache>>,
@@ -111,10 +111,10 @@ pub struct CombinedCommChannel<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> {
     primary_down: Arc<AtomicU64>,
 }
 
-impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> CombinedCommChannel<TYPES, MEMBERSHIP> {
+impl<TYPES: NodeType> CombinedCommChannel<TYPES> {
     /// Constructor
     #[must_use]
-    pub fn new(networks: Arc<CombinedNetworks<TYPES, MEMBERSHIP>>) -> Self {
+    pub fn new(networks: Arc<CombinedNetworks<TYPES>>) -> Self {
         Self {
             networks,
             message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
@@ -139,15 +139,13 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>> CombinedCommChannel<TYPES, 
 /// We need this so we can impl `TestableNetworkingImplementation`
 /// on the tuple
 #[derive(Debug, Clone)]
-pub struct CombinedNetworks<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>(
+pub struct CombinedNetworks<TYPES: NodeType>(
     pub WebServerNetwork<Message<TYPES>, TYPES::SignatureKey, TYPES>,
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    pub PhantomData<MEMBERSHIP>,
 );
 
-impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES>>
-    for CombinedNetworks<TYPES, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for CombinedNetworks<TYPES>
 {
     fn generator(
         expected_node_count: usize,
@@ -176,9 +174,7 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
                 is_da
             )
         );
-        Box::new(move |node_id| {
-            CombinedNetworks(generators.0(node_id), generators.1(node_id), PhantomData)
-        })
+        Box::new(move |node_id| CombinedNetworks(generators.0(node_id), generators.1(node_id)))
     }
 
     /// Get the number of messages in-flight.
@@ -189,9 +185,8 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
     }
 }
 
-impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES>>
-    for CombinedCommChannel<TYPES, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES, Message<TYPES>>
+    for CombinedCommChannel<TYPES>
 {
     fn generator(
         expected_node_count: usize,
@@ -200,16 +195,14 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
         da_committee_size: usize,
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <CombinedNetworks<TYPES, MEMBERSHIP> as TestableNetworkingImplementation<
-            _,
-            _,
-        >>::generator(
-            expected_node_count,
-            num_bootstrap,
-            network_id,
-            da_committee_size,
-            is_da,
-        );
+        let generator =
+            <CombinedNetworks<TYPES> as TestableNetworkingImplementation<_, _>>::generator(
+                expected_node_count,
+                num_bootstrap,
+                network_id,
+                da_committee_size,
+                is_da,
+            );
         Box::new(move |node_id| Self {
             networks: generator(node_id).into(),
             message_cache: Arc::new(RwLock::new(Cache::new(COMBINED_NETWORK_CACHE_SIZE))),
@@ -226,11 +219,10 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES>, MEMBERSHIP>
-    for CombinedCommChannel<TYPES, MEMBERSHIP>
+impl<TYPES: NodeType> CommunicationChannel<TYPES, Message<TYPES>, TYPES::Membership>
+    for CombinedCommChannel<TYPES>
 {
-    type NETWORK = CombinedNetworks<TYPES, MEMBERSHIP>;
+    type NETWORK = CombinedNetworks<TYPES>;
 
     async fn wait_for_ready(&self) {
         join!(
@@ -374,13 +366,9 @@ impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
     }
 }
 
-impl<TYPES: NodeType, MEMBERSHIP: Membership<TYPES>>
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES>,
-        MEMBERSHIP,
-        CombinedNetworks<TYPES, MEMBERSHIP>,
-    > for CombinedCommChannel<TYPES, MEMBERSHIP>
+impl<TYPES: NodeType>
+    TestableChannelImplementation<TYPES, Message<TYPES>, TYPES::Membership, CombinedNetworks<TYPES>>
+    for CombinedCommChannel<TYPES>
 {
     fn generate_network() -> Box<dyn Fn(Arc<Self::NETWORK>) -> Self + 'static> {
         Box::new(move |network| CombinedCommChannel::new(network))
