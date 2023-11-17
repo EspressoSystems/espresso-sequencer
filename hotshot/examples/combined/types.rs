@@ -9,7 +9,6 @@ use hotshot_types::{
         election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
         node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
     },
-    vote::ViewSyncVote,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -21,8 +20,6 @@ pub type DANetwork = CombinedCommChannel<DemoTypes>;
 pub type VIDNetwork = CombinedCommChannel<DemoTypes>;
 pub type QuorumNetwork = CombinedCommChannel<DemoTypes>;
 pub type ViewSyncNetwork = CombinedCommChannel<DemoTypes>;
-
-pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
