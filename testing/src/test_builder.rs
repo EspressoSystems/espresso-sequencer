@@ -139,7 +139,7 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(200, 0),
+                    duration: Duration::new(250, 0),
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
