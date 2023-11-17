@@ -548,10 +548,7 @@ where
     }
 }
 
-impl<TYPES: NodeType>
-    TestableChannelImplementation<TYPES, MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>
-    for MemoryCommChannel<TYPES>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for MemoryCommChannel<TYPES> {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {

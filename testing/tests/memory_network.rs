@@ -12,12 +12,9 @@ use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
 use hotshot_types::message::Message;
-use hotshot_types::traits::election::{
-    CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
-};
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
-use hotshot_types::traits::node_implementation::{ChannelMaps, Exchanges, NodeType};
+use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType};
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
@@ -68,14 +65,6 @@ impl NodeImplementation<Test> for TestImpl {
     type Storage = MemoryStorage<Test>;
     type QuorumNetwork = QuorumNetwork;
     type CommitteeNetwork = DANetwork;
-    type Exchanges = Exchanges<
-        Test,
-        Message<Test>,
-        QuorumExchange<Test, ThisMembership, QuorumNetwork, Message<Test>>,
-        CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test>>,
-        ViewSyncExchange<Test, ThisMembership, ViewSyncNetwork, Message<Test>>,
-        VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test>>,
-    >;
 
     fn new_channel_maps(
         start_view: <Test as NodeType>::Time,

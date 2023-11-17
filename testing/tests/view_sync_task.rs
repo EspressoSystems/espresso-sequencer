@@ -1,12 +1,7 @@
 use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
-use hotshot_types::{
-    data::ViewNumber,
-    traits::{
-        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
-    },
-};
+use hotshot_types::{data::ViewNumber, traits::state::ConsensusTime};
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -29,7 +24,6 @@ async fn test_view_sync_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let view_sync_exchange = api.inner.exchanges.view_sync_exchange().clone();
 
     let vote_data = ViewSyncPreCommitData {
         relay: 0,
@@ -38,8 +32,8 @@ async fn test_view_sync_task() {
     let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes>::create_signed_vote(
         vote_data,
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
-        view_sync_exchange.public_key(),
-        view_sync_exchange.private_key(),
+        hotshot_types::traits::consensus_api::ConsensusSharedApi::public_key(&api),
+        hotshot_types::traits::consensus_api::ConsensusSharedApi::private_key(&api),
     );
 
     tracing::error!("Vote in test is {:?}", vote.clone());

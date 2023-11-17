@@ -26,14 +26,11 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     event::Event,
-    message::{Message, Messages},
+    message::Messages,
     traits::{
         consensus_api::ConsensusSharedApi,
-        election::{ConsensusExchange, ViewSyncExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
-        node_implementation::{
-            CommitteeEx, NodeImplementation, NodeType, QuorumEx, VIDEx, ViewSyncEx,
-        },
+        node_implementation::{NodeImplementation, NodeType},
         state::ConsensusTime,
         BlockPayload,
     },
@@ -57,21 +54,14 @@ pub enum GlobalEvent {
 /// Add the network task to handle messages and publish events.
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_network_message_task<
-    TYPES: NodeType,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
->(
+pub async fn add_network_message_task<TYPES: NodeType, NET: CommunicationChannel<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    exchange: EXCHANGE,
-) -> TaskRunner
-// This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
-where
-    EXCHANGE::Networking: CommunicationChannel<TYPES>,
-{
-    let channel = exchange.network().clone();
+    channel: NET,
+) -> TaskRunner {
+    let net = channel.clone();
     let broadcast_stream = GeneratedStream::<Messages<TYPES>>::new(Arc::new(move || {
-        let network = channel.clone();
+        let network = net.clone();
         let closure = async move {
             loop {
                 let msgs = Messages(
@@ -89,9 +79,9 @@ where
         };
         Some(boxed_sync(closure))
     }));
-    let channel = exchange.network().clone();
+    let net = channel.clone();
     let direct_stream = GeneratedStream::<Messages<TYPES>>::new(Arc::new(move || {
-        let network = channel.clone();
+        let network = net.clone();
         let closure = async move {
             loop {
                 let msgs = Messages(
@@ -152,24 +142,14 @@ where
 /// Add the network task to handle events and send messages.
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_network_event_task<
-    TYPES: NodeType,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership> + 'static,
->(
+pub async fn add_network_event_task<TYPES: NodeType, NET: CommunicationChannel<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    exchange: EXCHANGE,
+    channel: NET,
+    membership: TYPES::Membership,
     task_kind: NetworkTaskKind,
-) -> TaskRunner
-// This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
-where
-    EXCHANGE::Networking: CommunicationChannel<TYPES>,
-{
-    let filter =
-        NetworkEventTaskState::<TYPES, <EXCHANGE as ConsensusExchange<_, _>>::Networking>::filter(
-            task_kind,
-        );
-    let channel = exchange.network().clone();
+) -> TaskRunner {
+    let filter = NetworkEventTaskState::<TYPES, NET>::filter(task_kind);
     let network_state: NetworkEventTaskState<_, _> = NetworkEventTaskState {
         channel,
         event_stream: event_stream.clone(),
@@ -178,9 +158,10 @@ where
     let registry = task_runner.registry.clone();
     let network_event_handler = HandleEvent(Arc::new(
         move |event, mut state: NetworkEventTaskState<_, _>| {
-            let membership = exchange.membership().clone();
+            let mem = membership.clone();
+
             async move {
-                let completion_status = state.handle_event(event, &membership).await;
+                let completion_status = state.handle_event(event, &mem).await;
                 (completion_status, state)
             }
             .boxed()
@@ -300,10 +281,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) -> TaskRunner {
     // build the vid task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -360,10 +338,7 @@ pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) -> TaskRunner {
     // build the da task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -419,10 +394,7 @@ pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) -> TaskRunner {
     // build the transactions task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -478,11 +450,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) -> TaskRunner {
     let api = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };

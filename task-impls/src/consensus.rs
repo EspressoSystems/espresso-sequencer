@@ -19,15 +19,15 @@ use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, QuorumProposal},
     event::{Event, EventType},
-    message::{GeneralConsensusMessage, Message, Proposal},
+    message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, Membership},
+        election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType, QuorumEx, TimeoutEx},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,
@@ -60,11 +60,7 @@ pub struct ConsensusTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+> {
     /// Our public key
     pub public_key: TYPES::SignatureKey,
     /// Our Private Key
@@ -134,11 +130,7 @@ pub struct ConsensusTaskState<
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
-pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-    TimeoutEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Network for all nodes
     pub quorum_network: Arc<I::QuorumNetwork>,
     /// Membership for Timeout votes/certs

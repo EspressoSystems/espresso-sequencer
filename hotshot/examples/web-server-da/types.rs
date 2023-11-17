@@ -1,15 +1,9 @@
 use crate::infra::WebServerDARun;
 use hotshot::{
-    demo::{DemoMembership, DemoTypes},
+    demo::DemoTypes,
     traits::implementations::{MemoryStorage, WebCommChannel},
 };
-use hotshot_types::{
-    message::Message,
-    traits::{
-        election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
-    },
-};
+use hotshot_types::traits::node_implementation::{ChannelMaps, NodeImplementation, NodeType};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -25,14 +19,6 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
     type CommitteeNetwork = DANetwork;
     type QuorumNetwork = QuorumNetwork;
-    type Exchanges = Exchanges<
-        DemoTypes,
-        Message<DemoTypes>,
-        QuorumExchange<DemoTypes, DemoMembership, QuorumNetwork, Message<DemoTypes>>,
-        CommitteeExchange<DemoTypes, DemoMembership, DANetwork, Message<DemoTypes>>,
-        ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes>>,
-        VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes>>,
-    >;
 
     fn new_channel_maps(
         start_view: <DemoTypes as NodeType>::Time,

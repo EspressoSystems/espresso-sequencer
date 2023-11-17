@@ -1,14 +1,12 @@
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::config::ValidatorConfigFile;
-use hotshot_types::traits::election::{ConsensusExchange, Membership};
+use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
-use hotshot_types::message::Message;
 
 use hotshot_types::{
-    traits::node_implementation::{NodeType, QuorumEx, TestableExchange},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
 
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
@@ -187,7 +185,6 @@ impl TestMetadata {
     ) -> TestLauncher<TYPES, I>
     where
         I: NodeImplementation<TYPES>,
-        <I as NodeImplementation<TYPES>>::Exchanges: TestableExchange<TYPES, Message<TYPES>>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
@@ -241,11 +238,8 @@ impl TestMetadata {
             propose_min_round_time: Duration::from_millis(0),
             propose_max_round_time: Duration::from_millis(1000),
             // TODO what's the difference between this and the second config?
-            election_config: Some(<QuorumEx<TYPES, I> as ConsensusExchange<
-                TYPES,
-                Message<TYPES>,
-            >>::Membership::default_election_config(
-                total_nodes as u64
+            election_config: Some(TYPES::Membership::default_election_config(
+                total_nodes as u64,
             )),
         };
         let TimingData {
@@ -272,18 +266,15 @@ impl TestMetadata {
         let overall_safety_task_generator = overall_safety_properties.build();
         let spinning_task_generator = spinning_properties.build();
         TestLauncher {
-            resource_generator:
-                ResourceGenerators {
-                    channel_generator:
-                        <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<
-                            _,
-                            _,
-                        >>::gen_comm_channels(
-                            total_nodes, num_bootstrap_nodes, da_committee_size
-                        ),
-                    storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
-                    config,
-                },
+            resource_generator: ResourceGenerators {
+                channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
+                    total_nodes,
+                    num_bootstrap_nodes,
+                    da_committee_size,
+                ),
+                storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
+                config,
+            },
             metadata: self,
             txn_task_generator,
             overall_safety_task_generator,

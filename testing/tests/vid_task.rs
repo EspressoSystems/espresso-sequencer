@@ -1,5 +1,5 @@
 use commit::Committable;
-use hotshot::{tasks::add_vid_task, HotShotConsensusApi};
+use hotshot::{tasks::add_vid_task, types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
@@ -8,12 +8,9 @@ use hotshot_testing::{
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
-    traits::{
-        consensus_api::ConsensusSharedApi, election::ConsensusExchange,
-        node_implementation::ExchangesType, state::ConsensusTime,
-    },
+    traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
-use hotshot_types::{simple_vote::VIDVote, traits::election::VIDExchangeType};
+use hotshot_types::{simple_vote::VIDVote, traits::node_implementation::NodeType};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -35,7 +32,6 @@ async fn test_vid_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let vid_exchange = api.inner.exchanges.vid_exchange().clone();
     let pub_key = *api.public_key();
 
     let vid = vid_init();
@@ -48,7 +44,8 @@ async fn test_vid_task() {
         payload_commitment,
     };
 
-    let signature = vid_exchange.sign_vid_disperse(&block.commit());
+    let signature =
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
     let proposal: DAProposal<TestTypes> = DAProposal {
         block_payload: block.clone(),
         view_number: ViewNumber::new(2),
@@ -96,8 +93,8 @@ async fn test_vid_task() {
             payload_commit: block.commit(),
         },
         ViewNumber::new(2),
-        vid_exchange.public_key(),
-        vid_exchange.private_key(),
+        api.public_key(),
+        api.private_key(),
     );
     output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 

@@ -10,15 +10,16 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, key_pair_for_id},
 };
-use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::simple_vote::QuorumVote;
 use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
-    traits::{
-        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
-    },
+    traits::state::ConsensusTime,
+};
+use hotshot_types::{
+    simple_vote::QuorumData,
+    traits::{consensus_api::ConsensusSharedApi, election::Membership},
 };
 
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ async fn build_vote(
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
+    let membership = api.inner.memberships.quorum_membership.clone();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
@@ -65,15 +66,15 @@ async fn build_vote(
         block_payload: None,
         rejected: Vec::new(),
         timestamp: 0,
-        proposer_id: quorum_exchange.get_leader(view).to_bytes(),
+        proposer_id: membership.get_leader(view).to_bytes(),
     };
     let vote = QuorumVote::<TestTypes>::create_signed_vote(
         QuorumData {
             leaf_commit: leaf.commit(),
         },
         view,
-        quorum_exchange.public_key(),
-        quorum_exchange.private_key(),
+        api.public_key(),
+        api.private_key(),
     );
     GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }

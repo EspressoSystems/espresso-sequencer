@@ -368,11 +368,11 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType> {
     fn in_flight_message_count(&self) -> Option<usize>;
 }
 /// Describes additional functionality needed by the test communication channel
-pub trait TestableChannelImplementation<TYPES: NodeType, NETWORK>:
-    CommunicationChannel<TYPES>
-{
+pub trait TestableChannelImplementation<TYPES: NodeType>: CommunicationChannel<TYPES> {
     /// generates the `CommunicationChannel` given it's associated network type
-    fn generate_network() -> Box<dyn Fn(Arc<NETWORK>) -> Self + 'static>;
+    #[allow(clippy::type_complexity)]
+    fn generate_network(
+    ) -> Box<dyn Fn(Arc<<Self as CommunicationChannel<TYPES>>::NETWORK>) -> Self + 'static>;
 }
 
 /// Changes that can occur in the network

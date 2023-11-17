@@ -5,18 +5,15 @@
 
 use super::{
     block_contents::{BlockHeader, Transaction},
-    election::{
-        CommitteeExchangeType, ConsensusExchange, ElectionConfig, QuorumExchangeType,
-        TimeoutExchange, TimeoutExchangeType, VIDExchangeType, ViewSyncExchangeType,
-    },
-    network::{CommunicationChannel, NetworkMsg, TestableNetworkingImplementation},
+    election::ElectionConfig,
+    network::{CommunicationChannel, TestableNetworkingImplementation},
     state::{ConsensusTime, TestableBlock, TestableState},
     storage::{StorageError, StorageState, TestableStorage},
     State,
 };
 use crate::{
     data::{Leaf, TestableLeaf},
-    message::{Message, ProcessedSequencingMessage},
+    message::ProcessedSequencingMessage,
     traits::{
         election::Membership, network::TestableChannelImplementation, signature_key::SignatureKey,
         storage::Storage, BlockPayload,
@@ -30,7 +27,6 @@ use std::{
     collections::BTreeMap,
     fmt::Debug,
     hash::Hash,
-    marker::PhantomData,
     sync::{atomic::AtomicBool, Arc},
 };
 /// Alias for the [`ProcessedConsensusMessage`] type of a [`NodeImplementation`].
@@ -116,11 +112,6 @@ pub trait NodeImplementation<TYPES: NodeType>:
     /// Storage type for this consensus implementation
     type Storage: Storage<TYPES> + Clone;
 
-    /// Consensus type selected exchanges.
-    ///
-    /// Implements either `ValidatingExchangesType` or `ExchangesType`.
-    type Exchanges: ExchangesType<TYPES, Message<TYPES>>;
-
     /// Network for all nodes
     type QuorumNetwork: CommunicationChannel<TYPES>;
     /// Network for those in the DA committee
@@ -133,315 +124,315 @@ pub trait NodeImplementation<TYPES: NodeType>:
     ) -> (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>);
 }
 
-/// Contains the protocols for exchanging proposals and votes.
-#[allow(clippy::type_complexity)]
-#[async_trait]
-pub trait ExchangesType<TYPES: NodeType, MESSAGE: NetworkMsg>: Send + Sync {
-    /// Protocol for exchanging data availability proposals and votes.
-    type CommitteeExchange: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug;
+// /// Contains the protocols for exchanging proposals and votes.
+// #[allow(clippy::type_complexity)]
+// #[async_trait]
+// pub trait ExchangesType<TYPES: NodeType, MESSAGE: NetworkMsg>: Send + Sync {
+//     /// Protocol for exchanging data availability proposals and votes.
+//     type CommitteeExchange: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
-    /// Protocol for exchanging VID proposals and votes
-    type VIDExchange: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug;
+//     /// Protocol for exchanging VID proposals and votes
+//     type VIDExchange: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
-    /// Get the committee exchange
-    fn committee_exchange(&self) -> &Self::CommitteeExchange;
+//     /// Get the committee exchange
+//     fn committee_exchange(&self) -> &Self::CommitteeExchange;
 
-    /// Get the timeout exchange
-    fn timeout_exchange(&self) -> &Self::TimeoutExchange;
+//     /// Get the timeout exchange
+//     fn timeout_exchange(&self) -> &Self::TimeoutExchange;
 
-    // type QuorumNetwork: CommunicationChannel<TYPES>;
-    // type CommitteeNetwork: CommunicationChannel<TYPES>;
+//     // type QuorumNetwork: CommunicationChannel<TYPES>;
+//     // type CommitteeNetwork: CommunicationChannel<TYPES>;
 
-    /// Protocol for exchanging quorum proposals and votes.
-    type QuorumExchange: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug;
+//     /// Protocol for exchanging quorum proposals and votes.
+//     type QuorumExchange: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
-    /// Protocol for exchanging view sync proposals and votes.
-    type ViewSyncExchange: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug;
+//     /// Protocol for exchanging view sync proposals and votes.
+//     type ViewSyncExchange: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
-    /// Protocol for receiving timeout votes
-    type TimeoutExchange: TimeoutExchangeType<TYPES, MESSAGE> + Clone + Debug;
+//     /// Protocol for receiving timeout votes
+//     type TimeoutExchange: TimeoutExchangeType<TYPES, MESSAGE> + Clone + Debug;
 
-    /// Election configurations for exchanges
-    type ElectionConfigs;
+//     /// Election configurations for exchanges
+//     type ElectionConfigs;
 
-    /// Create all exchanges.
-    fn create(
-        entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        configs: Self::ElectionConfigs,
-        networks: (
-            <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-        ),
-        pk: TYPES::SignatureKey,
-        entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Self;
+//     /// Create all exchanges.
+//     fn create(
+//         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+//         configs: Self::ElectionConfigs,
+//         networks: (
+//             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//         ),
+//         pk: TYPES::SignatureKey,
+//         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+//         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+//     ) -> Self;
 
-    /// Get the quorum exchange.
-    fn quorum_exchange(&self) -> &Self::QuorumExchange;
+//     /// Get the quorum exchange.
+//     fn quorum_exchange(&self) -> &Self::QuorumExchange;
 
-    /// Get the view sync exchange.
-    fn view_sync_exchange(&self) -> &Self::ViewSyncExchange;
+//     /// Get the view sync exchange.
+//     fn view_sync_exchange(&self) -> &Self::ViewSyncExchange;
 
-    /// Get the VID exchange
-    fn vid_exchange(&self) -> &Self::VIDExchange;
+//     /// Get the VID exchange
+//     fn vid_exchange(&self) -> &Self::VIDExchange;
 
-    /// BlockPayload the underlying networking interfaces until node is successfully initialized into the
-    /// networks.
-    async fn wait_for_networks_ready(&self);
+//     /// BlockPayload the underlying networking interfaces until node is successfully initialized into the
+//     /// networks.
+//     async fn wait_for_networks_ready(&self);
 
-    /// Shut down the the underlying networking interfaces.
-    async fn shut_down_networks(&self);
-}
+//     /// Shut down the the underlying networking interfaces.
+//     async fn shut_down_networks(&self);
+// }
 
-/// an exchange that is testable
-pub trait TestableExchange<TYPES: NodeType, MESSAGE: NetworkMsg>:
-    ExchangesType<TYPES, MESSAGE>
-{
-    /// generate communication channels
-    #[allow(clippy::type_complexity)]
-    fn gen_comm_channels(
-        expected_node_count: usize,
-        num_bootstrap: usize,
-        da_committee_size: usize,
-    ) -> Box<
-        dyn Fn(
-                u64,
-            ) -> (
-                <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-                <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-                <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-                <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            ) + 'static,
-    >;
-}
+// /// an exchange that is testable
+// pub trait TestableExchange<TYPES: NodeType, MESSAGE: NetworkMsg>:
+//     ExchangesType<TYPES, MESSAGE>
+// {
+//     /// generate communication channels
+//     #[allow(clippy::type_complexity)]
+//     fn gen_comm_channels(
+//         expected_node_count: usize,
+//         num_bootstrap: usize,
+//         da_committee_size: usize,
+//     ) -> Box<
+//         dyn Fn(
+//                 u64,
+//             ) -> (
+//                 <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//                 <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//                 <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//                 <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             ) + 'static,
+//     >;
+// }
 
-/// Implementes [`ExchangesType`].
-#[derive(Clone, Debug)]
-pub struct Exchanges<
-    TYPES: NodeType,
-    MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
-> {
-    /// Quorum exchange.
-    quorum_exchange: QUORUMEXCHANGE,
+// /// Implementes [`ExchangesType`].
+// #[derive(Clone, Debug)]
+// pub struct Exchanges<
+//     TYPES: NodeType,
+//     MESSAGE: NetworkMsg,
+//     QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
+// > {
+//     /// Quorum exchange.
+//     quorum_exchange: QUORUMEXCHANGE,
 
-    /// View sync exchange.
-    view_sync_exchange: VIEWSYNCEXCHANGE,
+//     /// View sync exchange.
+//     view_sync_exchange: VIEWSYNCEXCHANGE,
 
-    /// Committee exchange.
-    committee_exchange: COMMITTEEEXCHANGE,
+//     /// Committee exchange.
+//     committee_exchange: COMMITTEEEXCHANGE,
 
-    /// VID exchange
-    vid_exchange: VIDEXCHANGE,
+//     /// VID exchange
+//     vid_exchange: VIDEXCHANGE,
 
-    /// Timeout exchange
-    // This type can be simplified once we rework the exchanges trait
-    // It is here to avoid needing to instantiate it where all the other exchanges are instantiated
-    // https://github.com/EspressoSystems/HotShot/issues/1799
-    #[allow(clippy::type_complexity)]
-    pub timeout_exchange:
-        TimeoutExchange<
-            TYPES,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
-            >>::Membership,
-            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            MESSAGE,
-        >,
+//     /// Timeout exchange
+//     // This type can be simplified once we rework the exchanges trait
+//     // It is here to avoid needing to instantiate it where all the other exchanges are instantiated
+//     // https://github.com/EspressoSystems/HotShot/issues/1799
+//     #[allow(clippy::type_complexity)]
+//     pub timeout_exchange:
+//         TimeoutExchange<
+//             TYPES,
+//             <<Exchanges<
+//                 TYPES,
+//                 MESSAGE,
+//                 QUORUMEXCHANGE,
+//                 COMMITTEEEXCHANGE,
+//                 VIEWSYNCEXCHANGE,
+//                 VIDEXCHANGE,
+//             > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+//                 TYPES,
+//                 MESSAGE,
+//             >>::Membership,
+//             <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             MESSAGE,
+//         >,
 
-    /// Phantom data
-    _phantom: PhantomData<(TYPES, MESSAGE)>,
-}
+//     /// Phantom data
+//     _phantom: PhantomData<(TYPES, MESSAGE)>,
+// }
 
-#[async_trait]
-impl<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-    ExchangesType<TYPES, MESSAGE>
-    for Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
-where
-    TYPES: NodeType,
-    MESSAGE: NetworkMsg,
-    QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
-    VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
-{
-    type CommitteeExchange = COMMITTEEEXCHANGE;
-    type QuorumExchange = QUORUMEXCHANGE;
-    type ViewSyncExchange = VIEWSYNCEXCHANGE;
-    type VIDExchange = VIDEXCHANGE;
-    #[allow(clippy::type_complexity)]
-    type TimeoutExchange =
-        TimeoutExchange<
-            TYPES,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
-            >>::Membership,
-            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            MESSAGE,
-        >;
+// #[async_trait]
+// impl<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
+//     ExchangesType<TYPES, MESSAGE>
+//     for Exchanges<TYPES, MESSAGE, QUORUMEXCHANGE, COMMITTEEEXCHANGE, VIEWSYNCEXCHANGE, VIDEXCHANGE>
+// where
+//     TYPES: NodeType,
+//     MESSAGE: NetworkMsg,
+//     QUORUMEXCHANGE: QuorumExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     COMMITTEEEXCHANGE: CommitteeExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     VIEWSYNCEXCHANGE: ViewSyncExchangeType<TYPES, MESSAGE> + Clone + Debug,
+//     VIDEXCHANGE: VIDExchangeType<TYPES, MESSAGE> + Clone + Debug,
+// {
+//     type CommitteeExchange = COMMITTEEEXCHANGE;
+//     type QuorumExchange = QUORUMEXCHANGE;
+//     type ViewSyncExchange = VIEWSYNCEXCHANGE;
+//     type VIDExchange = VIDEXCHANGE;
+//     #[allow(clippy::type_complexity)]
+//     type TimeoutExchange =
+//         TimeoutExchange<
+//             TYPES,
+//             <<Exchanges<
+//                 TYPES,
+//                 MESSAGE,
+//                 QUORUMEXCHANGE,
+//                 COMMITTEEEXCHANGE,
+//                 VIEWSYNCEXCHANGE,
+//                 VIDEXCHANGE,
+//             > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+//                 TYPES,
+//                 MESSAGE,
+//             >>::Membership,
+//             <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             MESSAGE,
+//         >;
 
-    type ElectionConfigs = (TYPES::ElectionConfigType, TYPES::ElectionConfigType);
+//     type ElectionConfigs = (TYPES::ElectionConfigType, TYPES::ElectionConfigType);
 
-    fn committee_exchange(&self) -> &COMMITTEEEXCHANGE {
-        &self.committee_exchange
-    }
+//     fn committee_exchange(&self) -> &COMMITTEEEXCHANGE {
+//         &self.committee_exchange
+//     }
 
-    fn timeout_exchange(&self) -> &Self::TimeoutExchange {
-        &self.timeout_exchange
-    }
+//     fn timeout_exchange(&self) -> &Self::TimeoutExchange {
+//         &self.timeout_exchange
+//     }
 
-    fn create(
-        entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
-        configs: Self::ElectionConfigs,
-        networks: (
-            <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-        ),
-        pk: TYPES::SignatureKey,
-        entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Self {
-        let quorum_exchange = QUORUMEXCHANGE::create(
-            entries.clone(),
-            configs.0.clone(),
-            networks.0.clone(),
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
-        #[allow(clippy::type_complexity)]
-        let timeout_exchange: TimeoutExchange<
-            TYPES,
-            <<Exchanges<
-                TYPES,
-                MESSAGE,
-                QUORUMEXCHANGE,
-                COMMITTEEEXCHANGE,
-                VIEWSYNCEXCHANGE,
-                VIDEXCHANGE,
-            > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
-                TYPES,
-                MESSAGE,
-            >>::Membership,
-            <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
-            MESSAGE,
-        > = TimeoutExchange::create(
-            entries.clone(),
-            configs.0.clone(),
-            networks.0,
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
+//     fn create(
+//         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+//         configs: Self::ElectionConfigs,
+//         networks: (
+//             <Self::QuorumExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::CommitteeExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::ViewSyncExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             <Self::VIDExchange as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//         ),
+//         pk: TYPES::SignatureKey,
+//         entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
+//         sk: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+//     ) -> Self {
+//         let quorum_exchange = QUORUMEXCHANGE::create(
+//             entries.clone(),
+//             configs.0.clone(),
+//             networks.0.clone(),
+//             pk.clone(),
+//             entry.clone(),
+//             sk.clone(),
+//         );
+//         #[allow(clippy::type_complexity)]
+//         let timeout_exchange: TimeoutExchange<
+//             TYPES,
+//             <<Exchanges<
+//                 TYPES,
+//                 MESSAGE,
+//                 QUORUMEXCHANGE,
+//                 COMMITTEEEXCHANGE,
+//                 VIEWSYNCEXCHANGE,
+//                 VIDEXCHANGE,
+//             > as ExchangesType<TYPES, MESSAGE>>::QuorumExchange as ConsensusExchange<
+//                 TYPES,
+//                 MESSAGE,
+//             >>::Membership,
+//             <QUORUMEXCHANGE as ConsensusExchange<TYPES, MESSAGE>>::Networking,
+//             MESSAGE,
+//         > = TimeoutExchange::create(
+//             entries.clone(),
+//             configs.0.clone(),
+//             networks.0,
+//             pk.clone(),
+//             entry.clone(),
+//             sk.clone(),
+//         );
 
-        let view_sync_exchange = VIEWSYNCEXCHANGE::create(
-            entries.clone(),
-            configs.0,
-            networks.2,
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
+//         let view_sync_exchange = VIEWSYNCEXCHANGE::create(
+//             entries.clone(),
+//             configs.0,
+//             networks.2,
+//             pk.clone(),
+//             entry.clone(),
+//             sk.clone(),
+//         );
 
-        let committee_exchange = COMMITTEEEXCHANGE::create(
-            entries.clone(),
-            configs.1.clone(),
-            networks.1,
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
+//         let committee_exchange = COMMITTEEEXCHANGE::create(
+//             entries.clone(),
+//             configs.1.clone(),
+//             networks.1,
+//             pk.clone(),
+//             entry.clone(),
+//             sk.clone(),
+//         );
 
-        // RM TODO: figure out if this is the proper config
-        // issue: https://github.com/EspressoSystems/HotShot/issues/1918
-        let vid_exchange = VIDEXCHANGE::create(entries, configs.1, networks.3, pk, entry, sk);
+//         // RM TODO: figure out if this is the proper config
+//         // issue: https://github.com/EspressoSystems/HotShot/issues/1918
+//         let vid_exchange = VIDEXCHANGE::create(entries, configs.1, networks.3, pk, entry, sk);
 
-        Self {
-            quorum_exchange,
-            committee_exchange,
-            view_sync_exchange,
-            vid_exchange,
-            timeout_exchange,
-            _phantom: PhantomData,
-        }
-    }
+//         Self {
+//             quorum_exchange,
+//             committee_exchange,
+//             view_sync_exchange,
+//             vid_exchange,
+//             timeout_exchange,
+//             _phantom: PhantomData,
+//         }
+//     }
 
-    fn quorum_exchange(&self) -> &Self::QuorumExchange {
-        &self.quorum_exchange
-    }
+//     fn quorum_exchange(&self) -> &Self::QuorumExchange {
+//         &self.quorum_exchange
+//     }
 
-    fn view_sync_exchange(&self) -> &Self::ViewSyncExchange {
-        &self.view_sync_exchange
-    }
+//     fn view_sync_exchange(&self) -> &Self::ViewSyncExchange {
+//         &self.view_sync_exchange
+//     }
 
-    fn vid_exchange(&self) -> &Self::VIDExchange {
-        &self.vid_exchange
-    }
+//     fn vid_exchange(&self) -> &Self::VIDExchange {
+//         &self.vid_exchange
+//     }
 
-    async fn wait_for_networks_ready(&self) {
-        self.quorum_exchange.network().wait_for_ready().await;
-        self.committee_exchange.network().wait_for_ready().await;
-    }
+//     async fn wait_for_networks_ready(&self) {
+//         self.quorum_exchange.network().wait_for_ready().await;
+//         self.committee_exchange.network().wait_for_ready().await;
+//     }
 
-    async fn shut_down_networks(&self) {
-        self.quorum_exchange.network().shut_down().await;
-        self.committee_exchange.network().shut_down().await;
-    }
-}
+//     async fn shut_down_networks(&self) {
+//         self.quorum_exchange.network().shut_down().await;
+//         self.committee_exchange.network().shut_down().await;
+//     }
+// }
 
-/// Alias for the [`QuorumExchange`] type.
-pub type QuorumEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-    TYPES,
-    Message<TYPES>,
->>::QuorumExchange;
+// /// Alias for the [`QuorumExchange`] type.
+// pub type QuorumEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+//     TYPES,
+//     Message<TYPES>,
+// >>::QuorumExchange;
 
-/// Alias for `TimeoutExchange` type
-pub type TimeoutEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-    TYPES,
-    Message<TYPES>,
->>::TimeoutExchange;
+// /// Alias for `TimeoutExchange` type
+// pub type TimeoutEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+//     TYPES,
+//     Message<TYPES>,
+// >>::TimeoutExchange;
 
-/// Alias for the [`CommitteeExchange`] type.
-pub type CommitteeEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-    TYPES,
-    Message<TYPES>,
->>::CommitteeExchange;
+// /// Alias for the [`CommitteeExchange`] type.
+// pub type CommitteeEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+//     TYPES,
+//     Message<TYPES>,
+// >>::CommitteeExchange;
 
-/// Alias for the [`VIDExchange`] type.
-pub type VIDEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-    TYPES,
-    Message<TYPES>,
->>::VIDExchange;
+// /// Alias for the [`VIDExchange`] type.
+// pub type VIDEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+//     TYPES,
+//     Message<TYPES>,
+// >>::VIDExchange;
 
-/// Alias for the [`ViewSyncExchange`] type.
-pub type ViewSyncEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-    TYPES,
-    Message<TYPES>,
->>::ViewSyncExchange;
+// /// Alias for the [`ViewSyncExchange`] type.
+// pub type ViewSyncEx<TYPES, I> = <<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
+//     TYPES,
+//     Message<TYPES>,
+// >>::ViewSyncExchange;
 
 /// extra functions required on a node implementation to be usable by hotshot-testing
 #[allow(clippy::type_complexity)]
@@ -486,25 +477,33 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 
     /// Return the full internal state. This is useful for debugging.
     async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES>;
+
+    /// Generate the communication channels for testing
+    fn gen_comm_channels(
+        expected_node_count: usize,
+        num_bootstrap: usize,
+        da_committee_size: usize,
+    ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::CommitteeNetwork)>;
 }
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
-    CommitteeNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES>,
-    QuorumNetwork<TYPES, I>: TestableNetworkingImplementation<TYPES>,
-    QuorumCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
-    CommitteeCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
-    ViewSyncCommChannel<TYPES, I>: TestableChannelImplementation<TYPES, QuorumNetwork<TYPES, I>>,
     TYPES::StateType: TestableState,
     TYPES::BlockPayload: TestableBlock,
     I::Storage: TestableStorage<TYPES>,
+    I::QuorumNetwork: TestableChannelImplementation<TYPES>,
+    I::CommitteeNetwork: TestableChannelImplementation<TYPES>,
+    <<I as NodeImplementation<TYPES>>::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK:
+        TestableNetworkingImplementation<TYPES>,
+    <<I as NodeImplementation<TYPES>>::CommitteeNetwork as CommunicationChannel<TYPES>>::NETWORK:
+        TestableNetworkingImplementation<TYPES>,
 {
     type CommitteeElectionConfig = TYPES::ElectionConfigType;
 
     fn committee_election_config_generator(
     ) -> Box<dyn Fn(u64) -> Self::CommitteeElectionConfig + 'static> {
-        Box::new(|num_nodes| <CommitteeMembership<TYPES, I>>::default_election_config(num_nodes))
+        Box::new(|num_nodes| <TYPES as NodeType>::Membership::default_election_config(num_nodes))
     }
 
     fn state_create_random_transaction(
@@ -538,47 +537,82 @@ where
     async fn get_full_state(storage: &Self::Storage) -> StorageState<TYPES> {
         <I::Storage as TestableStorage<TYPES>>::get_full_state(storage).await
     }
+    #[allow(clippy::arc_with_non_send_sync)]
+    fn gen_comm_channels(
+        expected_node_count: usize,
+        num_bootstrap: usize,
+        da_committee_size: usize,
+    ) -> Box<dyn Fn(u64) -> (Self::QuorumNetwork, Self::CommitteeNetwork)> {
+        let network_generator = <<I::QuorumNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
+                expected_node_count,
+                num_bootstrap,
+                0,
+                da_committee_size,
+                false,
+            );
+        let da_generator = <<I::CommitteeNetwork as CommunicationChannel<TYPES>>::NETWORK as TestableNetworkingImplementation<TYPES>>::generator(
+                expected_node_count,
+                num_bootstrap,
+                1,
+                da_committee_size,
+                true,
+            );
+
+        Box::new(move |id| {
+            let network = Arc::new(network_generator(id));
+            let network_da = Arc::new(da_generator(id));
+            let quorum_chan =
+                <I::QuorumNetwork as TestableChannelImplementation<_>>::generate_network()(
+                    network.clone(),
+                );
+            let committee_chan =
+                <I::CommitteeNetwork as TestableChannelImplementation<_>>::generate_network()(
+                    network_da,
+                );
+            (quorum_chan, committee_chan)
+        })
+    }
 }
 
-/// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
-pub type QuorumCommChannel<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
+// /// Communication channel for [`QuorumProposalType`] and [`QuorumVote`].
+// pub type QuorumCommChannel<TYPES, I> =
+//     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
-/// Communication channel for [`ViewSyncProposalType`] and [`ViewSyncVote`].
-pub type ViewSyncCommChannel<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
+// /// Communication channel for [`ViewSyncProposalType`] and [`ViewSyncVote`].
+// pub type ViewSyncCommChannel<TYPES, I> =
+//     <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
-/// Communication channel for [`CommitteeProposalType`] and [`DAVote`].
-pub type CommitteeCommChannel<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
+// /// Communication channel for [`CommitteeProposalType`] and [`DAVote`].
+// pub type CommitteeCommChannel<TYPES, I> =
+//     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Networking;
 
-/// Protocol for determining membership in a consensus committee.
-pub type QuorumMembership<TYPES, I> =
-    <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
+// /// Protocol for determining membership in a consensus committee.
+// pub type QuorumMembership<TYPES, I> =
+//     <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
-/// TYPE aliase for the membership of VID exchange
-pub type VIDMembership<TYPES, I> =
-    <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
+// /// TYPE aliase for the membership of VID exchange
+// pub type VIDMembership<TYPES, I> =
+//     <VIDEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
-/// Protocol for determining membership in a DA committee.
-pub type CommitteeMembership<TYPES, I> =
-    <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
+// /// Protocol for determining membership in a DA committee.
+// pub type CommitteeMembership<TYPES, I> =
+//     <CommitteeEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
-/// Protocol for determining membership in a view sync committee.
-pub type ViewSyncMembership<TYPES, I> =
-    <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
+// /// Protocol for determining membership in a view sync committee.
+// pub type ViewSyncMembership<TYPES, I> =
+//     <ViewSyncEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES>>>::Membership;
 
-/// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type QuorumNetwork<TYPES, I> =
-    <QuorumCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
+// /// Type for the underlying quorum `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
+// pub type QuorumNetwork<TYPES, I> =
+//     <QuorumCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
-/// Type for the underlying committee `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type CommitteeNetwork<TYPES, I> =
-    <CommitteeCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
+// /// Type for the underlying committee `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
+// pub type CommitteeNetwork<TYPES, I> =
+//     <CommitteeCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
-/// Type for the underlying view sync `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
-pub type ViewSyncNetwork<TYPES, I> =
-    <ViewSyncCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
+// /// Type for the underlying view sync `ConnectedNetwork` that will be shared (for now) b/t Communication Channels
+// pub type ViewSyncNetwork<TYPES, I> =
+//     <ViewSyncCommChannel<TYPES, I> as CommunicationChannel<TYPES>>::NETWORK;
 
 /// Trait with all the type definitions that are used in the current hotshot setup.
 pub trait NodeType:

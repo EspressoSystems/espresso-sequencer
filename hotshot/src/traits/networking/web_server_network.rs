@@ -1256,9 +1256,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel
     }
 }
 
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES, WebServerNetwork<TYPES>>
-    for WebCommChannel<TYPES>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for WebCommChannel<TYPES> {
     fn generate_network() -> Box<dyn Fn(Arc<WebServerNetwork<TYPES>>) -> Self + 'static> {
         Box::new(move |network| WebCommChannel::new(network))
     }

@@ -12,7 +12,7 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotType, Networks, SystemContext,
+    HotShotType, Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::{
     self,
@@ -20,19 +20,16 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_types::{block_impl::VIDBlockHeader, traits::election::VIDExchange};
+use hotshot_types::block_impl::VIDBlockHeader;
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
-    message::Message,
     traits::{
-        election::{
-            CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
-        },
+        election::Membership,
         network::CommunicationChannel,
-        node_implementation::{CommitteeEx, Exchanges, ExchangesType, NodeType, QuorumEx},
+        node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock, TestableState},
     },
     HotShotConfig,
@@ -92,18 +89,7 @@ pub async fn run_orchestrator<
     QUORUMNETWORK: CommunicationChannel<TYPES> + Debug,
     VIEWSYNCNETWORK: CommunicationChannel<TYPES> + Debug,
     VIDNETWORK: CommunicationChannel<TYPES> + Debug,
-    NODE: NodeImplementation<
-        TYPES,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES>,
-            QuorumExchange<TYPES, TYPES::Membership, QUORUMNETWORK, Message<TYPES>>,
-            CommitteeExchange<TYPES, TYPES::Membership, DANETWORK, Message<TYPES>>,
-            ViewSyncExchange<TYPES, TYPES::Membership, VIEWSYNCNETWORK, Message<TYPES>>,
-            VIDExchange<TYPES, TYPES::Membership, VIDNETWORK, Message<TYPES>>,
-        >,
-        Storage = MemoryStorage<TYPES>,
-    >,
+    NODE: NodeImplementation<TYPES, Storage = MemoryStorage<TYPES>>,
 >(
     OrchestratorArgs {
         host,
@@ -145,14 +131,6 @@ pub trait RunDA<
         TYPES,
         QuorumNetwork = QUORUMNETWORK,
         CommitteeNetwork = DANETWORK,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES>,
-            QuorumExchange<TYPES, TYPES::Membership, QUORUMNETWORK, Message<TYPES>>,
-            CommitteeExchange<TYPES, TYPES::Membership, DANETWORK, Message<TYPES>>,
-            ViewSyncExchange<TYPES, TYPES::Membership, VIEWSYNCNETWORK, Message<TYPES>>,
-            VIDExchange<TYPES, TYPES::Membership, VIDNETWORK, Message<TYPES>>,
-        >,
         Storage = MemoryStorage<TYPES>,
     >,
 > where
@@ -181,25 +159,16 @@ pub trait RunDA<
         let pk = config.config.my_own_validator_config.public_key.clone();
         let sk = config.config.my_own_validator_config.private_key.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
-        let entry = pk.get_stake_table_entry(1u64);
 
         let da_network = self.get_da_network();
         let quorum_network = self.get_quorum_network();
-        let view_sync_network = self.get_view_sync_network();
-        let vid_network = self.get_vid_network();
 
         // Since we do not currently pass the election config type in the NetworkConfig, this will always be the default election config
         let quorum_election_config = config.config.election_config.clone().unwrap_or_else(|| {
-            <QuorumEx<TYPES,NODE> as ConsensusExchange<
-                TYPES,
-                Message<TYPES>,
-            >>::Membership::default_election_config(config.config.total_nodes.get() as u64)
+            TYPES::Membership::default_election_config(config.config.total_nodes.get() as u64)
         });
 
-        let committee_election_config = <CommitteeEx<TYPES, NODE> as ConsensusExchange<
-            TYPES,
-            Message<TYPES>,
-        >>::Membership::default_election_config(
+        let committee_election_config = TYPES::Membership::default_election_config(
             config.config.da_committee_size.try_into().unwrap(),
         );
         let networks_bundle = Networks {
@@ -207,19 +176,25 @@ pub trait RunDA<
             da_network: da_network.clone(),
             _pd: PhantomData,
         };
-        let exchanges = NODE::Exchanges::create(
-            known_nodes_with_stake.clone(),
-            (quorum_election_config, committee_election_config),
-            (
-                quorum_network.clone(),
-                da_network.clone(),
-                view_sync_network.clone(),
-                vid_network.clone(),
+
+        let memberships = Memberships {
+            quorum_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
             ),
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
+            da_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                committee_election_config,
+            ),
+            vid_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
+            ),
+            view_sync_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config,
+            ),
+        };
 
         SystemContext::init(
             pk,
@@ -227,7 +202,7 @@ pub trait RunDA<
             config.node_index,
             config.config,
             MemoryStorage::empty(),
-            exchanges,
+            memberships,
             networks_bundle,
             initializer,
             ConsensusMetricsValue::new(),
@@ -376,14 +351,6 @@ impl<
             TYPES,
             QuorumNetwork = WebCommChannel<TYPES>,
             CommitteeNetwork = WebCommChannel<TYPES>,
-            Exchanges = Exchanges<
-                TYPES,
-                Message<TYPES>,
-                QuorumExchange<TYPES, TYPES::Membership, WebCommChannel<TYPES>, Message<TYPES>>,
-                CommitteeExchange<TYPES, TYPES::Membership, WebCommChannel<TYPES>, Message<TYPES>>,
-                ViewSyncExchange<TYPES, TYPES::Membership, WebCommChannel<TYPES>, Message<TYPES>>,
-                VIDExchange<TYPES, TYPES::Membership, WebCommChannel<TYPES>, Message<TYPES>>,
-            >,
             Storage = MemoryStorage<TYPES>,
         >,
     >
@@ -504,24 +471,6 @@ impl<
             TYPES,
             QuorumNetwork = Libp2pCommChannel<TYPES>,
             CommitteeNetwork = Libp2pCommChannel<TYPES>,
-            Exchanges = Exchanges<
-                TYPES,
-                Message<TYPES>,
-                QuorumExchange<TYPES, TYPES::Membership, Libp2pCommChannel<TYPES>, Message<TYPES>>,
-                CommitteeExchange<
-                    TYPES,
-                    TYPES::Membership,
-                    Libp2pCommChannel<TYPES>,
-                    Message<TYPES>,
-                >,
-                ViewSyncExchange<
-                    TYPES,
-                    TYPES::Membership,
-                    Libp2pCommChannel<TYPES>,
-                    Message<TYPES>,
-                >,
-                VIDExchange<TYPES, TYPES::Membership, Libp2pCommChannel<TYPES>, Message<TYPES>>,
-            >,
             Storage = MemoryStorage<TYPES>,
         >,
     >
@@ -717,14 +666,6 @@ pub async fn main_entry_point<
         TYPES,
         QuorumNetwork = QUORUMNETWORK,
         CommitteeNetwork = DANETWORK,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES>,
-            QuorumExchange<TYPES, TYPES::Membership, QUORUMNETWORK, Message<TYPES>>,
-            CommitteeExchange<TYPES, TYPES::Membership, DANETWORK, Message<TYPES>>,
-            ViewSyncExchange<TYPES, TYPES::Membership, VIEWSYNCNETWORK, Message<TYPES>>,
-            VIDExchange<TYPES, TYPES::Membership, VIDNETWORK, Message<TYPES>>,
-        >,
         Storage = MemoryStorage<TYPES>,
     >,
     RUNDA: RunDA<TYPES, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,

@@ -883,10 +883,7 @@ where
     }
 }
 
-impl<TYPES: NodeType>
-    TestableChannelImplementation<TYPES, Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>
-    for Libp2pCommChannel<TYPES>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for Libp2pCommChannel<TYPES> {
     fn generate_network(
     ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {

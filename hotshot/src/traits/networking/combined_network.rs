@@ -357,9 +357,7 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
     }
 }
 
-impl<TYPES: NodeType> TestableChannelImplementation<TYPES, CombinedNetworks<TYPES>>
-    for CombinedCommChannel<TYPES>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for CombinedCommChannel<TYPES> {
     fn generate_network() -> Box<dyn Fn(Arc<Self::NETWORK>) -> Self + 'static> {
         Box::new(move |network| CombinedCommChannel::new(network))
     }
