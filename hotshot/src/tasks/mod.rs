@@ -359,7 +359,6 @@ where
 pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    committee_exchange: CommitteeEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
@@ -374,10 +373,13 @@ where
         registry: registry.clone(),
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
+        da_membership: c_api.inner.memberships.da_membership.clone().into(),
+        da_network: c_api.inner.networks.da_network.clone().into(),
         cur_view: TYPES::Time::new(0),
-        committee_exchange: committee_exchange.into(),
         vote_collector: None,
         event_stream: event_stream.clone(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         id: handle.hotshot.inner.id,
     };
     let da_event_handler = HandleEvent(Arc::new(

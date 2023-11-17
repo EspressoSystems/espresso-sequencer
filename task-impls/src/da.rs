@@ -20,7 +20,7 @@ use hotshot_types::{
     simple_vote::{DAData, DAVote},
     traits::{
         consensus_api::ConsensusApi,
-        election::{CommitteeExchangeType, ConsensusExchange, Membership},
+        election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
@@ -59,14 +59,23 @@ pub struct DATaskState<
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
-    /// the committee exchange
-    pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
+    /// Membership for the DA committee
+    pub da_membership: Arc<TYPES::Membership>,
+
+    /// Network for DA
+    pub da_network: Arc<I::CommitteeNetwork>,
 
     /// The view and ID of the current vote collection task, if there is one.
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
+
+    /// This Nodes public key
+    pub public_key: TYPES::SignatureKey,
+
+    /// This Nodes private key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// This state's ID
     pub id: u64,
@@ -77,9 +86,12 @@ pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPE
 where
     CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
-    /// the committee exchange
-    pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
-    #[allow(clippy::type_complexity)]
+    /// Membership for the DA committee
+    pub da_membership: Arc<TYPES::Membership>,
+
+    /// Network for DA
+    pub da_network: Arc<I::CommitteeNetwork>,
+    // #[allow(clippy::type_complexity)]
     /// Accumulates DA votes
     pub accumulator:
         Either<VoteAccumulator<TYPES, DAVote<TYPES>, DACertificate<TYPES>>, DACertificate<TYPES>>,
@@ -87,6 +99,11 @@ where
     pub cur_view: TYPES::Time,
     /// event stream for channel events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    /// This Nodes public key
+    pub public_key: TYPES::SignatureKey,
+
+    /// This Nodes private key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// the id of this task state
     pub id: u64,
 }
@@ -120,7 +137,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match accumulator.accumulate(&vote, state.committee_exchange.membership()) {
+            match accumulator.accumulate(&vote, state.da_membership.as_ref()) {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
                 }
@@ -129,16 +146,12 @@ where
                     debug!("Sending DAC! {:?}", dac.view_number);
                     state
                         .event_stream
-                        .publish(HotShotEvent::DACSend(
-                            dac.clone(),
-                            state.committee_exchange.public_key().clone(),
-                        ))
+                        .publish(HotShotEvent::DACSend(dac.clone(), state.public_key.clone()))
                         .await;
 
                     state.accumulator = Right(dac.clone());
                     state
-                        .committee_exchange
-                        .network()
+                        .da_network
                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
                             *dac.view_number,
                         ))
@@ -185,8 +198,7 @@ where
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
 
                 // stop polling for the received proposal
-                self.committee_exchange
-                    .network()
+                self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
                         *proposal.data.view_number,
                     ))
@@ -204,7 +216,7 @@ where
                 let payload_commitment = proposal.data.block_payload.commit();
 
                 // ED Is this the right leader?
-                let view_leader_key = self.committee_exchange.get_leader(view);
+                let view_leader_key = self.da_membership.get_leader(view);
                 if view_leader_key != sender {
                     error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
                     return None;
@@ -215,11 +227,7 @@ where
                     return None;
                 }
 
-                if !self
-                    .committee_exchange
-                    .membership()
-                    .has_stake(self.committee_exchange.public_key())
-                {
+                if !self.da_membership.has_stake(&self.public_key) {
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
                         self.cur_view
@@ -232,8 +240,8 @@ where
                         payload_commit: payload_commitment,
                     },
                     view,
-                    self.committee_exchange.public_key(),
-                    self.committee_exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
 
                 // ED Don't think this is necessary?
@@ -263,8 +271,8 @@ where
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.get_view_number();
-                if !self.committee_exchange.is_leader(view) {
-                    error!("We are not the committee leader for view {} are we leader for next view? {}", *view, self.committee_exchange.is_leader(view + 1));
+                if self.da_membership.get_leader(view) != self.public_key {
+                    error!("We are not the committee leader for view {} are we leader for next view? {}", *view, self.da_membership.get_leader(view + 1) == self.public_key);
                     return None;
                 }
 
@@ -287,20 +295,22 @@ where
                     let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.committee_exchange.total_nodes()],
+                        signers: bitvec![0; self.da_membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
                     let accumulator =
-                        new_accumulator.accumulate(&vote, self.committee_exchange.membership());
+                        new_accumulator.accumulate(&vote, self.da_membership.as_ref());
 
                     let state = DAVoteCollectionTaskState {
-                        committee_exchange: self.committee_exchange.clone(),
-
                         accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
                         id: self.id,
+                        da_membership: self.da_membership.clone(),
+                        da_network: self.da_network.clone(),
+                        public_key: self.public_key.clone(),
+                        private_key: self.private_key.clone(),
                     };
                     let name = "DA Vote Collection";
                     let filter = FilterEvent(Arc::new(|event| {
@@ -339,24 +349,21 @@ where
 
                 // Inject view info into network
                 let is_da = self
-                    .committee_exchange
-                    .membership()
+                    .da_membership
                     .get_committee(self.cur_view + 1)
-                    .contains(self.committee_exchange.public_key());
+                    .contains(&self.public_key);
 
                 if is_da {
                     debug!("Polling for DA proposals for view {}", *self.cur_view + 1);
-                    self.committee_exchange
-                        .network()
+                    self.da_network
                         .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
                             *self.cur_view + 1,
                         ))
                         .await;
                 }
-                if self.committee_exchange.is_leader(self.cur_view + 3) {
+                if self.da_membership.get_leader(self.cur_view + 3) == self.public_key {
                     debug!("Polling for transactions for view {}", *self.cur_view + 3);
-                    self.committee_exchange
-                        .network()
+                    self.da_network
                         .inject_consensus_info(ConsensusIntentEvent::PollForTransactions(
                             *self.cur_view + 3,
                         ))
@@ -364,30 +371,27 @@ where
                 }
 
                 // If we are not the next leader (DA leader for this view) immediately exit
-                if !self.committee_exchange.is_leader(self.cur_view + 1) {
+                if self.da_membership.get_leader(self.cur_view + 1) != self.public_key {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
                 debug!("Polling for DA votes for view {}", *self.cur_view + 1);
 
                 // Start polling for DA votes for the "next view"
-                self.committee_exchange
-                    .network()
+                self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::PollForVotes(*self.cur_view + 1))
                     .await;
 
                 return None;
             }
             HotShotEvent::BlockReady(block, view) => {
-                self.committee_exchange
-                    .network()
+                self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
                 let payload_commitment = block.commit();
-                let signature = self
-                    .committee_exchange
-                    .sign_da_proposal(&payload_commitment);
+                let signature =
+                    TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
                 let data: DAProposal<TYPES> = DAProposal {
                     block_payload: block.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
@@ -407,14 +411,13 @@ where
                 self.event_stream
                     .publish(HotShotEvent::DAProposalSend(
                         message.clone(),
-                        self.committee_exchange.public_key().clone(),
+                        self.public_key.clone(),
                     ))
                     .await;
             }
 
             HotShotEvent::Timeout(view) => {
-                self.committee_exchange
-                    .network()
+                self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
             }

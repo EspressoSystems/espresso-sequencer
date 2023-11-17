@@ -742,13 +742,8 @@ where
             handle.clone(),
         )
         .await;
-        let task_runner = add_da_task(
-            task_runner,
-            internal_event_stream.clone(),
-            committee_exchange.clone(),
-            handle.clone(),
-        )
-        .await;
+        let task_runner =
+            add_da_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         let task_runner = add_vid_task(
             task_runner,
             internal_event_stream.clone(),
