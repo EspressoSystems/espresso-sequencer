@@ -8,6 +8,8 @@ import { EdOnBN254 } from "../libraries/EdOnBn254.sol";
 /// @title Interface for stake table that keep track of validators' external key and staked amount.
 /// @dev Stake delegation happens in a separate DelegationPool contract, and specific to
 /// instantiation thus not part of this interface
+/// @dev Stake table contract should store a reference to the `LightClient.sol` to query
+/// "epoch-related" info
 interface IStakeTable {
     /// @notice Supported stake type, either using native token or re-staked using ETH
     enum StakeType {
@@ -44,13 +46,6 @@ interface IStakeTable {
 
     // === Table State & Stats ===
 
-    /// @notice Get the commitment of the stake table used in current voting (i.e. snapshot at
-    /// the start of last epoch)
-    function votingStakeTableCommitment() external view returns (bytes32);
-    /// @notice Get the commitment of the stake table frozen for change (i.g. snapshot at the start
-    /// of the current epoch)
-    function frozenStakeTableCommitment() external view returns (bytes32);
-
     /// @notice Get the total stakes of the registered keys in the latest stake table (Head).
     /// @return The total stake for native token and restaked token respectively.
     function totalStake() external view returns (uint256, uint256);
@@ -84,19 +79,22 @@ interface IStakeTable {
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
     /// @param stakeType The type of staking (native or restaking)
-    /// @param maxWait The maximum epoch the sender is waiting to wait to be included (cannot be
-    /// smaller than the current epoch)
+    /// @param blsSig The BLS signature that authenticates the `blsVK` field
+    /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
+    /// (cannot be smaller than the current epoch)
     ///
     /// @return success status
     ///
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
+    /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
     function register(
         BN254.G1Point calldata blsVK,
         EdOnBN254.EdOnBN254Point calldata schnorrVK,
         uint64 amount,
         StakeType stakeType,
-        uint64 maxWait
+        bytes calldata blsSig,
+        uint64 validUntilEpoch
     ) external returns (bool);
 
     /// @notice Deposit more stakes to registered keys
@@ -112,7 +110,7 @@ interface IStakeTable {
     ///
     /// @param blsVK The BLS verification key to exit
     /// @return success status
-    function exit(BN254.G1Point calldata blsVK) external returns (bool);
+    function requestExit(BN254.G1Point calldata blsVK) external returns (bool);
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.
@@ -120,9 +118,4 @@ interface IStakeTable {
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     function withdraw(BN254.G1Point calldata blsVK) external returns (uint64);
-
-    /// @notice Advance to the next epoch, the new `votingStakeTableCommitment` will be
-    /// `frozenStakeTableCommitment` and the new `frozenStakeTableCommitment` will be
-    /// `curEpochComm`,
-    function advanceEpoch(bytes32 curEpochComm) external returns (bool);
 }
