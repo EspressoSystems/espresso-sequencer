@@ -25,7 +25,6 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
     data::Leaf,
     event::Event,
     message::{Message, Messages, SequencingMessage},
@@ -37,6 +36,7 @@ use hotshot_types::{
             ViewSyncEx,
         },
         state::ConsensusTime,
+        BlockPayload,
     },
 };
 use std::{
@@ -221,7 +221,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_consensus_task<
-    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
+    TYPES: NodeType,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
@@ -242,13 +242,14 @@ where
         inner: handle.hotshot.inner.clone(),
     };
     let registry = task_runner.registry.clone();
+    let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
     // build the consensus task
     let consensus_state = ConsensusTaskState {
         registry: registry.clone(),
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment: Some(VIDBlockPayload::genesis().commit()),
+        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
@@ -436,7 +437,7 @@ where
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
 pub async fn add_transaction_task<
-    TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
+    TYPES: NodeType,
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
 >(
     task_runner: TaskRunner,
