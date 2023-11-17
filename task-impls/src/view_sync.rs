@@ -9,7 +9,6 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::simple_vote::ViewSyncFinalizeData;
 use hotshot_types::{
     simple_certificate::{
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
@@ -21,16 +20,17 @@ use hotshot_types::{
     traits::network::ConsensusIntentEvent,
     vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
+use hotshot_types::{simple_vote::ViewSyncFinalizeData, traits::signature_key::SignatureKey};
 
 use bitvec::prelude::*;
 use hotshot_task::global_registry::GlobalRegistry;
 use hotshot_types::{
-    message::{GeneralConsensusMessage, Message},
+    message::GeneralConsensusMessage,
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, ViewSyncExchangeType},
+        election::Membership,
         network::CommunicationChannel,
-        node_implementation::{NodeImplementation, NodeType, ViewSyncEx},
+        node_implementation::{NodeImplementation, NodeType},
         state::ConsensusTime,
     },
 };
@@ -66,9 +66,7 @@ pub struct ViewSyncTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
-> where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
-{
+> {
     /// Registry to register sub tasks
     pub registry: GlobalRegistry,
     /// Event stream to publish events to
@@ -77,8 +75,14 @@ pub struct ViewSyncTaskState<
     pub current_view: TYPES::Time,
     /// View HotShot wishes to be in
     pub next_view: TYPES::Time,
-    /// View sync exchange
-    pub exchange: Arc<ViewSyncEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// HotShot consensus API
     pub api: A,
     /// Our node id; for logging
@@ -105,8 +109,6 @@ impl<
         I: NodeImplementation<TYPES>,
         A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
     > TS for ViewSyncTaskState<TYPES, I, A>
-where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
 {
 }
 
@@ -123,9 +125,7 @@ pub struct ViewSyncReplicaTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES>>,
-{
+> {
     /// Timeout for view sync rounds
     pub view_sync_timeout: Duration,
     /// Current round HotShot is in
@@ -143,8 +143,14 @@ pub struct ViewSyncReplicaTaskState<
     /// Our node id; for logging
     pub id: u64,
 
-    /// View sync exchange
-    pub exchange: Arc<ViewSyncEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// HotShot consensus API
     pub api: A,
     /// Event stream to publish events to
@@ -153,9 +159,6 @@ pub struct ViewSyncReplicaTaskState<
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for ViewSyncReplicaTaskState<TYPES, I, A>
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
 }
 
@@ -176,8 +179,14 @@ pub struct ViewSyncRelayTaskState<
 > {
     /// Event stream to publish events to
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    /// View sync exchange
-    pub exchange: Arc<ViewSyncEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// Vote accumulator
     #[allow(clippy::type_complexity)]
@@ -211,9 +220,6 @@ impl<
         I: NodeImplementation<TYPES>,
         A: ConsensusApi<TYPES, I> + 'static + std::clone::Clone,
     > ViewSyncTaskState<TYPES, I, A>
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
     #[allow(clippy::type_complexity)]
@@ -250,7 +256,10 @@ where
                         finalized: false,
                         sent_view_change_event: false,
                         phase: ViewSyncPhase::None,
-                        exchange: self.exchange.clone(),
+                        membership: self.membership.clone(),
+                        network: self.network.clone(),
+                        public_key: self.public_key.clone(),
+                        private_key: self.private_key.clone(),
                         api: self.api.clone(),
                         event_stream: self.event_stream.clone(),
                         view_sync_timeout: self.view_sync_timeout,
@@ -308,9 +317,10 @@ where
                 }
 
                 // We do not have a relay task already running, so start one
-                if !self
-                    .exchange
-                    .is_leader(vote.get_view_number() + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_view_number() + vote.get_data().relay)
+                    != self.public_key
                 {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
@@ -320,7 +330,7 @@ where
                 let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
-                    signers: bitvec![0; self.exchange.total_nodes()],
+                    signers: bitvec![0; self.membership.total_nodes()],
                     phantom: PhantomData,
                 };
 
@@ -331,7 +341,10 @@ where
                     ViewSyncPreCommitCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
-                    exchange: self.exchange.clone(),
+                    membership: self.membership.clone(),
+                    network: self.network.clone(),
+                    public_key: self.public_key.clone(),
+                    private_key: self.private_key.clone(),
                     accumulator: either::Left(new_accumulator),
                     id: self.id,
                 };
@@ -394,9 +407,10 @@ where
                 }
 
                 // We do not have a relay task already running, so start one
-                if !self
-                    .exchange
-                    .is_leader(vote.get_view_number() + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_view_number() + vote.get_data().relay)
+                    != self.public_key
                 {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
@@ -406,7 +420,7 @@ where
                 let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
-                    signers: bitvec![0; self.exchange.total_nodes()],
+                    signers: bitvec![0; self.membership.total_nodes()],
                     phantom: PhantomData,
                 };
 
@@ -417,7 +431,10 @@ where
                     ViewSyncCommitCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
-                    exchange: self.exchange.clone(),
+                    membership: self.membership.clone(),
+                    network: self.network.clone(),
+                    public_key: self.public_key.clone(),
+                    private_key: self.private_key.clone(),
                     accumulator: either::Left(new_accumulator),
                     id: self.id,
                 };
@@ -480,9 +497,10 @@ where
                 }
 
                 // We do not have a relay task already running, so start one
-                if !self
-                    .exchange
-                    .is_leader(vote.get_view_number() + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_view_number() + vote.get_data().relay)
+                    != self.public_key
                 {
                     // TODO ED This will occur because everyone is pulling down votes for now. Will be fixed in `https://github.com/EspressoSystems/HotShot/issues/1471`
                     debug!("View sync vote sent to wrong leader");
@@ -492,7 +510,7 @@ where
                 let new_accumulator = VoteAccumulator {
                     vote_outcomes: HashMap::new(),
                     sig_lists: Vec::new(),
-                    signers: bitvec![0; self.exchange.total_nodes()],
+                    signers: bitvec![0; self.membership.total_nodes()],
                     phantom: PhantomData,
                 };
 
@@ -503,7 +521,10 @@ where
                     ViewSyncFinalizeCertificate2<TYPES>,
                 > {
                     event_stream: self.event_stream.clone(),
-                    exchange: self.exchange.clone(),
+                    membership: self.membership.clone(),
+                    network: self.network.clone(),
+                    public_key: self.public_key.clone(),
+                    private_key: self.private_key.clone(),
                     accumulator: either::Left(new_accumulator),
                     id: self.id,
                 };
@@ -614,15 +635,13 @@ where
 
                 if self.num_timeouts_tracked > 2 {
                     // Start polling for view sync certificates
-                    self.exchange
-                        .network()
+                    self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncCertificate(
                             *view_number + 1,
                         ))
                         .await;
 
-                    self.exchange
-                        .network()
+                    self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncVotes(
                             *view_number + 1,
                         ))
@@ -630,21 +649,21 @@ where
                     // Spawn replica task
                     let next_view = *view_number + 1;
                     // Subscribe to the view after we are leader since we know we won't propose in the next view if we are leader.
-                    let subscribe_view = if self.exchange.is_leader(TYPES::Time::new(next_view)) {
-                        next_view + 1
-                    } else {
+                    let subscribe_view = if self.membership.get_leader(TYPES::Time::new(next_view))
+                        == self.public_key
+                    {
                         next_view
+                    } else {
+                        next_view + 1
                     };
                     // Subscribe to the next view just in case there is progress being made
-                    self.exchange
-                        .network()
+                    self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
                             subscribe_view,
                         ))
                         .await;
 
-                    self.exchange
-                        .network()
+                    self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
                         .await;
 
@@ -655,7 +674,10 @@ where
                         finalized: false,
                         sent_view_change_event: false,
                         phase: ViewSyncPhase::None,
-                        exchange: self.exchange.clone(),
+                        membership: self.membership.clone(),
+                        network: self.network.clone(),
+                        public_key: self.public_key.clone(),
+                        private_key: self.private_key.clone(),
                         api: self.api.clone(),
                         event_stream: self.event_stream.clone(),
                         view_sync_timeout: self.view_sync_timeout,
@@ -740,9 +762,6 @@ where
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     ViewSyncReplicaTaskState<TYPES, I, A>
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Replica Task", level = "error")]
     /// Handle incoming events for the view sync replica task
@@ -765,7 +784,7 @@ where
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.exchange.membership()) {
+                if !certificate.is_valid_cert(self.membership.as_ref()) {
                     error!("Not valid view sync cert! {:?}", certificate.get_data());
 
                     return (None, self);
@@ -794,8 +813,8 @@ where
                         round: self.next_view,
                     },
                     self.next_view,
-                    self.exchange.public_key(),
-                    self.exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
 
@@ -833,7 +852,7 @@ where
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.exchange.membership()) {
+                if !certificate.is_valid_cert(self.membership.as_ref()) {
                     error!("Not valid view sync cert! {:?}", certificate.get_data());
 
                     return (None, self);
@@ -862,8 +881,8 @@ where
                         round: self.next_view,
                     },
                     self.next_view,
-                    self.exchange.public_key(),
-                    self.exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
 
@@ -904,7 +923,7 @@ where
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.exchange.membership()) {
+                if !certificate.is_valid_cert(self.membership.as_ref()) {
                     error!("Not valid view sync cert! {:?}", certificate.get_data());
 
                     return (None, self);
@@ -945,8 +964,8 @@ where
                         round: view_number,
                     },
                     view_number,
-                    self.exchange.public_key(),
-                    self.exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
                 let message = GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
 
@@ -989,8 +1008,8 @@ where
                                     round: self.next_view,
                                 },
                                 self.next_view,
-                                self.exchange.public_key(),
-                                self.exchange.private_key(),
+                                &self.public_key,
+                                &self.private_key,
                             );
                             let message =
                                 GeneralConsensusMessage::<TYPES>::ViewSyncPreCommitVote(vote);
@@ -1008,8 +1027,8 @@ where
                                     round: self.next_view,
                                 },
                                 self.next_view,
-                                self.exchange.public_key(),
-                                self.exchange.private_key(),
+                                &self.public_key,
+                                &self.private_key,
                             );
                             let message =
                                 GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
@@ -1027,8 +1046,8 @@ where
                                     round: self.next_view,
                                 },
                                 self.next_view,
-                                self.exchange.public_key(),
-                                self.exchange.private_key(),
+                                &self.public_key,
+                                &self.private_key,
                             );
                             let message =
                                 GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
@@ -1076,9 +1095,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         ViewSyncPreCommitVote<TYPES>,
         ViewSyncPreCommitCertificate2<TYPES>,
     >
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
@@ -1099,9 +1115,10 @@ where
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
                 // Ignore this vote if we are not the correct relay
                 // TODO ED Replace exchange with membership
-                if !self
-                    .exchange
-                    .is_leader(vote.get_data().round + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_data().round + vote.get_data().relay)
+                    != self.public_key
                 {
                     info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
                     return (None, self);
@@ -1116,7 +1133,7 @@ where
                 match self.accumulator {
                     Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
                     Left(accumulator) => {
-                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                        match accumulator.accumulate(&vote, self.membership.as_ref()) {
                             Left(new_accumulator) => {
                                 self.accumulator = Either::Left(new_accumulator);
                             }
@@ -1124,7 +1141,7 @@ where
                                 self.event_stream
                                     .publish(HotShotEvent::ViewSyncPreCommitCertificate2Send(
                                         certificate.clone(),
-                                        self.exchange.public_key().clone(),
+                                        self.public_key.clone(),
                                     ))
                                     .await;
                                 self.accumulator = Right(certificate);
@@ -1144,9 +1161,6 @@ where
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     ViewSyncRelayTaskState<TYPES, I, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
@@ -1166,9 +1180,10 @@ where
         match event {
             HotShotEvent::ViewSyncCommitVoteRecv(vote) => {
                 // Ignore this vote if we are not the correct relay
-                if !self
-                    .exchange
-                    .is_leader(vote.get_data().round + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_data().round + vote.get_data().relay)
+                    != self.public_key
                 {
                     info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
                     return (None, self);
@@ -1183,7 +1198,7 @@ where
                 match self.accumulator {
                     Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
                     Left(accumulator) => {
-                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                        match accumulator.accumulate(&vote, self.membership.as_ref()) {
                             Left(new_accumulator) => {
                                 self.accumulator = Either::Left(new_accumulator);
                             }
@@ -1191,7 +1206,7 @@ where
                                 self.event_stream
                                     .publish(HotShotEvent::ViewSyncCommitCertificate2Send(
                                         certificate.clone(),
-                                        self.exchange.public_key().clone(),
+                                        self.public_key.clone(),
                                     ))
                                     .await;
                                 self.accumulator = Right(certificate);
@@ -1216,9 +1231,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         ViewSyncFinalizeVote<TYPES>,
         ViewSyncFinalizeCertificate2<TYPES>,
     >
-where
-    ViewSyncEx<TYPES, I>:
-        ViewSyncExchangeType<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// Handles incoming events for the view sync relay task
     #[instrument(skip_all, fields(id = self.id), name = "View Sync Relay Task", level = "error")]
@@ -1238,10 +1250,10 @@ where
         match event {
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
                 // Ignore this vote if we are not the correct relay
-                // TODO ED Replace exchange with membership
-                if !self
-                    .exchange
-                    .is_leader(vote.get_data().round + vote.get_data().relay)
+                if self
+                    .membership
+                    .get_leader(vote.get_data().round + vote.get_data().relay)
+                    != self.public_key
                 {
                     info!("We are not the correct relay for this vote; vote was intended for relay {}", vote.get_data().relay);
                     return (None, self);
@@ -1256,7 +1268,7 @@ where
                 match self.accumulator {
                     Right(_) => return (Some(HotShotTaskCompleted::ShutDown), self),
                     Left(accumulator) => {
-                        match accumulator.accumulate(&vote, self.exchange.membership()) {
+                        match accumulator.accumulate(&vote, self.membership.as_ref()) {
                             Left(new_accumulator) => {
                                 self.accumulator = Either::Left(new_accumulator);
                             }
@@ -1264,7 +1276,7 @@ where
                                 self.event_stream
                                     .publish(HotShotEvent::ViewSyncFinalizeCertificate2Send(
                                         certificate.clone(),
-                                        self.exchange.public_key().clone(),
+                                        self.public_key.clone(),
                                     ))
                                     .await;
                                 self.accumulator = Right(certificate);
