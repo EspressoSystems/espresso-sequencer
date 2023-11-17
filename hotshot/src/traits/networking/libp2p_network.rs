@@ -138,6 +138,7 @@ where
     /// - An invalid configuration
     ///   (probably an issue with the defaults of this function)
     /// - An inability to spin up the replica's network
+    #[allow(clippy::panic)]
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -226,7 +227,7 @@ where
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
                 async_block_on(async move {
-                    Libp2pNetwork::new(
+                    match Libp2pNetwork::new(
                         NetworkingMetricsValue::new(),
                         config,
                         pubkey.clone(),
@@ -238,7 +239,12 @@ where
                         da.contains(&pubkey),
                     )
                     .await
-                    .unwrap()
+                    {
+                        Ok(network) => network,
+                        Err(err) => {
+                            panic!("Failed to create network: {err}");
+                        }
+                    }
                 })
             }
         })
