@@ -16,13 +16,13 @@ use hotshot_types::simple_certificate::DACertificate;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
-    message::{Message, Proposal},
+    message::Proposal,
     simple_vote::{DAData, DAVote},
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, Membership},
+        election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{CommitteeEx, NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,
@@ -45,9 +45,7 @@ pub struct DATaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+> {
     /// The state's api
     pub api: A,
     /// Global registry task for the state
@@ -82,10 +80,7 @@ pub struct DATaskState<
 }
 
 /// Struct to maintain DA Vote Collection task state
-pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Membership for the DA committee
     pub da_membership: Arc<TYPES::Membership>,
 
@@ -108,10 +103,7 @@ where
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>
-{
-}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> {}
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
 async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
@@ -120,10 +112,7 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     DAVoteCollectionTaskState<TYPES, I>,
-)
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
-{
+) {
     match event {
         HotShotEvent::DAVoteRecv(vote) => {
             debug!("DA vote recv, collection task {:?}", vote.get_view_number());
@@ -172,8 +161,6 @@ where
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     DATaskState<TYPES, I, A>
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>, Membership = TYPES::Membership>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
@@ -450,8 +437,6 @@ where
 /// task state implementation for DA Task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for DATaskState<TYPES, I, A>
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 

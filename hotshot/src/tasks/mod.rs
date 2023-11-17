@@ -421,7 +421,6 @@ pub async fn add_transaction_task<
 >(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    quorum_exchange: QuorumEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
@@ -439,7 +438,10 @@ where
         transactions: Arc::default(),
         seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
-        quorum_exchange: quorum_exchange.into(),
+        network: c_api.inner.networks.quorum_network.clone().into(),
+        membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };

@@ -16,11 +16,12 @@ use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::Consensus,
     data::{Leaf, VidDisperse, VidScheme, VidSchemeTrait},
-    message::{Message, Proposal},
+    message::Proposal,
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType},
-        node_implementation::{NodeImplementation, NodeType, QuorumEx},
+        election::Membership,
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         BlockPayload,
     },
 };
@@ -46,9 +47,7 @@ pub struct TransactionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
-{
+> {
     /// The state's api
     pub api: A,
     /// Global registry task for the state
@@ -66,12 +65,19 @@ pub struct TransactionTaskState<
     /// A list of transactions we've seen decided, but didn't receive
     pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// the committee exchange
-    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// This state's ID
     pub id: u64,
 }
@@ -84,8 +90,6 @@ impl<
         I: NodeImplementation<TYPES>,
         A: ConsensusApi<TYPES, I> + 'static,
     > TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
@@ -179,9 +183,7 @@ where
                 }
                 self.cur_view = view;
 
-                // If we are not the next leader (DA leader for this view) immediately exit
-                if !self.quorum_exchange.is_leader(self.cur_view + 1) {
-                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
+                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     return None;
                 }
 
@@ -264,10 +266,13 @@ where
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
+                            signature: TYPES::SignatureKey::sign(
+                                &self.private_key,
+                                block.commit().as_ref(),
+                            ),
                             _pd: PhantomData,
                         },
-                        self.quorum_exchange.public_key().clone(),
+                        self.public_key.clone(),
                     ))
                     .await;
                 return None;
@@ -286,8 +291,6 @@ where
 // whereas here it's just `TYPES: NodeType`.
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
@@ -372,8 +375,6 @@ where
 /// task state implementation for Transactions Task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
     for TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES>>,
 {
 }
 
