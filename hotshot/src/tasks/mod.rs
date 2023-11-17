@@ -301,7 +301,6 @@ pub async fn add_consensus_task<
 pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    vid_exchange: VIDEx<TYPES, I>,
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
@@ -317,8 +316,11 @@ where
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
         cur_view: TYPES::Time::new(0),
-        vid_exchange: vid_exchange.into(),
         vote_collector: None,
+        network: c_api.inner.networks.quorum_network.clone().into(),
+        membership: c_api.inner.memberships.vid_membership.clone().into(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };

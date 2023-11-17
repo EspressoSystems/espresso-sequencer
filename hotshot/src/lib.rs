@@ -744,13 +744,8 @@ where
         .await;
         let task_runner =
             add_da_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
-        let task_runner = add_vid_task(
-            task_runner,
-            internal_event_stream.clone(),
-            vid_exchange.clone(),
-            handle.clone(),
-        )
-        .await;
+        let task_runner =
+            add_vid_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         let task_runner =
             add_transaction_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         let task_runner =
