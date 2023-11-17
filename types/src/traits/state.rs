@@ -235,17 +235,16 @@ pub struct LightClientState<F: PrimeField> {
     pub stake_table_comm: (F, F, F),
 }
 
-impl<F: PrimeField> LightClientState<F> {
-    /// Return an array of field elements
-    pub fn to_array(&self) -> [F; 7] {
+impl<F: PrimeField> From<LightClientState<F>> for [F; 7] {
+    fn from(state: LightClientState<F>) -> Self {
         [
-            F::from(self.view_number as u64),
-            F::from(self.block_height as u64),
-            self.block_comm,
-            self.fee_ledger_comm,
-            self.stake_table_comm.0,
-            self.stake_table_comm.1,
-            self.stake_table_comm.2,
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
         ]
     }
 }

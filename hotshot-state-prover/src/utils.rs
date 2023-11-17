@@ -13,7 +13,6 @@ type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Helper function for test
-#[allow(dead_code)]
 pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
     num_validators: usize,
     prng: &mut R,
@@ -32,7 +31,6 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 }
 
 /// Helper function for test
-#[allow(dead_code)]
 pub(crate) fn stake_table_for_testing(
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],

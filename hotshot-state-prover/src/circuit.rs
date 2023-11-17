@@ -59,17 +59,64 @@ pub struct LightClientStateVar {
 }
 
 #[derive(Clone, Debug)]
-pub struct PublicInputs<F: PrimeField>(Vec<F>);
+pub struct PublicInput<F: PrimeField>(Vec<F>);
 
-impl<F: PrimeField> AsRef<[F]> for PublicInputs<F> {
+impl<F: PrimeField> AsRef<[F]> for PublicInput<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
     }
 }
 
-impl<F: PrimeField> From<Vec<F>> for PublicInputs<F> {
+impl<F: PrimeField> From<Vec<F>> for PublicInput<F> {
     fn from(v: Vec<F>) -> Self {
         Self(v)
+    }
+}
+
+impl<F: PrimeField> PublicInput<F> {
+    /// Return the threshold
+    pub fn threshold(&self) -> F {
+        self.0[0]
+    }
+
+    /// Return the view number of the light client state
+    pub fn view_number(&self) -> F {
+        self.0[1]
+    }
+
+    /// Return the block height of the light client state
+    pub fn block_height(&self) -> F {
+        self.0[2]
+    }
+
+    /// Return the block commitment of the light client state
+    pub fn block_comm(&self) -> F {
+        self.0[3]
+    }
+
+    /// Return the fee ledger commitment of the light client state
+    pub fn fee_ledger_comm(&self) -> F {
+        self.0[4]
+    }
+
+    /// Return the stake table commitment of the light client state
+    pub fn stake_table_comm(&self) -> (F, F, F) {
+        (self.0[5], self.0[6], self.0[7])
+    }
+
+    /// Return the bls key commitment of the light client state
+    pub fn bls_key_comm(&self) -> F {
+        self.0[5]
+    }
+
+    /// Return the schnorr key commitment of the light client state
+    pub fn schnorr_key_comm(&self) -> F {
+        self.0[6]
+    }
+
+    /// Return the stake amount commitment of the light client state
+    pub fn stake_amount_comm(&self) -> F {
+        self.0[7]
     }
 }
 
@@ -146,7 +193,7 @@ pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
     signatures: SigIter,
     lightclient_state: &LightClientState<F>,
     threshold: &U256,
-) -> Result<(PlonkCircuit<F>, PublicInputs<F>), PlonkError>
+) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
 where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
@@ -391,7 +438,7 @@ mod tests {
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg = lightclient_state.to_array();
+        let state_msg: [F; 7] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()
@@ -470,7 +517,7 @@ mod tests {
         // bad path: bad stake table commitment
         let mut bad_lightclient_state = lightclient_state.clone();
         bad_lightclient_state.stake_table_comm.1 = F::default();
-        let bad_state_msg = bad_lightclient_state.to_array();
+        let bad_state_msg: [F; 7] = bad_lightclient_state.clone().into();
         let sig_for_bad_state = schnorr_keys
             .iter()
             .map(|(key, _)| {
@@ -494,7 +541,7 @@ mod tests {
         let mut wrong_light_client_state = lightclient_state.clone();
         // state with a different bls key commitment
         wrong_light_client_state.stake_table_comm.0 = F::default();
-        let wrong_state_msg = wrong_light_client_state.to_array();
+        let wrong_state_msg: [F; 7] = wrong_light_client_state.into();
         let wrong_sigs = schnorr_keys
             .iter()
             .map(|(key, _)| {

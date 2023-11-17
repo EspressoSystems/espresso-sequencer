@@ -2,6 +2,8 @@
 
 /// State verifier circuit builder
 pub mod circuit;
+/// Utilities for test
+#[cfg(test)]
 mod utils;
 
 use ark_bn254::Bn254;
@@ -9,7 +11,7 @@ use ark_std::{
     borrow::Borrow,
     rand::{CryptoRng, RngCore},
 };
-use circuit::PublicInputs;
+use circuit::PublicInput;
 use ethereum_types::U256;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::traits::{
@@ -41,7 +43,7 @@ pub use ark_ed_on_bn254::EdwardsConfig;
 
 /// Given a SRS, returns the proving key and verifying key for state update
 pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
-    let (circuit, _) = build_dummy_circuit_for_preprocessing()?;
+    let (circuit, _) = build_for_preprocessing()?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 
@@ -63,7 +65,7 @@ pub fn generate_state_update_proof<ST, R, BitIter, SigIter>(
     signatures: SigIter,
     lightclient_state: &LightClientState<BaseField>,
     threshold: &U256,
-) -> Result<(Proof, PublicInputs<BaseField>), PlonkError>
+) -> Result<(Proof, PublicInput<BaseField>), PlonkError>
 where
     ST: StakeTableScheme<Key = BLSVerKey, Amount = U256, Aux = SchnorrVerKey>,
     ST::IntoIter: ExactSizeIterator,
@@ -91,8 +93,8 @@ where
 }
 
 /// Internal function for helping generate the proving/verifying key
-fn build_dummy_circuit_for_preprocessing(
-) -> Result<(PlonkCircuit<BaseField>, PublicInputs<BaseField>), PlonkError> {
+fn build_for_preprocessing() -> Result<(PlonkCircuit<BaseField>, PublicInput<BaseField>), PlonkError>
+{
     let st = StakeTable::<BLSVerKey, SchnorrVerKey, BaseField>::new();
     let lightclient_state = LightClientState {
         view_number: 0,
@@ -116,7 +118,7 @@ mod tests {
         utils::{key_pairs_for_testing, stake_table_for_testing},
         BaseField, UniversalSrs,
     };
-    use crate::{build_dummy_circuit_for_preprocessing, generate_state_update_proof, preprocess};
+    use crate::{build_for_preprocessing, generate_state_update_proof, preprocess};
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
     use ark_ed_on_bn254::EdwardsConfig as Config;
@@ -220,7 +222,7 @@ mod tests {
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg = lightclient_state.to_array();
+        let state_msg: [BaseField; 7] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()
@@ -245,10 +247,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         // good path
-        let num_gates = build_dummy_circuit_for_preprocessing()
-            .unwrap()
-            .0
-            .num_gates();
+        let num_gates = build_for_preprocessing().unwrap().0.num_gates();
         let test_srs = universal_setup_for_testing(num_gates + 2, &mut prng).unwrap();
         ark_std::println!("Number of constraint in the circuit: {}", num_gates);
 
