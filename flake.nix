@@ -18,13 +18,11 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.nixpkgs-cross-overlay.url =
-    "github:alekseysidorov/nixpkgs-cross-overlay";
+  inputs.nixpkgs-cross-overlay.url = "github:alekseysidorov/nixpkgs-cross-overlay";
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-  inputs.foundry.url =
-    "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
+  inputs.foundry.url = "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
   inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
 
   inputs.flake-compat.url = "github:edolstra/flake-compat";
@@ -32,8 +30,8 @@
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils
-    , pre-commit-hooks, fenix, foundry, solc-bin, ... }:
+
+  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils, pre-commit-hooks, fenix, foundry, solc-bin, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         # node=error: disable noisy anvil output
@@ -63,27 +61,27 @@
           foundry.overlay
           solc-bin.overlays.default
           (final: prev: {
-            solhint =
-              solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
+            solhint = solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
           })
         ];
-        pkgs = import nixpkgs { inherit system overlays; };
+        pkgs = import nixpkgs {
+          inherit system overlays;
+        };
         crossShell = { config }:
           let
             localSystem = system;
-            crossSystem = {
-              inherit config;
-              useLLVM = true;
-              isStatic = true;
-            };
+            crossSystem = { inherit config; useLLVM = true; isStatic = true; };
             pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
               inherit overlays localSystem crossSystem;
             };
-          in import ./cross-shell.nix {
+          in
+          import ./cross-shell.nix {
             inherit pkgs;
             inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
           };
-      in with pkgs; {
+      in
+      with pkgs;
+      {
         checks = {
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
             src = ./.;
@@ -112,8 +110,7 @@
               cargo-clippy = {
                 enable = true;
                 description = "Run clippy";
-                entry =
-                  "cargo clippy --workspace --all-features --all-targets -- -D warnings";
+                entry = "cargo clippy --workspace --all-features --all-targets -- -D warnings";
                 types_or = [ "rust" "toml" ];
                 pass_filenames = false;
               };
@@ -149,81 +146,85 @@
             };
           };
         };
-        devShells.default = let
-          stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
-            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-          };
-          # nixWithFlakes allows pre v2.4 nix installations to use
-          # flake commands (like `nix flake update`)
-          nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-            exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-          '';
-          solc = pkgs.solc-bin.latest;
-        in mkShell {
-          buildInputs = [
-            # Rust dependencies
-            pkg-config
-            openssl
-            curl
-            protobuf # to compile libp2p-autonat
-            stableToolchain
+        devShells.default =
+          let
+            stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
+              extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+            };
+            # nixWithFlakes allows pre v2.4 nix installations to use
+            # flake commands (like `nix flake update`)
+            nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
+              exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
+            '';
+            solc = pkgs.solc-bin.latest;
+          in
+          mkShell
+            {
+              buildInputs = [
+                # Rust dependencies
+                pkg-config
+                openssl
+                curl
+                protobuf # to compile libp2p-autonat
+                stableToolchain
 
-            # Rust tools
-            cargo-audit
-            cargo-edit
-            cargo-sort
-            just
-            fenix.packages.${system}.rust-analyzer
+                # Rust tools
+                cargo-audit
+                cargo-edit
+                cargo-sort
+                just
+                fenix.packages.${system}.rust-analyzer
 
-            # Tools
-            nixWithFlakes
-            nixpkgs-fmt
-            entr
+                # Tools
+                nixWithFlakes
+                nixpkgs-fmt
+                entr
 
-            # Figures
-            graphviz
-            plantuml
-            coreutils
+                # Figures
+                graphviz
+                plantuml
+                coreutils
 
-            # Ethereum contracts, solidity, ...
-            foundry-bin
-            solc
-            nodePackages.prettier
-            solhint
-            (python3.withPackages (ps: with ps; [ black ]))
+                # Ethereum contracts, solidity, ...
+                foundry-bin
+                solc
+                nodePackages.prettier
+                solhint
+                (python3.withPackages (ps: with ps; [ black ]))
 
-          ] ++ lib.optionals stdenv.isDarwin
-            [ darwin.apple_sdk.frameworks.SystemConfiguration ]
-            ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
-          ;
-          shellHook = ''
-            # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
-            # with rustup installations.
-            export CARGO_HOME=$HOME/.cargo-nix
-            export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
-          '' + self.checks.${system}.pre-commit-check.shellHook;
-          RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
-          FOUNDRY_SOLC = "${solc}/bin/solc";
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
-        devShells.crossShell =
-          crossShell { config = "x86_64-unknown-linux-musl"; };
-        devShells.armCrossShell =
-          crossShell { config = "aarch64-unknown-linux-musl"; };
-        devShells.rustShell = let
-          stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
-            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-          };
-        in mkShell {
-          buildInputs = [
-            # Rust dependencies
-            pkg-config
-            openssl
-            curl
-            protobuf # to compile libp2p-autonat
-            stableToolchain
-          ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
-      });
+              ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.SystemConfiguration ]
+              ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
+              ;
+              shellHook = ''
+                # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
+                # with rustup installations.
+                export CARGO_HOME=$HOME/.cargo-nix
+                export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
+              '' + self.checks.${system}.pre-commit-check.shellHook;
+              RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
+              FOUNDRY_SOLC = "${solc}/bin/solc";
+              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+            };
+        devShells.crossShell = crossShell { config = "x86_64-unknown-linux-musl"; };
+        devShells.armCrossShell = crossShell { config = "aarch64-unknown-linux-musl"; };
+        devShells.rustShell =
+          let
+            stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
+              extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+            };
+          in
+          mkShell
+            {
+              buildInputs = [
+                # Rust dependencies
+                pkg-config
+                openssl
+                curl
+                protobuf # to compile libp2p-autonat
+                stableToolchain
+              ];
+              inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+            };
+      }
+    );
 }
