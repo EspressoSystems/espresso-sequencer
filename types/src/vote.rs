@@ -36,7 +36,6 @@ pub trait Vote<TYPES: NodeType>: HasViewNumber<TYPES> {
 
     /// Gets the public signature key of the votes creator/sender
     fn get_signing_key(&self) -> TYPES::SignatureKey;
-    // fn create_signed_vote(Self::Commitment, Self::Membership) ??
 }
 
 /// Any type that is associated with a view
