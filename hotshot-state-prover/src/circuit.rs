@@ -393,6 +393,23 @@ where
     Ok((circuit, public_inputs.into()))
 }
 
+/// Internal function to build a dummy circuit
+pub(crate) fn build_for_preprocessing<F, P>(
+) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
+where
+    F: RescueParameter,
+    P: TECurveConfig<BaseField = F>,
+{
+    let lightclient_state = LightClientState {
+        view_number: 0,
+        block_height: 0,
+        block_comm: F::default(),
+        fee_ledger_comm: F::default(),
+        stake_table_comm: (F::default(), F::default(), F::default()),
+    };
+    build::<F, P, _, _, _>(&[], &[], &[], &lightclient_state, &U256::zero())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{build, LightClientState};
