@@ -1,8 +1,10 @@
+use async_compatibility_layer::art::async_sleep;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use clap::Parser;
 use futures::StreamExt;
+use hotshot::traits::implementations::{CombinedCommChannel, CombinedNetworks};
 use hotshot::{
     traits::{
         implementations::{
@@ -21,6 +23,9 @@ use hotshot_orchestrator::{
 };
 use hotshot_task::task::FilterEvent;
 use hotshot_types::block_impl::VIDBlockHeader;
+use hotshot_types::message::Message;
+use hotshot_types::traits::network::ConnectedNetwork;
+use hotshot_types::ValidatorConfig;
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::ConsensusMetricsValue,
@@ -45,13 +50,26 @@ use libp2p_networking::{
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::marker::PhantomData;
+use std::time::Duration;
 use std::{collections::BTreeSet, sync::Arc};
 use std::{num::NonZeroUsize, str::FromStr};
 
 use libp2p_identity::PeerId;
-use std::{fmt::Debug, net::Ipv4Addr};
-use std::{fs, mem, net::IpAddr, time::Instant};
-use tracing::{debug, error, info, warn};
+// use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
+use std::fmt::Debug;
+use std::{
+    //collections::{BTreeSet, VecDeque},
+    fs,
+    net::IpAddr,
+    //num::NonZeroUsize,
+    //str::FromStr,
+    //sync::Arc,
+    //time::{Duration, Instant},
+    time::Instant,
+};
+//use surf_disco::error::ClientError;
+//use surf_disco::Client;
+use tracing::{error, info, warn};
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -68,6 +86,17 @@ pub struct OrchestratorArgs {
     pub config_file: String,
 }
 
+#[derive(Parser, Debug, Clone)]
+#[command(
+    name = "Multi-machine consensus",
+    about = "Simulates consensus among multiple machines"
+)]
+/// The configuration file to be used for this run
+pub struct ConfigArgs {
+    /// The configuration file to be used for this run
+    pub config_file: String,
+}
+
 /// Reads a network configuration from a given filepath
 pub fn load_config_from_file<TYPES: NodeType>(
     config_file: String,
@@ -78,17 +107,34 @@ pub fn load_config_from_file<TYPES: NodeType>(
         toml::from_str::<NetworkConfigFile<TYPES::SignatureKey>>(&config_file_as_string)
             .expect("Unable to convert config file to TOML");
 
-    let config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> = config_toml.into();
+    let mut config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> =
+        config_toml.into();
+
+    // Generate network's public keys
+    let known_nodes: Vec<_> = (0..config.config.total_nodes.get())
+        .map(|node_id| {
+            TYPES::SignatureKey::generated_from_seed_indexed(
+                config.seed,
+                node_id.try_into().unwrap(),
+            )
+            .0
+        })
+        .collect();
+
+    config.config.known_nodes_with_stake = (0..config.config.total_nodes.get())
+        .map(|node_id| known_nodes[node_id].get_stake_table_entry(1u64))
+        .collect();
+
     config
 }
 
 /// Runs the orchestrator
 pub async fn run_orchestrator<
     TYPES: NodeType,
-    DANETWORK: CommunicationChannel<TYPES> + Debug,
-    QUORUMNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIDNETWORK: CommunicationChannel<TYPES> + Debug,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<TYPES, Storage = MemoryStorage<TYPES>>,
 >(
     OrchestratorArgs {
@@ -112,30 +158,164 @@ fn calculate_num_tx_per_round(
     total_num_nodes: usize,
     transactions_per_round: usize,
 ) -> usize {
-    if node_index == 0 {
-        transactions_per_round / total_num_nodes + transactions_per_round % total_num_nodes
+    transactions_per_round / total_num_nodes
+        + ((total_num_nodes - 1 - node_index as usize) < (transactions_per_round % total_num_nodes))
+            as usize
+}
+
+async fn webserver_network_from_config<TYPES: NodeType>(
+    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    pub_key: TYPES::SignatureKey,
+) -> WebServerNetwork<TYPES> {
+    // Get the configuration for the web server
+    let WebServerConfig {
+        host,
+        port,
+        wait_between_polls,
+    }: WebServerConfig = config.clone().web_server_config.unwrap();
+
+    WebServerNetwork::create(
+        &host.to_string(),
+        port,
+        wait_between_polls,
+        pub_key.clone(),
+        false,
+    )
+}
+
+async fn libp2p_network_from_config<TYPES: NodeType>(
+    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    pub_key: TYPES::SignatureKey,
+) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    let mut config = config;
+    let libp2p_config = config
+        .libp2p_config
+        .take()
+        .expect("Configuration is not for a Libp2p network");
+    let bs_len = libp2p_config.bootstrap_nodes.len();
+    let bootstrap_nodes: Vec<(PeerId, Multiaddr)> = libp2p_config
+        .bootstrap_nodes
+        .iter()
+        .map(|(addr, pair)| {
+            let kp = Keypair::from_protobuf_encoding(pair).unwrap();
+            let peer_id = PeerId::from_public_key(&kp.public());
+            let multiaddr =
+                Multiaddr::from_str(&format!("/ip4/{}/udp/{}/quic-v1", addr.ip(), addr.port()))
+                    .unwrap();
+            (peer_id, multiaddr)
+        })
+        .collect();
+    let identity = libp2p_generate_indexed_identity(config.seed, config.node_index);
+    let node_type = if (config.node_index as usize) < bs_len {
+        NetworkNodeType::Bootstrap
     } else {
-        transactions_per_round / total_num_nodes
+        NetworkNodeType::Regular
+    };
+    let node_index = config.node_index;
+    let port_index = match libp2p_config.index_ports {
+        true => node_index,
+        false => 0,
+    };
+    let bound_addr: Multiaddr = format!(
+        "/{}/{}/udp/{}/quic-v1",
+        if libp2p_config.public_ip.is_ipv4() {
+            "ip4"
+        } else {
+            "ip6"
+        },
+        libp2p_config.public_ip,
+        libp2p_config.base_port as u64 + port_index
+    )
+    .parse()
+    .unwrap();
+
+    // generate network
+    let mut config_builder = NetworkNodeConfigBuilder::default();
+    assert!(config.config.total_nodes.get() > 2);
+    let replicated_nodes = NonZeroUsize::new(config.config.total_nodes.get() - 2).unwrap();
+    config_builder.replication_factor(replicated_nodes);
+    config_builder.identity(identity.clone());
+
+    config_builder.bound_addr(Some(bound_addr.clone()));
+
+    let to_connect_addrs = bootstrap_nodes
+        .iter()
+        .map(|(peer_id, multiaddr)| (Some(*peer_id), multiaddr.clone()))
+        .collect();
+
+    config_builder.to_connect_addrs(to_connect_addrs);
+
+    let mesh_params =
+// NOTE I'm arbitrarily choosing these.
+match node_type {
+    NetworkNodeType::Bootstrap => MeshParams {
+        mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
+        mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
+        mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
+        mesh_n: libp2p_config.bootstrap_mesh_n,
+    },
+    NetworkNodeType::Regular => MeshParams {
+        mesh_n_high: libp2p_config.mesh_n_high,
+        mesh_n_low: libp2p_config.mesh_n_low,
+        mesh_outbound_min: libp2p_config.mesh_outbound_min,
+        mesh_n: libp2p_config.mesh_n,
+    },
+    NetworkNodeType::Conductor => unreachable!(),
+};
+    config_builder.mesh_params(Some(mesh_params));
+
+    let mut all_keys = BTreeSet::new();
+    let mut da_keys = BTreeSet::new();
+    for i in 0..config.config.total_nodes.get() as u64 {
+        let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
+        let pub_key = TYPES::SignatureKey::from_private(&privkey);
+        if i < config.config.da_committee_size as u64 {
+            da_keys.insert(pub_key.clone());
+        }
+        all_keys.insert(pub_key);
     }
+    let node_config = config_builder.build().unwrap();
+
+    Libp2pNetwork::new(
+        NetworkingMetricsValue::new(),
+        node_config,
+        pub_key.clone(),
+        Arc::new(RwLock::new(
+            bootstrap_nodes
+                .iter()
+                .map(|(peer_id, addr)| (Some(*peer_id), addr.clone()))
+                .collect(),
+        )),
+        bs_len,
+        config.node_index as usize,
+        // NOTE: this introduces an invariant that the keys are assigned using this indexed
+        // function
+        all_keys,
+        da_keys.clone(),
+        da_keys.contains(&pub_key),
+    )
+    .await
+    .unwrap()
 }
 
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
 pub trait RunDA<
     TYPES: NodeType,
-    DANETWORK: CommunicationChannel<TYPES> + Debug,
-    QUORUMNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIDNETWORK: CommunicationChannel<TYPES> + Debug,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        QuorumNetwork = QUORUMNETWORK,
-        CommitteeNetwork = DANETWORK,
+        QuorumNetwork = QUORUMCHANNEL,
+        CommitteeNetwork = DACHANNEL,
         Storage = MemoryStorage<TYPES>,
     >,
 > where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
+    TYPES: NodeType<Transaction = VIDTransaction>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
     SystemContext<TYPES, NODE>: HotShotType<TYPES, NODE>,
@@ -160,8 +340,8 @@ pub trait RunDA<
         let sk = config.config.my_own_validator_config.private_key.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
 
-        let da_network = self.get_da_network();
-        let quorum_network = self.get_quorum_network();
+        let da_network = self.get_da_channel();
+        let quorum_network = self.get_quorum_channel();
 
         // Since we do not currently pass the election config type in the NetworkConfig, this will always be the default election config
         let quorum_election_config = config.config.election_config.clone().unwrap_or_else(|| {
@@ -213,28 +393,26 @@ pub trait RunDA<
     }
 
     /// Starts HotShot consensus, returns when consensus has finished
-    async fn run_hotshot(&self, mut context: SystemContextHandle<TYPES, NODE>) {
+    async fn run_hotshot(
+        &self,
+        mut context: SystemContextHandle<TYPES, NODE>,
+        transactions: &mut Vec<VIDTransaction>,
+        transactions_to_send_per_round: u64,
+    ) {
         let NetworkConfig {
-            padding,
             rounds,
-            transactions_per_round,
             node_index,
-            config: HotShotConfig { total_nodes, .. },
+            start_delay_seconds,
             ..
         } = self.get_config();
 
-        let size = mem::size_of::<TYPES::Transaction>();
-        let padding = padding.saturating_sub(size);
-        let mut txn_rng = StdRng::seed_from_u64(node_index);
-
-        debug!("Adjusted padding size is {:?} bytes", padding);
-
         let mut total_transactions_committed = 0;
         let mut total_transactions_sent = 0;
-        let transactions_to_send_per_round =
-            calculate_num_tx_per_round(node_index, total_nodes.get(), transactions_per_round);
 
-        info!("Starting hotshot!");
+        error!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
+        async_sleep(Duration::from_secs(start_delay_seconds)).await;
+
+        error!("Starting hotshot!");
         let start = Instant::now();
 
         let (mut event_stream, _streamid) = context.get_event_stream(FilterEvent::default()).await;
@@ -267,18 +445,14 @@ pub trait RunDA<
                                 if new_anchor >= anchor_view {
                                     anchor_view = leaf.view_number;
                                 }
-                            }
 
-                            // send transactions
-                            for _ in 0..transactions_to_send_per_round {
-                                let txn =
-                                <<TYPES as NodeType>::StateType as TestableState>::create_random_transaction(
-                                    None,
-                                    &mut txn_rng,
-                                    padding as u64,
-                                );
-                                _ = context.submit_transaction(txn).await.unwrap();
-                                total_transactions_sent += 1;
+                                // send transactions
+                                for _ in 0..transactions_to_send_per_round {
+                                    let tx = transactions.remove(0);
+
+                                    _ = context.submit_transaction(tx).await.unwrap();
+                                    total_transactions_sent += 1;
+                                }
                             }
 
                             if let Some(size) = block_size {
@@ -314,16 +488,16 @@ pub trait RunDA<
     }
 
     /// Returns the da network for this run
-    fn get_da_network(&self) -> DANETWORK;
+    fn get_da_channel(&self) -> DACHANNEL;
 
     /// Returns the quorum network for this run
-    fn get_quorum_network(&self) -> QUORUMNETWORK;
+    fn get_quorum_channel(&self) -> QUORUMCHANNEL;
 
     ///Returns view sync network for this run
-    fn get_view_sync_network(&self) -> VIEWSYNCNETWORK;
+    fn get_view_sync_channel(&self) -> VIEWSYNCCHANNEL;
 
     ///Returns VID network for this run
-    fn get_vid_network(&self) -> VIDNETWORK;
+    fn get_vid_channel(&self) -> VIDCHANNEL;
 
     /// Returns the config for this run
     fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>;
@@ -334,10 +508,10 @@ pub trait RunDA<
 /// Represents a web server-based run
 pub struct WebServerDARun<TYPES: NodeType> {
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    quorum_network: WebCommChannel<TYPES>,
-    da_network: WebCommChannel<TYPES>,
-    view_sync_network: WebCommChannel<TYPES>,
-    vid_network: WebCommChannel<TYPES>,
+    quorum_channel: WebCommChannel<TYPES>,
+    da_channel: WebCommChannel<TYPES>,
+    view_sync_channel: WebCommChannel<TYPES>,
+    vid_channel: WebCommChannel<TYPES>,
 }
 
 #[async_trait]
@@ -374,36 +548,27 @@ where
         // Get our own key
         let pub_key = config.config.my_own_validator_config.public_key.clone();
 
-        // Get the configuration for the web server
-        let WebServerConfig {
-            host,
-            port,
-            wait_between_polls,
-        }: WebServerConfig = config.clone().web_server_config.unwrap();
-
-        let underlying_quorum_network = WebServerNetwork::create(
-            &host.to_string(),
-            port,
-            wait_between_polls,
-            pub_key.clone(),
-            false,
-        );
-
-        // Create the network
-        let quorum_network: WebCommChannel<TYPES> =
-            WebCommChannel::new(underlying_quorum_network.clone().into());
-
-        let view_sync_network: WebCommChannel<TYPES> =
-            WebCommChannel::new(underlying_quorum_network.into());
-
+        // extract values from config (for DA network)
         let WebServerConfig {
             host,
             port,
             wait_between_polls,
         }: WebServerConfig = config.clone().da_web_server_config.unwrap();
 
-        // Each node runs the DA network so that leaders have access to transactions and DA votes
-        let da_network: WebCommChannel<TYPES> = WebCommChannel::new(
+        // create and wait for underlying network
+        let underlying_quorum_network =
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+
+        underlying_quorum_network.wait_for_ready().await;
+
+        // create communication channels
+        let quorum_channel: WebCommChannel<TYPES> =
+            WebCommChannel::new(underlying_quorum_network.clone().into());
+
+        let view_sync_channel: WebCommChannel<TYPES> =
+            WebCommChannel::new(underlying_quorum_network.into());
+
+        let da_channel: WebCommChannel<TYPES> = WebCommChannel::new(
             WebServerNetwork::create(
                 &host.to_string(),
                 port,
@@ -414,34 +579,34 @@ where
             .into(),
         );
 
-        let vid_network: WebCommChannel<TYPES> = WebCommChannel::new(
+        let vid_channel: WebCommChannel<TYPES> = WebCommChannel::new(
             WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true)
                 .into(),
         );
 
         WebServerDARun {
             config,
-            quorum_network,
-            da_network,
-            view_sync_network,
-            vid_network,
+            quorum_channel,
+            da_channel,
+            view_sync_channel,
+            vid_channel,
         }
     }
 
-    fn get_da_network(&self) -> WebCommChannel<TYPES> {
-        self.da_network.clone()
+    fn get_da_channel(&self) -> WebCommChannel<TYPES> {
+        self.da_channel.clone()
     }
 
-    fn get_quorum_network(&self) -> WebCommChannel<TYPES> {
-        self.quorum_network.clone()
+    fn get_quorum_channel(&self) -> WebCommChannel<TYPES> {
+        self.quorum_channel.clone()
     }
 
-    fn get_view_sync_network(&self) -> WebCommChannel<TYPES> {
-        self.view_sync_network.clone()
+    fn get_view_sync_channel(&self) -> WebCommChannel<TYPES> {
+        self.view_sync_channel.clone()
     }
 
-    fn get_vid_network(&self) -> WebCommChannel<TYPES> {
-        self.vid_network.clone()
+    fn get_vid_channel(&self) -> WebCommChannel<TYPES> {
+        self.vid_channel.clone()
     }
 
     fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
@@ -454,10 +619,10 @@ where
 /// Represents a libp2p-based run
 pub struct Libp2pDARun<TYPES: NodeType> {
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    quorum_network: Libp2pCommChannel<TYPES>,
-    da_network: Libp2pCommChannel<TYPES>,
-    view_sync_network: Libp2pCommChannel<TYPES>,
-    vid_network: Libp2pCommChannel<TYPES>,
+    quorum_channel: Libp2pCommChannel<TYPES>,
+    da_channel: Libp2pCommChannel<TYPES>,
+    view_sync_channel: Libp2pCommChannel<TYPES>,
+    vid_channel: Libp2pCommChannel<TYPES>,
 }
 
 #[async_trait]
@@ -491,159 +656,173 @@ where
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     ) -> Libp2pDARun<TYPES> {
-        let pubkey = config.config.my_own_validator_config.public_key.clone();
-        let mut config = config;
-        let libp2p_config = config
-            .libp2p_config
-            .take()
-            .expect("Configuration is not for a Libp2p network");
-        let bs_len = libp2p_config.bootstrap_nodes.len();
-        let bootstrap_nodes: Vec<(PeerId, Multiaddr)> = libp2p_config
-            .bootstrap_nodes
-            .iter()
-            .map(|(addr, pair)| {
-                let kp = Keypair::from_protobuf_encoding(pair).unwrap();
-                let peer_id = PeerId::from_public_key(&kp.public());
-                let multiaddr =
-                    Multiaddr::from_str(&format!("/ip4/{}/udp/{}/quic-v1", addr.ip(), addr.port()))
-                        .unwrap();
-                (peer_id, multiaddr)
-            })
-            .collect();
-        let identity = libp2p_generate_indexed_identity(config.seed, config.node_index);
-        let node_type = if (config.node_index as usize) < bs_len {
-            NetworkNodeType::Bootstrap
-        } else {
-            NetworkNodeType::Regular
-        };
-        let node_index = config.node_index;
-        let port_index = match libp2p_config.index_ports {
-            true => node_index,
-            false => 0,
-        };
-        let bound_addr: Multiaddr = format!(
-            "/{}/{}/udp/{}/quic-v1",
-            if libp2p_config.public_ip.is_ipv4() {
-                "ip4"
-            } else {
-                "ip6"
-            },
-            libp2p_config.public_ip,
-            libp2p_config.base_port as u64 + port_index
-        )
-        .parse()
-        .unwrap();
+        let pub_key = config.config.my_own_validator_config.public_key.clone();
 
-        // generate network
-        let mut config_builder = NetworkNodeConfigBuilder::default();
-        assert!(config.config.total_nodes.get() > 2);
-        let replicated_nodes = NonZeroUsize::new(config.config.total_nodes.get() - 2).unwrap();
-        config_builder.replication_factor(replicated_nodes);
-        config_builder.identity(identity.clone());
-
-        config_builder.bound_addr(Some(bound_addr.clone()));
-
-        let to_connect_addrs = bootstrap_nodes
-            .iter()
-            .map(|(peer_id, multiaddr)| (Some(*peer_id), multiaddr.clone()))
-            .collect();
-
-        config_builder.to_connect_addrs(to_connect_addrs);
-
-        let mesh_params =
-        // NOTE I'm arbitrarily choosing these.
-        match node_type {
-            NetworkNodeType::Bootstrap => MeshParams {
-                mesh_n_high: libp2p_config.bootstrap_mesh_n_high,
-                mesh_n_low: libp2p_config.bootstrap_mesh_n_low,
-                mesh_outbound_min: libp2p_config.bootstrap_mesh_outbound_min,
-                mesh_n: libp2p_config.bootstrap_mesh_n,
-            },
-            NetworkNodeType::Regular => MeshParams {
-                mesh_n_high: libp2p_config.mesh_n_high,
-                mesh_n_low: libp2p_config.mesh_n_low,
-                mesh_outbound_min: libp2p_config.mesh_outbound_min,
-                mesh_n: libp2p_config.mesh_n,
-            },
-            NetworkNodeType::Conductor => unreachable!(),
-        };
-        config_builder.mesh_params(Some(mesh_params));
-
-        let mut all_keys = BTreeSet::new();
-        let mut da_keys = BTreeSet::new();
-        for i in 0..config.config.total_nodes.get() as u64 {
-            let pubkey = <<TYPES as NodeType>::SignatureKey>::get_public_key(
-                config
-                    .config
-                    .known_nodes_with_stake
-                    .get(i as usize)
-                    .expect("node_id should be within the range of known_nodes"),
-            );
-            if i < config.config.da_committee_size as u64 {
-                da_keys.insert(pubkey.clone());
-            }
-            all_keys.insert(pubkey);
-        }
-        let node_config = config_builder.build().unwrap();
-        let underlying_quorum_network = Libp2pNetwork::new(
-            NetworkingMetricsValue::new(),
-            node_config,
-            pubkey.clone(),
-            Arc::new(RwLock::new(
-                bootstrap_nodes
-                    .iter()
-                    .map(|(peer_id, addr)| (Some(*peer_id), addr.clone()))
-                    .collect(),
-            )),
-            bs_len,
-            config.node_index as usize,
-            // NOTE: this introduces an invariant that the keys are assigned using this indexed
-            // function
-            all_keys,
-            da_keys.clone(),
-            da_keys.contains(&pubkey),
-        )
-        .await
-        .unwrap();
+        // create and wait for underlying network
+        let underlying_quorum_network =
+            libp2p_network_from_config::<TYPES>(config.clone(), pub_key).await;
 
         underlying_quorum_network.wait_for_ready().await;
 
-        // Create the network
-        let quorum_network: Libp2pCommChannel<TYPES> =
+        // create communication channels
+        let quorum_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let view_sync_network: Libp2pCommChannel<TYPES> =
+        let view_sync_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let da_network: Libp2pCommChannel<TYPES> =
+        let da_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let vid_network: Libp2pCommChannel<TYPES> =
+        let vid_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
         Libp2pDARun {
             config,
-            quorum_network,
-            da_network,
-            view_sync_network,
-            vid_network,
+            quorum_channel,
+            da_channel,
+            view_sync_channel,
+            vid_channel,
         }
     }
 
-    fn get_da_network(&self) -> Libp2pCommChannel<TYPES> {
-        self.da_network.clone()
+    fn get_da_channel(&self) -> Libp2pCommChannel<TYPES> {
+        self.da_channel.clone()
     }
 
-    fn get_quorum_network(&self) -> Libp2pCommChannel<TYPES> {
-        self.quorum_network.clone()
+    fn get_quorum_channel(&self) -> Libp2pCommChannel<TYPES> {
+        self.quorum_channel.clone()
     }
 
-    fn get_view_sync_network(&self) -> Libp2pCommChannel<TYPES> {
-        self.view_sync_network.clone()
+    fn get_view_sync_channel(&self) -> Libp2pCommChannel<TYPES> {
+        self.view_sync_channel.clone()
     }
 
-    fn get_vid_network(&self) -> Libp2pCommChannel<TYPES> {
-        self.vid_network.clone()
+    fn get_vid_channel(&self) -> Libp2pCommChannel<TYPES> {
+        self.vid_channel.clone()
+    }
+
+    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
+        self.config.clone()
+    }
+}
+
+// Combined network
+
+/// Represents a combined-network-based run
+pub struct CombinedDARun<TYPES: NodeType> {
+    config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    quorum_channel: CombinedCommChannel<TYPES>,
+    da_channel: CombinedCommChannel<TYPES>,
+    view_sync_channel: CombinedCommChannel<TYPES>,
+    vid_channel: CombinedCommChannel<TYPES>,
+}
+
+#[async_trait]
+impl<
+        TYPES: NodeType<
+            Transaction = VIDTransaction,
+            BlockPayload = VIDBlockPayload,
+            BlockHeader = VIDBlockHeader,
+        >,
+        NODE: NodeImplementation<
+            TYPES,
+            Storage = MemoryStorage<TYPES>,
+            QuorumNetwork = CombinedCommChannel<TYPES>,
+            CommitteeNetwork = CombinedCommChannel<TYPES>,
+        >,
+    >
+    RunDA<
+        TYPES,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
+        NODE,
+    > for CombinedDARun<TYPES>
+where
+    <TYPES as NodeType>::StateType: TestableState,
+    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    Leaf<TYPES>: TestableLeaf,
+    Self: Sync,
+{
+    async fn initialize_networking(
+        config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
+    ) -> CombinedDARun<TYPES> {
+        // generate our own key
+        let (pub_key, _privkey) =
+            <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+                config.seed,
+                config.node_index,
+            );
+
+        // create and wait for libp2p network
+        let libp2p_underlying_quorum_network =
+            libp2p_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+
+        libp2p_underlying_quorum_network.wait_for_ready().await;
+
+        // extract values from config (for webserver DA network)
+        let WebServerConfig {
+            host,
+            port,
+            wait_between_polls,
+        }: WebServerConfig = config.clone().da_web_server_config.unwrap();
+
+        // create and wait for underlying webserver network
+        let webserver_underlying_quorum_network =
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
+
+        let webserver_underlying_da_network =
+            WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true);
+
+        webserver_underlying_quorum_network.wait_for_ready().await;
+
+        // combine the two communication channels
+        let quorum_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
+            webserver_underlying_quorum_network.clone(),
+            libp2p_underlying_quorum_network.clone(),
+        )));
+
+        let view_sync_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
+            webserver_underlying_quorum_network.clone(),
+            libp2p_underlying_quorum_network.clone(),
+        )));
+
+        let da_channel: CombinedCommChannel<TYPES> =
+            CombinedCommChannel::new(Arc::new(CombinedNetworks(
+                webserver_underlying_da_network,
+                libp2p_underlying_quorum_network.clone(),
+            )));
+
+        let vid_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
+            webserver_underlying_quorum_network,
+            libp2p_underlying_quorum_network,
+        )));
+
+        CombinedDARun {
+            config,
+            quorum_channel,
+            da_channel,
+            view_sync_channel,
+            vid_channel,
+        }
+    }
+
+    fn get_da_channel(&self) -> CombinedCommChannel<TYPES> {
+        self.da_channel.clone()
+    }
+
+    fn get_quorum_channel(&self) -> CombinedCommChannel<TYPES> {
+        self.quorum_channel.clone()
+    }
+
+    fn get_view_sync_channel(&self) -> CombinedCommChannel<TYPES> {
+        self.view_sync_channel.clone()
+    }
+
+    fn get_vid_channel(&self) -> CombinedCommChannel<TYPES> {
+        self.vid_channel.clone()
     }
 
     fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
@@ -658,17 +837,17 @@ pub async fn main_entry_point<
         BlockPayload = VIDBlockPayload,
         BlockHeader = VIDBlockHeader,
     >,
-    DANETWORK: CommunicationChannel<TYPES> + Debug,
-    QUORUMNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIEWSYNCNETWORK: CommunicationChannel<TYPES> + Debug,
-    VIDNETWORK: CommunicationChannel<TYPES> + Debug,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        QuorumNetwork = QUORUMNETWORK,
-        CommitteeNetwork = DANETWORK,
+        QuorumNetwork = QUORUMCHANNEL,
+        CommitteeNetwork = DACHANNEL,
         Storage = MemoryStorage<TYPES>,
     >,
-    RUNDA: RunDA<TYPES, DANETWORK, QUORUMNETWORK, VIEWSYNCNETWORK, VIDNETWORK, NODE>,
+    RUNDA: RunDA<TYPES, DACHANNEL, QUORUMCHANNEL, VIEWSYNCCHANNEL, VIDCHANNEL, NODE>,
 >(
     args: ValidatorArgs,
 ) where
@@ -679,7 +858,7 @@ pub async fn main_entry_point<
     setup_logging();
     setup_backtrace();
 
-    info!("Starting validator");
+    error!("Starting validator");
 
     let orchestrator_client: OrchestratorClient =
         OrchestratorClient::connect_to_orchestrator(args.clone()).await;
@@ -687,36 +866,83 @@ pub async fn main_entry_point<
     // Identify with the orchestrator
     let public_ip = match args.public_ip {
         Some(ip) => ip,
-        None => IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        None => local_ip_address::local_ip().unwrap(),
     };
-    info!(
+    error!(
         "Identifying with orchestrator using IP address {}",
         public_ip.to_string()
     );
     let node_index: u16 = orchestrator_client
         .identify_with_orchestrator(public_ip.to_string())
         .await;
-    info!("Finished identifying; our node index is {node_index}");
-    info!("Getting config from orchestrator");
+    error!("Finished identifying; our node index is {node_index}");
+    error!("Getting config from orchestrator");
 
     let mut run_config = orchestrator_client
         .get_config_from_orchestrator::<TYPES>(node_index)
         .await;
 
     run_config.node_index = node_index.into();
+
+    let (public_key, private_key) =
+        <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+            run_config.seed,
+            node_index.into(),
+        );
+    run_config.config.my_own_validator_config = ValidatorConfig {
+        public_key,
+        private_key,
+        stake_value: 1,
+    };
     //run_config.libp2p_config.as_mut().unwrap().public_ip = args.public_ip.unwrap();
 
-    info!("Initializing networking");
+    error!("Initializing networking");
     let run = RUNDA::initialize_networking(run_config.clone()).await;
     let hotshot = run.initialize_state_and_hotshot().await;
 
-    info!("Waiting for start command from orchestrator");
+    // pre-generate transactions
+    let NetworkConfig {
+        transaction_size,
+        rounds,
+        transactions_per_round,
+        node_index,
+        config: HotShotConfig { total_nodes, .. },
+        ..
+    } = run_config;
+
+    let mut txn_rng = StdRng::seed_from_u64(node_index);
+    let transactions_to_send_per_round =
+        calculate_num_tx_per_round(node_index, total_nodes.get(), transactions_per_round);
+    let mut transactions = Vec::new();
+
+    for round in 0..rounds {
+        for _ in 0..transactions_to_send_per_round {
+            let mut txn = <TYPES::StateType>::create_random_transaction(
+                None,
+                &mut txn_rng,
+                transaction_size as u64,
+            );
+
+            // prepend destined view number to transaction
+            let view_execute_number: u64 = round as u64 + 4;
+            txn.0[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
+
+            transactions.push(txn);
+        }
+    }
+
+    error!("Waiting for start command from orchestrator");
     orchestrator_client
         .wait_for_all_nodes_ready(run_config.clone().node_index)
         .await;
 
-    info!("All nodes are ready!  Starting HotShot");
-    run.run_hotshot(hotshot).await;
+    error!("All nodes are ready!  Starting HotShot");
+    run.run_hotshot(
+        hotshot,
+        &mut transactions,
+        transactions_to_send_per_round as u64,
+    )
+    .await;
 }
 
 pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {

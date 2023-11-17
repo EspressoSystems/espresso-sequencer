@@ -11,10 +11,8 @@ use clap::Parser;
 struct WebServerArgs {
     port: u16,
 }
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::main(flavor = "multi_thread", worker_threads = 2)
-)]
+
+#[cfg_attr(async_executor_impl = "tokio", tokio::main)]
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]
 async fn main() {
     setup_backtrace();
