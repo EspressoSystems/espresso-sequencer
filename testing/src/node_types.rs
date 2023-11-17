@@ -1,7 +1,7 @@
 use hotshot::traits::{
     election::static_committee::GeneralStaticCommittee, implementations::CombinedNetworks,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use hotshot::{
     demo::DemoState,
@@ -73,7 +73,7 @@ type StaticLibp2pDAComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMembers
 
 type StaticWebDAComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedDAComm = CombinedCommChannel<TestTypes, StaticMembership>;
+type StaticCombinedDAComm = CombinedCommChannel<TestTypes>;
 
 pub type StaticMemoryQuorumComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -81,7 +81,7 @@ type StaticLibp2pQuorumComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMem
 
 type StaticWebQuorumComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedQuorumComm = CombinedCommChannel<TestTypes, StaticMembership>;
+type StaticCombinedQuorumComm = CombinedCommChannel<TestTypes>;
 
 pub type StaticMemoryViewSyncComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -89,7 +89,7 @@ type StaticLibp2pViewSyncComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticM
 
 type StaticWebViewSyncComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedViewSyncComm = CombinedCommChannel<TestTypes, StaticMembership>;
+type StaticCombinedViewSyncComm = CombinedCommChannel<TestTypes>;
 
 pub type StaticMemoryVIDComm = MemoryCommChannel<TestTypes, MemoryImpl, StaticMembership>;
 
@@ -97,7 +97,7 @@ type StaticLibp2pVIDComm = Libp2pCommChannel<TestTypes, Libp2pImpl, StaticMember
 
 type StaticWebVIDComm = WebCommChannel<TestTypes, WebImpl, StaticMembership>;
 
-type StaticCombinedVIDComm = CombinedCommChannel<TestTypes, StaticMembership>;
+type StaticCombinedVIDComm = CombinedCommChannel<TestTypes>;
 
 pub type SequencingLibp2pExchange = Exchanges<
     TestTypes,
@@ -525,16 +525,8 @@ impl TestableExchange<TestTypes, Message<TestTypes>> for CombinedExchange {
 
             let libp2p_network = libp2p_network_generator(id);
 
-            let network = Arc::new(CombinedNetworks(
-                web_server_network,
-                libp2p_network.clone(),
-                PhantomData,
-            ));
-            let network_da = Arc::new(CombinedNetworks(
-                web_server_network_da,
-                libp2p_network,
-                PhantomData,
-            ));
+            let network = Arc::new(CombinedNetworks(web_server_network, libp2p_network.clone()));
+            let network_da = Arc::new(CombinedNetworks(web_server_network_da, libp2p_network));
 
             let quorum_chan =
                 <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<
