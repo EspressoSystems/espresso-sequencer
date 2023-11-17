@@ -334,17 +334,15 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 
 impl<TYPES: NodeType> Leaf<TYPES> {
     /// Create a new leaf from its components.
-    pub fn new(
-        view_number: TYPES::Time,
-        justify_qc: QuorumCertificate2<TYPES>,
-        payload: TYPES::BlockPayload,
-    ) -> Self {
+    #[must_use]
+    pub fn genesis() -> Self {
+        let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
         Self {
-            view_number,
-            justify_qc,
+            view_number: TYPES::Time::genesis(),
+            justify_qc: QuorumCertificate2::<TYPES>::genesis(),
             parent_commitment: fake_commitment(),
-            block_header: TYPES::BlockHeader::genesis(payload.clone()),
-            block_payload: Some(payload),
+            block_header,
+            block_payload: Some(block_payload),
             rejected: Vec::new(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
             proposer_id: genesis_proposer_id(),

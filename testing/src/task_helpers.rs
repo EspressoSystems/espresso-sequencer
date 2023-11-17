@@ -6,7 +6,7 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    traits::{NodeImplementation, TestableNodeImplementation},
+    traits::NodeImplementation,
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, SystemContext,
 };
@@ -43,11 +43,7 @@ pub async fn build_system_handle(
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer =
-        HotShotInitializer::<TestTypes>::from_genesis(<MemoryImpl as TestableNodeImplementation<
-            TestTypes,
-        >>::block_genesis())
-        .unwrap();
+    let initializer = HotShotInitializer::<TestTypes>::from_genesis().unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
@@ -114,7 +110,7 @@ async fn build_quorum_proposal_and_signature(
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
     let payload_commitment = block.commit();
-    let block_header = VIDBlockHeader::new(payload_commitment, &parent_leaf.block_header);
+    let block_header = VIDBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
     let leaf = Leaf {
         view_number: ViewNumber::new(view),
         justify_qc: consensus.high_qc.clone(),

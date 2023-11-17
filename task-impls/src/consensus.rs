@@ -16,7 +16,6 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::{Consensus, View},
     data::{Leaf, QuorumProposal},
     event::{Event, EventType},
@@ -54,10 +53,13 @@ use tracing::{debug, error, info, instrument};
 #[derive(Snafu, Debug)]
 pub struct ConsensusTaskError {}
 
+/// Alias for the block payload commitment and the associated metadata.
+type CommitmentAndMetadata<PAYLOAD> = (Commitment<PAYLOAD>, <PAYLOAD as BlockPayload>::Metadata);
+
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
 pub struct ConsensusTaskState<
-    TYPES: NodeType<Transaction = VIDTransaction>,
+    TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
@@ -77,8 +79,8 @@ pub struct ConsensusTaskState<
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// The commitment to the current block payload submitted to DA
-    pub payload_commitment: Option<Commitment<TYPES::BlockPayload>>,
+    /// The commitment to the current block payload and its metadata submitted to DA.
+    pub payload_commitment_and_metadata: Option<CommitmentAndMetadata<TYPES::BlockPayload>>,
 
     /// the quorum exchange
     pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
@@ -288,13 +290,9 @@ where
     (None, state)
 }
 
-impl<
-        TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
-        I: NodeImplementation<TYPES>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > ConsensusTaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    ConsensusTaskState<TYPES, I, A>
 where
-    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES>,
@@ -1201,8 +1199,8 @@ where
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
-            HotShotEvent::SendPayloadCommitment(payload_commitment) => {
-                self.payload_commitment = Some(payload_commitment);
+            HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata) => {
+                self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
             }
             _ => {}
         }
@@ -1278,12 +1276,16 @@ where
             // TODO do some sort of sanity check on the view number that it matches decided
         }
 
-        if let Some(payload_commitment) = &self.payload_commitment {
+        if let Some((payload_commitment, metadata)) = &self.payload_commitment_and_metadata {
             let leaf = Leaf {
                 view_number: view,
                 justify_qc: consensus.high_qc.clone(),
                 parent_commitment: parent_leaf.commit(),
-                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
+                block_header: TYPES::BlockHeader::new(
+                    *payload_commitment,
+                    metadata.clone(),
+                    &parent_header,
+                ),
                 block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
@@ -1295,7 +1297,7 @@ where
                 .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
-                block_header: TYPES::BlockHeader::new(*payload_commitment, &parent_header),
+                block_header: leaf.block_header.clone(),
                 view_number: leaf.view_number,
                 justify_qc: consensus.high_qc.clone(),
                 timeout_certificate: timeout_certificate.or_else(|| None),
@@ -1317,7 +1319,7 @@ where
                     self.quorum_exchange.public_key().clone(),
                 ))
                 .await;
-            self.payload_commitment = None;
+            self.payload_commitment_and_metadata = None;
             return true;
         }
         debug!("Self block was None");
@@ -1325,11 +1327,8 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType<Transaction = VIDTransaction>,
-        I: NodeImplementation<TYPES>,
-        A: ConsensusApi<TYPES, I>,
-    > TS for ConsensusTaskState<TYPES, I, A>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I>> TS
+    for ConsensusTaskState<TYPES, I, A>
 where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES>, Commitment = Commitment<Leaf<TYPES>>>,
@@ -1358,7 +1357,7 @@ pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
-    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
+    TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 >(
@@ -1369,7 +1368,6 @@ pub async fn sequencing_consensus_handle<
     ConsensusTaskState<TYPES, I, A>,
 )
 where
-    TYPES::BlockHeader: BlockHeader<Payload = VIDBlockPayload>,
     QuorumEx<TYPES, I>: ConsensusExchange<
         TYPES,
         Message<TYPES>,
@@ -1406,7 +1404,7 @@ pub fn consensus_event_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> b
             | HotShotEvent::QCFormed(_)
             | HotShotEvent::DACRecv(_)
             | HotShotEvent::ViewChange(_)
-            | HotShotEvent::SendPayloadCommitment(_)
+            | HotShotEvent::SendPayloadCommitmentAndMetadata(_, _)
             | HotShotEvent::Timeout(_)
             | HotShotEvent::TimeoutVoteRecv(_)
             | HotShotEvent::Shutdown,
