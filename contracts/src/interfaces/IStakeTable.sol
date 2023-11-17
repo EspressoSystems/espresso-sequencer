@@ -117,5 +117,5 @@ interface IStakeTable {
     ///
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdraw(BN254.G1Point calldata blsVK) external returns (uint64);
+    function withdrawFunds(BN254.G1Point calldata blsVK) external returns (uint64);
 }

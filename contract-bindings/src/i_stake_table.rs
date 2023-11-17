@@ -333,9 +333,9 @@ pub mod i_stake_table {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("withdraw"),
+                    ::std::borrow::ToOwned::to_owned("withdrawFunds"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("withdraw"),
+                        name: ::std::borrow::ToOwned::to_owned("withdrawFunds"),
                         inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                             name: ::std::borrow::ToOwned::to_owned("blsVK"),
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
@@ -518,13 +518,13 @@ pub mod i_stake_table {
                 .method_hash([67, 23, 208, 11], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `withdraw` (0x0d075e27) function
-        pub fn withdraw(
+        ///Calls the contract's `withdrawFunds` (0x162d4e7c) function
+        pub fn withdraw_funds(
             &self,
             bls_vk: G1Point,
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([13, 7, 94, 39], (bls_vk,))
+                .method_hash([22, 45, 78, 124], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
     }
@@ -732,7 +732,7 @@ pub mod i_stake_table {
     )]
     #[ethcall(name = "totalVotingStake", abi = "totalVotingStake()")]
     pub struct TotalVotingStakeCall;
-    ///Container type for all input parameters for the `withdraw` function with signature `withdraw((uint256,uint256))` and selector `0x0d075e27`
+    ///Container type for all input parameters for the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256))` and selector `0x162d4e7c`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -745,8 +745,8 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "withdraw", abi = "withdraw((uint256,uint256))")]
-    pub struct WithdrawCall {
+    #[ethcall(name = "withdrawFunds", abi = "withdrawFunds((uint256,uint256))")]
+    pub struct WithdrawFundsCall {
         pub bls_vk: G1Point,
     }
     ///Container type for all of the contract's call
@@ -773,7 +773,7 @@ pub mod i_stake_table {
         TotalKeys(TotalKeysCall),
         TotalStake(TotalStakeCall),
         TotalVotingStake(TotalVotingStakeCall),
-        Withdraw(WithdrawCall),
+        WithdrawFunds(WithdrawFundsCall),
     }
     impl ::ethers::core::abi::AbiDecode for IStakeTableCalls {
         fn decode(
@@ -825,8 +825,9 @@ pub mod i_stake_table {
             {
                 return Ok(Self::TotalVotingStake(decoded));
             }
-            if let Ok(decoded) = <WithdrawCall as ::ethers::core::abi::AbiDecode>::decode(data) {
-                return Ok(Self::Withdraw(decoded));
+            if let Ok(decoded) = <WithdrawFundsCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::WithdrawFunds(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
@@ -850,7 +851,7 @@ pub mod i_stake_table {
                 Self::TotalKeys(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TotalStake(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TotalVotingStake(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::Withdraw(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::WithdrawFunds(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
     }
@@ -869,7 +870,7 @@ pub mod i_stake_table {
                 Self::TotalKeys(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TotalStake(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TotalVotingStake(element) => ::core::fmt::Display::fmt(element, f),
-                Self::Withdraw(element) => ::core::fmt::Display::fmt(element, f),
+                Self::WithdrawFunds(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
@@ -933,9 +934,9 @@ pub mod i_stake_table {
             Self::TotalVotingStake(value)
         }
     }
-    impl ::core::convert::From<WithdrawCall> for IStakeTableCalls {
-        fn from(value: WithdrawCall) -> Self {
-            Self::Withdraw(value)
+    impl ::core::convert::From<WithdrawFundsCall> for IStakeTableCalls {
+        fn from(value: WithdrawFundsCall) -> Self {
+            Self::WithdrawFunds(value)
         }
     }
     ///Container type for all return fields from the `deposit` function with signature `deposit((uint256,uint256),uint64)` and selector `0xf7bfb01c`
@@ -1109,7 +1110,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct TotalVotingStakeReturn(pub ::ethers::core::types::U256);
-    ///Container type for all return fields from the `withdraw` function with signature `withdraw((uint256,uint256))` and selector `0x0d075e27`
+    ///Container type for all return fields from the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256))` and selector `0x162d4e7c`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1122,7 +1123,7 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    pub struct WithdrawReturn(pub u64);
+    pub struct WithdrawFundsReturn(pub u64);
     ///`EdOnBN254Point(uint256,uint256)`
     #[derive(
         Clone,
