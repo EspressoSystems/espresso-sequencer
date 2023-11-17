@@ -1,7 +1,10 @@
 use crate::Transaction;
-use std::mem::size_of;
+use hotshot_query_service::QueryableBlock;
+use serde::{Deserialize, Serialize};
+use std::{mem::size_of, ops::Range};
 
 #[allow(dead_code)] // TODO temporary
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct BlockPayload {
     payload: Vec<u8>,
 }
@@ -57,6 +60,81 @@ impl BlockPayload {
         payload.extend(tx_table);
         payload.extend(tx_bodies);
         Self { payload }
+    }
+
+    fn tx_table_len(&self) -> u32 {
+        // TODO don't panic
+        // Alternative: store this value as a separate field of `Self`.
+        u32::from_le_bytes(self.payload[..size_of::<u32>()].try_into().unwrap())
+    }
+}
+
+impl QueryableBlock for BlockPayload {
+    type TransactionIndex = u32;
+    type Iter<'a> = Range<Self::TransactionIndex>;
+    type InclusionProof = ();
+
+    fn len(&self) -> usize {
+        // TODO don't panic
+        // Alternative: do `as usize` and pray?
+        // We should probably fail the build if usize is smaller than u32.
+        self.tx_table_len()
+            .try_into()
+            .expect("number of txs should fit into usize")
+    }
+
+    fn iter(&self) -> Self::Iter<'_> {
+        0..self.tx_table_len()
+    }
+
+    fn transaction_with_proof(
+        &self,
+        _index: &Self::TransactionIndex,
+    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+        todo!()
+    }
+}
+
+mod boilerplate {
+    use super::{BlockPayload, Transaction};
+    use commit::Committable;
+    use std::fmt::Display;
+
+    // TODO temporary.
+    // `Block` trait subject to change/delection.
+    // Skeleton impl for now so as to enable `QueryableBlock`.
+    impl hotshot::traits::Block for BlockPayload {
+        type Error = crate::Error;
+        type Transaction = Transaction;
+
+        fn new() -> Self {
+            todo!()
+        }
+
+        fn add_transaction_raw(
+            &self,
+            _tx: &Self::Transaction,
+        ) -> std::result::Result<Self, Self::Error> {
+            todo!()
+        }
+
+        fn contained_transactions(
+            &self,
+        ) -> std::collections::HashSet<commit::Commitment<Self::Transaction>> {
+            todo!()
+        }
+    }
+
+    impl Display for BlockPayload {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{self:#?}")
+        }
+    }
+
+    impl Committable for BlockPayload {
+        fn commit(&self) -> commit::Commitment<Self> {
+            todo!()
+        }
     }
 }
 
