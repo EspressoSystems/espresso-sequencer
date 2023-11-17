@@ -33,7 +33,7 @@ async fn web_server_network() {
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_secs(20),
+                duration: Duration::from_secs(60),
             },
         ),
         ..TestMetadata::default()

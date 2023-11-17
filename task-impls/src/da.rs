@@ -378,18 +378,20 @@ where
 
                 return None;
             }
-            HotShotEvent::BlockReady(block, view) => {
+            HotShotEvent::BlockReady(payload, metadata, view) => {
                 self.committee_exchange
                     .network()
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let payload_commitment = block.commit();
+                let payload_commitment = payload.commit();
                 let signature = self
                     .committee_exchange
                     .sign_da_proposal(&payload_commitment);
+                // TODO (Keyao) Fix the payload sending and receiving for the DA proposal.
+                // <https://github.com/EspressoSystems/HotShot/issues/2026>
                 let data: DAProposal<TYPES> = DAProposal {
-                    block_payload: block.clone(),
+                    block_payload: payload.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number: view,
                 };
@@ -402,7 +404,10 @@ where
                 };
 
                 self.event_stream
-                    .publish(HotShotEvent::SendPayloadCommitment(payload_commitment))
+                    .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
+                        payload_commitment,
+                        metadata,
+                    ))
                     .await;
                 self.event_stream
                     .publish(HotShotEvent::DAProposalSend(
@@ -437,7 +442,7 @@ where
             HotShotEvent::DAProposalRecv(_, _)
                 | HotShotEvent::DAVoteRecv(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::BlockReady(_, _)
+                | HotShotEvent::BlockReady(_, _, _)
                 | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewChange(_)
         )

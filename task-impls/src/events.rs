@@ -13,7 +13,7 @@ use hotshot_types::{
         DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
-    traits::node_implementation::NodeType,
+    traits::{node_implementation::NodeType, BlockPayload},
 };
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
@@ -88,10 +88,17 @@ pub enum HotShotEvent<TYPES: NodeType> {
     TransactionsRecv(Vec<TYPES::Transaction>),
     /// Send transactions to the network
     TransactionSend(TYPES::Transaction, TYPES::SignatureKey),
-    /// Event to send block payload commitment from DA leader to the quorum; internal event only
-    SendPayloadCommitment(Commitment<TYPES::BlockPayload>),
+    /// Event to send block payload commitment and metadata from DA leader to the quorum; internal event only
+    SendPayloadCommitmentAndMetadata(
+        Commitment<TYPES::BlockPayload>,
+        <TYPES::BlockPayload as BlockPayload>::Metadata,
+    ),
     /// Event when the transactions task has a block formed
-    BlockReady(TYPES::BlockPayload, TYPES::Time),
+    BlockReady(
+        TYPES::BlockPayload,
+        <TYPES::BlockPayload as BlockPayload>::Metadata,
+        TYPES::Time,
+    ),
     /// Event when consensus decided on a leaf
     LeafDecided(Vec<Leaf<TYPES>>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader

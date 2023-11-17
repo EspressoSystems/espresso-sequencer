@@ -5,24 +5,29 @@
 
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
+use snafu::Snafu;
 
 use std::{
-    collections::HashSet,
     error::Error,
     fmt::{Debug, Display},
     hash::Hash,
 };
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
+/// The error type for block and its transactions.
+#[derive(Snafu, Debug)]
+pub enum BlockError {
+    /// Invalid block header.
+    InvalidBlockHeader,
+    /// Invalid transaction length.
+    InvalidTransactionLength,
+}
+
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
 }
 
-// TODO (Keyao) Determine whether we can refactor BlockPayload and Transaction from traits to structs.
-// <https://github.com/EspressoSystems/HotShot/issues/1815>
 /// Abstraction over the full contents of a block
 ///
 /// This trait encapsulates the behaviors that the transactions of a block must have in order to be
@@ -50,11 +55,40 @@ pub trait BlockPayload:
     /// The type of the transitions we are applying
     type Transaction: Transaction;
 
-    // type Header: BlockHeader;
+    /// Data created during block building which feeds into the block header
+    type Metadata: Clone + Debug + Eq + Hash + Send + Sync;
 
-    /// returns hashes of all the transactions in this block
-    /// TODO make this ordered with a vec
-    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>>;
+    /// Encoded payload.
+    type Encode<'a>: 'a + Iterator<Item = u8> + Send
+    where
+        Self: 'a;
+
+    /// Build a payload and associated metadata with the transactions.
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error>;
+
+    /// Build a payload with the encoded transaction bytes and metadata.
+    ///
+    /// `I` may be, but not necessarily is, the `Encode` type directly from `fn encode`.
+    fn from_bytes<I>(encoded_transactions: I, metadata: Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>;
+
+    /// Build the genesis payload and metadata.
+    fn genesis() -> (Self, Self::Metadata);
+
+    /// Encode the payload
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error>;
+
+    /// List of transaction commitments.
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;
 }
 
 /// Header of a block, which commits to a [`BlockPayload`].
@@ -64,11 +98,19 @@ pub trait BlockHeader:
     /// Block payload associated with the commitment.
     type Payload: BlockPayload;
 
-    /// Build a header with the payload commitment and parent header.
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self;
+    /// Build a header with the payload commitment, metadata, and parent header.
+    fn new(
+        payload_commitment: Commitment<Self::Payload>,
+        metadata: <Self::Payload as BlockPayload>::Metadata,
+        parent_header: &Self,
+    ) -> Self;
 
-    /// Build a genesis header with the genesis payload.
-    fn genesis(payload: Self::Payload) -> Self;
+    /// Build the genesis header, payload, and metadata.
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    );
 
     /// Get the block number.
     fn block_number(&self) -> u64;
