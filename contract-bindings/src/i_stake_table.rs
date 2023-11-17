@@ -60,9 +60,9 @@ pub mod i_stake_table {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("fullLookup"),
+                    ::std::borrow::ToOwned::to_owned("lookupNode"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("fullLookup"),
+                        name: ::std::borrow::ToOwned::to_owned("lookupNode"),
                         inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                             name: ::std::borrow::ToOwned::to_owned("blsVK"),
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
@@ -95,9 +95,9 @@ pub mod i_stake_table {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("lookup"),
+                    ::std::borrow::ToOwned::to_owned("lookupStake"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("lookup"),
+                        name: ::std::borrow::ToOwned::to_owned("lookupStake"),
                         inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                             name: ::std::borrow::ToOwned::to_owned("blsVK"),
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
@@ -414,22 +414,22 @@ pub mod i_stake_table {
                 .method_hash([247, 191, 176, 28], (bls_vk, amount))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `fullLookup` (0x8d98af20) function
-        pub fn full_lookup(
+        ///Calls the contract's `lookupNode` (0x52f92fc4) function
+        pub fn lookup_node(
             &self,
             bls_vk: G1Point,
         ) -> ::ethers::contract::builders::ContractCall<M, Node> {
             self.0
-                .method_hash([141, 152, 175, 32], (bls_vk,))
+                .method_hash([82, 249, 47, 196], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `lookup` (0x28e25b51) function
-        pub fn lookup(
+        ///Calls the contract's `lookupStake` (0xcdf7788f) function
+        pub fn lookup_stake(
             &self,
             bls_vk: G1Point,
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([40, 226, 91, 81], (bls_vk,))
+                .method_hash([205, 247, 120, 143], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `nextExitEpoch` (0x3b09c267) function
@@ -551,7 +551,7 @@ pub mod i_stake_table {
         pub bls_vk: G1Point,
         pub amount: u64,
     }
-    ///Container type for all input parameters for the `fullLookup` function with signature `fullLookup((uint256,uint256))` and selector `0x8d98af20`
+    ///Container type for all input parameters for the `lookupNode` function with signature `lookupNode((uint256,uint256))` and selector `0x52f92fc4`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -564,11 +564,11 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "fullLookup", abi = "fullLookup((uint256,uint256))")]
-    pub struct FullLookupCall {
+    #[ethcall(name = "lookupNode", abi = "lookupNode((uint256,uint256))")]
+    pub struct LookupNodeCall {
         pub bls_vk: G1Point,
     }
-    ///Container type for all input parameters for the `lookup` function with signature `lookup((uint256,uint256))` and selector `0x28e25b51`
+    ///Container type for all input parameters for the `lookupStake` function with signature `lookupStake((uint256,uint256))` and selector `0xcdf7788f`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -581,8 +581,8 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "lookup", abi = "lookup((uint256,uint256))")]
-    pub struct LookupCall {
+    #[ethcall(name = "lookupStake", abi = "lookupStake((uint256,uint256))")]
+    pub struct LookupStakeCall {
         pub bls_vk: G1Point,
     }
     ///Container type for all input parameters for the `nextExitEpoch` function with signature `nextExitEpoch()` and selector `0x3b09c267`
@@ -762,8 +762,8 @@ pub mod i_stake_table {
     )]
     pub enum IStakeTableCalls {
         Deposit(DepositCall),
-        FullLookup(FullLookupCall),
-        Lookup(LookupCall),
+        LookupNode(LookupNodeCall),
+        LookupStake(LookupStakeCall),
         NextExitEpoch(NextExitEpochCall),
         NextRegistrationEpoch(NextRegistrationEpochCall),
         NumPendingExit(NumPendingExitCall),
@@ -783,11 +783,11 @@ pub mod i_stake_table {
             if let Ok(decoded) = <DepositCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Deposit(decoded));
             }
-            if let Ok(decoded) = <FullLookupCall as ::ethers::core::abi::AbiDecode>::decode(data) {
-                return Ok(Self::FullLookup(decoded));
+            if let Ok(decoded) = <LookupNodeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::LookupNode(decoded));
             }
-            if let Ok(decoded) = <LookupCall as ::ethers::core::abi::AbiDecode>::decode(data) {
-                return Ok(Self::Lookup(decoded));
+            if let Ok(decoded) = <LookupStakeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
+                return Ok(Self::LookupStake(decoded));
             }
             if let Ok(decoded) = <NextExitEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -836,8 +836,8 @@ pub mod i_stake_table {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::Deposit(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::FullLookup(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::Lookup(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::LookupNode(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::LookupStake(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NextExitEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NextRegistrationEpoch(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -859,8 +859,8 @@ pub mod i_stake_table {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::Deposit(element) => ::core::fmt::Display::fmt(element, f),
-                Self::FullLookup(element) => ::core::fmt::Display::fmt(element, f),
-                Self::Lookup(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LookupNode(element) => ::core::fmt::Display::fmt(element, f),
+                Self::LookupStake(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NextExitEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NextRegistrationEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NumPendingExit(element) => ::core::fmt::Display::fmt(element, f),
@@ -879,14 +879,14 @@ pub mod i_stake_table {
             Self::Deposit(value)
         }
     }
-    impl ::core::convert::From<FullLookupCall> for IStakeTableCalls {
-        fn from(value: FullLookupCall) -> Self {
-            Self::FullLookup(value)
+    impl ::core::convert::From<LookupNodeCall> for IStakeTableCalls {
+        fn from(value: LookupNodeCall) -> Self {
+            Self::LookupNode(value)
         }
     }
-    impl ::core::convert::From<LookupCall> for IStakeTableCalls {
-        fn from(value: LookupCall) -> Self {
-            Self::Lookup(value)
+    impl ::core::convert::From<LookupStakeCall> for IStakeTableCalls {
+        fn from(value: LookupStakeCall) -> Self {
+            Self::LookupStake(value)
         }
     }
     impl ::core::convert::From<NextExitEpochCall> for IStakeTableCalls {
@@ -953,7 +953,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct DepositReturn(pub u64, pub u64);
-    ///Container type for all return fields from the `fullLookup` function with signature `fullLookup((uint256,uint256))` and selector `0x8d98af20`
+    ///Container type for all return fields from the `lookupNode` function with signature `lookupNode((uint256,uint256))` and selector `0x52f92fc4`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -966,8 +966,8 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    pub struct FullLookupReturn(pub Node);
-    ///Container type for all return fields from the `lookup` function with signature `lookup((uint256,uint256))` and selector `0x28e25b51`
+    pub struct LookupNodeReturn(pub Node);
+    ///Container type for all return fields from the `lookupStake` function with signature `lookupStake((uint256,uint256))` and selector `0xcdf7788f`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -980,7 +980,7 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    pub struct LookupReturn(pub u64);
+    pub struct LookupStakeReturn(pub u64);
     ///Container type for all return fields from the `nextExitEpoch` function with signature `nextExitEpoch()` and selector `0x3b09c267`
     #[derive(
         Clone,

@@ -56,9 +56,9 @@ interface IStakeTable {
     function totalVotingStake() external view returns (uint256);
 
     /// @notice Look up the balance of `blsVK`
-    function lookup(BN254.G1Point calldata blsVK) external view returns (uint64);
+    function lookupStake(BN254.G1Point calldata blsVK) external view returns (uint64);
     /// @notice Look up the full `Node` state associated with `blsVK`
-    function fullLookup(BN254.G1Point calldata blsVK) external view returns (Node memory);
+    function lookupNode(BN254.G1Point calldata blsVK) external view returns (Node memory);
 
     // === Queuing Stats ===
 
