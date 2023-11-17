@@ -19,6 +19,7 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 - Obtain code: `git clone git@github.com:EspressoSystems/espresso-sequencer`.
 - Make sure [nix](https://nixos.org/download.html) is installed.
 - Activate the environment with `nix-shell`, or `nix develop`, or `direnv allow` if using [direnv](https://direnv.net/).
+- For installation without nix please see [ubuntu.md](./doc/ubuntu.md).
 
 ## Run the tests
 
