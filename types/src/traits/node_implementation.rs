@@ -365,7 +365,7 @@ where
 
         let view_sync_exchange = VIEWSYNCEXCHANGE::create(
             entries.clone(),
-            configs.0,
+            configs.0.clone(),
             networks.2,
             pk.clone(),
             entry.clone(),
@@ -374,16 +374,14 @@ where
 
         let committee_exchange = COMMITTEEEXCHANGE::create(
             entries.clone(),
-            configs.1.clone(),
+            configs.1,
             networks.1,
             pk.clone(),
             entry.clone(),
             sk.clone(),
         );
 
-        // RM TODO: figure out if this is the proper config
-        // issue: https://github.com/EspressoSystems/HotShot/issues/1918
-        let vid_exchange = VIDEXCHANGE::create(entries, configs.1, networks.3, pk, entry, sk);
+        let vid_exchange = VIDEXCHANGE::create(entries, configs.0, networks.3, pk, entry, sk);
 
         Self {
             quorum_exchange,
