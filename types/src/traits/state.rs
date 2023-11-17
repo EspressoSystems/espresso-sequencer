@@ -248,3 +248,16 @@ impl<F: PrimeField> From<LightClientState<F>> for [F; 7] {
         ]
     }
 }
+impl<F: PrimeField> From<&LightClientState<F>> for [F; 7] {
+    fn from(state: &LightClientState<F>) -> Self {
+        [
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
+        ]
+    }
+}
