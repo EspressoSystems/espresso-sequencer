@@ -25,7 +25,6 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
     data::Leaf,
     event::Event,
     message::{Message, Messages},
@@ -37,6 +36,7 @@ use hotshot_types::{
             ViewSyncEx,
         },
         state::ConsensusTime,
+        BlockPayload,
     },
 };
 use std::{
@@ -220,10 +220,7 @@ where
 /// add the consensus task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_consensus_task<
-    TYPES: NodeType<BlockPayload = VIDBlockPayload, Transaction = VIDTransaction>,
-    I: NodeImplementation<TYPES>,
->(
+pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     output_stream: ChannelStream<Event<TYPES>>,
@@ -242,13 +239,14 @@ where
         inner: handle.hotshot.inner.clone(),
     };
     let registry = task_runner.registry.clone();
+    let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
     // build the consensus task
     let consensus_state = ConsensusTaskState {
         registry: registry.clone(),
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment: Some(VIDBlockPayload::genesis().commit()),
+        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
@@ -429,10 +427,7 @@ where
 /// add the Transaction Handling task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_transaction_task<
-    TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-    I: NodeImplementation<TYPES>,
->(
+pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
     event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
     quorum_exchange: QuorumEx<TYPES, I>,
@@ -511,7 +506,7 @@ where
         num_timeouts_tracked: 0,
         replica_task_map: HashMap::default(),
         relay_task_map: HashMap::default(),
-        view_sync_timeout: Duration::new(5, 0),
+        view_sync_timeout: Duration::new(10, 0),
         id: handle.hotshot.inner.id,
         last_garbage_collected_view: TYPES::Time::new(0),
     };

@@ -602,12 +602,12 @@ where
 
                 self.num_timeouts_tracked += 1;
                 error!(
-                    "Num timeouts tracked is {}. View {} timed out",
+                    "Num timeouts tracked since last view change is {}. View {} timed out",
                     self.num_timeouts_tracked, *view_number
                 );
 
                 if self.num_timeouts_tracked > 3 {
-                    error!("Too many timeouts!  This shouldn't happen");
+                    error!("Too many consecutive timeouts!  This shouldn't happen");
                 }
 
                 if self.num_timeouts_tracked > 2 {
