@@ -48,7 +48,7 @@ pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), Plon
 /// Given a proving key and
 /// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
-/// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
+/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a bit vector indicates the signers
 /// - a quorum threshold
 /// Returns error or a pair (proof, public_inputs) asserting that
@@ -182,7 +182,7 @@ mod tests {
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(&bls_keys, &schnorr_keys);
 
-        let block_comm = VariableLengthRescueCRHF::<BaseField, 1>::evaluate(vec![
+        let block_comm_root = VariableLengthRescueCRHF::<BaseField, 1>::evaluate(vec![
             BaseField::from(1u32),
             BaseField::from(2u32),
         ])
@@ -196,7 +196,7 @@ mod tests {
         let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
-            block_comm,
+            block_comm_root,
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };

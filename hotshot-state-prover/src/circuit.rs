@@ -52,7 +52,7 @@ pub struct LightClientStateVar {
     /// Private list holding all variables
     ///  vars[0]: view number
     ///  vars[1]: block height
-    ///  vars[2]: block commitment
+    ///  vars[2]: block commitment root
     ///  vars[3]: fee ledger commitment
     ///  vars[4-6]: stake table commitment
     vars: [Variable; 7],
@@ -89,8 +89,8 @@ impl<F: PrimeField> PublicInput<F> {
         self.0[2]
     }
 
-    /// Return the block commitment of the light client state
-    pub fn block_comm(&self) -> F {
+    /// Return the block commitment root of the light client state
+    pub fn block_comm_root(&self) -> F {
         self.0[3]
     }
 
@@ -131,7 +131,7 @@ impl LightClientStateVar {
             vars: [
                 circuit.create_public_variable(view_number_f)?,
                 circuit.create_public_variable(block_height_f)?,
-                circuit.create_public_variable(state.block_comm)?,
+                circuit.create_public_variable(state.block_comm_root)?,
                 circuit.create_public_variable(state.fee_ledger_comm)?,
                 circuit.create_public_variable(state.stake_table_comm.0)?,
                 circuit.create_public_variable(state.stake_table_comm.1)?,
@@ -148,7 +148,7 @@ impl LightClientStateVar {
         self.vars[1]
     }
 
-    pub fn block_comm(&self) -> Variable {
+    pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
     }
 
@@ -175,7 +175,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - a list of stake table entries (`Vec<(SchnorrVerKey, Amount)>`)
 /// - a bit vector indicates the signers
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
-/// - updated light client state (`(view_number, block_height, block_comm, fee_ledger_comm, stake_table_comm)`)
+/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a quorum threshold
 /// Lengths of input vectors should not exceed the `STAKE_TABLE_CAPACITY`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `STAKE_TABLE_CAPACITY`.
@@ -300,7 +300,7 @@ where
         threshold,
         view_number_f,
         block_height_f,
-        lightclient_state.block_comm,
+        lightclient_state.block_comm_root,
         lightclient_state.fee_ledger_comm,
         lightclient_state.stake_table_comm.0,
         lightclient_state.stake_table_comm.1,
@@ -403,7 +403,7 @@ where
     let lightclient_state = LightClientState {
         view_number: 0,
         block_height: 0,
-        block_comm: F::default(),
+        block_comm_root: F::default(),
         fee_ledger_comm: F::default(),
         stake_table_comm: (F::default(), F::default(), F::default()),
     };
@@ -441,7 +441,7 @@ mod tests {
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
 
-        let block_comm =
+        let block_comm_root =
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
                 [0];
         let fee_ledger_comm =
@@ -451,7 +451,7 @@ mod tests {
         let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
-            block_comm,
+            block_comm_root,
             fee_ledger_comm,
             stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };

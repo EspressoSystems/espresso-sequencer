@@ -227,8 +227,8 @@ pub struct LightClientState<F: PrimeField> {
     pub view_number: usize,
     /// Current block height
     pub block_height: usize,
-    /// Block commitment
-    pub block_comm: F,
+    /// Root of the block commitment tree
+    pub block_comm_root: F,
     /// Commitment for fee ledger
     pub fee_ledger_comm: F,
     /// Commitment for the stake table
@@ -240,7 +240,7 @@ impl<F: PrimeField> From<LightClientState<F>> for [F; 7] {
         [
             F::from(state.view_number as u64),
             F::from(state.block_height as u64),
-            state.block_comm,
+            state.block_comm_root,
             state.fee_ledger_comm,
             state.stake_table_comm.0,
             state.stake_table_comm.1,
@@ -253,7 +253,7 @@ impl<F: PrimeField> From<&LightClientState<F>> for [F; 7] {
         [
             F::from(state.view_number as u64),
             F::from(state.block_height as u64),
-            state.block_comm,
+            state.block_comm_root,
             state.fee_ledger_comm,
             state.stake_table_comm.0,
             state.stake_table_comm.1,
