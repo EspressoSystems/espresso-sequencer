@@ -125,13 +125,11 @@ impl<TYPES: NodeType> QuorumCertificate2<TYPES> {
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
 pub type QuorumCertificate2<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
 /// Type alias for a DA certificate over `DAData`
-pub type DACertificate2<TYPES> =
-    SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
+pub type DACertificate2<TYPES> = SimpleCertificate<TYPES, DAData>;
 /// Type alias for a Timeout certificate over a view number
 pub type TimeoutCertificate2<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
 /// type alias for a VID certificate
-pub type VIDCertificate2<TYPES> =
-    SimpleCertificate<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
+pub type VIDCertificate2<TYPES> = SimpleCertificate<TYPES, VIDData>;
 
 // TODO ED Update this to use the correct threshold instead of the default `success_threshold`
 /// Type alias for a `ViewSyncPreCommit` certificate over a view number

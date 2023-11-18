@@ -2,7 +2,7 @@
 
 use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
-use commit::{Commitment, Committable};
+use commit::Commitment;
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -25,10 +25,11 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     event::Event,
     message::{Message, Messages, SequencingMessage},
     traits::{
+        block_contents::vid_commitment,
         election::{ConsensusExchange, Membership, ViewSyncExchangeType},
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{
@@ -232,8 +233,7 @@ pub async fn add_consensus_task<
 where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
     TimeoutEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
@@ -249,7 +249,11 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
+        payload_commitment_and_metadata: Some((
+            // Encoding a genesis payload should not fail.
+            vid_commitment(payload.encode().unwrap().collect()),
+            metadata,
+        )),
         quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
         timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
         api: c_api.clone(),
@@ -323,8 +327,7 @@ pub async fn add_vid_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     // build the vid task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
@@ -385,8 +388,7 @@ pub async fn add_da_task<
     handle: SystemContextHandle<TYPES, I>,
 ) -> TaskRunner
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     // build the da task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {

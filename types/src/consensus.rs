@@ -7,10 +7,11 @@ pub use crate::{
 use displaydoc::Display;
 
 use crate::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     error::HotShotError,
     simple_certificate::QuorumCertificate2,
     traits::{
+        block_contents::vid_commitment,
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
         BlockPayload,
@@ -360,10 +361,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 /// before all but one branch are ultimately garbage collected.
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct BlockPayloadStore<PAYLOAD: BlockPayload>(HashMap<Commitment<PAYLOAD>, (PAYLOAD, u64)>);
+pub struct BlockPayloadStore<PAYLOAD: BlockPayload>(HashMap<VidCommitment, (PAYLOAD, u64)>);
 
 impl<PAYLOAD: BlockPayload> BlockPayloadStore<PAYLOAD> {
-    /// Save payload commitment for later retrieval.
+    /// Save the payload commitment for later retrieval.
     ///
     /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
     /// `self.get(payload_commitment)` will return `Some(payload)`.
@@ -372,28 +373,32 @@ impl<PAYLOAD: BlockPayload> BlockPayloadStore<PAYLOAD> {
     /// multiple calls to [`insert`](Self::insert) for the same payload commitment result in
     /// multiple owning references to the payload commitment. [`remove`](Self::remove) must be
     /// called once for each reference before the payload commitment will be deallocated.
-    pub fn insert(&mut self, payload: PAYLOAD) {
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
+    pub fn insert(&mut self, payload: PAYLOAD) -> Result<(), PAYLOAD::Error> {
         self.0
-            .entry(payload.commit())
+            .entry(vid_commitment(payload.clone().encode()?.collect()))
             .and_modify(|(_, refcount)| *refcount += 1)
             .or_insert((payload, 1));
+        Ok(())
     }
 
-    /// Get a saved set of transaction commitments, if available.
+    /// Get a saved block payload, if available.
     ///
-    /// If a set of transaction commitments has been saved with [`insert`](Self::insert), this
-    /// function will retrieve it. It may return [`None`] if a block with the given commitment has
-    /// not been saved or if the block has been dropped with [`remove`](Self::remove).
+    /// If a payload has been saved with [`insert`](Self::insert), this function will retrieve it.
+    /// It may return [`None`] if a block with the given commitment has not been saved or if the
+    /// block has been dropped with [`remove`](Self::remove).
     #[must_use]
-    pub fn get(&self, payload_commitment: Commitment<PAYLOAD>) -> Option<&PAYLOAD> {
+    pub fn get(&self, payload_commitment: VidCommitment) -> Option<&PAYLOAD> {
         self.0.get(&payload_commitment).map(|(payload, _)| payload)
     }
 
-    /// Drop a reference to a saved set of transaction commitments.
+    /// Drop a reference to a saved block payload.
     ///
     /// If the set exists and this call drops the last reference to it, the set will be returned,
     /// Otherwise, the return value is [`None`].
-    pub fn remove(&mut self, payload_commitment: Commitment<PAYLOAD>) -> Option<PAYLOAD> {
+    pub fn remove(&mut self, payload_commitment: VidCommitment) -> Option<PAYLOAD> {
         if let Entry::Occupied(mut e) = self.0.entry(payload_commitment) {
             let (_, refcount) = e.get_mut();
             *refcount -= 1;

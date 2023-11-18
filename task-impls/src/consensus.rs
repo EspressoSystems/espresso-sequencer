@@ -17,7 +17,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal},
+    data::{Leaf, QuorumProposal, VidCommitment},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
     simple_certificate::{
@@ -56,7 +56,7 @@ use tracing::{debug, error, info, instrument};
 pub struct ConsensusTaskError {}
 
 /// Alias for the block payload commitment and the associated metadata.
-type CommitmentAndMetadata<PAYLOAD> = (Commitment<PAYLOAD>, <PAYLOAD as BlockPayload>::Metadata);
+type CommitmentAndMetadata<PAYLOAD> = (VidCommitment, <PAYLOAD as BlockPayload>::Metadata);
 
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
@@ -67,8 +67,7 @@ pub struct ConsensusTaskState<
 > where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
     TimeoutEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
@@ -304,8 +303,7 @@ impl<
 where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
     TimeoutEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
@@ -786,7 +784,7 @@ where
                                     .saved_block_payloads
                                     .get(leaf.get_payload_commitment())
                                 {
-                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
+                                    if let Err(e) = leaf.fill_block_payload(payload) {
                                         error!(
                                             "Saved block payload and commitment don't match: {:?}",
                                             e
@@ -1332,8 +1330,7 @@ impl<
 where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
     TimeoutEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {
@@ -1370,8 +1367,7 @@ pub async fn sequencing_consensus_handle<
 where
     QuorumEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
     TimeoutEx<TYPES, I>:
         ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
 {

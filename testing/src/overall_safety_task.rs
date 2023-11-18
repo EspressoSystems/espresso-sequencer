@@ -1,13 +1,5 @@
-use commit::Commitment;
-use either::Either;
-use hotshot_task::{event_stream::EventStream, Merge};
-use hotshot_task_impls::events::HotShotEvent;
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::Arc,
-};
-
 use async_compatibility_layer::channel::UnboundedStream;
+use either::Either;
 use futures::FutureExt;
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_task::{
@@ -16,14 +8,20 @@ use hotshot_task::{
     task_impls::{HSTWithEventAndMessage, TaskBuilder},
     MergeN,
 };
+use hotshot_task::{event_stream::EventStream, Merge};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     error::RoundTimedoutState,
     event::{Event, EventType},
     simple_certificate::QuorumCertificate2,
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node};
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
@@ -106,7 +104,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub leaf_map: HashMap<Leaf<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<TYPES::BlockPayload>, usize>,
+    pub block_map: HashMap<VidCommitment, usize>,
 
     /// state -> # entries decided on that state
     pub state_map: HashMap<(), usize>,

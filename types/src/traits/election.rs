@@ -7,7 +7,10 @@ use super::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedSignature,
 };
-use crate::{certificate::AssembledSignature, data::Leaf};
+use crate::{
+    certificate::AssembledSignature,
+    data::{Leaf, VidCommitment},
+};
 
 use crate::{
     traits::{
@@ -316,10 +319,7 @@ pub trait CommitteeExchangeType<TYPES: NodeType, M: NetworkMsg>:
     ConsensusExchange<TYPES, M>
 {
     /// Sign a DA proposal.
-    fn sign_da_proposal(
-        &self,
-        payload_commitment: &Commitment<TYPES::BlockPayload>,
-    ) -> EncodedSignature;
+    fn sign_da_proposal(&self, payload_commitment: &VidCommitment) -> EncodedSignature;
 }
 
 /// Standard implementation of [`CommitteeExchangeType`] utilizing a DA committee.
@@ -354,10 +354,7 @@ impl<
     > CommitteeExchangeType<TYPES, M> for CommitteeExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     /// Sign a DA proposal.
-    fn sign_da_proposal(
-        &self,
-        payload_commitment: &Commitment<TYPES::BlockPayload>,
-    ) -> EncodedSignature {
+    fn sign_da_proposal(&self, payload_commitment: &VidCommitment) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
         signature
     }
@@ -372,7 +369,7 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockPayload>;
+    type Commitment = ();
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -411,10 +408,7 @@ impl<
 /// A [`ConsensusExchange`] where participants vote to provide availability for blobs of data.
 pub trait VIDExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<TYPES, M> {
     /// Sign a VID disperse
-    fn sign_vid_disperse(
-        &self,
-        payload_commitment: &Commitment<TYPES::BlockPayload>,
-    ) -> EncodedSignature;
+    fn sign_vid_disperse(&self, payload_commitment: &VidCommitment) -> EncodedSignature;
 }
 
 /// Standard implementation of [`VIDExchangeType`]
@@ -449,10 +443,7 @@ impl<
     > VIDExchangeType<TYPES, M> for VIDExchange<TYPES, MEMBERSHIP, NETWORK, M>
 {
     /// Sign a VID proposal.
-    fn sign_vid_disperse(
-        &self,
-        payload_commitment: &Commitment<TYPES::BlockPayload>,
-    ) -> EncodedSignature {
+    fn sign_vid_disperse(&self, payload_commitment: &VidCommitment) -> EncodedSignature {
         let signature = TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
         signature
     }
@@ -467,7 +458,7 @@ impl<
 {
     type Membership = MEMBERSHIP;
     type Networking = NETWORK;
-    type Commitment = Commitment<TYPES::BlockPayload>;
+    type Commitment = ();
 
     fn create(
         entries: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -512,10 +503,7 @@ pub trait QuorumExchangeType<TYPES: NodeType, M: NetworkMsg>: ConsensusExchange<
     ) -> EncodedSignature;
 
     /// Sign a block payload commitment.
-    fn sign_payload_commitment(
-        &self,
-        payload_commitment: Commitment<TYPES::BlockPayload>,
-    ) -> EncodedSignature;
+    fn sign_payload_commitment(&self, payload_commitment: VidCommitment) -> EncodedSignature;
 }
 
 /// Standard implementation of [`QuroumExchangeType`] based on Hot Stuff consensus.
@@ -558,10 +546,7 @@ impl<
         signature
     }
 
-    fn sign_payload_commitment(
-        &self,
-        payload_commitment: Commitment<<TYPES as NodeType>::BlockPayload>,
-    ) -> EncodedSignature {
+    fn sign_payload_commitment(&self, payload_commitment: VidCommitment) -> EncodedSignature {
         TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref())
     }
 }

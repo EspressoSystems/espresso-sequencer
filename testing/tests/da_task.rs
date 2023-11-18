@@ -3,6 +3,7 @@ use hotshot::HotShotConsensusApi;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
+    block_impl::vid_commitment,
     block_impl::VIDTransaction,
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote2},
@@ -37,8 +38,8 @@ async fn test_da_task() {
     let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = VIDBlockPayload::vid_commitment(&encoded_txns);
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let payload_commitment = vid_commitment(&encoded_transactions);
     let block = VIDBlockPayload {
         transactions,
         payload_commitment,
@@ -46,7 +47,7 @@ async fn test_da_task() {
 
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let proposal = DAProposal {
-        block_payload: block.clone(),
+        encoded_transactions,
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -66,7 +67,7 @@ async fn test_da_task() {
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::BlockReady(
-        block.clone(),
+        encoded_transactions,
         (),
         ViewNumber::new(2),
     ));
@@ -76,7 +77,7 @@ async fn test_da_task() {
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
     output.insert(

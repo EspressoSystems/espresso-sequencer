@@ -3,6 +3,7 @@
 //! This module provides the [`Transaction`], [`BlockPayload`], and [`BlockHeader`] traits, which
 //! describe the behaviors that a block is expected to have.
 
+use crate::data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait};
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::Snafu;
@@ -12,6 +13,13 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of storage nodes for VID initiation.
+pub const NUM_STORAGE_NODES: usize = 8;
+// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+/// Number of chunks for VID initiation.
+pub const NUM_CHUNKS: usize = 8;
 
 /// The error type for block and its transactions.
 #[derive(Snafu, Debug)]
@@ -37,17 +45,7 @@ pub trait Transaction:
 ///     sent between threads, and can have a hash produced of it
 ///   * Must be hashable
 pub trait BlockPayload:
-    Serialize
-    + Clone
-    + Debug
-    + Display
-    + Hash
-    + PartialEq
-    + Eq
-    + Send
-    + Sync
-    + Committable
-    + DeserializeOwned
+    Serialize + Clone + Debug + Display + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned
 {
     /// The error type for this type of block
     type Error: Error + Debug + Send + Sync;
@@ -56,7 +54,7 @@ pub trait BlockPayload:
     type Transaction: Transaction;
 
     /// Data created during block building which feeds into the block header
-    type Metadata: Clone + Debug + Eq + Hash + Send + Sync;
+    type Metadata: Clone + Debug + DeserializeOwned + Eq + Hash + Send + Sync + Serialize;
 
     /// Encoded payload.
     type Encode<'a>: 'a + Iterator<Item = u8> + Send
@@ -91,6 +89,20 @@ pub trait BlockPayload:
     fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>>;
 }
 
+/// Compute the VID payload commitment.
+/// # Panics
+/// If the VID computation fails.
+#[must_use]
+pub fn vid_commitment(encoded_transactions: Vec<u8>) -> <VidScheme as VidSchemeTrait>::Commit {
+    // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+    let srs = test_srs(NUM_STORAGE_NODES);
+    // TODO We are using constant numbers for now, but they will change as the quorum size
+    // changes.
+    // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+    let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap();
+    vid.disperse(encoded_transactions).unwrap().commit
+}
+
 /// Header of a block, which commits to a [`BlockPayload`].
 pub trait BlockHeader:
     Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned
@@ -100,7 +112,7 @@ pub trait BlockHeader:
 
     /// Build a header with the payload commitment, metadata, and parent header.
     fn new(
-        payload_commitment: Commitment<Self::Payload>,
+        payload_commitment: VidCommitment,
         metadata: <Self::Payload as BlockPayload>::Metadata,
         parent_header: &Self,
     ) -> Self;
@@ -116,5 +128,5 @@ pub trait BlockHeader:
     fn block_number(&self) -> u64;
 
     /// Get the payload commitment.
-    fn payload_commitment(&self) -> Commitment<Self::Payload>;
+    fn payload_commitment(&self) -> VidCommitment;
 }

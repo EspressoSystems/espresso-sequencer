@@ -6,7 +6,7 @@ use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -24,9 +24,9 @@ pub struct QuorumData<TYPES: NodeType> {
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
-pub struct DAData<PAYLOAD: Committable> {
+pub struct DAData {
     /// Commitment to a block payload
-    pub payload_commit: Commitment<PAYLOAD>,
+    pub payload_commit: VidCommitment,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a timeout vote.
@@ -36,9 +36,9 @@ pub struct TimeoutData<TYPES: NodeType> {
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a VID vote.
-pub struct VIDData<PAYLOAD: Committable> {
+pub struct VIDData {
     /// Commitment to the block payload the VID vote is on.
-    pub payload_commit: Commitment<PAYLOAD>,
+    pub payload_commit: VidCommitment,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Pre Commit vote.
@@ -166,14 +166,14 @@ impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
     }
 }
 
-impl<PAYLOAD: Committable> Committable for DAData<PAYLOAD> {
+impl Committable for DAData {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("DA Vote")
             .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }
 }
-impl<PAYLOAD: Committable> Committable for VIDData<PAYLOAD> {
+impl Committable for VIDData {
     fn commit(&self) -> Commitment<Self> {
         commit::RawCommitmentBuilder::new("VID Vote")
             .var_size_bytes(self.payload_commit.as_ref())
@@ -219,9 +219,9 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 /// Quorum vote Alias
 pub type QuorumVote<TYPES, M> = SimpleVote<TYPES, QuorumData<TYPES>, M>;
 /// DA vote type alias
-pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData<<TYPES as NodeType>::BlockPayload>, M>;
+pub type DAVote2<TYPES, M> = SimpleVote<TYPES, DAData, M>;
 /// VID vote type alias
-pub type VIDVote2<TYPES, M> = SimpleVote<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>, M>;
+pub type VIDVote2<TYPES, M> = SimpleVote<TYPES, VIDData, M>;
 /// Timeout Vote type alias
 pub type TimeoutVote2<TYPES, M> = SimpleVote<TYPES, TimeoutData<TYPES>, M>;
 /// View Sync Commit Vote type alias

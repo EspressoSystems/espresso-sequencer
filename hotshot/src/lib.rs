@@ -57,7 +57,7 @@ use hotshot_types::{
 
 use hotshot_types::{
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     error::StorageSnafu,
     message::{
         ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
@@ -193,7 +193,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let mut saved_block_payloads = BlockPayloadStore::default();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
         if let Some(payload) = anchored_leaf.get_block_payload() {
-            saved_block_payloads.insert(payload);
+            if let Err(e) = saved_block_payloads.insert(payload) {
+                return Err(HotShotError::BlockError { source: e });
+            }
         }
 
         let start_view = anchored_leaf.get_view_number();
@@ -625,7 +627,7 @@ where
     CommitteeEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Commitment = Commitment<TYPES::BlockPayload>,
+            Commitment = VidCommitment,
             Membership = MEMBERSHIP,
         > + 'static,
     ViewSyncEx<TYPES, I>:
@@ -633,7 +635,7 @@ where
     VIDEx<TYPES, I>: ConsensusExchange<
             TYPES,
             Message<TYPES, I>,
-            Commitment = Commitment<TYPES::BlockPayload>,
+            Commitment = VidCommitment,
             Membership = MEMBERSHIP,
         > + 'static,
     TimeoutEx<TYPES, I>: ConsensusExchange<

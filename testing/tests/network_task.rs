@@ -6,7 +6,7 @@ use hotshot_testing::{
     task_helpers::{build_quorum_proposal, vid_init},
 };
 use hotshot_types::{
-    data::{DAProposal, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, ViewNumber},
     traits::{
         consensus_api::ConsensusSharedApi, node_implementation::ExchangesType, state::ConsensusTime,
     },
@@ -43,8 +43,8 @@ async fn test_network_task() {
     let priv_key = api.private_key();
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions,
@@ -53,7 +53,7 @@ async fn test_network_task() {
     let signature = committee_exchange.sign_da_proposal(&block.commit());
     let da_proposal = Proposal {
         data: DAProposal {
-            block_payload: block.clone(),
+            encoded_transactions,
             view_number: ViewNumber::new(2),
         },
         signature,
@@ -79,7 +79,7 @@ async fn test_network_task() {
 
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::BlockReady(
-        block.clone(),
+        encoded_transactions,
         (),
         ViewNumber::new(2),
     ));
@@ -101,7 +101,7 @@ async fn test_network_task() {
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
         2,
     );
     output.insert(

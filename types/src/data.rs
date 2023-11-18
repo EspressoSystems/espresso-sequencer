@@ -19,10 +19,11 @@ use crate::{
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use bincode::Options;
-use commit::{Commitment, Committable};
+use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
 use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
+// use jf_primitives::pcs::prelude::Commitment;
 use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -66,7 +67,7 @@ impl ConsensusTime for ViewNumber {
 
 impl Committable for ViewNumber {
     fn commit(&self) -> Commitment<Self> {
-        let builder = commit::RawCommitmentBuilder::new("View Number Commitment");
+        let builder = RawCommitmentBuilder::new("View Number Commitment");
         builder.u64(self.0).finalize()
     }
 }
@@ -114,8 +115,10 @@ pub type TxnCommitment<STATE> = Commitment<Transaction<STATE>>;
 /// A proposal to start providing data availability for a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct DAProposal<TYPES: NodeType> {
-    /// BlockPayload leaf wants to apply
-    pub block_payload: TYPES::BlockPayload,
+    /// Encoded transactions in the block to be applied.
+    pub encoded_transactions: Vec<u8>,
+    /// Metadata of the block to be applied.
+    pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
     /// View this proposal applies to
     pub view_number: TYPES::Time,
 }
@@ -123,6 +126,30 @@ pub struct DAProposal<TYPES: NodeType> {
 /// The VID scheme type used in `HotShot`.
 pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sha2::Sha256>;
 pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
+/// VID commitment.
+pub type VidCommitment = <VidScheme as VidSchemeTrait>::Commit;
+// pub type VidCommitment = Commitment<<VidScheme as VidSchemeTrait>::Commit>;
+// struct DummyVidCommitment;
+// impl Committable for DummyVidCommitment {
+//     fn commit(&self) -> Commitment<Self> {
+//         Commitment([0u8; 32], PhantomData)
+//     }
+
+//     fn tag() -> String {
+//         "DUMMY_TAG".to_string()
+//     }
+// }
+
+// impl Committable for VidCommit {
+//     fn commit(&self) -> Commitment<Self> {
+//         <Commitment<Self> as CanonicalDeserialize>::deserialize(self)
+//             .expect("conversion from VidScheme::Commit to Commitment should succeed")
+//     }
+
+//     fn tag() -> String {
+//         "VID_COMMIT".to_string()
+//     }
+// }
 
 /// VID dispersal data
 ///
@@ -132,7 +159,7 @@ pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::Time,
     /// Block payload commitment
-    pub payload_commitment: Commitment<TYPES::BlockPayload>,
+    pub payload_commitment: VidCommitment,
     /// VID shares dispersed among storage nodes
     pub shares: Vec<<VidScheme as VidSchemeTrait>::Share>,
     /// VID common data sent to all storage nodes
@@ -212,14 +239,14 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for ViewSyncCertificate<TYPES> {
 /// full. It is guaranteed to contain, at least, a cryptographic commitment to the block, and it
 /// provides an interface for resolving the commitment to a full block if the full block is
 /// available.
-pub trait DeltasType<BlockPayload: Committable>:
+pub trait DeltasType<PAYLOAD: BlockPayload>:
     Clone + Debug + for<'a> Deserialize<'a> + PartialEq + Eq + std::hash::Hash + Send + Serialize + Sync
 {
     /// Errors reported by this type.
     type Error: std::error::Error;
 
     /// Get a cryptographic commitment to the block represented by this delta.
-    fn payload_commitment(&self) -> Commitment<BlockPayload>;
+    fn payload_commitment(&self) -> VidCommitment;
 
     /// Get the full block if it is available, otherwise return this object unchanged.
     ///
@@ -227,7 +254,7 @@ pub trait DeltasType<BlockPayload: Committable>:
     ///
     /// Returns the original [`DeltasType`], unchanged, in an [`Err`] variant in the case where the
     /// full block is not currently available.
-    fn try_resolve(self) -> Result<BlockPayload, Self>;
+    fn try_resolve(self) -> Result<PAYLOAD, Self>;
 
     /// Fill this [`DeltasType`] by providing a complete block.
     ///
@@ -238,18 +265,23 @@ pub trait DeltasType<BlockPayload: Committable>:
     ///
     /// Fails if `block` does not match `self.payload_commitment()`, or if the block is not able to be
     /// stored for some implementation-defined reason.
-    fn fill(&mut self, block: BlockPayload) -> Result<(), Self::Error>;
+    fn fill(&mut self, block: PAYLOAD) -> Result<(), Self::Error>;
 }
 
 /// Error which occurs when [`Leaf::fill_block_payload`] is called with a payload commitment
 /// that does not match the internal payload commitment of the leaf.
 #[derive(Clone, Copy, Debug, Snafu)]
-#[snafu(display("the block payload {:?} has commitment {} (expected {})", payload, payload.commit(), commitment))]
+#[snafu(display(
+    "the block payload {:?} has commitment  (expected )",
+    payload,
+    // vid_commitment(payload),
+    // commitment
+))]
 pub struct InconsistentPayloadCommitmentError<PAYLOAD: BlockPayload> {
     /// The block payload with the wrong commitment.
     payload: PAYLOAD,
-    /// The expected commitment.
-    commitment: Commitment<PAYLOAD>,
+    // /// The expected commitment.
+    // commitment: VidCommitment,
 }
 
 /// Additional functions required to use a [`Leaf`] with hotshot-testing.
@@ -378,16 +410,17 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// Fails if the payload commitment doesn't match `self.block_header.payload_commitment()`.
     pub fn fill_block_payload(
         &mut self,
-        block_payload: TYPES::BlockPayload,
+        _block_payload: &TYPES::BlockPayload,
     ) -> Result<(), InconsistentPayloadCommitmentError<TYPES::BlockPayload>> {
-        if block_payload.commit() != self.block_header.payload_commitment() {
-            return Err(InconsistentPayloadCommitmentError {
-                payload: block_payload,
-                commitment: self.block_header.payload_commitment(),
-            });
-        }
-        self.block_payload = Some(block_payload);
-        Ok(())
+        unimplemented!("TODO Keyao");
+        // if block_payload.commit() != self.block_header.payload_commitment() {
+        //     return Err(InconsistentPayloadCommitmentError {
+        //         payload: block_payload,
+        //         // commitment: self.block_header.payload_commitment(),
+        //     });
+        // }
+        // self.block_payload = Some(block_payload);
+        // Ok(())
     }
     /// Optional block payload.
     pub fn get_block_payload(&self) -> Option<TYPES::BlockPayload> {
@@ -395,7 +428,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     }
 
     /// A commitment to the block payload contained in this leaf.
-    pub fn get_payload_commitment(&self) -> Commitment<TYPES::BlockPayload> {
+    pub fn get_payload_commitment(&self) -> VidCommitment {
         self.get_block_header().payload_commitment()
     }
     /// The blockchain state after appending this leaf.
@@ -446,14 +479,14 @@ where
 /// Fake the thing a genesis block points to. Needed to avoid infinite recursion
 #[must_use]
 pub fn fake_commitment<S: Committable>() -> Commitment<S> {
-    commit::RawCommitmentBuilder::new("Dummy commitment for arbitrary genesis").finalize()
+    RawCommitmentBuilder::new("Dummy commitment for arbitrary genesis").finalize()
 }
 
 /// create a random commitment
 #[must_use]
 pub fn random_commitment<S: Committable>(rng: &mut dyn rand::RngCore) -> Commitment<S> {
     let random_array: Vec<u8> = (0u8..100u8).map(|_| rng.gen_range(0..255)).collect();
-    commit::RawCommitmentBuilder::new("Random Commitment")
+    RawCommitmentBuilder::new("Random Commitment")
         .constant_str("Random Field")
         .var_size_bytes(&random_array)
         .finalize()
@@ -544,6 +577,7 @@ pub fn serialize_signature2<TYPES: NodeType>(
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> commit::Commitment<Self> {
+        let payload_commitment_bytes: [u8; 32] = self.get_payload_commitment().into();
         let signatures_bytes = if self.justify_qc.is_genesis {
             let mut bytes = vec![];
             bytes.extend("genesis".as_bytes());
@@ -553,11 +587,12 @@ impl<TYPES: NodeType> Committable for Leaf<TYPES> {
         };
 
         // Skip the transaction commitments, so that the repliacs can reconstruct the leaf.
-        commit::RawCommitmentBuilder::new("leaf commitment")
+        RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)
             .u64_field("block number", self.get_height())
             .field("parent Leaf commitment", self.parent_commitment)
-            .field("block payload commitment", self.get_payload_commitment())
+            .constant_str("block payload commitment")
+            .fixed_size_bytes(&payload_commitment_bytes)
             .constant_str("justify_qc view number")
             .u64(*self.justify_qc.view_number)
             .field(

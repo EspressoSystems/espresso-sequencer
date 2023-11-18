@@ -7,7 +7,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     block_impl::VIDTransaction,
-    data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, VidDisperse, ViewNumber},
     traits::{
         consensus_api::ConsensusSharedApi, election::ConsensusExchange,
         node_implementation::ExchangesType, state::ConsensusTime,
@@ -40,8 +40,8 @@ async fn test_vid_task() {
 
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
         transactions,
@@ -50,7 +50,7 @@ async fn test_vid_task() {
 
     let signature = vid_exchange.sign_vid_disperse(&block.commit());
     let proposal: DAProposal<TestTypes> = DAProposal {
-        block_payload: block.clone(),
+        encoded_transactions,
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -77,7 +77,7 @@ async fn test_vid_task() {
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::BlockReady(
-        block.clone(),
+        encoded_transactions,
         (),
         ViewNumber::new(2),
     ));
@@ -87,7 +87,7 @@ async fn test_vid_task() {
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
 

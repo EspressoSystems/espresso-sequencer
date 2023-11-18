@@ -3,7 +3,6 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::{Commitment, Committable};
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -14,17 +13,17 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::DAProposal,
+    data::{DAProposal, VidCommitment},
     message::{Message, Proposal, SequencingMessage},
     simple_vote::{DAData, DAVote2},
     traits::{
+        block_contents::{vid_commitment, BlockPayload},
         consensus_api::ConsensusApi,
         election::{CommitteeExchangeType, ConsensusExchange, Membership},
         network::{CommunicationChannel, ConsensusIntentEvent},
         node_implementation::{CommitteeEx, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
-        BlockPayload,
     },
     utils::ViewInner,
     vote2::HasViewNumber,
@@ -48,8 +47,7 @@ pub struct DATaskState<
     I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
     A: ConsensusApi<TYPES, I> + 'static,
 > where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     /// The state's api
     pub api: A,
@@ -78,8 +76,7 @@ pub struct DATaskState<
 /// Struct to maintain DA Vote Collection task state
 pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     /// the committee exchange
     pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
@@ -102,8 +99,7 @@ where
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>
 {
 }
 
@@ -116,8 +112,7 @@ async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     DAVoteCollectionTaskState<TYPES, I>,
 )
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     match event {
         HotShotEvent::DAVoteRecv(vote) => {
@@ -175,8 +170,7 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static,
     > DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
@@ -213,16 +207,18 @@ where
                     return None;
                 }
 
-                debug!(
-                    "Got a DA block with {} transactions!",
-                    proposal.data.block_payload.transaction_commitments().len()
-                );
-                let payload_commitment = proposal.data.block_payload.commit();
+                // TODO (Keyao)
+                // debug!(
+                //     "Got a DA block with {} transactions!",
+                //     proposal.data.block_payload.transaction_commitments().len()
+                // );
+                let payload_commitment = vid_commitment(proposal.data.encoded_transactions.clone());
 
                 // ED Is this the right leader?
                 let view_leader_key = self.committee_exchange.get_leader(view);
                 if view_leader_key != sender {
-                    error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
+                    // TODO (Keyao)
+                    // error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
                     return None;
                 }
 
@@ -265,15 +261,19 @@ where
                 // there is already a view there: the replica task may have inserted a `Leaf` view which
                 // contains strictly more information.
                 consensus.state_map.entry(view).or_insert(View {
-                    view_inner: ViewInner::DA {
-                        block: payload_commitment,
-                    },
+                    view_inner: ViewInner::DA { payload_commitment },
                 });
 
                 // Record the block payload we have promised to make available.
-                consensus
+                if let Err(e) = consensus
                     .saved_block_payloads
-                    .insert(proposal.data.block_payload);
+                    .insert(BlockPayload::from_bytes(
+                        proposal.data.encoded_transactions.into_iter(),
+                        proposal.data.metadata,
+                    ))
+                {
+                    error!("Failed to build the block payload: {:?}.", e);
+                }
             }
             HotShotEvent::DAVoteRecv(vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
@@ -394,20 +394,21 @@ where
 
                 return None;
             }
-            HotShotEvent::BlockReady(payload, metadata, view) => {
+            HotShotEvent::BlockReady(encoded_transactions, metadata, view) => {
                 self.committee_exchange
                     .network()
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let payload_commitment = payload.commit();
+                let payload_commitment = vid_commitment(encoded_transactions.clone());
                 let signature = self
                     .committee_exchange
                     .sign_da_proposal(&payload_commitment);
                 // TODO (Keyao) Fix the payload sending and receiving for the DA proposal.
                 // <https://github.com/EspressoSystems/HotShot/issues/2026>
                 let data: DAProposal<TYPES> = DAProposal {
-                    block_payload: payload.clone(),
+                    encoded_transactions,
+                    metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number: view,
                 };
@@ -472,8 +473,7 @@ impl<
         A: ConsensusApi<TYPES, I> + 'static,
     > TS for DATaskState<TYPES, I, A>
 where
-    CommitteeEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
 {
 }
 

@@ -13,13 +13,14 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
+    block_impl::{VIDBlockHeader, VIDBlockPayload},
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::{Message, Proposal},
     simple_certificate::QuorumCertificate2,
     traits::{
         block_contents::BlockHeader,
+        block_contents::{NUM_CHUNKS, NUM_STORAGE_NODES},
         consensus_api::ConsensusSharedApi,
         election::{ConsensusExchange, Membership},
         node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
