@@ -19,7 +19,7 @@ license = "GPL-3.0-or-later"
 
 [features]
 default = []
-testing = ["rand", "tempdir"]
+testing = ["espresso-macros", "rand", "tempdir"]
 
 [dependencies]
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer.git", tag = "1.4.1", features = [
@@ -51,6 +51,7 @@ toml = "0.7"
 tracing = "0.1"
 
 # Dependencies enabled by feature "testing".
+espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
 rand = { version = "0.8", optional = true }
 tempdir = { version = "0.3", optional = true }
 
@@ -66,6 +67,7 @@ tempdir = { version = "0.3", optional = true }
 backtrace-on-stack-overflow = { version = "0.3", optional = true }
 
 [dev-dependencies]
+espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 portpicker = "0.1"
 rand = "0.8"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.2" }

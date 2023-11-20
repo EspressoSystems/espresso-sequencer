@@ -2157,6 +2157,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "espresso-macros"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/espresso-macros.git?tag=0.1.0#9e0b0258c99757c567676c4dd92f1501db0cf580"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "espresso-systems-common"
 version = "0.4.0"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4.0#5abd890f79014a86db31286e1f3a529f161e69de"
@@ -2753,6 +2763,7 @@ dependencies = [
  "derivative",
  "derive_more",
  "either",
+ "espresso-macros",
  "futures",
  "hotshot",
  "hotshot-signature-key",

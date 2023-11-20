@@ -10,8 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTransaction, MockTypes};
-use crate::{data_source::QueryData, update::UpdateDataSource};
+use super::mocks::{
+    MockBlock, MockMembership, MockNodeImpl, MockTransaction, MockTypes, TestableDataSource,
+};
+use crate::data_source::FileSystemDataSource;
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -34,23 +36,25 @@ use hotshot_types::{
 };
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use tempdir::TempDir;
 
-struct MockNode<UserData> {
-    query_data: Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>>,
+struct MockNode<D: TestableDataSource> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
+    data_source: Arc<RwLock<D>>,
+    _tmp_data: D::TmpData,
 }
 
-pub struct MockNetwork<UserData> {
-    nodes: Vec<MockNode<UserData>>,
-    _dir: TempDir,
+pub struct MockNetwork<D: TestableDataSource> {
+    nodes: Vec<MockNode<D>>,
 }
+
+// MockNetwork can be used with any TestableDataSource, but it's nice to have a default with a
+// convenient type alias.
+pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl, ()>;
 
 const MINIMUM_NODES: usize = 6;
 
-impl<UserData: Clone + Send> MockNetwork<UserData> {
-    pub async fn init(user_data: UserData) -> Self {
-        let dir = TempDir::new("mock_network").unwrap();
+impl<D: TestableDataSource> MockNetwork<D> {
+    pub async fn init() -> Self {
         let priv_keys = (0..MINIMUM_NODES)
             .map(|_| BN254Priv::generate())
             .collect::<Vec<_>>();
@@ -86,8 +90,6 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
-                    let path = dir.path().join(format!("node{}", node_id));
-                    let user_data = user_data.clone();
                     let pub_keys = pub_keys.clone();
                     let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
@@ -96,10 +98,10 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                         MockMembership::default_election_config(total_nodes.get() as u64);
 
                     async move {
-                        let query_data = QueryData::create(&path, user_data).unwrap();
+                        let (data_source, tmp_data) = D::create(node_id).await;
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            query_data.metrics(),
+                            data_source.metrics(),
                             master_map.clone(),
                             None,
                         ));
@@ -126,24 +128,25 @@ impl<UserData: Clone + Send> MockNetwork<UserData> {
                             MemoryStorage::empty(),
                             exchanges,
                             HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                            query_data.metrics(),
+                            data_source.metrics(),
                         )
                         .await
                         .unwrap();
                         MockNode {
-                            query_data: Arc::new(RwLock::new(query_data)),
                             hotshot,
+                            data_source: Arc::new(RwLock::new(data_source)),
+                            _tmp_data: tmp_data,
                         }
                     }
                 }),
         )
         .await;
 
-        Self { nodes, _dir: dir }
+        Self { nodes }
     }
 }
 
-impl<UserData> MockNetwork<UserData> {
+impl<D: TestableDataSource> MockNetwork<D> {
     pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
@@ -152,8 +155,8 @@ impl<UserData> MockNetwork<UserData> {
         self.handle().submit_transaction(tx).await.unwrap();
     }
 
-    pub fn query_data(&self) -> Arc<RwLock<QueryData<MockTypes, MockNodeImpl, UserData>>> {
-        self.nodes[0].query_data.clone()
+    pub fn data_source(&self) -> Arc<RwLock<D>> {
+        self.nodes[0].data_source.clone()
     }
 
     pub async fn shut_down(mut self) {
@@ -167,18 +170,18 @@ impl<UserData> MockNetwork<UserData> {
     }
 }
 
-impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
+impl<D: TestableDataSource> MockNetwork<D> {
     pub async fn start(&mut self) {
         // Spawn the update tasks.
         for node in &mut self.nodes {
-            let qd = node.query_data.clone();
+            let ds = node.data_source.clone();
             let mut events = node.hotshot.get_event_stream(Default::default()).await.0;
             spawn(async move {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).await.unwrap();
-                    qd.commit_version().await.unwrap();
+                    let mut ds = ds.write().await;
+                    ds.update(&event).await.unwrap();
+                    ds.commit_version().await;
                 }
             });
         }
@@ -192,7 +195,7 @@ impl<UserData: Send + Sync + 'static> MockNetwork<UserData> {
     }
 }
 
-impl<UserData> Drop for MockNetwork<UserData> {
+impl<D: TestableDataSource> Drop for MockNetwork<D> {
     fn drop(&mut self) {
         async_std::task::block_on(self.shut_down_impl())
     }
