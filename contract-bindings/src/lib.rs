@@ -16,5 +16,6 @@ pub mod i_stake_table;
 pub mod plonk_verifier;
 pub mod polynomial_eval;
 pub mod shared_types;
+pub mod stake_table;
 pub mod transcript;
 pub mod utils;
