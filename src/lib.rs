@@ -38,13 +38,13 @@
 //! use tide_disco::App;
 //!
 //! // Create or open a data source.
-//! let query_data = FileSystemDataSource::<AppTypes, AppNodeImpl, ()>::create(storage_path, ())
+//! let data_source = FileSystemDataSource::<AppTypes, AppNodeImpl, ()>::create(storage_path, ())
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
 //! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
-//!     query_data.metrics(),
+//!     data_source.metrics(),
 //!     // Other fields omitted
 //! ).await.map_err(Error::internal)?;
 //!
@@ -54,9 +54,9 @@
 //! let status_api = status::define_api(&Default::default())
 //!     .map_err(Error::internal)?;
 //!
-//! // Create app. We wrap `query_data` into an `RwLock` so we can share it with the web server.
-//! let query_data = Arc::new(RwLock::new(query_data));
-//! let mut app = App::<_, Error>::with_state(query_data.clone());
+//! // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
+//! let data_source = Arc::new(RwLock::new(data_source));
+//! let mut app = App::<_, Error>::with_state(data_source.clone());
 //! app
 //!     .register_module("availability", availability_api)
 //!     .map_err(Error::internal)?
@@ -70,11 +70,11 @@
 //! let mut events = hotshot.get_event_stream(Default::default()).await.0;
 //! while let Some(event) = events.next().await {
 //!     // Re-lock the mutex each time we get a new event.
-//!     let mut query_data = query_data.write().await;
+//!     let mut data_source = data_source.write().await;
 //!
 //!     // Update the query data based on this event.
-//!     query_data.update(&event);
-//!     query_data.commit_version().await.map_err(Error::internal)?;
+//!     data_source.update(&event);
+//!     data_source.commit_version().await.map_err(Error::internal)?;
 //! }
 //! # Ok(())
 //! # }
@@ -92,8 +92,8 @@
 //! # fn doc(storage_path: &Path, options: &Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
-//! let query_data = FileSystemDataSource::create(storage_path, ()).map_err(Error::internal)?;
-//! spawn(run_standalone_service(options, query_data, hotshot));
+//! let data_source = FileSystemDataSource::create(storage_path, ()).map_err(Error::internal)?;
+//! spawn(run_standalone_service(options, data_source, hotshot));
 //! # Ok(())
 //! # }
 //! ```

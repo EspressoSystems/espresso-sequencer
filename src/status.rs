@@ -121,7 +121,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.query_data());
+        let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module("status", define_api(&Default::default()).unwrap())
             .unwrap();
         spawn(app.serve(format!("0.0.0.0:{}", port)));
@@ -221,7 +221,7 @@ mod test {
         setup_test();
 
         let dir = TempDir::new("test_status_extensions").unwrap();
-        let query_data =
+        let data_source =
             FileSystemDataSource::<MockTypes, MockNodeImpl, u64>::create(dir.path(), 0).unwrap();
 
         let extensions = toml! {
@@ -254,7 +254,7 @@ mod test {
         })
         .unwrap();
 
-        let mut app = App::<_, Error>::with_state(RwLock::new(query_data));
+        let mut app = App::<_, Error>::with_state(RwLock::new(data_source));
         app.register_module("status", api).unwrap();
 
         let port = pick_unused_port().unwrap();

@@ -50,16 +50,16 @@ pub mod data_source_tests {
     use std::time::Duration;
 
     async fn get_non_empty_blocks(
-        qd: &RwLock<impl TestableDataSource>,
+        ds: &RwLock<impl TestableDataSource>,
     ) -> Vec<(
         LeafQueryData<MockTypes, MockNodeImpl>,
         BlockQueryData<MockTypes>,
     )> {
-        let qd = qd.read().await;
-        qd.get_leaf_range(..)
+        let ds = ds.read().await;
+        ds.get_leaf_range(..)
             .await
             .unwrap()
-            .zip(qd.get_block_range(..).await.unwrap())
+            .zip(ds.get_block_range(..).await.unwrap())
             .filter_map(|entry| async move {
                 match entry {
                     (Ok(leaf), Ok(block)) if !block.is_empty() => Some((leaf, block)),
@@ -70,29 +70,29 @@ pub mod data_source_tests {
             .await
     }
 
-    async fn validate(qd: &RwLock<impl TestableDataSource>) {
-        let qd = qd.read().await;
+    async fn validate(ds: &RwLock<impl TestableDataSource>) {
+        let ds = ds.read().await;
 
         // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
         // we've seen so we can detect duplicates.
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
-        let mut leaves = qd.get_leaf_range(..).await.unwrap().enumerate();
+        let mut leaves = ds.get_leaf_range(..).await.unwrap().enumerate();
         while let Some((i, leaf)) = leaves.next().await {
             let leaf = leaf.unwrap();
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(leaf.hash(), leaf.leaf().commit());
 
             // Check indices.
-            assert_eq!(leaf, qd.get_leaf(i).await.unwrap());
-            assert_eq!(leaf, qd.get_leaf(leaf.hash()).await.unwrap());
-            assert!(qd
+            assert_eq!(leaf, ds.get_leaf(i).await.unwrap());
+            assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.unwrap());
+            assert!(ds
                 .get_proposals(&leaf.proposer(), None)
                 .await
                 .unwrap()
                 .contains(&leaf));
 
-            let Ok(block) = qd.get_block(i).await else {
+            let Ok(block) = ds.get_block(i).await else {
                 continue;
             };
             assert_eq!(leaf.block_hash(), block.hash());
@@ -104,11 +104,11 @@ pub mod data_source_tests {
             );
 
             // Check indices.
-            assert_eq!(block, qd.get_block(i).await.unwrap());
+            assert_eq!(block, ds.get_block(i).await.unwrap());
             // We should be able to look up the block by hash unless it is a duplicate. For
             // duplicate blocks, this function returns the index of the first duplicate.
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
-            assert_eq!(qd.get_block(block.hash()).await.unwrap().height(), *ix);
+            assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), *ix);
 
             for (j, txn) in block.block().iter().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
@@ -117,14 +117,14 @@ pub mod data_source_tests {
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                let (block, pos) = qd.get_block_with_transaction(txn.commit()).await.unwrap();
+                let (block, pos) = ds.get_block_with_transaction(txn.commit()).await.unwrap();
                 assert_eq!((block.height(), pos), *ix);
             }
         }
 
         // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
         // ID.
-        for proposer in qd
+        for proposer in ds
             .get_leaf_range(..)
             .await
             .unwrap()
@@ -132,7 +132,7 @@ pub mod data_source_tests {
             .collect::<HashSet<_>>()
             .await
         {
-            for leaf in qd.get_proposals(&proposer, None).await.unwrap() {
+            for leaf in ds.get_proposals(&proposer, None).await.unwrap() {
                 assert_eq!(proposer, leaf.proposer());
             }
         }
@@ -143,15 +143,15 @@ pub mod data_source_tests {
         setup_test();
 
         let mut network = MockNetwork::<D>::init().await;
-        let qd = network.query_data();
+        let ds = network.data_source();
 
         network.start().await;
-        assert_eq!(get_non_empty_blocks(&qd).await, vec![]);
+        assert_eq!(get_non_empty_blocks(&ds).await, vec![]);
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
         let mut blocks = {
-            qd.read()
+            ds.read()
                 .await
                 .subscribe_blocks(0)
                 .await
@@ -172,8 +172,8 @@ pub mod data_source_tests {
                 tracing::info!("block {i} is empty");
             };
 
-            assert_eq!(qd.read().await.get_block(i).await.unwrap(), block);
-            validate(&qd).await;
+            assert_eq!(ds.read().await.get_block(i).await.unwrap(), block);
+            validate(&ds).await;
         }
 
         network.shut_down().await;
@@ -184,21 +184,21 @@ pub mod data_source_tests {
         setup_test();
 
         let mut network = MockNetwork::<D>::init().await;
-        let qd = network.query_data();
+        let ds = network.data_source();
 
         {
             // With consensus paused, check that the success rate returns NaN (since the block
             // height, the numerator, and view number, the denominator, are both 0).
-            assert!(qd.read().await.success_rate().await.unwrap().is_nan());
+            assert!(ds.read().await.success_rate().await.unwrap().is_nan());
             // Check that block height is initially zero.
-            assert_eq!(qd.read().await.block_height().await.unwrap(), 0);
+            assert_eq!(ds.read().await.block_height().await.unwrap(), 0);
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.
         let txn = MockTransaction { nonce: 0 };
         network.submit_transaction(txn.clone()).await;
         loop {
-            let mempool = { qd.read().await.mempool_info().await.unwrap() };
+            let mempool = { ds.read().await.mempool_info().await.unwrap() };
             let expected = MempoolQueryData {
                 transaction_count: 1,
                 memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -214,7 +214,7 @@ pub mod data_source_tests {
         }
         {
             assert_eq!(
-                qd.read().await.mempool_info().await.unwrap(),
+                ds.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
                     memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -227,7 +227,7 @@ pub mod data_source_tests {
         sleep(Duration::from_secs(3)).await;
         {
             assert_eq!(
-                qd.read().await.mempool_info().await.unwrap(),
+                ds.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 1,
                     memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
@@ -236,7 +236,7 @@ pub mod data_source_tests {
         }
 
         // Start consensus and wait for the transaction to be finalized.
-        let mut blocks = { qd.read().await.subscribe_blocks(0).await.unwrap() };
+        let mut blocks = { ds.read().await.subscribe_blocks(0).await.unwrap() };
         network.start().await;
         loop {
             if !blocks.next().await.unwrap().is_empty() {
@@ -251,14 +251,14 @@ pub mod data_source_tests {
             // check that block height is at least 2, because we know that the genesis block and our
             // transaction's block have both been committed, but we can't know how many empty blocks
             // were committed.
-            assert!(qd.read().await.success_rate().await.unwrap() > 0.0);
-            assert!(qd.read().await.block_height().await.unwrap() >= 2);
+            assert!(ds.read().await.success_rate().await.unwrap() > 0.0);
+            assert!(ds.read().await.block_height().await.unwrap() >= 2);
         }
 
         {
             // Check that the transaction is no longer reflected in the mempool.
             assert_eq!(
-                qd.read().await.mempool_info().await.unwrap(),
+                ds.read().await.mempool_info().await.unwrap(),
                 MempoolQueryData {
                     transaction_count: 0,
                     memory_footprint: 0,
@@ -272,40 +272,40 @@ pub mod data_source_tests {
         setup_test();
 
         let mut network = MockNetwork::<D>::init().await;
-        let qd = network.query_data();
+        let ds = network.data_source();
         network.start().await;
 
         // Wait for there to be at least 3 blocks, then lock the state so the block height can't
         // change during the test.
-        let (qd, block_height) = loop {
-            let qd = qd.read().await;
-            let block_height = qd.block_height().await.unwrap();
+        let (ds, block_height) = loop {
+            let ds = ds.read().await;
+            let block_height = ds.block_height().await.unwrap();
             if block_height >= 3 {
-                break (qd, block_height as u64);
+                break (ds, block_height as u64);
             }
         };
 
         // Query for a variety of ranges testing all cases of included, excluded, and unbounded
         // starting and ending bounds
-        do_range_test(&*qd, 1..=2, 1..3).await; // (inclusive, inclusive)
-        do_range_test(&*qd, 1..3, 1..3).await; // (inclusive, exclusive)
-        do_range_test(&*qd, 1.., 1..block_height).await; // (inclusive, unbounded)
-        do_range_test(&*qd, ..=2, 0..3).await; // (unbounded, inclusive)
-        do_range_test(&*qd, ..3, 0..3).await; // (unbounded, exclusive)
-        do_range_test(&*qd, .., 0..block_height).await; // (unbounded, unbounded)
-        do_range_test(&*qd, ExRange(0..=2), 1..3).await; // (exclusive, inclusive)
-        do_range_test(&*qd, ExRange(0..3), 1..3).await; // (exclusive, exclusive)
-        do_range_test(&*qd, ExRange(0..), 1..block_height).await; // (exclusive, unbounded)
+        do_range_test(&*ds, 1..=2, 1..3).await; // (inclusive, inclusive)
+        do_range_test(&*ds, 1..3, 1..3).await; // (inclusive, exclusive)
+        do_range_test(&*ds, 1.., 1..block_height).await; // (inclusive, unbounded)
+        do_range_test(&*ds, ..=2, 0..3).await; // (unbounded, inclusive)
+        do_range_test(&*ds, ..3, 0..3).await; // (unbounded, exclusive)
+        do_range_test(&*ds, .., 0..block_height).await; // (unbounded, unbounded)
+        do_range_test(&*ds, ExRange(0..=2), 1..3).await; // (exclusive, inclusive)
+        do_range_test(&*ds, ExRange(0..3), 1..3).await; // (exclusive, exclusive)
+        do_range_test(&*ds, ExRange(0..), 1..block_height).await; // (exclusive, unbounded)
     }
 
-    async fn do_range_test<D, R, I>(qd: &D, range: R, expected_indices: I)
+    async fn do_range_test<D, R, I>(ds: &D, range: R, expected_indices: I)
     where
         D: TestableDataSource,
         R: RangeBounds<usize> + Clone + Send,
         I: IntoIterator<Item = u64>,
     {
-        let mut leaves = qd.get_leaf_range(range.clone()).await.unwrap();
-        let mut blocks = qd.get_block_range(range).await.unwrap();
+        let mut leaves = ds.get_leaf_range(range.clone()).await.unwrap();
+        let mut blocks = ds.get_block_range(range).await.unwrap();
 
         for i in expected_indices {
             let leaf = leaves.next().await.unwrap().unwrap();

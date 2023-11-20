@@ -202,10 +202,10 @@ where
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
     pub fn create(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
-        let mut loader = AtomicStoreLoader::create(path, "hotshot_query_data")?;
-        let mut query_data = Self::create_with_store(&mut loader, user_data)?;
-        query_data.top_storage = Some(AtomicStore::open(loader)?);
-        Ok(query_data)
+        let mut loader = AtomicStoreLoader::create(path, "hotshot_data_soure")?;
+        let mut data_source = Self::create_with_store(&mut loader, user_data)?;
+        data_source.top_storage = Some(AtomicStore::open(loader)?);
+        Ok(data_source)
     }
 
     /// Open an existing [FileSystemDataSource] from storage at `path`.
@@ -217,10 +217,10 @@ where
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
     {
-        let mut loader = AtomicStoreLoader::load(path, "hotshot_query_data")?;
-        let mut query_data = Self::open_with_store(&mut loader, user_data)?;
-        query_data.top_storage = Some(AtomicStore::open(loader)?);
-        Ok(query_data)
+        let mut loader = AtomicStoreLoader::load(path, "hotshot_data_soure")?;
+        let mut data_source = Self::open_with_store(&mut loader, user_data)?;
+        data_source.top_storage = Some(AtomicStore::open(loader)?);
+        Ok(data_source)
     }
 
     /// Create a new [FileSystemDataSource] using a persistent storage loader.

@@ -39,7 +39,7 @@ use std::time::Duration;
 
 struct MockNode<D: TestableDataSource> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
-    query_data: Arc<RwLock<D>>,
+    data_source: Arc<RwLock<D>>,
     _tmp_data: D::TmpData,
 }
 
@@ -98,10 +98,10 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         MockMembership::default_election_config(total_nodes.get() as u64);
 
                     async move {
-                        let (query_data, tmp_data) = D::create(node_id).await;
+                        let (data_source, tmp_data) = D::create(node_id).await;
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            query_data.metrics(),
+                            data_source.metrics(),
                             master_map.clone(),
                             None,
                         ));
@@ -128,13 +128,13 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             MemoryStorage::empty(),
                             exchanges,
                             HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                            query_data.metrics(),
+                            data_source.metrics(),
                         )
                         .await
                         .unwrap();
                         MockNode {
                             hotshot,
-                            query_data: Arc::new(RwLock::new(query_data)),
+                            data_source: Arc::new(RwLock::new(data_source)),
                             _tmp_data: tmp_data,
                         }
                     }
@@ -155,8 +155,8 @@ impl<D: TestableDataSource> MockNetwork<D> {
         self.handle().submit_transaction(tx).await.unwrap();
     }
 
-    pub fn query_data(&self) -> Arc<RwLock<D>> {
-        self.nodes[0].query_data.clone()
+    pub fn data_source(&self) -> Arc<RwLock<D>> {
+        self.nodes[0].data_source.clone()
     }
 
     pub async fn shut_down(mut self) {
@@ -174,14 +174,14 @@ impl<D: TestableDataSource> MockNetwork<D> {
     pub async fn start(&mut self) {
         // Spawn the update tasks.
         for node in &mut self.nodes {
-            let qd = node.query_data.clone();
+            let ds = node.data_source.clone();
             let mut events = node.hotshot.get_event_stream(Default::default()).await.0;
             spawn(async move {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
-                    let mut qd = qd.write().await;
-                    qd.update(&event).await.unwrap();
-                    qd.commit_version().await;
+                    let mut ds = ds.write().await;
+                    ds.update(&event).await.unwrap();
+                    ds.commit_version().await;
                 }
             });
         }
