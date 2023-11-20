@@ -74,8 +74,7 @@ impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send
                 if let Some(block) = leaf.get_block_payload() {
                     // For the same reason, this will not panic either.
                     self.insert_block(
-                        BlockQueryData::new(leaf.clone(), qc.clone(), block)
-                            .expect("inconsistent block"),
+                        BlockQueryData::new(leaf, &qc, block).expect("inconsistent block"),
                     )
                     .await?;
                 } else {
