@@ -4,7 +4,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use bitvec::prelude::*;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use core::time::Duration;
 use either::Either;
 use futures::FutureExt;
@@ -739,7 +739,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                     .saved_block_payloads
                                     .get(leaf.get_payload_commitment())
                                 {
-                                    if let Err(e) = leaf.fill_block_payload(payload) {
+                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
                                         error!(
                                             "Saved block payload and commitment don't match: {:?}",
                                             e

@@ -195,18 +195,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
-                // TODO (Keyao)
-                // debug!(
-                //     "Got a DA block with {} transactions!",
-                //     proposal.data.block_payload.transaction_commitments().len()
-                // );
                 let payload_commitment = vid_commitment(proposal.data.encoded_transactions.clone());
 
                 // ED Is this the right leader?
                 let view_leader_key = self.da_membership.get_leader(view);
                 if view_leader_key != sender {
-                    // TODO (Keyao)
-                    // error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
+                    error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
                     return None;
                 }
 
@@ -376,16 +370,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 return None;
             }
-            HotShotEvent::BlockReady(payload, metadata, view) => {
+            HotShotEvent::BlockReady(encoded_transactions, metadata, view) => {
                 self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let payload_commitment = payload.commit();
+                let payload_commitment = vid_commitment(encoded_transactions.clone());
                 let signature =
                     TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
-                // TODO (Keyao) Fix the payload sending and receiving for the DA proposal.
-                // <https://github.com/EspressoSystems/HotShot/issues/2026>
                 let data: DAProposal<TYPES> = DAProposal {
                     encoded_transactions,
                     metadata: metadata.clone(),

@@ -6,6 +6,7 @@
 use crate::{
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
     traits::{
+        block_contents::vid_commitment,
         block_contents::BlockHeader,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
@@ -257,20 +258,15 @@ pub trait DeltasType<PAYLOAD: BlockPayload>:
     fn fill(&mut self, block: PAYLOAD) -> Result<(), Self::Error>;
 }
 
-/// Error which occurs when [`Leaf::fill_block_payload`] is called with a payload commitment
-/// that does not match the internal payload commitment of the leaf.
-#[derive(Clone, Copy, Debug, Snafu)]
-#[snafu(display(
-    "the block payload {:?} has commitment  (expected )",
-    payload,
-    // vid_commitment(payload),
-    // commitment
-))]
-pub struct InconsistentPayloadCommitmentError<PAYLOAD: BlockPayload> {
-    /// The block payload with the wrong commitment.
-    payload: PAYLOAD,
-    // /// The expected commitment.
-    // commitment: VidCommitment,
+/// The error type for block and its transactions.
+#[derive(Snafu, Debug)]
+pub enum BlockError {
+    /// Invalid block header.
+    InvalidBlockHeader,
+    /// Invalid transaction length.
+    InvalidTransactionLength,
+    /// Inconsistent payload commitment.
+    InconsistentPayloadCommitment,
 }
 
 /// Additional functions required to use a [`Leaf`] with hotshot-testing.
@@ -399,17 +395,18 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// Fails if the payload commitment doesn't match `self.block_header.payload_commitment()`.
     pub fn fill_block_payload(
         &mut self,
-        _block_payload: &TYPES::BlockPayload,
-    ) -> Result<(), InconsistentPayloadCommitmentError<TYPES::BlockPayload>> {
-        unimplemented!("TODO Keyao");
-        // if block_payload.commit() != self.block_header.payload_commitment() {
-        //     return Err(InconsistentPayloadCommitmentError {
-        //         payload: block_payload,
-        //         // commitment: self.block_header.payload_commitment(),
-        //     });
-        // }
-        // self.block_payload = Some(block_payload);
-        // Ok(())
+        block_payload: TYPES::BlockPayload,
+    ) -> Result<(), BlockError> {
+        let encoded_txns = match block_payload.encode() {
+            Ok(encoded) => encoded.into_iter().collect(),
+            Err(_) => return Err(BlockError::InvalidTransactionLength),
+        };
+        let commitment = vid_commitment(encoded_txns);
+        if commitment != self.block_header.payload_commitment() {
+            return Err(BlockError::InconsistentPayloadCommitment);
+        }
+        self.block_payload = Some(block_payload);
+        Ok(())
     }
     /// Optional block payload.
     pub fn get_block_payload(&self) -> Option<TYPES::BlockPayload> {

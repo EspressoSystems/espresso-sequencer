@@ -1,14 +1,13 @@
-use commit::Committable;
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
-    block_impl::vid_commitment,
     block_impl::VIDTransaction,
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        consensus_api::ConsensusSharedApi, node_implementation::NodeType, state::ConsensusTime,
+        block_contents::vid_commitment, consensus_api::ConsensusSharedApi,
+        node_implementation::NodeType, state::ConsensusTime,
     },
 };
 use std::{collections::HashMap, marker::PhantomData};
@@ -22,7 +21,7 @@ async fn test_da_task() {
     use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{block_impl::VIDBlockPayload, message::Proposal};
+    use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -35,16 +34,13 @@ async fn test_da_task() {
     let pub_key = *api.public_key();
     let transactions = vec![VIDTransaction(vec![0])];
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = vid_commitment(&encoded_transactions);
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
+    let payload_commitment = vid_commitment(encoded_transactions.clone());
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
     let proposal = DAProposal {
-        encoded_transactions,
+        encoded_transactions: encoded_transactions.clone(),
+        metadata: (),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -64,7 +60,7 @@ async fn test_da_task() {
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::BlockReady(
-        encoded_transactions,
+        encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
@@ -78,13 +74,13 @@ async fn test_da_task() {
         1,
     );
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
         1,
     );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let da_vote = DAVote::create_signed_vote(
         DAData {
-            payload_commit: block.commit(),
+            payload_commit: payload_commitment,
         },
         ViewNumber::new(2),
         api.public_key(),

@@ -1,4 +1,3 @@
-use commit::Committable;
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
@@ -21,11 +20,7 @@ use std::{collections::HashMap, marker::PhantomData};
 async fn test_network_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{
-        block_impl::{VIDBlockPayload, VIDTransaction},
-        data::VidDisperse,
-        message::Proposal,
-    };
+    use hotshot_types::{block_impl::VIDTransaction, data::VidDisperse, message::Proposal};
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -42,18 +37,15 @@ async fn test_network_task() {
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
     let signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
-            block.commit().as_ref(),
+            payload_commitment.as_ref(),
         );
     let da_proposal = Proposal {
         data: DAProposal {
-            encoded_transactions,
+            encoded_transactions: encoded_transactions.clone(),
+            metadata: (),
             view_number: ViewNumber::new(2),
         },
         signature,
@@ -65,7 +57,7 @@ async fn test_network_task() {
     let da_vid_disperse = Proposal {
         data: VidDisperse {
             view_number: da_proposal.data.view_number,
-            payload_commitment: block.commit(),
+            payload_commitment,
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },
@@ -79,7 +71,7 @@ async fn test_network_task() {
 
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::BlockReady(
-        encoded_transactions,
+        encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
@@ -125,7 +117,7 @@ async fn test_network_task() {
         1,
     );
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
         1,
     );
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);

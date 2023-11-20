@@ -257,10 +257,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 shares: vid_disperse.shares,
                                 common: vid_disperse.common,
                             },
-                            // TODO (Keyao) This is also signed in DA task.
                             signature: TYPES::SignatureKey::sign(
                                 &self.private_key,
-                                payload.commit().as_ref(),
+                                &vid_disperse.commit,
                             ),
                             _pd: PhantomData,
                         },

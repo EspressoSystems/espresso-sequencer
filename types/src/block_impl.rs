@@ -7,9 +7,9 @@ use std::{
 };
 
 use crate::{
-    data::{VidCommitment, VidScheme, VidSchemeTrait},
+    data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{vid_commitment, BlockError, BlockHeader, Transaction},
+        block_contents::{vid_commitment, BlockHeader, Transaction},
         state::TestableBlock,
         BlockPayload,
     },

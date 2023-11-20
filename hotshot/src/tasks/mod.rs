@@ -27,6 +27,7 @@ use hotshot_types::{
     event::Event,
     message::Messages,
     traits::{
+        block_contents::vid_commitment,
         consensus_api::ConsensusSharedApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{NodeImplementation, NodeType},
@@ -204,13 +205,15 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     };
     let registry = task_runner.registry.clone();
     let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
+    // Impossible for `unwrap` to fail on the genesis payload.
+    let payload_commitment = vid_commitment(payload.encode().unwrap().collect());
     // build the consensus task
     let consensus_state = ConsensusTaskState {
         registry: registry.clone(),
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
+        payload_commitment_and_metadata: Some((payload_commitment, metadata)),
         api: c_api.clone(),
         _pd: PhantomData,
         vote_collector: None,

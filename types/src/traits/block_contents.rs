@@ -6,7 +6,6 @@
 use crate::data::{test_srs, VidCommitment, VidScheme, VidSchemeTrait};
 use commit::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Serialize};
-use snafu::Snafu;
 
 use std::{
     error::Error,
@@ -20,15 +19,6 @@ pub const NUM_STORAGE_NODES: usize = 8;
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of chunks for VID initiation.
 pub const NUM_CHUNKS: usize = 8;
-
-/// The error type for block and its transactions.
-#[derive(Snafu, Debug)]
-pub enum BlockError {
-    /// Invalid block header.
-    InvalidBlockHeader,
-    /// Invalid transaction length.
-    InvalidTransactionLength,
-}
 
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:

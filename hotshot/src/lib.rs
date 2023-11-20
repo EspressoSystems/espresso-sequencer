@@ -53,7 +53,7 @@ use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{Leaf, VidCommitment},
+    data::Leaf,
     error::StorageSnafu,
     message::{
         DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
