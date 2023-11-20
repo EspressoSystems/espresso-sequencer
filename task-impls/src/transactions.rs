@@ -82,9 +82,6 @@ pub struct TransactionTaskState<
     pub id: u64,
 }
 
-// We have two `TransactionTaskState` implementations with different bounds. The implementation
-// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
-// whereas it's just `TYPES: NodeType` in the second implementation.
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     TransactionTaskState<TYPES, I, A>
 {

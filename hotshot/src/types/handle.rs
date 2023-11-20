@@ -20,8 +20,7 @@ use hotshot_types::{
     event::EventType,
     message::{MessageKind, SequencingMessage},
     traits::{
-        election::Membership, network::CommunicationChannel, node_implementation::NodeType,
-        state::ConsensusTime, storage::Storage,
+        election::Membership, node_implementation::NodeType, state::ConsensusTime, storage::Storage,
     },
 };
 use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
@@ -176,18 +175,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// Block the underlying quorum (and committee) networking interfaces until node is
     /// successfully initialized into the networks.
     pub async fn wait_for_networks_ready(&self) {
-        self.hotshot
-            .inner
-            .networks
-            .quorum_network
-            .wait_for_ready()
-            .await;
-        self.hotshot
-            .inner
-            .networks
-            .da_network
-            .wait_for_ready()
-            .await;
+        self.hotshot.inner.networks.wait_for_networks_ready().await;
     }
 
     /// Shut down the the inner hotshot and wait until all background threads are closed.

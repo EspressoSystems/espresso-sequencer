@@ -102,7 +102,15 @@ pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub da_network: I::CommitteeNetwork,
 
     /// Phantom for TYPES and I
-    pub _pd: PhantomData<(TYPES, I)>, //TODO: Do we need seperate networks for Viewsync/VID?
+    pub _pd: PhantomData<(TYPES, I)>,
+}
+
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Networks<TYPES, I> {
+    /// wait for all networks to be ready
+    pub async fn wait_for_networks_ready(&self) {
+        self.quorum_network.wait_for_ready().await;
+        self.da_network.wait_for_ready().await;
+    }
 }
 
 /// Bundle of all the memberships a consensus instance uses
