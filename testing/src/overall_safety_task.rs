@@ -14,7 +14,7 @@ use hotshot_types::{
     data::{Leaf, VidCommitment},
     error::RoundTimedoutState,
     event::{Event, EventType},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
@@ -90,7 +90,7 @@ pub struct RoundResult<TYPES: NodeType> {
     /// id -> (leaf, qc)
     // TODO GG: isn't it infeasible to store a Vec<Leaf<TYPES>>?
     #[allow(clippy::type_complexity)]
-    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>)>,
+    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
@@ -184,7 +184,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<Leaf<TYPES>>, QuorumCertificate2<TYPES>),
+        result: (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>),
         maybe_block_size: Option<u64>,
     ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
@@ -366,7 +366,7 @@ impl Default for OverallSafetyPropertiesDescription {
             check_leaf: false,
             check_state: true,
             check_block: true,
-            num_failed_views: 10,
+            num_failed_views: 0,
             transaction_threshold: 0,
             // very strict
             threshold_calculator: Arc::new(|_num_live, num_total| 2 * num_total / 3 + 1),
@@ -593,7 +593,7 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     OverallSafetyTaskErr,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
-    (usize, Either<Event<TYPES>, HotShotEvent<TYPES, I>>),
-    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES, I>>>>,
+    (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
+    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES>>>>,
     OverallSafetyTask<TYPES, I>,
 >;

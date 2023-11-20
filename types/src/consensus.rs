@@ -9,7 +9,7 @@ use displaydoc::Display;
 use crate::{
     data::{Leaf, VidCommitment},
     error::HotShotError,
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{
         block_contents::vid_commitment,
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
@@ -58,7 +58,7 @@ pub struct Consensus<TYPES: NodeType> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate2<TYPES>,
+    pub high_qc: QuorumCertificate<TYPES>,
 
     /// A reference to the metrics trait
     pub metrics: Arc<ConsensusMetricsValue>,

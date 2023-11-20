@@ -2,7 +2,7 @@
 
 use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use crate::{
-    data::Leaf, simple_certificate::QuorumCertificate2, traits::BlockPayload, vote2::HasViewNumber,
+    data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote::HasViewNumber,
 };
 use async_trait::async_trait;
 use commit::Commitment;
@@ -123,7 +123,7 @@ pub struct StoredView<TYPES: NodeType> {
     /// The parent of this view
     pub parent: Commitment<Leaf<TYPES>>,
     /// The justify QC of this view. See the hotstuff paper for more information on this.
-    pub justify_qc: QuorumCertificate2<TYPES>,
+    pub justify_qc: QuorumCertificate<TYPES>,
     /// Block header.
     pub block_header: TYPES::BlockHeader,
     /// Optional block payload.
@@ -149,7 +149,7 @@ where
     /// Note that this will set the `parent` to `LeafHash::default()`, so this will not have a
     /// parent.
     pub fn from_qc_block_and_state(
-        qc: QuorumCertificate2<TYPES>,
+        qc: QuorumCertificate<TYPES>,
         block_header: TYPES::BlockHeader,
         block_payload: Option<TYPES::BlockPayload>,
         parent_commitment: Commitment<Leaf<TYPES>>,

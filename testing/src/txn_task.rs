@@ -9,10 +9,7 @@ use hotshot_task::{
     task_impls::{HSTWithEventAndMessage, TaskBuilder},
     GeneratedStream,
 };
-use hotshot_types::{
-    message::SequencingMessage,
-    traits::node_implementation::{NodeImplementation, NodeType},
-};
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use rand::thread_rng;
 use snafu::Snafu;
 use std::{sync::Arc, time::Duration};
@@ -64,7 +61,7 @@ impl TxnTaskDescription {
     ) -> TaskGenerator<TxnTask<TYPES, I>>
     where
         TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+        I: NodeImplementation<TYPES>,
     {
         Box::new(move |state, mut registry, test_event_stream| {
             async move {

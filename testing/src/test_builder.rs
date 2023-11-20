@@ -1,14 +1,12 @@
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::config::ValidatorConfigFile;
-use hotshot_types::traits::election::{ConsensusExchange, Membership};
+use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
-use hotshot_types::message::{Message, SequencingMessage};
 
 use hotshot_types::{
-    traits::node_implementation::{NodeType, QuorumEx, TestableExchange},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
 
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
@@ -66,12 +64,12 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 10000,
+            next_view_timeout: 1000,
             timeout_ratio: (11, 10),
-            round_start_delay: 1,
-            start_delay: 1,
+            round_start_delay: 100,
+            start_delay: 100,
             propose_min_round_time: Duration::new(0, 0),
-            propose_max_round_time: Duration::new(5, 0),
+            propose_max_round_time: Duration::from_millis(100),
         }
     }
 }
@@ -125,7 +123,7 @@ impl TestMetadata {
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
-    pub fn default_more_nodes_less_success() -> TestMetadata {
+    pub fn default_more_nodes() -> TestMetadata {
         TestMetadata {
             total_nodes: 20,
             start_nodes: 20,
@@ -143,8 +141,11 @@ impl TestMetadata {
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 8,
                 ..Default::default()
+            },
+            timing_data: TimingData {
+                next_view_timeout: 1000,
+                ..TimingData::default()
             },
             ..TestMetadata::default()
         }
@@ -183,8 +184,7 @@ impl TestMetadata {
         node_id: u64,
     ) -> TestLauncher<TYPES, I>
     where
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        <I as NodeImplementation<TYPES>>::Exchanges: TestableExchange<TYPES, Message<TYPES, I>>,
+        I: NodeImplementation<TYPES>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
@@ -238,11 +238,8 @@ impl TestMetadata {
             propose_min_round_time: Duration::from_millis(0),
             propose_max_round_time: Duration::from_millis(1000),
             // TODO what's the difference between this and the second config?
-            election_config: Some(<QuorumEx<TYPES, I> as ConsensusExchange<
-                TYPES,
-                Message<TYPES, I>,
-            >>::Membership::default_election_config(
-                total_nodes as u64
+            election_config: Some(TYPES::Membership::default_election_config(
+                total_nodes as u64,
             )),
         };
         let TimingData {
@@ -269,18 +266,15 @@ impl TestMetadata {
         let overall_safety_task_generator = overall_safety_properties.build();
         let spinning_task_generator = spinning_properties.build();
         TestLauncher {
-            resource_generator:
-                ResourceGenerators {
-                    channel_generator:
-                        <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<
-                            _,
-                            _,
-                        >>::gen_comm_channels(
-                            total_nodes, num_bootstrap_nodes, da_committee_size
-                        ),
-                    storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
-                    config,
-                },
+            resource_generator: ResourceGenerators {
+                channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
+                    total_nodes,
+                    num_bootstrap_nodes,
+                    da_committee_size,
+                ),
+                storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
+                config,
+            },
             metadata: self,
             txn_task_generator,
             overall_safety_task_generator,

@@ -4,8 +4,7 @@
 //! `HotShot`'s version of a block, and proposals, messages upon which to reach the consensus.
 
 use crate::{
-    certificate::{AssembledSignature, ViewSyncCertificate},
-    simple_certificate::{QuorumCertificate2, TimeoutCertificate2},
+    simple_certificate::{QuorumCertificate, TimeoutCertificate},
     traits::{
         block_contents::BlockHeader,
         node_implementation::NodeType,
@@ -14,7 +13,7 @@ use crate::{
         storage::StoredView,
         BlockPayload, State,
     },
-    vote2::{Certificate2, HasViewNumber},
+    vote::{Certificate, HasViewNumber},
 };
 use ark_bls12_381::Bls12_381;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -196,10 +195,10 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES>,
+    pub justify_qc: QuorumCertificate<TYPES>,
 
     /// Possible timeout certificate.  Only present if the justify_qc is not for the preceding view
-    pub timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
+    pub timeout_certificate: Option<TimeoutCertificate<TYPES>>,
 
     /// the propser id
     pub proposer_id: EncodedPublicKey,
@@ -220,16 +219,6 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for VidDisperse<TYPES> {
 impl<TYPES: NodeType> HasViewNumber<TYPES> for QuorumProposal<TYPES> {
     fn get_view_number(&self) -> TYPES::Time {
         self.view_number
-    }
-}
-
-impl<TYPES: NodeType> HasViewNumber<TYPES> for ViewSyncCertificate<TYPES> {
-    fn get_view_number(&self) -> TYPES::Time {
-        match self {
-            ViewSyncCertificate::PreCommit(certificate_internal)
-            | ViewSyncCertificate::Commit(certificate_internal)
-            | ViewSyncCertificate::Finalize(certificate_internal) => certificate_internal.round,
-        }
     }
 }
 
@@ -307,7 +296,7 @@ pub struct Leaf<TYPES: NodeType> {
     pub view_number: TYPES::Time,
 
     /// Per spec, justification
-    pub justify_qc: QuorumCertificate2<TYPES>,
+    pub justify_qc: QuorumCertificate<TYPES>,
 
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
@@ -371,7 +360,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         let (block_header, block_payload, _) = TYPES::BlockHeader::genesis();
         Self {
             view_number: TYPES::Time::genesis(),
-            justify_qc: QuorumCertificate2::<TYPES>::genesis(),
+            justify_qc: QuorumCertificate::<TYPES>::genesis(),
             parent_commitment: fake_commitment(),
             block_header,
             block_payload: Some(block_payload),
@@ -392,7 +381,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         self.block_header.block_number()
     }
     /// The QC linking this leaf to its parent in the chain.
-    pub fn get_justify_qc(&self) -> QuorumCertificate2<TYPES> {
+    pub fn get_justify_qc(&self) -> QuorumCertificate<TYPES> {
         self.justify_qc.clone()
     }
     /// Commitment to this leaf's parent.
@@ -490,66 +479,6 @@ pub fn random_commitment<S: Committable>(rng: &mut dyn rand::RngCore) -> Commitm
         .constant_str("Random Field")
         .var_size_bytes(&random_array)
         .finalize()
-}
-
-/// Serialization for the QC assembled signature
-/// # Panics
-/// if serialization fails
-// TODO: Remove after new QC is integrated
-pub fn serialize_signature<TYPES: NodeType>(signature: &AssembledSignature<TYPES>) -> Vec<u8> {
-    let mut signatures_bytes = vec![];
-    let signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType> = match &signature {
-        AssembledSignature::DA(signatures) => {
-            signatures_bytes.extend("DA".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::VID(signatures) => {
-            signatures_bytes.extend("VID".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::Yes(signatures) => {
-            signatures_bytes.extend("Yes".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::No(signatures) => {
-            signatures_bytes.extend("No".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::Timeout(signatures) => {
-            signatures_bytes.extend("Timeout".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::ViewSyncPreCommit(signatures) => {
-            signatures_bytes.extend("ViewSyncPreCommit".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::ViewSyncCommit(signatures) => {
-            signatures_bytes.extend("ViewSyncCommit".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::ViewSyncFinalize(signatures) => {
-            signatures_bytes.extend("ViewSyncFinalize".as_bytes());
-            Some(signatures.clone())
-        }
-        AssembledSignature::Genesis() => None,
-    };
-    if let Some(sig) = signatures {
-        let (sig, proof) = TYPES::SignatureKey::get_sig_proof(&sig);
-        let proof_bytes = bincode_opts()
-            .serialize(&proof.as_bitslice())
-            .expect("This serialization shouldn't be able to fail");
-        signatures_bytes.extend("bitvec proof".as_bytes());
-        signatures_bytes.extend(proof_bytes.as_slice());
-        let sig_bytes = bincode_opts()
-            .serialize(&sig)
-            .expect("This serialization shouldn't be able to fail");
-        signatures_bytes.extend("aggregated signature".as_bytes());
-        signatures_bytes.extend(sig_bytes.as_slice());
-    } else {
-        signatures_bytes.extend("genesis".as_bytes());
-    }
-
-    signatures_bytes
 }
 
 /// Serialization for the QC assembled signature

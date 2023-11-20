@@ -19,25 +19,21 @@ use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, QuorumProposal, VidCommitment},
     event::{Event, EventType},
-    message::{GeneralConsensusMessage, Message, Proposal, SequencingMessage},
-    simple_certificate::{
-        DACertificate2, QuorumCertificate2, TimeoutCertificate2, VIDCertificate2,
-    },
-    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote2},
+    message::{GeneralConsensusMessage, Proposal},
+    simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
+    simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, Membership, QuorumExchangeType},
+        election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
-        node_implementation::{
-            CommitteeEx, NodeImplementation, NodeType, QuorumEx, QuorumMembership, TimeoutEx,
-        },
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
         BlockPayload,
     },
     utils::{Terminator, ViewInner},
-    vote2::{Certificate2, HasViewNumber, VoteAccumulator2},
+    vote::{Certificate, HasViewNumber, VoteAccumulator},
 };
 use tracing::warn;
 
@@ -62,15 +58,13 @@ type CommitmentAndMetadata<PAYLOAD> = (VidCommitment, <PAYLOAD as BlockPayload>:
 /// of consensus
 pub struct ConsensusTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
+> {
+    /// Our public key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// The global task registry
     pub registry: GlobalRegistry,
     /// Reference to consensus. The replica will require a write lock on this.
@@ -83,17 +77,23 @@ pub struct ConsensusTaskState<
     /// The commitment to the current block payload and its metadata submitted to DA.
     pub payload_commitment_and_metadata: Option<CommitmentAndMetadata<TYPES::BlockPayload>>,
 
-    /// the quorum exchange
-    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
+    /// Network for all nodes
+    pub quorum_network: Arc<I::QuorumNetwork>,
 
-    /// The timeout exchange
-    pub timeout_exchange: Arc<TimeoutEx<TYPES, I>>,
+    /// Network for DA committee
+    pub committee_network: Arc<I::CommitteeNetwork>,
+
+    /// Membership for Timeout votes/certs
+    pub timeout_membership: Arc<TYPES::Membership>,
+
+    /// Membership for Quorum Certs/votes
+    pub quorum_membership: Arc<TYPES::Membership>,
+
+    /// Membership for DA committee Votes/certs
+    pub committee_membership: Arc<TYPES::Membership>,
 
     /// Consensus api
     pub api: A,
-
-    /// the committee exchange
-    pub committee_exchange: Arc<CommitteeEx<TYPES, I>>,
 
     /// needed to typecheck
     pub _pd: PhantomData<I>,
@@ -109,16 +109,16 @@ pub struct ConsensusTaskState<
     pub timeout_task: JoinHandle<()>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// Event stream to publish events to the application layer
     pub output_event_stream: ChannelStream<Event<TYPES>>,
 
     /// All the DA certs we've received for current and future views.
-    pub da_certs: HashMap<TYPES::Time, DACertificate2<TYPES>>,
+    pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// All the VID certs we've received for current and future views.
-    pub vid_certs: HashMap<TYPES::Time, VIDCertificate2<TYPES>>,
+    pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -130,71 +130,46 @@ pub struct ConsensusTaskState<
 }
 
 /// State for the vote collection task.  This handles the building of a QC from a votes received
-pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
-    /// the quorum exchange
-    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
-    /// the timeout exchange
-    pub timeout_exchange: Arc<TimeoutEx<TYPES, I>>,
+pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Network for all nodes
+    pub quorum_network: Arc<I::QuorumNetwork>,
+    /// Membership for Timeout votes/certs
+    pub timeout_membership: Arc<TYPES::Membership>,
+    /// Membership for Quorum Certs/votes
+    pub quorum_membership: Arc<TYPES::Membership>,
 
     #[allow(clippy::type_complexity)]
     /// Accumulator for votes
     pub accumulator: Either<
-        VoteAccumulator2<
-            TYPES,
-            QuorumVote<TYPES, QuorumMembership<TYPES, I>>,
-            QuorumCertificate2<TYPES>,
-        >,
-        QuorumCertificate2<TYPES>,
+        VoteAccumulator<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
+        QuorumCertificate<TYPES>,
     >,
 
     /// Accumulator for votes
     #[allow(clippy::type_complexity)]
     pub timeout_accumulator: Either<
-        VoteAccumulator2<
-            TYPES,
-            TimeoutVote2<TYPES, QuorumMembership<TYPES, I>>,
-            TimeoutCertificate2<TYPES>,
-        >,
-        TimeoutCertificate2<TYPES>,
+        VoteAccumulator<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
+        TimeoutCertificate<TYPES>,
     >,
     /// View which this vote collection task is collecting votes in
     pub cur_view: TYPES::Time,
     /// The event stream shared by all tasks
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// Node id
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I>
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
-}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I> {}
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "Quorum Vote Collection Task", level = "error")]
 
 async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     mut state: VoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES>,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     VoteCollectionTaskState<TYPES, I>,
-)
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
+) {
     match event {
         HotShotEvent::QuorumVoteRecv(vote) => {
             // For the case where we receive votes after we've made a certificate
@@ -213,7 +188,7 @@ where
 
             let accumulator = state.accumulator.left().unwrap();
 
-            match accumulator.accumulate(&vote, state.quorum_exchange.membership()) {
+            match accumulator.accumulate(&vote, &state.quorum_membership) {
                 Either::Left(acc) => {
                     state.accumulator = Either::Left(acc);
                     return (None, state);
@@ -228,8 +203,7 @@ where
 
                     // No longer need to poll for votes
                     state
-                        .quorum_exchange
-                        .network()
+                        .quorum_network
                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
                             *qc.view_number,
                         ))
@@ -259,7 +233,7 @@ where
 
             let accumulator = state.timeout_accumulator.left().unwrap();
 
-            match accumulator.accumulate(&vote, state.quorum_exchange.membership()) {
+            match accumulator.accumulate(&vote, &state.timeout_membership) {
                 Either::Left(acc) => {
                     state.timeout_accumulator = Either::Left(acc);
                     return (None, state);
@@ -274,8 +248,7 @@ where
 
                     // No longer need to poll for votes
                     state
-                        .quorum_exchange
-                        .network()
+                        .quorum_network
                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
                             *qc.view_number,
                         ))
@@ -295,17 +268,8 @@ where
     (None, state)
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > ConsensusTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    ConsensusTaskState<TYPES, I, A>
 {
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus genesis leaf", level = "error")]
 
@@ -333,11 +297,7 @@ where
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
 
     async fn vote_if_able(&self) -> bool {
-        if !self
-            .quorum_exchange
-            .membership()
-            .has_stake(self.quorum_exchange.public_key())
-        {
+        if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
                 "We were not chosen for consensus committee on {:?}",
                 self.cur_view
@@ -381,17 +341,17 @@ where
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
                 };
-                let vote = QuorumVote::<TYPES, QuorumMembership<TYPES, I>>::create_signed_vote(
+                let vote = QuorumVote::<TYPES>::create_signed_vote(
                     QuorumData {
                         leaf_commit: leaf.commit(),
                     },
                     view,
-                    self.quorum_exchange.public_key(),
-                    self.quorum_exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
-                let message = GeneralConsensusMessage::<TYPES, I>::Vote(vote);
+                let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
                 if let GeneralConsensusMessage::Vote(vote) = message {
                     debug!(
@@ -441,11 +401,11 @@ where
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_exchange.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
                 };
 
                 // Validate the DAC.
-                let message = if cert.is_valid_cert(self.committee_exchange.membership()) {
+                let message = if cert.is_valid_cert(self.committee_membership.as_ref()) {
                     // Validate the block payload commitment for non-genesis DAC.
                     if !cert.is_genesis
                         && cert.get_data().payload_commit
@@ -454,15 +414,15 @@ where
                         error!("Block payload commitment does not equal parent commitment");
                         return false;
                     }
-                    let vote = QuorumVote::<TYPES, QuorumMembership<TYPES, I>>::create_signed_vote(
+                    let vote = QuorumVote::<TYPES>::create_signed_vote(
                         QuorumData {
                             leaf_commit: leaf.commit(),
                         },
                         view,
-                        self.quorum_exchange.public_key(),
-                        self.quorum_exchange.private_key(),
+                        &self.public_key,
+                        &self.private_key,
                     );
-                    GeneralConsensusMessage::<TYPES, I>::Vote(vote)
+                    GeneralConsensusMessage::<TYPES>::Vote(vote)
                 } else {
                     error!(
                         "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
@@ -514,31 +474,27 @@ where
 
             // Poll the future leader for lookahead
             let lookahead_view = new_view + LOOK_AHEAD;
-            if !self.quorum_exchange.is_leader(lookahead_view) {
-                self.quorum_exchange
-                    .network()
+            if self.quorum_membership.get_leader(lookahead_view) != self.public_key {
+                self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
                         *lookahead_view,
-                        self.quorum_exchange.get_leader(lookahead_view),
+                        self.quorum_membership.get_leader(lookahead_view),
                     ))
                     .await;
             }
 
             // Start polling for proposals for the new view
-            self.quorum_exchange
-                .network()
+            self.quorum_network
                 .inject_consensus_info(ConsensusIntentEvent::PollForProposal(*self.cur_view + 1))
                 .await;
 
-            self.quorum_exchange
-                .network()
+            self.quorum_network
                 .inject_consensus_info(ConsensusIntentEvent::PollForDAC(*self.cur_view + 1))
                 .await;
 
-            if self.quorum_exchange.is_leader(self.cur_view + 1) {
+            if self.quorum_membership.get_leader(self.cur_view + 1) == self.public_key {
                 debug!("Polling for quorum votes for view {}", *self.cur_view);
-                self.quorum_exchange
-                    .network()
+                self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::PollForVotes(*self.cur_view))
                     .await;
             }
@@ -578,7 +534,7 @@ where
 
     /// Handles a consensus event received on the event stream
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error")]
-    pub async fn handle_event(&mut self, event: HotShotEvent<TYPES, I>) {
+    pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!(
@@ -587,8 +543,7 @@ where
                 );
 
                 // stop polling for the received proposal
-                self.quorum_exchange
-                    .network()
+                self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
                         *proposal.data.view_number,
                     ))
@@ -600,7 +555,7 @@ where
                     return;
                 }
 
-                let view_leader_key = self.quorum_exchange.get_leader(view);
+                let view_leader_key = self.quorum_membership.get_leader(view);
                 if view_leader_key != sender {
                     error!("Leader key does not match key in proposal");
                     return;
@@ -620,7 +575,7 @@ where
                         return;
                     }
 
-                    if !timeout_cert.is_valid_cert(self.timeout_exchange.membership()) {
+                    if !timeout_cert.is_valid_cert(self.timeout_membership.as_ref()) {
                         warn!("Timeout certificate for view {} was invalid", *view);
                         return;
                     }
@@ -628,7 +583,7 @@ where
 
                 let justify_qc = proposal.data.justify_qc.clone();
 
-                if !justify_qc.is_valid_cert(self.quorum_exchange.membership()) {
+                if !justify_qc.is_valid_cert(self.quorum_membership.as_ref()) {
                     error!("Invalid justify_qc in proposal for view {}", *view);
                     let consensus = self.consensus.write().await;
                     consensus.metrics.invalid_qc.update(1);
@@ -879,7 +834,7 @@ where
                 let new_view = self.current_proposal.clone().unwrap().view_number + 1;
                 // In future we can use the mempool model where we fetch the proposal if we don't have it, instead of having to wait for it here
                 // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
-                let should_propose = self.quorum_exchange.is_leader(new_view)
+                let should_propose = self.quorum_membership.get_leader(new_view) == self.public_key
                     && consensus.high_qc.view_number
                         == self.current_proposal.clone().unwrap().view_number;
                 // todo get rid of this clone
@@ -907,11 +862,17 @@ where
             HotShotEvent::QuorumVoteRecv(vote) => {
                 debug!("Received quroum vote: {:?}", vote.get_view_number());
 
-                if !self.quorum_exchange.is_leader(vote.get_view_number() + 1) {
+                if self
+                    .quorum_membership
+                    .get_leader(vote.get_view_number() + 1)
+                    != self.public_key
+                {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
                         *vote.get_view_number() + 1,
-                        self.quorum_exchange.is_leader(vote.get_view_number() + 2)
+                        self.quorum_membership
+                            .get_leader(vote.get_view_number() + 2)
+                            == self.public_key
                     );
                     return;
                 }
@@ -932,28 +893,29 @@ where
 
                 if vote.get_view_number() > collection_view {
                     // Todo check if we are the leader
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        signers: bitvec![0; self.quorum_membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
                     let accumulator =
-                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+                        new_accumulator.accumulate(&vote, self.quorum_membership.as_ref());
 
                     // TODO Create default functions for accumulators
                     // https://github.com/EspressoSystems/HotShot/issues/1797
-                    let timeout_accumulator = VoteAccumulator2 {
+                    let timeout_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        signers: bitvec![0; self.timeout_membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
                     let state = VoteCollectionTaskState {
-                        quorum_exchange: self.quorum_exchange.clone(),
-                        timeout_exchange: self.timeout_exchange.clone(),
+                        quorum_network: self.quorum_network.clone(),
+                        quorum_membership: self.quorum_membership.clone(),
+                        timeout_membership: self.timeout_membership.clone(),
                         accumulator,
                         timeout_accumulator: either::Left(timeout_accumulator),
                         cur_view: vote.get_view_number(),
@@ -992,11 +954,17 @@ where
                 }
             }
             HotShotEvent::TimeoutVoteRecv(vote) => {
-                if !self.timeout_exchange.is_leader(vote.get_view_number() + 1) {
+                if self
+                    .timeout_membership
+                    .get_leader(vote.get_view_number() + 1)
+                    != self.public_key
+                {
                     error!(
                         "We are not the leader for view {} are we the leader for view + 1? {}",
                         *vote.get_view_number() + 1,
-                        self.timeout_exchange.is_leader(vote.get_view_number() + 2)
+                        self.timeout_membership
+                            .get_leader(vote.get_view_number() + 2)
+                            == self.public_key
                     );
                     return;
                 }
@@ -1017,28 +985,29 @@ where
 
                 if vote.get_view_number() > collection_view {
                     // Todo check if we are the leader
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.timeout_exchange.total_nodes()],
+                        signers: bitvec![0; self.timeout_membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
                     let timeout_accumulator =
-                        new_accumulator.accumulate(&vote, self.quorum_exchange.membership());
+                        new_accumulator.accumulate(&vote, self.quorum_membership.as_ref());
 
-                    let quorum_accumulator = VoteAccumulator2 {
+                    let quorum_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.quorum_exchange.total_nodes()],
+                        signers: bitvec![0; self.quorum_membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
                     // self.timeout_accumulator = accumulator;
 
                     let state = VoteCollectionTaskState {
-                        quorum_exchange: self.quorum_exchange.clone(),
-                        timeout_exchange: self.timeout_exchange.clone(),
+                        quorum_network: self.quorum_network.clone(),
+                        quorum_membership: self.quorum_membership.clone(),
+                        timeout_membership: self.timeout_membership.clone(),
                         accumulator: either::Left(quorum_accumulator),
                         timeout_accumulator,
                         cur_view: vote.get_view_number(),
@@ -1119,8 +1088,7 @@ where
                 debug!("DAC Recved for view ! {}", *cert.view_number);
                 let view = cert.view_number;
 
-                self.quorum_exchange
-                    .network()
+                self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForDAC(*view))
                     .await;
 
@@ -1165,11 +1133,7 @@ where
                 if self.cur_view >= view {
                     return;
                 }
-                if !self
-                    .timeout_exchange
-                    .membership()
-                    .has_stake(self.timeout_exchange.public_key())
-                {
+                if !self.timeout_membership.has_stake(&self.public_key) {
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
                         self.cur_view
@@ -1177,11 +1141,11 @@ where
                     return;
                 }
 
-                let vote = TimeoutVote2::create_signed_vote(
+                let vote = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
-                    self.timeout_exchange.public_key(),
-                    self.timeout_exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
 
                 self.event_stream
@@ -1205,11 +1169,11 @@ where
     #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate2<TYPES>,
+        _qc: QuorumCertificate<TYPES>,
         view: TYPES::Time,
-        timeout_certificate: Option<TimeoutCertificate2<TYPES>>,
+        timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
-        if !self.quorum_exchange.is_leader(view) {
+        if self.quorum_membership.get_leader(view) != self.public_key {
             error!(
                 "Somehow we formed a QC but are not the leader for the next view {:?}",
                 view
@@ -1287,9 +1251,7 @@ where
                 proposer_id: self.api.public_key().to_bytes(),
             };
 
-            let signature = self
-                .quorum_exchange
-                .sign_validating_or_commitment_proposal::<I>(&leaf.commit());
+            let signature = TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref());
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
                 block_header: leaf.block_header.clone(),
@@ -1311,7 +1273,7 @@ where
             self.event_stream
                 .publish(HotShotEvent::QuorumProposalSend(
                     message,
-                    self.quorum_exchange.public_key().clone(),
+                    self.public_key.clone(),
                 ))
                 .await;
             self.payload_commitment_and_metadata = None;
@@ -1322,55 +1284,39 @@ where
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I>,
-    > TS for ConsensusTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I>> TS
+    for ConsensusTaskState<TYPES, I, A>
 {
 }
 
 /// Type allias for consensus' vote collection task
 pub type VoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     VoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for Consensus task
 pub type ConsensusTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     ConsensusTaskState<TYPES, I, A>,
 >;
 
 /// Event handle for consensus
 pub async fn sequencing_consensus_handle<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
 >(
-    event: HotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES>,
     mut state: ConsensusTaskState<TYPES, I, A>,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     ConsensusTaskState<TYPES, I, A>,
-)
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
+) {
     if let HotShotEvent::Shutdown = event {
         (Some(HotShotTaskCompleted::ShutDown), state)
     } else {
@@ -1380,9 +1326,7 @@ where
 }
 
 /// Filter for consensus, returns true for event types the consensus task subscribes to.
-pub fn consensus_event_filter<TYPES: NodeType, I: NodeImplementation<TYPES>>(
-    event: &HotShotEvent<TYPES, I>,
-) -> bool {
+pub fn consensus_event_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> bool {
     matches!(
         event,
         HotShotEvent::QuorumProposalRecv(_, _)

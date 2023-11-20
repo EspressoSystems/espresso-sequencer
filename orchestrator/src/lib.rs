@@ -99,12 +99,7 @@ where
 
         //add new node's key to stake table
         if self.config.web_server_config.clone().is_some() {
-            let new_key = self
-                .config
-                .config
-                .my_own_validator_config
-                .public_key
-                .clone();
+            let new_key = &self.config.config.my_own_validator_config.public_key;
             let client_clone = self.client.clone().unwrap();
             async move {
                 client_clone

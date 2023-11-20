@@ -1,7 +1,7 @@
-use crate::infra::Libp2pDARun;
+use crate::infra::CombinedDARun;
 use hotshot::{
     demo::DemoTypes,
-    traits::implementations::{Libp2pCommChannel, MemoryStorage},
+    traits::implementations::{CombinedCommChannel, MemoryStorage},
 };
 use hotshot_types::traits::node_implementation::{ChannelMaps, NodeImplementation, NodeType};
 use serde::{Deserialize, Serialize};
@@ -10,10 +10,10 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type DANetwork = Libp2pCommChannel<DemoTypes>;
-pub type VIDNetwork = Libp2pCommChannel<DemoTypes>;
-pub type QuorumNetwork = Libp2pCommChannel<DemoTypes>;
-pub type ViewSyncNetwork = Libp2pCommChannel<DemoTypes>;
+pub type DANetwork = CombinedCommChannel<DemoTypes>;
+pub type VIDNetwork = CombinedCommChannel<DemoTypes>;
+pub type QuorumNetwork = CombinedCommChannel<DemoTypes>;
+pub type ViewSyncNetwork = CombinedCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
@@ -26,4 +26,4 @@ impl NodeImplementation<DemoTypes> for NodeImpl {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = Libp2pDARun<DemoTypes>;
+pub type ThisRun = CombinedDARun<DemoTypes>;

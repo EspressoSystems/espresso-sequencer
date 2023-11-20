@@ -4,10 +4,11 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot::demo::DemoTypes;
 use tracing::instrument;
+use types::VIDNetwork;
 
 use crate::infra::run_orchestrator;
 use crate::infra::OrchestratorArgs;
-use crate::types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork};
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork};
 
 #[path = "../infra/mod.rs"]
 pub mod infra;

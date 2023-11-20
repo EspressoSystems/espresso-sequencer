@@ -15,13 +15,12 @@ use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
     message::{Message, MessagePurpose},
     traits::{
-        election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
             TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
             WebServerNetworkError,
         },
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::NodeType,
         signature_key::SignatureKey,
     },
 };
@@ -32,7 +31,6 @@ use serde::{Deserialize, Serialize};
 use hotshot_types::traits::network::ViewMessage;
 use std::{
     collections::{hash_map::Entry, BTreeSet, HashMap},
-    marker::PhantomData,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -43,39 +41,31 @@ use surf_disco::error::ClientError;
 use tracing::{debug, error, info};
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
-pub struct WebCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
-    Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    PhantomData<(MEMBERSHIP, I)>,
-);
+pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    WebCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> WebCommChannel<TYPES> {
     /// Create new communication channel
     #[must_use]
-    pub fn new(
-        network: Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    ) -> Self {
-        Self(network, PhantomData)
+    pub fn new(network: Arc<WebServerNetwork<TYPES>>) -> Self {
+        Self(network)
     }
 }
 
 /// The web server network state
 #[derive(Clone, Debug)]
-pub struct WebServerNetwork<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
+pub struct WebServerNetwork<TYPES: NodeType> {
     /// The inner, core state of the web server network
-    inner: Arc<Inner<M, KEY, TYPES>>,
+    inner: Arc<Inner<TYPES>>,
     /// An optional shutdown signal. This is only used when this connection is created through the `TestableNetworkingImplementation` API.
     server_shutdown_signal: Option<Arc<OneShotSender<()>>>,
 }
 
-impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> WebServerNetwork<M, KEY, TYPES> {
+impl<TYPES: NodeType> WebServerNetwork<TYPES> {
     /// Post a message to the web server and return the result
-    async fn post_message_to_web_server(&self, message: SendMsg<M>) -> Result<(), NetworkError> {
+    async fn post_message_to_web_server(
+        &self,
+        message: SendMsg<Message<TYPES>>,
+    ) -> Result<(), NetworkError> {
         let result: Result<(), ClientError> = self
             .inner
             .client
@@ -93,15 +83,13 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> WebServerNetwork<M, KEY,
 
 /// Represents the core of web server networking
 #[derive(Debug)]
-struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
-    /// Phantom data for generic types
-    phantom: PhantomData<(KEY, TYPES::ElectionConfigType)>,
+struct Inner<TYPES: NodeType> {
     /// Our own key
     _own_key: TYPES::SignatureKey,
     /// Queue for broadcasted messages
-    broadcast_poll_queue: Arc<RwLock<Vec<RecvMsg<M>>>>,
+    broadcast_poll_queue: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
     /// Queue for direct messages
-    direct_poll_queue: Arc<RwLock<Vec<RecvMsg<M>>>>,
+    direct_poll_queue: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
     /// Client is running
     running: AtomicBool,
     /// The web server connection is ready
@@ -145,7 +133,7 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
         Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
 }
 
-impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
+impl<TYPES: NodeType> Inner<TYPES> {
     #![allow(clippy::too_many_lines)]
     /// Pull a web server.
     async fn poll_web_server(
@@ -400,7 +388,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     async fn get_txs_from_web_server(
         &self,
         endpoint: String,
-    ) -> Result<Option<(u64, Vec<RecvMsg<M>>)>, NetworkError> {
+    ) -> Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError> {
         let result: Result<Option<(u64, Vec<Vec<u8>>)>, ClientError> =
             self.client.get(&endpoint).send().await;
         match result {
@@ -427,7 +415,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     async fn get_message_from_web_server(
         &self,
         endpoint: String,
-    ) -> Result<Option<Vec<RecvMsg<M>>>, NetworkError> {
+    ) -> Result<Option<Vec<RecvMsg<Message<TYPES>>>>, NetworkError> {
         let result: Result<Option<Vec<Vec<u8>>>, ClientError> =
             self.client.get(&endpoint).send().await;
         match result {
@@ -501,12 +489,7 @@ impl<M: NetworkMsg> RecvMsgTrait<M> for RecvMsg<M> {
 impl<M: NetworkMsg> NetworkMsg for SendMsg<M> {}
 impl<M: NetworkMsg> NetworkMsg for RecvMsg<M> {}
 
-impl<
-        M: NetworkMsg + 'static + ViewMessage<TYPES>,
-        K: SignatureKey + 'static,
-        TYPES: NodeType + 'static,
-    > WebServerNetwork<M, K, TYPES>
-{
+impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
     /// Creates a new instance of the `WebServerNetwork`
     /// # Panics
     /// if the web server url is malformed
@@ -529,7 +512,6 @@ impl<
         let client = surf_disco::Client::<ClientError>::new(base_url.unwrap());
 
         let inner = Arc::new(Inner {
-            phantom: PhantomData,
             broadcast_poll_queue: Arc::default(),
             direct_poll_queue: Arc::default(),
             running: AtomicBool::new(true),
@@ -560,7 +542,9 @@ impl<
 
     /// Parses a message to find the appropriate endpoint
     /// Returns a `SendMsg` containing the endpoint
-    fn parse_post_message(message: M) -> Result<SendMsg<M>, WebServerNetworkError> {
+    fn parse_post_message(
+        message: Message<TYPES>,
+    ) -> Result<SendMsg<Message<TYPES>>, WebServerNetworkError> {
         let view_number: TYPES::Time = message.get_view_number();
 
         let endpoint = match &message.purpose() {
@@ -581,7 +565,7 @@ impl<
             MessagePurpose::VidCert => config::post_vid_certificate_route(*view_number),
         };
 
-        let network_msg: SendMsg<M> = SendMsg {
+        let network_msg: SendMsg<Message<TYPES>> = SendMsg {
             message: Some(message),
             endpoint,
         };
@@ -590,16 +574,13 @@ impl<
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
-    for WebCommChannel<TYPES, I, MEMBERSHIP>
-{
-    type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for WebCommChannel<TYPES> {
+    type NETWORK = WebServerNetwork<TYPES>;
     /// Blocks until node is successfully initialized
     /// into the network
     async fn wait_for_ready(&self) {
-        <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+        <WebServerNetwork<_> as ConnectedNetwork<
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::wait_for_ready(&self.0)
         .await;
@@ -608,10 +589,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// checks if the network is ready
     /// nonblocking
     async fn is_ready(&self) -> bool {
-        <WebServerNetwork<_, _, _,> as ConnectedNetwork<
-            Message<TYPES, I>,
-            TYPES::SignatureKey,
-        >>::is_ready(&self.0)
+        <WebServerNetwork<_> as ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>::is_ready(
+            &self.0,
+        )
         .await
     }
 
@@ -624,8 +604,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
         Self: 'b,
     {
         let closure = async move {
-            <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+            <WebServerNetwork<_> as ConnectedNetwork<
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::shut_down(&self.0)
             .await;
@@ -637,8 +617,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// blocking
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        _election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        _election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
         self.0.broadcast_message(message, BTreeSet::new()).await
     }
@@ -647,7 +627,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     /// blocking
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -660,14 +640,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
     {
         let closure = async move {
-            <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+            <WebServerNetwork<_> as ConnectedNetwork<
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::recv_msgs(&self.0, transmit_type)
             .await
@@ -676,8 +656,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
-        <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+        <WebServerNetwork<_> as ConnectedNetwork<
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::inject_consensus_info(&self.0, event)
         .await;
@@ -685,11 +665,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
 }
 
 #[async_trait]
-impl<
-        M: NetworkMsg + 'static + ViewMessage<TYPES>,
-        K: SignatureKey + 'static,
-        TYPES: NodeType + 'static,
-    > ConnectedNetwork<M, K> for WebServerNetwork<M, K, TYPES>
+impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
+    for WebServerNetwork<TYPES>
 {
     /// Blocks until the network is successfully initialized
     async fn wait_for_ready(&self) {
@@ -721,8 +698,8 @@ impl<
     /// blocking
     async fn broadcast_message(
         &self,
-        message: M,
-        _recipients: BTreeSet<K>,
+        message: Message<TYPES>,
+        _recipients: BTreeSet<TYPES::SignatureKey>,
     ) -> Result<(), NetworkError> {
         let network_msg = Self::parse_post_message(message);
         match network_msg {
@@ -735,7 +712,11 @@ impl<
 
     /// Sends a direct message to a specific node
     /// blocking
-    async fn direct_message(&self, message: M, _recipient: K) -> Result<(), NetworkError> {
+    async fn direct_message(
+        &self,
+        message: Message<TYPES>,
+        _recipient: TYPES::SignatureKey,
+    ) -> Result<(), NetworkError> {
         let network_msg = Self::parse_post_message(message);
         match network_msg {
             Ok(network_msg) => {
@@ -756,7 +737,7 @@ impl<
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -787,7 +768,7 @@ impl<
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
         debug!(
             "Injecting event: {:?} is da {}",
             event.clone(),
@@ -1204,10 +1185,7 @@ impl<
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>
-{
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwork<TYPES> {
     fn generator(
         expected_node_count: usize,
         _num_bootstrap: usize,
@@ -1255,10 +1233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel<TYPES> {
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -1266,18 +1241,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
         da_committee_size: usize,
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <WebServerNetwork<
-            Message<TYPES, I>,
-            TYPES::SignatureKey,
-            TYPES,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        let generator = <WebServerNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
             da_committee_size,
             is_da,
         );
-        Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
+        Box::new(move |node_id| Self(generator(node_id).into()))
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {
@@ -1285,18 +1256,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES, I>,
-        MEMBERSHIP,
-        WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
-    > for WebCommChannel<TYPES, I, MEMBERSHIP>
-{
-    fn generate_network() -> Box<
-        dyn Fn(Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>) -> Self
-            + 'static,
-    > {
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for WebCommChannel<TYPES> {
+    fn generate_network() -> Box<dyn Fn(Arc<WebServerNetwork<TYPES>>) -> Self + 'static> {
         Box::new(move |network| WebCommChannel::new(network))
     }
 }

@@ -1,15 +1,13 @@
 use commit::Committable;
-use hotshot::HotShotConsensusApi;
+use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, vid_init},
 };
 use hotshot_types::{
-    data::{DAProposal, ViewNumber},
-    traits::{
-        consensus_api::ConsensusSharedApi, node_implementation::ExchangesType, state::ConsensusTime,
-    },
+    data::{DAProposal, VidSchemeTrait, ViewNumber},
+    traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
 use std::{collections::HashMap, marker::PhantomData};
 
@@ -27,7 +25,6 @@ async fn test_network_task() {
         block_impl::{VIDBlockPayload, VIDTransaction},
         data::VidDisperse,
         message::Proposal,
-        traits::election::CommitteeExchangeType,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -38,7 +35,6 @@ async fn test_network_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
     let vid = vid_init();
@@ -50,7 +46,11 @@ async fn test_network_task() {
         transactions,
         payload_commitment,
     };
-    let signature = committee_exchange.sign_da_proposal(&block.commit());
+    let signature =
+        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
+            api.private_key(),
+            block.commit().as_ref(),
+        );
     let da_proposal = Proposal {
         data: DAProposal {
             encoded_transactions,

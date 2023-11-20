@@ -2,7 +2,6 @@
 
 use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
-use commit::Commitment;
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -25,17 +24,12 @@ use hotshot_task_impls::{
     view_sync::{ViewSyncTaskState, ViewSyncTaskStateTypes},
 };
 use hotshot_types::{
-    data::{Leaf, VidCommitment},
     event::Event,
-    message::{Message, Messages, SequencingMessage},
+    message::Messages,
     traits::{
-        block_contents::vid_commitment,
-        election::{ConsensusExchange, Membership, ViewSyncExchangeType},
+        consensus_api::ConsensusSharedApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
-        node_implementation::{
-            CommitteeEx, ExchangesType, NodeImplementation, NodeType, QuorumEx, TimeoutEx, VIDEx,
-            ViewSyncEx,
-        },
+        node_implementation::{NodeImplementation, NodeType},
         state::ConsensusTime,
         BlockPayload,
     },
@@ -59,23 +53,14 @@ pub enum GlobalEvent {
 /// Add the network task to handle messages and publish events.
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_network_message_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
->(
+pub async fn add_network_message_task<TYPES: NodeType, NET: CommunicationChannel<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    exchange: EXCHANGE,
-) -> TaskRunner
-// This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
-where
-    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
-{
-    let channel = exchange.network().clone();
-    let broadcast_stream = GeneratedStream::<Messages<TYPES, I>>::new(Arc::new(move || {
-        let network = channel.clone();
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    channel: NET,
+) -> TaskRunner {
+    let net = channel.clone();
+    let broadcast_stream = GeneratedStream::<Messages<TYPES>>::new(Arc::new(move || {
+        let network = net.clone();
         let closure = async move {
             loop {
                 let msgs = Messages(
@@ -93,9 +78,9 @@ where
         };
         Some(boxed_sync(closure))
     }));
-    let channel = exchange.network().clone();
-    let direct_stream = GeneratedStream::<Messages<TYPES, I>>::new(Arc::new(move || {
-        let network = channel.clone();
+    let net = channel.clone();
+    let direct_stream = GeneratedStream::<Messages<TYPES>>::new(Arc::new(move || {
+        let network = net.clone();
         let closure = async move {
             loop {
                 let msgs = Messages(
@@ -114,13 +99,13 @@ where
         Some(boxed_sync(closure))
     }));
     let message_stream = Merge::new(broadcast_stream, direct_stream);
-    let network_state: NetworkMessageTaskState<_, _> = NetworkMessageTaskState {
+    let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
         event_stream: event_stream.clone(),
     };
     let registry = task_runner.registry.clone();
     let network_message_handler = HandleMessage(Arc::new(
-        move |messages: either::Either<Messages<TYPES, I>, Messages<TYPES, I>>,
-              mut state: NetworkMessageTaskState<TYPES, I>| {
+        move |messages: either::Either<Messages<TYPES>, Messages<TYPES>>,
+              mut state: NetworkMessageTaskState<TYPES>| {
             let messages = match messages {
                 either::Either::Left(messages) | either::Either::Right(messages) => messages,
             };
@@ -134,7 +119,7 @@ where
     let networking_name = "Networking Task";
 
     let networking_task_builder =
-        TaskBuilder::<NetworkMessageTaskTypes<_, _>>::new(networking_name.to_string())
+        TaskBuilder::<NetworkMessageTaskTypes<_>>::new(networking_name.to_string())
             .register_message_stream(message_stream)
             .register_registry(&mut registry.clone())
             .await
@@ -156,40 +141,26 @@ where
 /// Add the network task to handle events and send messages.
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_network_event_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    MEMBERSHIP: Membership<TYPES>,
-    EXCHANGE: ConsensusExchange<TYPES, Message<TYPES, I>, Membership = MEMBERSHIP> + 'static,
->(
+pub async fn add_network_event_task<TYPES: NodeType, NET: CommunicationChannel<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    exchange: EXCHANGE,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    channel: NET,
+    membership: TYPES::Membership,
     task_kind: NetworkTaskKind,
-) -> TaskRunner
-// This bound is required so that we can call the `recv_msgs` function of `CommunicationChannel`.
-where
-    EXCHANGE::Networking: CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>,
-{
-    let filter = NetworkEventTaskState::<
-        TYPES,
-        I,
-        MEMBERSHIP,
-        <EXCHANGE as ConsensusExchange<_, _>>::Networking,
-    >::filter(task_kind);
-    let channel = exchange.network().clone();
-    let network_state: NetworkEventTaskState<_, _, _, _> = NetworkEventTaskState {
+) -> TaskRunner {
+    let filter = NetworkEventTaskState::<TYPES, NET>::filter(task_kind);
+    let network_state: NetworkEventTaskState<_, _> = NetworkEventTaskState {
         channel,
         event_stream: event_stream.clone(),
         view: TYPES::Time::genesis(),
-        phantom: PhantomData,
     };
     let registry = task_runner.registry.clone();
     let network_event_handler = HandleEvent(Arc::new(
-        move |event, mut state: NetworkEventTaskState<_, _, MEMBERSHIP, _>| {
-            let membership = exchange.membership().clone();
+        move |event, mut state: NetworkEventTaskState<_, _>| {
+            let mem = membership.clone();
+
             async move {
-                let completion_status = state.handle_event(event, &membership).await;
+                let completion_status = state.handle_event(event, &mem).await;
                 (completion_status, state)
             }
             .boxed()
@@ -198,7 +169,7 @@ where
     let networking_name = "Networking Task";
 
     let networking_task_builder =
-        TaskBuilder::<NetworkEventTaskTypes<_, _, _, _>>::new(networking_name.to_string())
+        TaskBuilder::<NetworkEventTaskTypes<_, _>>::new(networking_name.to_string())
             .register_event_stream(event_stream.clone(), filter)
             .await
             .register_registry(&mut registry.clone())
@@ -221,22 +192,12 @@ where
 /// add the consensus task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_consensus_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(
+pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
     output_stream: ChannelStream<Event<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    QuorumEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<Leaf<TYPES>>>,
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-    TimeoutEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::Time>>,
-{
+) -> TaskRunner {
     let consensus = handle.hotshot.get_consensus();
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -249,15 +210,8 @@ where
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((
-            // Encoding a genesis payload should not fail.
-            vid_commitment(payload.encode().unwrap().collect()),
-            metadata,
-        )),
-        quorum_exchange: c_api.inner.exchanges.quorum_exchange().clone().into(),
-        timeout_exchange: c_api.inner.exchanges.timeout_exchange().clone().into(),
+        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
         api: c_api.clone(),
-        committee_exchange: c_api.inner.exchanges.committee_exchange().clone().into(),
         _pd: PhantomData,
         vote_collector: None,
         timeout_task: async_spawn(async move {}),
@@ -267,15 +221,20 @@ where
         vid_certs: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
+        quorum_network: c_api.inner.networks.quorum_network.clone().into(),
+        committee_network: c_api.inner.networks.da_network.clone().into(),
+        timeout_membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        quorum_membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        committee_membership: c_api.inner.memberships.da_membership.clone().into(),
     };
     consensus_state
-        .quorum_exchange
-        .network()
+        .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
         .await;
     consensus_state
-        .quorum_exchange
-        .network()
+        .quorum_network
         .inject_consensus_info(ConsensusIntentEvent::PollForProposal(1))
         .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
@@ -317,18 +276,11 @@ where
 /// add the VID task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_vid_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(
+pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    vid_exchange: VIDEx<TYPES, I>,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    VIDEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-{
+) -> TaskRunner {
     // build the vid task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -339,8 +291,11 @@ where
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
         cur_view: TYPES::Time::new(0),
-        vid_exchange: vid_exchange.into(),
         vote_collector: None,
+        network: c_api.inner.networks.quorum_network.clone().into(),
+        membership: c_api.inner.memberships.vid_membership.clone().into(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };
@@ -378,18 +333,11 @@ where
 /// add the Data Availability task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_da_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(
+pub async fn add_da_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    committee_exchange: CommitteeEx<TYPES, I>,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    CommitteeEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = VidCommitment>,
-{
+) -> TaskRunner {
     // build the da task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -399,10 +347,13 @@ where
         registry: registry.clone(),
         api: c_api.clone(),
         consensus: handle.hotshot.get_consensus(),
+        da_membership: c_api.inner.memberships.da_membership.clone().into(),
+        da_network: c_api.inner.networks.da_network.clone().into(),
         cur_view: TYPES::Time::new(0),
-        committee_exchange: committee_exchange.into(),
         vote_collector: None,
         event_stream: event_stream.clone(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         id: handle.hotshot.inner.id,
     };
     let da_event_handler = HandleEvent(Arc::new(
@@ -438,18 +389,11 @@ where
 /// add the Transaction Handling task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_transaction_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(
+pub async fn add_transaction_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
-    quorum_exchange: QuorumEx<TYPES, I>,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
-{
+) -> TaskRunner {
     // build the transactions task
     let c_api: HotShotConsensusApi<TYPES, I> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
@@ -462,7 +406,10 @@ where
         transactions: Arc::default(),
         seen_transactions: HashSet::new(),
         cur_view: TYPES::Time::new(0),
-        quorum_exchange: quorum_exchange.into(),
+        network: c_api.inner.networks.quorum_network.clone().into(),
+        membership: c_api.inner.memberships.quorum_membership.clone().into(),
+        public_key: c_api.public_key().clone(),
+        private_key: c_api.private_key().clone(),
         event_stream: event_stream.clone(),
         id: handle.hotshot.inner.id,
     };
@@ -498,17 +445,11 @@ where
 /// add the view sync task
 /// # Panics
 /// Is unable to panic. This section here is just to satisfy clippy
-pub async fn add_view_sync_task<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->(
+pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     task_runner: TaskRunner,
-    event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    event_stream: ChannelStream<HotShotEvent<TYPES>>,
     handle: SystemContextHandle<TYPES, I>,
-) -> TaskRunner
-where
-    ViewSyncEx<TYPES, I>: ViewSyncExchangeType<TYPES, Message<TYPES, I>>,
-{
+) -> TaskRunner {
     let api = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
@@ -518,12 +459,15 @@ where
         event_stream: event_stream.clone(),
         current_view: TYPES::Time::new(0),
         next_view: TYPES::Time::new(0),
-        exchange: (*api.inner.exchanges.view_sync_exchange()).clone().into(),
+        network: api.inner.networks.quorum_network.clone().into(),
+        membership: api.inner.memberships.view_sync_membership.clone().into(),
+        public_key: api.public_key().clone(),
+        private_key: api.private_key().clone(),
         api,
         num_timeouts_tracked: 0,
         replica_task_map: HashMap::default(),
         relay_task_map: HashMap::default(),
-        view_sync_timeout: Duration::new(5, 0),
+        view_sync_timeout: Duration::new(10, 0),
         id: handle.hotshot.inner.id,
         last_garbage_collected_view: TYPES::Time::new(0),
     };

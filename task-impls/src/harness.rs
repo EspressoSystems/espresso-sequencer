@@ -8,28 +8,28 @@ use hotshot_task::{
     task_impls::{HSTWithEvent, TaskBuilder},
     task_launcher::TaskRunner,
 };
-use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use snafu::Snafu;
 use std::{collections::HashMap, future::Future, sync::Arc};
 
 /// The state for the test harness task. Keeps track of which events and how many we expect to get
-pub struct TestHarnessState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct TestHarnessState<TYPES: NodeType> {
     /// The expected events we get from the test.  Maps an event to the number of times we expect to see it
-    expected_output: HashMap<HotShotEvent<TYPES, I>, usize>,
+    expected_output: HashMap<HotShotEvent<TYPES>, usize>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for TestHarnessState<TYPES, I> {}
+impl<TYPES: NodeType> TS for TestHarnessState<TYPES> {}
 
 /// Error emitted if the test harness task fails
 #[derive(Snafu, Debug)]
 pub struct TestHarnessTaskError {}
 
 /// Type alias for the Test Harness Task
-pub type TestHarnessTaskTypes<TYPES, I> = HSTWithEvent<
+pub type TestHarnessTaskTypes<TYPES> = HSTWithEvent<
     TestHarnessTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
-    TestHarnessState<TYPES, I>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
+    TestHarnessState<TYPES>,
 >;
 
 /// Runs a test by building the task using `build_fn` and then passing it the `input` events
@@ -40,14 +40,13 @@ pub type TestHarnessTaskTypes<TYPES, I> = HSTWithEvent<
 /// # Panics
 /// Panics if any state the test expects is not set. Panicing causes a test failure
 #[allow(clippy::implicit_hasher)]
-pub async fn run_harness<TYPES, I, Fut>(
-    input: Vec<HotShotEvent<TYPES, I>>,
-    expected_output: HashMap<HotShotEvent<TYPES, I>, usize>,
-    event_stream: Option<ChannelStream<HotShotEvent<TYPES, I>>>,
-    build_fn: impl FnOnce(TaskRunner, ChannelStream<HotShotEvent<TYPES, I>>) -> Fut,
+pub async fn run_harness<TYPES, Fut>(
+    input: Vec<HotShotEvent<TYPES>>,
+    expected_output: HashMap<HotShotEvent<TYPES>, usize>,
+    event_stream: Option<ChannelStream<HotShotEvent<TYPES>>>,
+    build_fn: impl FnOnce(TaskRunner, ChannelStream<HotShotEvent<TYPES>>) -> Fut,
 ) where
     TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
     Fut: Future<Output = TaskRunner>,
 {
     let task_runner = TaskRunner::new();
@@ -58,7 +57,7 @@ pub async fn run_harness<TYPES, I, Fut>(
         async move { handle_event(event, state) }.boxed()
     }));
     let filter = FilterEvent::default();
-    let builder = TaskBuilder::<TestHarnessTaskTypes<TYPES, I>>::new("test_harness".to_string())
+    let builder = TaskBuilder::<TestHarnessTaskTypes<TYPES>>::new("test_harness".to_string())
         .register_event_stream(event_stream.clone(), filter)
         .await
         .register_registry(&mut registry.clone())
@@ -88,12 +87,12 @@ pub async fn run_harness<TYPES, I, Fut>(
 ///  # Panics
 /// Will panic to fail the test when it receives and unexpected event
 #[allow(clippy::needless_pass_by_value)]
-pub fn handle_event<TYPES: NodeType, I: NodeImplementation<TYPES>>(
-    event: HotShotEvent<TYPES, I>,
-    mut state: TestHarnessState<TYPES, I>,
+pub fn handle_event<TYPES: NodeType>(
+    event: HotShotEvent<TYPES>,
+    mut state: TestHarnessState<TYPES>,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
-    TestHarnessState<TYPES, I>,
+    TestHarnessState<TYPES>,
 ) {
     assert!(
         state.expected_output.contains_key(&event),

@@ -7,7 +7,7 @@ use crate::{
     spinning_task::UpDown,
     test_launcher::{Networks, TestLauncher},
 };
-use hotshot::types::SystemContextHandle;
+use hotshot::{types::SystemContextHandle, Memberships};
 
 use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
 use hotshot_task::{
@@ -15,16 +15,13 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    message::Message,
-    traits::{
-        election::{ConsensusExchange, Membership},
-        network::CommunicationChannel,
-        node_implementation::{ExchangesType, NodeType, QuorumCommChannel, QuorumEx},
-        signature_key::SignatureKey,
-    },
+    traits::{election::Membership, node_implementation::NodeType},
     HotShotConfig, ValidatorConfig,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+};
 
 #[allow(deprecated)]
 use tracing::info;
@@ -37,14 +34,7 @@ pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 
 /// The runner of a test network
 /// spin up and down nodes, execute rounds
-pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>
-where
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
-    >,
-{
+pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) launcher: TestLauncher<TYPES, I>,
     pub(crate) nodes: Vec<Node<TYPES, I>>,
     pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
@@ -55,21 +45,10 @@ where
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
 where
     SystemContext<TYPES, I>: HotShotType<TYPES, I>,
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
-    >,
+    I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
     /// excecute test
-    pub async fn run_test(mut self)
-    where
-        I::Exchanges: ExchangesType<
-            TYPES,
-            Message<TYPES, I>,
-            ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
-        >,
-    {
+    pub async fn run_test(mut self) {
         let spinning_changes = self
             .launcher
             .metadata
@@ -188,14 +167,7 @@ where
     }
 
     /// add nodes
-    pub async fn add_nodes(&mut self, total: usize, late_start: &HashSet<u64>) -> Vec<u64>
-    where
-        I::Exchanges: ExchangesType<
-            TYPES,
-            Message<TYPES, I>,
-            ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
-        >,
-    {
+    pub async fn add_nodes(&mut self, total: usize, late_start: &HashSet<u64>) -> Vec<u64> {
         let mut results = vec![];
         for i in 0..total {
             tracing::debug!("launch node {}", i);
@@ -232,46 +204,50 @@ where
         initializer: HotShotInitializer<TYPES>,
         config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
-    ) -> SystemContext<TYPES, I>
-    where
-        I::Exchanges: ExchangesType<
-            TYPES,
-            Message<TYPES, I>,
-            ElectionConfigs = (TYPES::ElectionConfigType, I::CommitteeElectionConfig),
-        >,
-    {
+    ) -> SystemContext<TYPES, I> {
         let node_id = self.next_node_id;
         self.next_node_id += 1;
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
-        let entry = public_key.get_stake_table_entry(validator_config.stake_value);
         let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
-            <QuorumEx<TYPES,I> as ConsensusExchange<
-                TYPES,
-                Message<TYPES, I>,
-            >>::Membership::default_election_config(config.total_nodes.get() as u64)
+            TYPES::Membership::default_election_config(config.total_nodes.get() as u64)
         });
         let committee_election_config = I::committee_election_config_generator();
-        let exchanges = I::Exchanges::create(
-            known_nodes_with_stake.clone(),
-            (
-                quorum_election_config,
+        let network_bundle = hotshot::Networks {
+            quorum_network: networks.0.clone(),
+            da_network: networks.1.clone(),
+            _pd: PhantomData,
+        };
+
+        let memberships = Memberships {
+            quorum_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
+            ),
+            da_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
                 committee_election_config(config.da_committee_size as u64),
             ),
-            networks,
-            public_key.clone(),
-            entry.clone(),
-            private_key.clone(),
-        );
+            vid_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
+            ),
+            view_sync_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config,
+            ),
+        };
+
         SystemContext::new(
             public_key,
             private_key,
             node_id,
             config,
             storage,
-            exchanges,
+            memberships,
+            network_bundle,
             initializer,
             ConsensusMetricsValue::new(),
         )
