@@ -142,7 +142,7 @@ impl QueryableBlock for BlockPayload {
     fn transaction_with_proof(
         &self,
         index: &Self::TransactionIndex,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         // TODO temporary VID construction
         let vid = {
             let (payload_chunk_size, num_storage_nodes) = (5, 10);
@@ -161,14 +161,12 @@ impl QueryableBlock for BlockPayload {
         let tx_range = self.get_tx_range(*index)?;
 
         use jf_primitives::vid::payload_prover::PayloadProver;
-        let _proof: SmallRangeProof<_> =
-            vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
+        let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
 
-        // Some((
-        //     &Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
-        //     proof,
-        // ))
-        todo!()
+        Some((
+            Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
+            proof,
+        ))
     }
 }
 
