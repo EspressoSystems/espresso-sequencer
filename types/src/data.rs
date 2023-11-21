@@ -128,28 +128,6 @@ pub type VidScheme = jf_primitives::vid::advz::Advz<ark_bls12_381::Bls12_381, sh
 pub use jf_primitives::vid::VidScheme as VidSchemeTrait;
 /// VID commitment.
 pub type VidCommitment = <VidScheme as VidSchemeTrait>::Commit;
-// pub type VidCommitment = Commitment<<VidScheme as VidSchemeTrait>::Commit>;
-// struct DummyVidCommitment;
-// impl Committable for DummyVidCommitment {
-//     fn commit(&self) -> Commitment<Self> {
-//         Commitment([0u8; 32], PhantomData)
-//     }
-
-//     fn tag() -> String {
-//         "DUMMY_TAG".to_string()
-//     }
-// }
-
-// impl Committable for VidCommit {
-//     fn commit(&self) -> Commitment<Self> {
-//         <Commitment<Self> as CanonicalDeserialize>::deserialize(self)
-//             .expect("conversion from VidScheme::Commit to Commitment should succeed")
-//     }
-
-//     fn tag() -> String {
-//         "VID_COMMIT".to_string()
-//     }
-// }
 
 /// VID dispersal data
 ///
