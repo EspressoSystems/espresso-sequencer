@@ -1,0 +1,27 @@
+name: Ubuntu install without nix
+
+on:
+  schedule:
+    - cron: "0 0 * * MON"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and test
+        # Execute all lines that start with four spaces, and remove leading 'sudo '
+        # because we're in a container and already root.
+        run: |
+          grep '^    ' doc/ubuntu.md \
+            | sed 's/^    //' \
+            | sed 's/^sudo //' \
+            | bash -exo pipefail

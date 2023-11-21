@@ -32,123 +32,137 @@
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
-  outputs = { self, nixpkgs, rust-overlay, nixpkgs-cross-overlay, flake-utils
-    , pre-commit-hooks, fenix, foundry, solc-bin, ... }:
+  outputs =
+    { self
+    , nixpkgs
+    , rust-overlay
+    , nixpkgs-cross-overlay
+    , flake-utils
+    , pre-commit-hooks
+    , fenix
+    , foundry
+    , solc-bin
+    , ...
+    }:
     flake-utils.lib.eachDefaultSystem (system:
-      let
-        # node=error: disable noisy anvil output
-        RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
-        RUST_BACKTRACE = 1;
-        RUSTFLAGS =
-          " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
-        # Use a distinct target dir for builds from within nix shells.
-        CARGO_TARGET_DIR = "target/nix";
+    let
+      # node=error: disable noisy anvil output
+      RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
+      RUST_BACKTRACE = 1;
+      RUSTFLAGS =
+        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"";
+      # Use a distinct target dir for builds from within nix shells.
+      CARGO_TARGET_DIR = "target/nix";
 
-        solhintPkg = { buildNpmPackage, fetchFromGitHub }:
-          buildNpmPackage rec {
-            pname = "solhint";
-            version = "3.6.2";
-            src = fetchFromGitHub {
-              owner = "protofire";
-              repo = pname;
-              rev = "refs/tags/${version}";
-              hash = "sha256-VI6J2iSgimcT9TWPlPD6aIDfRFmlQafCc/J4dwF9rMs=";
-            };
-            npmDepsHash = "sha256-lSe3Rt3I2yFy9Je3SLD2QJA/608ppvbLWmwDt6vkDIk=";
-            dontNpmBuild = true;
+      solhintPkg = { buildNpmPackage, fetchFromGitHub }:
+        buildNpmPackage rec {
+          pname = "solhint";
+          version = "3.6.2";
+          src = fetchFromGitHub {
+            owner = "protofire";
+            repo = pname;
+            rev = "refs/tags/${version}";
+            hash = "sha256-VI6J2iSgimcT9TWPlPD6aIDfRFmlQafCc/J4dwF9rMs=";
           };
+          npmDepsHash = "sha256-lSe3Rt3I2yFy9Je3SLD2QJA/608ppvbLWmwDt6vkDIk=";
+          dontNpmBuild = true;
+        };
 
-        overlays = [
-          (import rust-overlay)
-          foundry.overlay
-          solc-bin.overlays.default
-          (final: prev: {
-            solhint =
-              solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
-          })
-        ];
-        pkgs = import nixpkgs { inherit system overlays; };
-        crossShell = { config }:
-          let
-            localSystem = system;
-            crossSystem = {
-              inherit config;
-              useLLVM = true;
-              isStatic = true;
-            };
-            pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
-              inherit overlays localSystem crossSystem;
-            };
-          in import ./cross-shell.nix {
-            inherit pkgs;
-            inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+      overlays = [
+        (import rust-overlay)
+        foundry.overlay
+        solc-bin.overlays.default
+        (final: prev: {
+          solhint =
+            solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
+        })
+      ];
+      pkgs = import nixpkgs { inherit system overlays; };
+      crossShell = { config }:
+        let
+          localSystem = system;
+          crossSystem = {
+            inherit config;
+            useLLVM = true;
+            isStatic = true;
           };
-      in with pkgs; {
-        checks = {
-          pre-commit-check = pre-commit-hooks.lib.${system}.run {
-            src = ./.;
-            hooks = {
-              doc = {
-                enable = true;
-                description = "Generate figures";
-                entry = "make doc";
-                types_or = [ "plantuml" ];
-                pass_filenames = false;
-              };
-              cargo-fmt = {
-                enable = true;
-                description = "Enforce rustfmt";
-                entry = "cargo fmt --all";
-                types_or = [ "rust" "toml" ];
-                pass_filenames = false;
-              };
-              cargo-sort = {
-                enable = true;
-                description = "Ensure Cargo.toml are sorted";
-                entry = "cargo sort -g -w";
-                types_or = [ "toml" ];
-                pass_filenames = false;
-              };
-              cargo-clippy = {
-                enable = true;
-                description = "Run clippy";
-                entry =
-                  "cargo clippy --workspace --all-features --all-targets -- -D warnings";
-                types_or = [ "rust" "toml" ];
-                pass_filenames = false;
-              };
-              forge-fmt = {
-                enable = true;
-                description = "Enforce forge fmt";
-                entry = "forge fmt";
-                types_or = [ "solidity" ];
-                pass_filenames = false;
-              };
-              solhint = {
-                enable = true;
-                description = "Solidity linter";
-                entry = "solhint --fix 'contracts/{script,src,test}/**/*.sol'";
-                types_or = [ "solidity" ];
-                pass_filenames = true;
-              };
-              contract-bindings = {
-                enable = true;
-                description = "Generate contract bindings";
-                entry = "just gen-bindings";
-                types_or = [ "solidity" ];
-                pass_filenames = false;
-              };
-              prettier-fmt = {
-                enable = true;
-                description = "Enforce markdown formatting";
-                entry = "prettier -w";
-                types_or = [ "markdown" ];
-                pass_filenames = true;
-              };
+          pkgs = import "${nixpkgs-cross-overlay}/utils/nixpkgs.nix" {
+            inherit overlays localSystem crossSystem;
+          };
+        in
+        import ./cross-shell.nix {
+          inherit pkgs;
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+        };
+    in
+    with pkgs; {
+      checks = {
+        pre-commit-check = pre-commit-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = {
+            doc = {
+              enable = true;
+              description = "Generate figures";
+              entry = "make doc";
+              types_or = [ "plantuml" ];
+              pass_filenames = false;
             };
+            cargo-fmt = {
+              enable = true;
+              description = "Enforce rustfmt";
+              entry = "cargo fmt --all";
+              types_or = [ "rust" "toml" ];
+              pass_filenames = false;
+            };
+            cargo-sort = {
+              enable = true;
+              description = "Ensure Cargo.toml are sorted";
+              entry = "cargo sort -g -w";
+              types_or = [ "toml" ];
+              pass_filenames = false;
+            };
+            cargo-clippy = {
+              enable = true;
+              description = "Run clippy";
+              entry =
+                "cargo clippy --workspace --all-features --all-targets -- -D warnings";
+              types_or = [ "rust" "toml" ];
+              pass_filenames = false;
+            };
+            forge-fmt = {
+              enable = true;
+              description = "Enforce forge fmt";
+              entry = "forge fmt";
+              types_or = [ "solidity" ];
+              pass_filenames = false;
+            };
+            solhint = {
+              enable = true;
+              description = "Solidity linter";
+              entry = "solhint --fix 'contracts/{script,src,test}/**/*.sol'";
+              types_or = [ "solidity" ];
+              pass_filenames = true;
+            };
+            contract-bindings = {
+              enable = true;
+              description = "Generate contract bindings";
+              entry = "just gen-bindings";
+              types_or = [ "solidity" ];
+              pass_filenames = false;
+            };
+            prettier-fmt = {
+              enable = true;
+              description = "Enforce markdown formatting";
+              entry = "prettier -w";
+              types_or = [ "markdown" ];
+              pass_filenames = true;
+            };
+            nixpkgs-fmt.enable = true;
           };
         };
-        devShells.default = let
+      };
+      devShells.default =
+        let
           stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
             extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
           };
@@ -158,7 +172,8 @@
             exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
           '';
           solc = pkgs.solc-bin.latest;
-        in mkShell {
+        in
+        mkShell {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -176,6 +191,7 @@
 
             # Tools
             nixWithFlakes
+            nixpkgs-fmt
             entr
 
             # Figures
@@ -192,7 +208,7 @@
 
           ] ++ lib.optionals stdenv.isDarwin
             [ darwin.apple_sdk.frameworks.SystemConfiguration ]
-            ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
+          ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
           ;
           shellHook = ''
             # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
@@ -204,15 +220,17 @@
           FOUNDRY_SOLC = "${solc}/bin/solc";
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
         };
-        devShells.crossShell =
-          crossShell { config = "x86_64-unknown-linux-musl"; };
-        devShells.armCrossShell =
-          crossShell { config = "aarch64-unknown-linux-musl"; };
-        devShells.rustShell = let
+      devShells.crossShell =
+        crossShell { config = "x86_64-unknown-linux-musl"; };
+      devShells.armCrossShell =
+        crossShell { config = "aarch64-unknown-linux-musl"; };
+      devShells.rustShell =
+        let
           stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
             extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
           };
-        in mkShell {
+        in
+        mkShell {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -223,5 +241,5 @@
           ];
           inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
         };
-      });
+    });
 }

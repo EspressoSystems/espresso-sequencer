@@ -119,6 +119,7 @@ contract LightClient {
         // update the stake table. The `finalizedState` (before update) should have the
         // `epochEndingBlockHeight`
         if (finalizedState.blockHeight == epochEndingBlockHeight) {
+            // solhint-disable-next-line no-unused-vars
             bytes32 newStakeTableComm = keccak256(
                 abi.encodePacked(
                     finalizedState.stakeTableBlsKeyComm,
@@ -127,7 +128,7 @@ contract LightClient {
                 )
             );
 
-            stakeTable.advanceEpoch(newStakeTableComm);
+            // stakeTable.advanceEpoch(newStakeTableComm);
             currentEpoch += 1;
         }
 
