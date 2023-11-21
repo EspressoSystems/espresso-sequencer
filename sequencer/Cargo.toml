@@ -47,14 +47,7 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branc
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 
-# jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-#     "std",
-#     "test-srs", # TODO temporary
-# ], rev = "1a9db506f011b168ead863e1dfcb5fd094fa2550" }
-jf-primitives = { path = "../../jellyfish/primitives", features = [
-    "std",
-    "test-srs", # TODO temporary
-] }
+jf-primitives = { workspace = true }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
