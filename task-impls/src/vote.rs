@@ -174,7 +174,8 @@ pub async fn spawn_vote_accumulator<TYPES, VOTE, CERT>(
     info: &AccumulatorInfo<'_, TYPES>,
     vote: VOTE,
     event: HotShotEvent<TYPES>,
-) -> Option<usize>
+    name: String,
+) -> Option<(TYPES::Time, usize, usize>
 where
     TYPES: NodeType,
     VOTE: Vote<TYPES>
@@ -228,8 +229,6 @@ where
 
     state = result.1;
 
-    let name = format!("View Sync Relay Task for view {:?}", vote.get_view_number());
-
     let relay_handle_event = HandleEvent(Arc::new(
         move |event, state: VoteCollectionTaskState<TYPES, VOTE, CERT>| {
             async move { state.handle_event(event).await }.boxed()
@@ -248,10 +247,11 @@ where
         .register_event_handler(relay_handle_event);
 
     let event_stream_id = builder.get_stream_id().unwrap();
+    let id = builder.get_task_id().unwrap()
 
     let _task = async_spawn(async move { VoteTaskStateTypes::build(builder).launch().await });
 
-    Some(event_stream_id)
+    Some((vote.get_view_number(), id, event_stream_id))
 }
 
 /// Alias for Quorum vote accumulator
@@ -282,7 +282,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote<TYPES>, QuorumCertifica
     for QuorumVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number())
+        membership.get_leader(self.get_view_number() + 1)
     }
     fn make_cert_event(
         certificate: QuorumCertificate<TYPES>,
@@ -310,7 +310,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, TimeoutVote<TYPES>, TimeoutCertifi
     for TimeoutVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number())
+        membership.get_leader(self.get_view_number() + 1)
     }
     fn make_cert_event(
         certificate: TimeoutCertificate<TYPES>,

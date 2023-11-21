@@ -129,144 +129,144 @@ pub struct ConsensusTaskState<
     pub id: u64,
 }
 
-/// State for the vote collection task.  This handles the building of a QC from a votes received
-pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-    /// Membership for Timeout votes/certs
-    pub timeout_membership: Arc<TYPES::Membership>,
-    /// Membership for Quorum Certs/votes
-    pub quorum_membership: Arc<TYPES::Membership>,
+// /// State for the vote collection task.  This handles the building of a QC from a votes received
+// pub struct VoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+//     /// Network for all nodes
+//     pub quorum_network: Arc<I::QuorumNetwork>,
+//     /// Membership for Timeout votes/certs
+//     pub timeout_membership: Arc<TYPES::Membership>,
+//     /// Membership for Quorum Certs/votes
+//     pub quorum_membership: Arc<TYPES::Membership>,
 
-    #[allow(clippy::type_complexity)]
-    /// Accumulator for votes
-    pub accumulator: Either<
-        VoteAccumulator<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
-        QuorumCertificate<TYPES>,
-    >,
+//     #[allow(clippy::type_complexity)]
+//     /// Accumulator for votes
+//     pub accumulator: Either<
+//         VoteAccumulator<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>,
+//         QuorumCertificate<TYPES>,
+//     >,
 
-    /// Accumulator for votes
-    #[allow(clippy::type_complexity)]
-    pub timeout_accumulator: Either<
-        VoteAccumulator<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
-        TimeoutCertificate<TYPES>,
-    >,
-    /// View which this vote collection task is collecting votes in
-    pub cur_view: TYPES::Time,
-    /// The event stream shared by all tasks
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    /// Node id
-    pub id: u64,
-}
+//     /// Accumulator for votes
+//     #[allow(clippy::type_complexity)]
+//     pub timeout_accumulator: Either<
+//         VoteAccumulator<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>,
+//         TimeoutCertificate<TYPES>,
+//     >,
+//     /// View which this vote collection task is collecting votes in
+//     pub cur_view: TYPES::Time,
+//     /// The event stream shared by all tasks
+//     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
+//     /// Node id
+//     pub id: u64,
+// }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I> {}
+// impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VoteCollectionTaskState<TYPES, I> {}
 
-#[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "Quorum Vote Collection Task", level = "error")]
+// #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "Quorum Vote Collection Task", level = "error")]
 
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
-    mut state: VoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES>,
-) -> (
-    std::option::Option<HotShotTaskCompleted>,
-    VoteCollectionTaskState<TYPES, I>,
-) {
-    match event {
-        HotShotEvent::QuorumVoteRecv(vote) => {
-            // For the case where we receive votes after we've made a certificate
-            if state.accumulator.is_right() {
-                return (None, state);
-            }
+// async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+//     mut state: VoteCollectionTaskState<TYPES, I>,
+//     event: HotShotEvent<TYPES>,
+// ) -> (
+//     std::option::Option<HotShotTaskCompleted>,
+//     VoteCollectionTaskState<TYPES, I>,
+// ) {
+//     match event {
+//         HotShotEvent::QuorumVoteRecv(vote) => {
+//             // For the case where we receive votes after we've made a certificate
+//             if state.accumulator.is_right() {
+//                 return (None, state);
+//             }
 
-            if vote.get_view_number() != state.cur_view {
-                error!(
-                    "Vote view does not match! vote view is {} current view is {}",
-                    *vote.get_view_number(),
-                    *state.cur_view
-                );
-                return (None, state);
-            }
+//             if vote.get_view_number() != state.cur_view {
+//                 error!(
+//                     "Vote view does not match! vote view is {} current view is {}",
+//                     *vote.get_view_number(),
+//                     *state.cur_view
+//                 );
+//                 return (None, state);
+//             }
 
-            let accumulator = state.accumulator.left().unwrap();
+//             let accumulator = state.accumulator.left().unwrap();
 
-            match accumulator.accumulate(&vote, &state.quorum_membership) {
-                Either::Left(acc) => {
-                    state.accumulator = Either::Left(acc);
-                    return (None, state);
-                }
-                Either::Right(qc) => {
-                    debug!("QCFormed! {:?}", qc.view_number);
-                    state
-                        .event_stream
-                        .publish(HotShotEvent::QCFormed(either::Left(qc.clone())))
-                        .await;
-                    state.accumulator = Either::Right(qc.clone());
+//             match accumulator.accumulate(&vote, &state.quorum_membership) {
+//                 Either::Left(acc) => {
+//                     state.accumulator = Either::Left(acc);
+//                     return (None, state);
+//                 }
+//                 Either::Right(qc) => {
+//                     debug!("QCFormed! {:?}", qc.view_number);
+//                     state
+//                         .event_stream
+//                         .publish(HotShotEvent::QCFormed(either::Left(qc.clone())))
+//                         .await;
+//                     state.accumulator = Either::Right(qc.clone());
 
-                    // No longer need to poll for votes
-                    state
-                        .quorum_network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                            *qc.view_number,
-                        ))
-                        .await;
+//                     // No longer need to poll for votes
+//                     state
+//                         .quorum_network
+//                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+//                             *qc.view_number,
+//                         ))
+//                         .await;
 
-                    return (Some(HotShotTaskCompleted::ShutDown), state);
-                }
-            }
-        }
-        // TODO: Code below is redundant of code above; can be fixed
-        // during exchange refactor
-        // https://github.com/EspressoSystems/HotShot/issues/1799
-        HotShotEvent::TimeoutVoteRecv(vote) => {
-            debug!("Received timeout vote for view {}", *vote.get_view_number());
-            if state.timeout_accumulator.is_right() {
-                return (None, state);
-            }
+//                     return (Some(HotShotTaskCompleted::ShutDown), state);
+//                 }
+//             }
+//         }
+//         // TODO: Code below is redundant of code above; can be fixed
+//         // during exchange refactor
+//         // https://github.com/EspressoSystems/HotShot/issues/1799
+//         HotShotEvent::TimeoutVoteRecv(vote) => {
+//             debug!("Received timeout vote for view {}", *vote.get_view_number());
+//             if state.timeout_accumulator.is_right() {
+//                 return (None, state);
+//             }
 
-            if vote.get_view_number() != state.cur_view {
-                error!(
-                    "Vote view does not match! vote view is {} current view is {}",
-                    *vote.get_view_number(),
-                    *state.cur_view
-                );
-                return (None, state);
-            }
+//             if vote.get_view_number() != state.cur_view {
+//                 error!(
+//                     "Vote view does not match! vote view is {} current view is {}",
+//                     *vote.get_view_number(),
+//                     *state.cur_view
+//                 );
+//                 return (None, state);
+//             }
 
-            let accumulator = state.timeout_accumulator.left().unwrap();
+//             let accumulator = state.timeout_accumulator.left().unwrap();
 
-            match accumulator.accumulate(&vote, &state.timeout_membership) {
-                Either::Left(acc) => {
-                    state.timeout_accumulator = Either::Left(acc);
-                    return (None, state);
-                }
-                Either::Right(qc) => {
-                    debug!("QCFormed! {:?}", qc.view_number);
-                    state
-                        .event_stream
-                        .publish(HotShotEvent::QCFormed(either::Right(qc.clone())))
-                        .await;
-                    state.timeout_accumulator = Either::Right(qc.clone());
+//             match accumulator.accumulate(&vote, &state.timeout_membership) {
+//                 Either::Left(acc) => {
+//                     state.timeout_accumulator = Either::Left(acc);
+//                     return (None, state);
+//                 }
+//                 Either::Right(qc) => {
+//                     debug!("QCFormed! {:?}", qc.view_number);
+//                     state
+//                         .event_stream
+//                         .publish(HotShotEvent::QCFormed(either::Right(qc.clone())))
+//                         .await;
+//                     state.timeout_accumulator = Either::Right(qc.clone());
 
-                    // No longer need to poll for votes
-                    state
-                        .quorum_network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                            *qc.view_number,
-                        ))
-                        .await;
+//                     // No longer need to poll for votes
+//                     state
+//                         .quorum_network
+//                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+//                             *qc.view_number,
+//                         ))
+//                         .await;
 
-                    return (Some(HotShotTaskCompleted::ShutDown), state);
-                }
-            }
-        }
-        HotShotEvent::Shutdown => {
-            return (Some(HotShotTaskCompleted::ShutDown), state);
-        }
-        _ => {
-            error!("Unexpected event");
-        }
-    }
-    (None, state)
-}
+//                     return (Some(HotShotTaskCompleted::ShutDown), state);
+//                 }
+//             }
+//         }
+//         HotShotEvent::Shutdown => {
+//             return (Some(HotShotTaskCompleted::ShutDown), state);
+//         }
+//         _ => {
+//             error!("Unexpected event");
+//         }
+//     }
+//     (None, state)
+// }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     ConsensusTaskState<TYPES, I, A>
