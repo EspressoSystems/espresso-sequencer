@@ -107,7 +107,7 @@ impl<TYPES: NodeType> Storage<TYPES> for MemoryStorage<TYPES> {
 
 #[cfg(test)]
 mod test {
-    use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
+    use crate::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 
     use super::*;
     use commit::Committable;
@@ -115,7 +115,7 @@ mod test {
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
-        simple_certificate::QuorumCertificate2,
+        simple_certificate::QuorumCertificate,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
     use std::{fmt::Debug, hash::Hash, marker::PhantomData};
@@ -141,10 +141,10 @@ mod test {
         type BlockHeader = VIDBlockHeader;
         type BlockPayload = VIDBlockPayload;
         type SignatureKey = BLSPubKey;
-        type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
         type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
+        type Membership = GeneralStaticCommittee<DummyTypes, BLSPubKey>;
     }
 
     fn random_stored_view(view_number: <DummyTypes as NodeType>::Time) -> StoredView<DummyTypes> {
@@ -159,7 +159,7 @@ mod test {
         };
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate2 {
+            QuorumCertificate {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
                 data,
                 vote_commitment: commit,

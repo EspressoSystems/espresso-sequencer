@@ -9,7 +9,6 @@ use types::VIDNetwork;
 use crate::infra::run_orchestrator;
 use crate::infra::OrchestratorArgs;
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ViewSyncNetwork};
-use hotshot::demo::DemoMembership;
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
@@ -25,14 +24,8 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<
-        DemoTypes,
-        DemoMembership,
-        DANetwork,
-        QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
-        NodeImpl,
-    >(args)
+    run_orchestrator::<DemoTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
+        args,
+    )
     .await;
 }

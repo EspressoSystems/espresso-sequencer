@@ -3,7 +3,6 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use clap::Parser;
-use core::marker::PhantomData;
 use futures::StreamExt;
 use hotshot::traits::implementations::{CombinedCommChannel, CombinedNetworks};
 use hotshot::{
@@ -15,7 +14,7 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotType, SystemContext,
+    HotShotType, Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::{
     self,
@@ -23,21 +22,19 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
+use hotshot_types::block_impl::VIDBlockHeader;
+use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::ValidatorConfig;
-use hotshot_types::{block_impl::VIDBlockHeader, traits::election::VIDExchange};
 use hotshot_types::{
     block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
-    message::{Message, SequencingMessage},
     traits::{
-        election::{
-            CommitteeExchange, ConsensusExchange, Membership, QuorumExchange, ViewSyncExchange,
-        },
+        election::Membership,
         network::CommunicationChannel,
-        node_implementation::{CommitteeEx, Exchanges, ExchangesType, NodeType, QuorumEx},
+        node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock, TestableState},
     },
     HotShotConfig,
@@ -52,17 +49,11 @@ use libp2p_networking::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use std::marker::PhantomData;
 use std::time::Duration;
 use std::{collections::BTreeSet, sync::Arc};
 use std::{num::NonZeroUsize, str::FromStr};
-// use libp2p::{
-//     identity::{
-//         ed25519::{Keypair as EdKeypair, SecretKey},
-//         Keypair,
-//     },
-//     multiaddr::{self, Protocol},
-//     Multiaddr,
-// };
+
 use libp2p_identity::PeerId;
 // use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
 use std::fmt::Debug;
@@ -140,24 +131,11 @@ pub fn load_config_from_file<TYPES: NodeType>(
 /// Runs the orchestrator
 pub async fn run_orchestrator<
     TYPES: NodeType,
-    MEMBERSHIP: Membership<TYPES> + Debug,
-    DACHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    QUORUMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIEWSYNCCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIDCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    NODE: NodeImplementation<
-        TYPES,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumExchange<TYPES, MEMBERSHIP, QUORUMCHANNEL, Message<TYPES, NODE>>,
-            CommitteeExchange<TYPES, MEMBERSHIP, DACHANNEL, Message<TYPES, NODE>>,
-            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCCHANNEL, Message<TYPES, NODE>>,
-            VIDExchange<TYPES, MEMBERSHIP, VIDCHANNEL, Message<TYPES, NODE>>,
-        >,
-        Storage = MemoryStorage<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
-    >,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
+    NODE: NodeImplementation<TYPES, Storage = MemoryStorage<TYPES>>,
 >(
     OrchestratorArgs {
         host,
@@ -185,10 +163,10 @@ fn calculate_num_tx_per_round(
             as usize
 }
 
-async fn webserver_network_from_config<TYPES: NodeType, NODE: NodeImplementation<TYPES>>(
+async fn webserver_network_from_config<TYPES: NodeType>(
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     pub_key: TYPES::SignatureKey,
-) -> WebServerNetwork<Message<TYPES, NODE>, TYPES::SignatureKey, TYPES> {
+) -> WebServerNetwork<TYPES> {
     // Get the configuration for the web server
     let WebServerConfig {
         host,
@@ -205,10 +183,10 @@ async fn webserver_network_from_config<TYPES: NodeType, NODE: NodeImplementation
     )
 }
 
-async fn libp2p_network_from_config<TYPES: NodeType, NODE: NodeImplementation<TYPES>>(
+async fn libp2p_network_from_config<TYPES: NodeType>(
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
     pub_key: TYPES::SignatureKey,
-) -> Libp2pNetwork<Message<TYPES, NODE>, TYPES::SignatureKey> {
+) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
     let mut config = config;
     let libp2p_config = config
         .libp2p_config
@@ -324,23 +302,15 @@ match node_type {
 #[async_trait]
 pub trait RunDA<
     TYPES: NodeType,
-    MEMBERSHIP: Membership<TYPES> + Debug,
-    DACHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    QUORUMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIEWSYNCCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIDCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumExchange<TYPES, MEMBERSHIP, QUORUMCHANNEL, Message<TYPES, NODE>>,
-            CommitteeExchange<TYPES, MEMBERSHIP, DACHANNEL, Message<TYPES, NODE>>,
-            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCCHANNEL, Message<TYPES, NODE>>,
-            VIDExchange<TYPES, MEMBERSHIP, VIDCHANNEL, Message<TYPES, NODE>>,
-        >,
+        QuorumNetwork = QUORUMCHANNEL,
+        CommitteeNetwork = DACHANNEL,
         Storage = MemoryStorage<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
 > where
     <TYPES as NodeType>::StateType: TestableState,
@@ -369,41 +339,42 @@ pub trait RunDA<
         let pk = config.config.my_own_validator_config.public_key.clone();
         let sk = config.config.my_own_validator_config.private_key.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
-        let entry = pk.get_stake_table_entry(1u64);
 
         let da_network = self.get_da_channel();
         let quorum_network = self.get_quorum_channel();
-        let view_sync_network = self.get_view_sync_channel();
-        let vid_network = self.get_vid_channel();
 
         // Since we do not currently pass the election config type in the NetworkConfig, this will always be the default election config
         let quorum_election_config = config.config.election_config.clone().unwrap_or_else(|| {
-            <QuorumEx<TYPES,NODE> as ConsensusExchange<
-                TYPES,
-                Message<TYPES, NODE>,
-            >>::Membership::default_election_config(config.config.total_nodes.get() as u64)
+            TYPES::Membership::default_election_config(config.config.total_nodes.get() as u64)
         });
 
-        let committee_election_config = <CommitteeEx<TYPES, NODE> as ConsensusExchange<
-            TYPES,
-            Message<TYPES, NODE>,
-        >>::Membership::default_election_config(
+        let committee_election_config = TYPES::Membership::default_election_config(
             config.config.da_committee_size.try_into().unwrap(),
         );
+        let networks_bundle = Networks {
+            quorum_network: quorum_network.clone(),
+            da_network: da_network.clone(),
+            _pd: PhantomData,
+        };
 
-        let exchanges = NODE::Exchanges::create(
-            known_nodes_with_stake.clone(),
-            (quorum_election_config, committee_election_config),
-            (
-                quorum_network.clone(),
-                da_network.clone(),
-                view_sync_network.clone(),
-                vid_network.clone(),
+        let memberships = Memberships {
+            quorum_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
             ),
-            pk.clone(),
-            entry.clone(),
-            sk.clone(),
-        );
+            da_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                committee_election_config,
+            ),
+            vid_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config.clone(),
+            ),
+            view_sync_membership: <TYPES as NodeType>::Membership::create_election(
+                known_nodes_with_stake.clone(),
+                quorum_election_config,
+            ),
+        };
 
         SystemContext::init(
             pk,
@@ -411,7 +382,8 @@ pub trait RunDA<
             config.node_index,
             config.config,
             MemoryStorage::empty(),
-            exchanges,
+            memberships,
+            networks_bundle,
             initializer,
             ConsensusMetricsValue::new(),
         )
@@ -534,16 +506,12 @@ pub trait RunDA<
 // WEB SERVER
 
 /// Represents a web server-based run
-pub struct WebServerDARun<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
-> {
+pub struct WebServerDARun<TYPES: NodeType> {
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    quorum_channel: WebCommChannel<TYPES, I, MEMBERSHIP>,
-    da_channel: WebCommChannel<TYPES, I, MEMBERSHIP>,
-    view_sync_channel: WebCommChannel<TYPES, I, MEMBERSHIP>,
-    vid_channel: WebCommChannel<TYPES, I, MEMBERSHIP>,
+    quorum_channel: WebCommChannel<TYPES>,
+    da_channel: WebCommChannel<TYPES>,
+    view_sync_channel: WebCommChannel<TYPES>,
+    vid_channel: WebCommChannel<TYPES>,
 }
 
 #[async_trait]
@@ -553,50 +521,21 @@ impl<
             BlockPayload = VIDBlockPayload,
             BlockHeader = VIDBlockHeader,
         >,
-        MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Exchanges = Exchanges<
-                TYPES,
-                Message<TYPES, NODE>,
-                QuorumExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                CommitteeExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                ViewSyncExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                VIDExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-            >,
+            QuorumNetwork = WebCommChannel<TYPES>,
+            CommitteeNetwork = WebCommChannel<TYPES>,
             Storage = MemoryStorage<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
     RunDA<
         TYPES,
-        MEMBERSHIP,
-        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
-        WebCommChannel<TYPES, NODE, MEMBERSHIP>,
+        WebCommChannel<TYPES>,
+        WebCommChannel<TYPES>,
+        WebCommChannel<TYPES>,
+        WebCommChannel<TYPES>,
         NODE,
-    > for WebServerDARun<TYPES, NODE, MEMBERSHIP>
+    > for WebServerDARun<TYPES>
 where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -605,7 +544,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    ) -> WebServerDARun<TYPES, NODE, MEMBERSHIP> {
+    ) -> WebServerDARun<TYPES> {
         // Get our own key
         let pub_key = config.config.my_own_validator_config.public_key.clone();
 
@@ -618,18 +557,18 @@ where
 
         // create and wait for underlying network
         let underlying_quorum_network =
-            webserver_network_from_config::<TYPES, NODE>(config.clone(), pub_key.clone()).await;
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
 
         underlying_quorum_network.wait_for_ready().await;
 
         // create communication channels
-        let quorum_channel: WebCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let quorum_channel: WebCommChannel<TYPES> =
             WebCommChannel::new(underlying_quorum_network.clone().into());
 
-        let view_sync_channel: WebCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let view_sync_channel: WebCommChannel<TYPES> =
             WebCommChannel::new(underlying_quorum_network.into());
 
-        let da_channel: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
+        let da_channel: WebCommChannel<TYPES> = WebCommChannel::new(
             WebServerNetwork::create(
                 &host.to_string(),
                 port,
@@ -640,7 +579,7 @@ where
             .into(),
         );
 
-        let vid_channel: WebCommChannel<TYPES, NODE, MEMBERSHIP> = WebCommChannel::new(
+        let vid_channel: WebCommChannel<TYPES> = WebCommChannel::new(
             WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true)
                 .into(),
         );
@@ -654,19 +593,19 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_da_channel(&self) -> WebCommChannel<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_quorum_channel(&self) -> WebCommChannel<TYPES> {
         self.quorum_channel.clone()
     }
 
-    fn get_view_sync_channel(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_view_sync_channel(&self) -> WebCommChannel<TYPES> {
         self.view_sync_channel.clone()
     }
 
-    fn get_vid_channel(&self) -> WebCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_vid_channel(&self) -> WebCommChannel<TYPES> {
         self.vid_channel.clone()
     }
 
@@ -678,13 +617,12 @@ where
 // Libp2p
 
 /// Represents a libp2p-based run
-pub struct Libp2pDARun<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-{
+pub struct Libp2pDARun<TYPES: NodeType> {
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    quorum_channel: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
-    da_channel: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
-    view_sync_channel: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
-    vid_channel: Libp2pCommChannel<TYPES, I, MEMBERSHIP>,
+    quorum_channel: Libp2pCommChannel<TYPES>,
+    da_channel: Libp2pCommChannel<TYPES>,
+    view_sync_channel: Libp2pCommChannel<TYPES>,
+    vid_channel: Libp2pCommChannel<TYPES>,
 }
 
 #[async_trait]
@@ -694,50 +632,21 @@ impl<
             BlockPayload = VIDBlockPayload,
             BlockHeader = VIDBlockHeader,
         >,
-        MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Exchanges = Exchanges<
-                TYPES,
-                Message<TYPES, NODE>,
-                QuorumExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                CommitteeExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                ViewSyncExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                VIDExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-            >,
+            QuorumNetwork = Libp2pCommChannel<TYPES>,
+            CommitteeNetwork = Libp2pCommChannel<TYPES>,
             Storage = MemoryStorage<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
         >,
     >
     RunDA<
         TYPES,
-        MEMBERSHIP,
-        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
-        Libp2pCommChannel<TYPES, NODE, MEMBERSHIP>,
+        Libp2pCommChannel<TYPES>,
+        Libp2pCommChannel<TYPES>,
+        Libp2pCommChannel<TYPES>,
+        Libp2pCommChannel<TYPES>,
         NODE,
-    > for Libp2pDARun<TYPES, NODE, MEMBERSHIP>
+    > for Libp2pDARun<TYPES>
 where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -746,26 +655,26 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    ) -> Libp2pDARun<TYPES, NODE, MEMBERSHIP> {
+    ) -> Libp2pDARun<TYPES> {
         let pub_key = config.config.my_own_validator_config.public_key.clone();
 
         // create and wait for underlying network
         let underlying_quorum_network =
-            libp2p_network_from_config::<TYPES, NODE>(config.clone(), pub_key).await;
+            libp2p_network_from_config::<TYPES>(config.clone(), pub_key).await;
 
         underlying_quorum_network.wait_for_ready().await;
 
         // create communication channels
-        let quorum_channel: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let quorum_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let view_sync_channel: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let view_sync_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let da_channel: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let da_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
-        let vid_channel: Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let vid_channel: Libp2pCommChannel<TYPES> =
             Libp2pCommChannel::new(underlying_quorum_network.clone().into());
 
         Libp2pDARun {
@@ -777,19 +686,19 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_da_channel(&self) -> Libp2pCommChannel<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_quorum_channel(&self) -> Libp2pCommChannel<TYPES> {
         self.quorum_channel.clone()
     }
 
-    fn get_view_sync_channel(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_view_sync_channel(&self) -> Libp2pCommChannel<TYPES> {
         self.view_sync_channel.clone()
     }
 
-    fn get_vid_channel(&self) -> Libp2pCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_vid_channel(&self) -> Libp2pCommChannel<TYPES> {
         self.vid_channel.clone()
     }
 
@@ -801,16 +710,12 @@ where
 // Combined network
 
 /// Represents a combined-network-based run
-pub struct CombinedDARun<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
-> {
+pub struct CombinedDARun<TYPES: NodeType> {
     config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    quorum_channel: CombinedCommChannel<TYPES, I, MEMBERSHIP>,
-    da_channel: CombinedCommChannel<TYPES, I, MEMBERSHIP>,
-    view_sync_channel: CombinedCommChannel<TYPES, I, MEMBERSHIP>,
-    vid_channel: CombinedCommChannel<TYPES, I, MEMBERSHIP>,
+    quorum_channel: CombinedCommChannel<TYPES>,
+    da_channel: CombinedCommChannel<TYPES>,
+    view_sync_channel: CombinedCommChannel<TYPES>,
+    vid_channel: CombinedCommChannel<TYPES>,
 }
 
 #[async_trait]
@@ -820,50 +725,21 @@ impl<
             BlockPayload = VIDBlockPayload,
             BlockHeader = VIDBlockHeader,
         >,
-        MEMBERSHIP: Membership<TYPES> + Debug,
         NODE: NodeImplementation<
             TYPES,
-            Exchanges = Exchanges<
-                TYPES,
-                Message<TYPES, NODE>,
-                QuorumExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                CommitteeExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                ViewSyncExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-                VIDExchange<
-                    TYPES,
-                    MEMBERSHIP,
-                    CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-                    Message<TYPES, NODE>,
-                >,
-            >,
             Storage = MemoryStorage<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, NODE>,
+            QuorumNetwork = CombinedCommChannel<TYPES>,
+            CommitteeNetwork = CombinedCommChannel<TYPES>,
         >,
     >
     RunDA<
         TYPES,
-        MEMBERSHIP,
-        CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-        CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-        CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
-        CombinedCommChannel<TYPES, NODE, MEMBERSHIP>,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
+        CombinedCommChannel<TYPES>,
         NODE,
-    > for CombinedDARun<TYPES, NODE, MEMBERSHIP>
+    > for CombinedDARun<TYPES>
 where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -872,7 +748,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-    ) -> CombinedDARun<TYPES, NODE, MEMBERSHIP> {
+    ) -> CombinedDARun<TYPES> {
         // generate our own key
         let (pub_key, _privkey) =
             <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
@@ -882,7 +758,7 @@ where
 
         // create and wait for libp2p network
         let libp2p_underlying_quorum_network =
-            libp2p_network_from_config::<TYPES, NODE>(config.clone(), pub_key.clone()).await;
+            libp2p_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
 
         libp2p_underlying_quorum_network.wait_for_ready().await;
 
@@ -895,7 +771,7 @@ where
 
         // create and wait for underlying webserver network
         let webserver_underlying_quorum_network =
-            webserver_network_from_config::<TYPES, NODE>(config.clone(), pub_key.clone()).await;
+            webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
 
         let webserver_underlying_da_network =
             WebServerNetwork::create(&host.to_string(), port, wait_between_polls, pub_key, true);
@@ -906,26 +782,22 @@ where
         let quorum_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
             webserver_underlying_quorum_network.clone(),
             libp2p_underlying_quorum_network.clone(),
-            PhantomData,
         )));
 
         let view_sync_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
             webserver_underlying_quorum_network.clone(),
             libp2p_underlying_quorum_network.clone(),
-            PhantomData,
         )));
 
-        let da_channel: CombinedCommChannel<TYPES, NODE, MEMBERSHIP> =
+        let da_channel: CombinedCommChannel<TYPES> =
             CombinedCommChannel::new(Arc::new(CombinedNetworks(
                 webserver_underlying_da_network,
                 libp2p_underlying_quorum_network.clone(),
-                PhantomData,
             )));
 
         let vid_channel = CombinedCommChannel::new(Arc::new(CombinedNetworks(
             webserver_underlying_quorum_network,
             libp2p_underlying_quorum_network,
-            PhantomData,
         )));
 
         CombinedDARun {
@@ -937,19 +809,19 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> CombinedCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_da_channel(&self) -> CombinedCommChannel<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> CombinedCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_quorum_channel(&self) -> CombinedCommChannel<TYPES> {
         self.quorum_channel.clone()
     }
 
-    fn get_view_sync_channel(&self) -> CombinedCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_view_sync_channel(&self) -> CombinedCommChannel<TYPES> {
         self.view_sync_channel.clone()
     }
 
-    fn get_vid_channel(&self) -> CombinedCommChannel<TYPES, NODE, MEMBERSHIP> {
+    fn get_vid_channel(&self) -> CombinedCommChannel<TYPES> {
         self.vid_channel.clone()
     }
 
@@ -965,25 +837,17 @@ pub async fn main_entry_point<
         BlockPayload = VIDBlockPayload,
         BlockHeader = VIDBlockHeader,
     >,
-    MEMBERSHIP: Membership<TYPES> + Debug,
-    DACHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    QUORUMCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIEWSYNCCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
-    VIDCHANNEL: CommunicationChannel<TYPES, Message<TYPES, NODE>, MEMBERSHIP> + Debug,
+    DACHANNEL: CommunicationChannel<TYPES> + Debug,
+    QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIEWSYNCCHANNEL: CommunicationChannel<TYPES> + Debug,
+    VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<
         TYPES,
-        Exchanges = Exchanges<
-            TYPES,
-            Message<TYPES, NODE>,
-            QuorumExchange<TYPES, MEMBERSHIP, QUORUMCHANNEL, Message<TYPES, NODE>>,
-            CommitteeExchange<TYPES, MEMBERSHIP, DACHANNEL, Message<TYPES, NODE>>,
-            ViewSyncExchange<TYPES, MEMBERSHIP, VIEWSYNCCHANNEL, Message<TYPES, NODE>>,
-            VIDExchange<TYPES, MEMBERSHIP, VIDCHANNEL, Message<TYPES, NODE>>,
-        >,
+        QuorumNetwork = QUORUMCHANNEL,
+        CommitteeNetwork = DACHANNEL,
         Storage = MemoryStorage<TYPES>,
-        ConsensusMessage = SequencingMessage<TYPES, NODE>,
     >,
-    RUNDA: RunDA<TYPES, MEMBERSHIP, DACHANNEL, QUORUMCHANNEL, VIEWSYNCCHANNEL, VIDCHANNEL, NODE>,
+    RUNDA: RunDA<TYPES, DACHANNEL, QUORUMCHANNEL, VIEWSYNCCHANNEL, VIDCHANNEL, NODE>,
 >(
     args: ValidatorArgs,
 ) where

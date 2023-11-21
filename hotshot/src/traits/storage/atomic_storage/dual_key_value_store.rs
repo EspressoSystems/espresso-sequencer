@@ -180,7 +180,7 @@ pub trait DualKeyValue: Serialize + DeserializeOwned + Clone {
     fn key_2(&self) -> Self::Key2;
 }
 
-impl<STATE: StateContents> DualKeyValue for QuorumCertificate2<STATE> {
+impl<STATE: StateContents> DualKeyValue for QuorumCertificate<STATE> {
     type Key1 = Commitment<STATE::BlockPayload>;
     type Key2 = ViewNumber;
 

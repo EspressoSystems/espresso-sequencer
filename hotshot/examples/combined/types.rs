@@ -1,48 +1,29 @@
 use crate::infra::CombinedDARun;
 use hotshot::{
-    demo::{DemoMembership, DemoTypes},
+    demo::DemoTypes,
     traits::implementations::{CombinedCommChannel, MemoryStorage},
 };
-use hotshot_types::{
-    message::{Message, SequencingMessage},
-    traits::{
-        election::{CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, Exchanges, NodeImplementation, NodeType},
-    },
-    vote::ViewSyncVote,
-};
+use hotshot_types::traits::node_implementation::{ChannelMaps, NodeImplementation, NodeType};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-pub type DANetwork = CombinedCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type VIDNetwork = CombinedCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type QuorumNetwork = CombinedCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-pub type ViewSyncNetwork = CombinedCommChannel<DemoTypes, NodeImpl, DemoMembership>;
-
-pub type ThisViewSyncVote = ViewSyncVote<DemoTypes>;
+pub type DANetwork = CombinedCommChannel<DemoTypes>;
+pub type VIDNetwork = CombinedCommChannel<DemoTypes>;
+pub type QuorumNetwork = CombinedCommChannel<DemoTypes>;
+pub type ViewSyncNetwork = CombinedCommChannel<DemoTypes>;
 
 impl NodeImplementation<DemoTypes> for NodeImpl {
     type Storage = MemoryStorage<DemoTypes>;
-    type Exchanges = Exchanges<
-        DemoTypes,
-        Message<DemoTypes, Self>,
-        QuorumExchange<DemoTypes, DemoMembership, QuorumNetwork, Message<DemoTypes, Self>>,
-        CommitteeExchange<DemoTypes, DemoMembership, DANetwork, Message<DemoTypes, Self>>,
-        ViewSyncExchange<DemoTypes, DemoMembership, ViewSyncNetwork, Message<DemoTypes, Self>>,
-        VIDExchange<DemoTypes, DemoMembership, VIDNetwork, Message<DemoTypes, Self>>,
-    >;
-    type ConsensusMessage = SequencingMessage<DemoTypes, Self>;
+    type QuorumNetwork = QuorumNetwork;
+    type CommitteeNetwork = DANetwork;
 
     fn new_channel_maps(
         start_view: <DemoTypes as NodeType>::Time,
-    ) -> (
-        ChannelMaps<DemoTypes, Self>,
-        Option<ChannelMaps<DemoTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<DemoTypes>, Option<ChannelMaps<DemoTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
-pub type ThisRun = CombinedDARun<DemoTypes, NodeImpl, DemoMembership>;
+pub type ThisRun = CombinedDARun<DemoTypes>;

@@ -10,16 +10,16 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::{build_quorum_proposal, key_pair_for_id},
 };
-use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::simple_vote::QuorumVote;
-use hotshot_types::traits::node_implementation::QuorumMembership;
-use hotshot_types::vote2::Certificate2;
+use hotshot_types::vote::Certificate;
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::GeneralConsensusMessage,
-    traits::{
-        election::ConsensusExchange, node_implementation::ExchangesType, state::ConsensusTime,
-    },
+    traits::state::ConsensusTime,
+};
+use hotshot_types::{
+    simple_vote::QuorumData,
+    traits::{consensus_api::ConsensusSharedApi, election::Membership},
 };
 
 use std::collections::HashMap;
@@ -27,13 +27,13 @@ use std::collections::HashMap;
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     proposal: QuorumProposal<TestTypes>,
-) -> GeneralConsensusMessage<TestTypes, MemoryImpl> {
+) -> GeneralConsensusMessage<TestTypes> {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
+    let membership = api.inner.memberships.quorum_membership.clone();
 
     let justify_qc = proposal.justify_qc.clone();
     let view = ViewNumber::new(*proposal.view_number);
@@ -66,17 +66,17 @@ async fn build_vote(
         block_payload: None,
         rejected: Vec::new(),
         timestamp: 0,
-        proposer_id: quorum_exchange.get_leader(view).to_bytes(),
+        proposer_id: membership.get_leader(view).to_bytes(),
     };
-    let vote = QuorumVote::<TestTypes, QuorumMembership<TestTypes, MemoryImpl>>::create_signed_vote(
+    let vote = QuorumVote::<TestTypes>::create_signed_vote(
         QuorumData {
             leaf_commit: leaf.commit(),
         },
         view,
-        quorum_exchange.public_key(),
-        quorum_exchange.private_key(),
+        api.public_key(),
+        api.private_key(),
     );
-    GeneralConsensusMessage::<TestTypes, MemoryImpl>::Vote(vote)
+    GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }
 
 #[cfg(test)]
@@ -89,7 +89,7 @@ async fn build_vote(
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::simple_certificate::QuorumCertificate2;
+    use hotshot_types::simple_certificate::QuorumCertificate;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -102,7 +102,7 @@ async fn test_consensus_task() {
     let mut output = HashMap::new();
 
     // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate2::<TestTypes>::genesis();
+    let qc = QuorumCertificate::<TestTypes>::genesis();
     let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
 
     input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));

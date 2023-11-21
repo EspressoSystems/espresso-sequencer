@@ -5,7 +5,7 @@ use crate::{
     error::HotShotError,
     event::{Event, EventType},
     message::{DataMessage, SequencingMessage},
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{
         network::NetworkError,
         node_implementation::{NodeImplementation, NodeType},
@@ -92,7 +92,7 @@ pub trait ConsensusSharedApi<TYPES: NodeType, I: NodeImplementation<TYPES>>: Sen
         &self,
         view_number: TYPES::Time,
         leaf_views: Vec<Leaf<TYPES>>,
-        decide_qc: QuorumCertificate2<TYPES>,
+        decide_qc: QuorumCertificate<TYPES>,
     ) {
         self.send_event(Event {
             view_number,
@@ -117,35 +117,33 @@ pub trait ConsensusSharedApi<TYPES: NodeType, I: NodeImplementation<TYPES>>: Sen
 
 /// The API that [`HotStuff`] needs to talk to the system, for sequencing consensus.
 #[async_trait]
-pub trait ConsensusApi<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
->: ConsensusSharedApi<TYPES, I>
+pub trait ConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>>:
+    ConsensusSharedApi<TYPES, I>
 {
     /// Send a direct message to the given recipient
     async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// send a direct message using the DA communication channel
     async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// Send a broadcast message to the entire network.
     async fn send_broadcast_message(
         &self,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// Send a broadcast to the DA comitee, stub for now
     async fn send_da_broadcast(
         &self,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError>;
 
     /// Send a message with a transaction.

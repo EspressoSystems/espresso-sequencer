@@ -1,7 +1,7 @@
 //! Events that a `HotShot` instance can emit
 
 use crate::{
-    data::Leaf, error::HotShotError, simple_certificate::QuorumCertificate2,
+    data::Leaf, error::HotShotError, simple_certificate::QuorumCertificate,
     traits::node_implementation::NodeType,
 };
 
@@ -43,7 +43,7 @@ pub enum EventType<TYPES: NodeType> {
         ///
         /// Note that the QC for each additional leaf in the chain can be obtained from the leaf
         /// before it using
-        qc: Arc<QuorumCertificate2<TYPES>>,
+        qc: Arc<QuorumCertificate<TYPES>>,
         /// Optional information of the number of transactions in the block, for logging purposes.
         block_size: Option<u64>,
     },

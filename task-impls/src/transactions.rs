@@ -16,11 +16,12 @@ use hotshot_types::{
     block_impl::{NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::Consensus,
     data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
-    message::{Message, Proposal, SequencingMessage},
+    message::Proposal,
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType},
-        node_implementation::{NodeImplementation, NodeType, QuorumEx},
+        election::Membership,
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         BlockPayload,
     },
 };
@@ -44,11 +45,9 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
-{
+> {
     /// The state's api
     pub api: A,
     /// Global registry task for the state
@@ -66,30 +65,32 @@ pub struct TransactionTaskState<
     /// A list of transactions we've seen decided, but didn't receive
     pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// the committee exchange
-    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// This state's ID
     pub id: u64,
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    TransactionTaskState<TYPES, I, A>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
 
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsRecv(transactions) => {
@@ -176,9 +177,7 @@ where
                 }
                 self.cur_view = view;
 
-                // If we are not the next leader (DA leader for this view) immediately exit
-                if !self.quorum_exchange.is_leader(self.cur_view + 1) {
-                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
+                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     return None;
                 }
 
@@ -261,12 +260,13 @@ where
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self
-                                .quorum_exchange
-                                .sign_payload_commitment(payload.commit()),
+                            signature: TYPES::SignatureKey::sign(
+                                &self.private_key,
+                                payload.commit().as_ref(),
+                            ),
                             _pd: PhantomData,
                         },
-                        self.quorum_exchange.public_key().clone(),
+                        self.public_key.clone(),
                     ))
                     .await;
                 return None;
@@ -348,7 +348,7 @@ where
     }
 
     /// Event filter for the transaction task
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::TransactionsRecv(_)
@@ -360,20 +360,15 @@ where
 }
 
 /// task state implementation for Transactions Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > TS for TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<TYPES, Message<TYPES, I>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
+    for TransactionTaskState<TYPES, I, A>
 {
 }
 
 /// Type alias for DA Task Types
 pub type TransactionsTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     TransactionTaskState<TYPES, I, A>,
 >;

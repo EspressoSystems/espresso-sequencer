@@ -10,7 +10,6 @@ use tracing::instrument;
 use types::VIDNetwork;
 
 use crate::types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun, ViewSyncNetwork};
-use hotshot::demo::DemoMembership;
 
 pub mod types;
 
@@ -50,7 +49,6 @@ async fn main() {
         let node = async_spawn(async move {
             infra::main_entry_point::<
                 DemoTypes,
-                DemoMembership,
                 DANetwork,
                 QuorumNetwork,
                 ViewSyncNetwork,

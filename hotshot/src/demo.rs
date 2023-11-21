@@ -5,9 +5,7 @@
 //!
 //! These implementations are useful in examples and integration testing, but are not suitable for
 //! production use.
-use crate::traits::election::static_committee::{
-    GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-};
+use crate::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 
@@ -136,10 +134,10 @@ impl NodeType for DemoTypes {
     type BlockHeader = VIDBlockHeader;
     type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
-    type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
+    type Membership = DemoMembership;
 }
 
 /// Alias for the static committee used in the Demo apps

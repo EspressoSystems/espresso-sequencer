@@ -3,7 +3,6 @@ use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 
 use bitvec::prelude::*;
-use commit::Commitment;
 use either::{Either, Left, Right};
 use futures::FutureExt;
 use hotshot_task::{
@@ -12,24 +11,23 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::{network::ConsensusIntentEvent, node_implementation::VIDMembership};
+use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
     consensus::{Consensus, View},
-    message::{Message, SequencingMessage},
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, Membership},
-        node_implementation::{NodeImplementation, NodeType, VIDEx},
+        election::Membership,
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
     utils::ViewInner,
 };
 use hotshot_types::{
-    simple_certificate::VIDCertificate2,
-    simple_vote::{VIDData, VIDVote2},
+    simple_certificate::VIDCertificate,
+    simple_vote::{VIDData, VIDVote},
     traits::network::CommunicationChannel,
-    vote2::{HasViewNumber, VoteAccumulator2},
+    vote::{HasViewNumber, VoteAccumulator},
 };
 
 use snafu::Snafu;
@@ -44,12 +42,9 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a VID task
 pub struct VIDTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
+    I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
-> where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-{
+> {
     /// The state's api
     pub api: A,
     /// Global registry task for the state
@@ -60,52 +55,54 @@ pub struct VIDTaskState<
 
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
-
-    /// the VID exchange
-    pub vid_exchange: Arc<VIDEx<TYPES, I>>,
-
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// The view and ID of the current vote collection task, if there is one.
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// This state's ID
     pub id: u64,
 }
 
 /// Struct to maintain VID Vote Collection task state
-pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>>
-where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
-{
-    /// the vid exchange
-    pub vid_exchange: Arc<VIDEx<TYPES, I>>,
+pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     #[allow(clippy::type_complexity)]
     /// Accumulates VID votes
     pub accumulator: Either<
-        VoteAccumulator2<TYPES, VIDVote2<TYPES, VIDMembership<TYPES, I>>, VIDCertificate2<TYPES>>,
-        VIDCertificate2<TYPES>,
+        VoteAccumulator<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>,
+        VIDCertificate<TYPES>,
     >,
     /// the current view
     pub cur_view: TYPES::Time,
     /// event stream for channel events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     /// the id of this task state
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>
-{
-}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> {}
 
 #[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "VID Vote Collection Task", level = "error")]
 async fn vote_handle<TYPES, I>(
     mut state: VIDVoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES, I>,
+    event: HotShotEvent<TYPES>,
 ) -> (
     Option<HotShotTaskCompleted>,
     VIDVoteCollectionTaskState<TYPES, I>,
@@ -113,8 +110,6 @@ async fn vote_handle<TYPES, I>(
 where
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
 {
     match event {
         HotShotEvent::VidVoteRecv(vote) => {
@@ -131,7 +126,7 @@ where
             }
 
             let accumulator = state.accumulator.left().unwrap();
-            match accumulator.accumulate(&vote, state.vid_exchange.membership()) {
+            match accumulator.accumulate(&vote, state.membership.as_ref()) {
                 Left(new_accumulator) => {
                     state.accumulator = either::Left(new_accumulator);
                 }
@@ -142,14 +137,13 @@ where
                         .event_stream
                         .publish(HotShotEvent::VidCertSend(
                             vid_cert.clone(),
-                            state.vid_exchange.public_key().clone(),
+                            state.public_key.clone(),
                         ))
                         .await;
 
                     state.accumulator = Right(vid_cert.clone());
                     state
-                        .vid_exchange
-                        .network()
+                        .network
                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDVotes(
                             *vid_cert.view_number,
                         ))
@@ -167,20 +161,14 @@ where
     (None, state)
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > VIDTaskState<TYPES, I, A>
-where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    VIDTaskState<TYPES, I, A>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::VidVoteRecv(vote) => {
@@ -191,11 +179,11 @@ where
                 // );
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.get_view_number();
-                if !self.vid_exchange.is_leader(view) {
+                if self.membership.get_leader(view) != self.public_key {
                     error!(
                         "We are not the VID leader for view {} are we leader for next view? {}",
                         *view,
-                        self.vid_exchange.is_leader(view + 1)
+                        self.membership.get_leader(view + 1) == self.public_key
                     );
                     return None;
                 }
@@ -216,19 +204,20 @@ where
                     };
 
                 if view > collection_view {
-                    let new_accumulator = VoteAccumulator2 {
+                    let new_accumulator = VoteAccumulator {
                         vote_outcomes: HashMap::new(),
                         sig_lists: Vec::new(),
-                        signers: bitvec![0; self.vid_exchange.total_nodes()],
+                        signers: bitvec![0; self.membership.total_nodes()],
                         phantom: PhantomData,
                     };
 
-                    let accumulator =
-                        new_accumulator.accumulate(&vote, self.vid_exchange.membership());
+                    let accumulator = new_accumulator.accumulate(&vote, self.membership.as_ref());
 
                     let state = VIDVoteCollectionTaskState {
-                        vid_exchange: self.vid_exchange.clone(),
-
+                        network: self.network.clone(),
+                        membership: self.membership.clone(),
+                        public_key: self.public_key.clone(),
+                        private_key: self.private_key.clone(),
                         accumulator,
                         cur_view: view,
                         event_stream: self.event_stream.clone(),
@@ -266,8 +255,7 @@ where
                 );
 
                 // stop polling for the received disperse
-                self.vid_exchange
-                    .network()
+                self.network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
                         *disperse.data.view_number,
                     ))
@@ -289,7 +277,7 @@ where
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // ED Is this the right leader?
-                let view_leader_key = self.vid_exchange.get_leader(view);
+                let view_leader_key = self.membership.get_leader(view);
                 if view_leader_key != sender {
                     error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
                     return None;
@@ -300,11 +288,7 @@ where
                     return None;
                 }
 
-                if !self
-                    .vid_exchange
-                    .membership()
-                    .has_stake(self.vid_exchange.public_key())
-                {
+                if !self.membership.has_stake(&self.public_key) {
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
                         self.cur_view
@@ -313,13 +297,13 @@ where
                 }
 
                 // Generate and send vote
-                let vote = VIDVote2::create_signed_vote(
+                let vote = VIDVote::create_signed_vote(
                     VIDData {
                         payload_commit: payload_commitment,
                     },
                     view,
-                    self.vid_exchange.public_key(),
-                    self.vid_exchange.private_key(),
+                    &self.public_key,
+                    &self.private_key,
                 );
 
                 // ED Don't think this is necessary?
@@ -348,8 +332,7 @@ where
                 // consensus.saved_block_payloads.insert(proposal.data.block_payload);
             }
             HotShotEvent::VidCertRecv(cert) => {
-                self.vid_exchange
-                    .network()
+                self.network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDCertificate(
                         *cert.view_number,
                     ))
@@ -366,29 +349,26 @@ where
                 self.cur_view = view;
 
                 // Start polling for VID disperse for the new view
-                self.vid_exchange
-                    .network()
+                self.network
                     .inject_consensus_info(ConsensusIntentEvent::PollForVIDDisperse(
                         *self.cur_view + 1,
                     ))
                     .await;
 
-                self.vid_exchange
-                    .network()
+                self.network
                     .inject_consensus_info(ConsensusIntentEvent::PollForVIDCertificate(
                         *self.cur_view + 1,
                     ))
                     .await;
 
                 // If we are not the next leader, we should exit
-                if !self.vid_exchange.is_leader(self.cur_view + 1) {
+                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
 
                 // Start polling for VID votes for the "next view"
-                self.vid_exchange
-                    .network()
+                self.network
                     .inject_consensus_info(ConsensusIntentEvent::PollForVIDVotes(
                         *self.cur_view + 1,
                     ))
@@ -408,7 +388,7 @@ where
     }
 
     /// Filter the VID event.
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::Shutdown
@@ -421,29 +401,23 @@ where
 }
 
 /// task state implementation for VID Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        A: ConsensusApi<TYPES, I> + 'static,
-    > TS for VIDTaskState<TYPES, I, A>
-where
-    VIDEx<TYPES, I>:
-        ConsensusExchange<TYPES, Message<TYPES, I>, Commitment = Commitment<TYPES::BlockPayload>>,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
+    for VIDTaskState<TYPES, I, A>
 {
 }
 
 /// Type alias for VID Vote Collection Types
 pub type VIDVoteCollectionTypes<TYPES, I> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     VIDVoteCollectionTaskState<TYPES, I>,
 >;
 
 /// Type alias for VID Task Types
 pub type VIDTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     VIDTaskState<TYPES, I, A>,
 >;

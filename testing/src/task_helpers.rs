@@ -6,9 +6,8 @@ use crate::{
 };
 use commit::Committable;
 use hotshot::{
-    traits::NodeImplementation,
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
-    HotShotConsensusApi, HotShotInitializer, SystemContext,
+    HotShotConsensusApi, HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
@@ -16,24 +15,24 @@ use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
-    message::{Message, Proposal},
-    simple_certificate::QuorumCertificate2,
+    message::Proposal,
+    simple_certificate::QuorumCertificate,
     traits::{
         block_contents::BlockHeader,
         consensus_api::ConsensusSharedApi,
-        election::{ConsensusExchange, Membership},
-        node_implementation::{CommitteeEx, ExchangesType, NodeType, QuorumEx},
+        election::Membership,
+        node_implementation::NodeType,
         signature_key::EncodedSignature,
         state::{ConsensusTime, TestableBlock},
     },
-    vote2::HasViewNumber,
+    vote::HasViewNumber,
 };
 
 pub async fn build_system_handle(
     node_id: u64,
 ) -> (
     SystemContextHandle<TestTypes, MemoryImpl>,
-    ChannelStream<HotShotEvent<TestTypes, MemoryImpl>>,
+    ChannelStream<HotShotEvent<TestTypes>>,
 ) {
     let builder = TestMetadata::default_multiple_rounds();
 
@@ -48,34 +47,52 @@ pub async fn build_system_handle(
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
     let public_key = config.my_own_validator_config.public_key;
-    let quorum_election_config = config.election_config.clone().unwrap_or_else(|| {
-        <QuorumEx<TestTypes, MemoryImpl> as ConsensusExchange<
-            TestTypes,
-            Message<TestTypes, MemoryImpl>,
-        >>::Membership::default_election_config(config.total_nodes.get() as u64)
-    });
+    let quorum_election_config =
+        config.election_config.clone().unwrap_or_else(|| {
+            <TestTypes as NodeType>::Membership::default_election_config(
+                config.total_nodes.get() as u64
+            )
+        });
 
-    let committee_election_config = config.election_config.clone().unwrap_or_else(|| {
-        <CommitteeEx<TestTypes, MemoryImpl> as ConsensusExchange<
-            TestTypes,
-            Message<TestTypes, MemoryImpl>,
-        >>::Membership::default_election_config(config.total_nodes.get() as u64)
-    });
-    let exchanges = <MemoryImpl as NodeImplementation<TestTypes>>::Exchanges::create(
-        known_nodes_with_stake.clone(),
-        (quorum_election_config, committee_election_config),
-        networks,
-        public_key,
-        public_key.get_stake_table_entry(1u64),
-        private_key.clone(),
-    );
+    let committee_election_config =
+        config.election_config.clone().unwrap_or_else(|| {
+            <TestTypes as NodeType>::Membership::default_election_config(
+                config.total_nodes.get() as u64
+            )
+        });
+    let networks_bundle = Networks {
+        quorum_network: networks.0.clone(),
+        da_network: networks.1.clone(),
+        _pd: PhantomData,
+    };
+
+    let memberships = Memberships {
+        quorum_membership: <TestTypes as NodeType>::Membership::create_election(
+            known_nodes_with_stake.clone(),
+            quorum_election_config.clone(),
+        ),
+        da_membership: <TestTypes as NodeType>::Membership::create_election(
+            known_nodes_with_stake.clone(),
+            committee_election_config,
+        ),
+        vid_membership: <TestTypes as NodeType>::Membership::create_election(
+            known_nodes_with_stake.clone(),
+            quorum_election_config.clone(),
+        ),
+        view_sync_membership: <TestTypes as NodeType>::Membership::create_election(
+            known_nodes_with_stake.clone(),
+            quorum_election_config,
+        ),
+    };
+
     SystemContext::init(
         public_key,
         private_key,
         node_id,
         config,
         storage,
-        exchanges,
+        memberships,
+        networks_bundle,
         initializer,
         ConsensusMetricsValue::new(),
     )
@@ -93,8 +110,6 @@ async fn build_quorum_proposal_and_signature(
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let _quorum_exchange = api.inner.exchanges.quorum_exchange().clone();
-
     let parent_view_number = &consensus.high_qc.get_view_number();
     let Some(parent_view) = consensus.state_map.get(parent_view_number) else {
         panic!("Couldn't find high QC parent in state map.");
@@ -125,7 +140,7 @@ async fn build_quorum_proposal_and_signature(
     let proposal = QuorumProposal::<TestTypes> {
         block_header,
         view_number: ViewNumber::new(view),
-        justify_qc: QuorumCertificate2::genesis(),
+        justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id,
     };

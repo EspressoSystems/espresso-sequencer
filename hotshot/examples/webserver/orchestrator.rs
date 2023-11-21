@@ -2,7 +2,7 @@ pub mod types;
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demo::{DemoMembership, DemoTypes};
+use hotshot::demo::DemoTypes;
 use tracing::instrument;
 use types::VIDNetwork;
 
@@ -24,14 +24,8 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<
-        DemoTypes,
-        DemoMembership,
-        DANetwork,
-        QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
-        NodeImpl,
-    >(args)
+    run_orchestrator::<DemoTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
+        args,
+    )
     .await;
 }
