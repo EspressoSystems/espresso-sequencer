@@ -89,7 +89,7 @@ pub trait QueryableBlock: traits::Block {
     /// Enumerate the transactions in the block with their indices.
     fn enumerate(
         &self,
-    ) -> Box<dyn '_ + Iterator<Item = (Self::TransactionIndex, &Self::Transaction)>> {
+    ) -> Box<dyn '_ + Iterator<Item = (Self::TransactionIndex, Self::Transaction)>> {
         Box::new(self.iter().map(|ix| {
             // `self.transaction` should always return `Some` if we are using an index which was
             // yielded by `self.iter`.
@@ -102,10 +102,10 @@ pub trait QueryableBlock: traits::Block {
     fn transaction_with_proof(
         &self,
         index: &Self::TransactionIndex,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)>;
+    ) -> Option<(Self::Transaction, Self::InclusionProof)>;
 
     /// Get a transaction by its block-specific index.
-    fn transaction(&self, index: &Self::TransactionIndex) -> Option<&Self::Transaction> {
+    fn transaction(&self, index: &Self::TransactionIndex) -> Option<Self::Transaction> {
         Some(self.transaction_with_proof(index)?.0)
     }
 
@@ -120,7 +120,7 @@ pub trait QueryableBlock: traits::Block {
     }
 
     /// Get the `nth` transaction.
-    fn nth_transaction(&self, n: usize) -> Option<&Self::Transaction> {
+    fn nth_transaction(&self, n: usize) -> Option<Self::Transaction> {
         self.transaction(&self.nth(n)?)
     }
 
@@ -128,7 +128,7 @@ pub trait QueryableBlock: traits::Block {
     fn nth_transaction_with_proof(
         &self,
         n: usize,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         self.transaction_with_proof(&self.nth(n)?)
     }
 
@@ -147,7 +147,7 @@ pub trait QueryableBlock: traits::Block {
     fn transaction_by_hash(
         &self,
         hash: Commitment<Self::Transaction>,
-    ) -> Option<&Self::Transaction> {
+    ) -> Option<Self::Transaction> {
         self.transaction(&self.by_hash(hash)?)
     }
 
@@ -155,7 +155,7 @@ pub trait QueryableBlock: traits::Block {
     fn transaction_by_hash_with_proof(
         &self,
         hash: Commitment<Self::Transaction>,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         self.transaction_with_proof(&self.by_hash(hash)?)
     }
 }
