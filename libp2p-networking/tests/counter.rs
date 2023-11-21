@@ -330,7 +330,6 @@ async fn run_dht_rounds(
                 }
                 Ok(v) => {
                     assert_eq!(v, value);
-                    break;
                 }
             }
         }
