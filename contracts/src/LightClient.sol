@@ -84,8 +84,8 @@ contract LightClient {
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     function newFinalizedState(
-        LightClientState calldata newState,
-        IPlonkVerifier.PlonkProof calldata proof
+        LightClientState memory newState,
+        IPlonkVerifier.PlonkProof memory proof
     ) external {
         if (
             newState.viewNum <= finalizedState.viewNum
@@ -128,7 +128,7 @@ contract LightClient {
     /// plonk proof verification
     /// @param isNewEpoch Indicate if the `state` is in the new epoch, thus won't reuse threshold
     /// from `finalizedState`
-    function preparePublicInput(LightClientState calldata state, bool isNewEpoch)
+    function preparePublicInput(LightClientState memory state, bool isNewEpoch)
         internal
         view
         returns (uint256[] memory)
