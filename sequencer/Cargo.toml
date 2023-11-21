@@ -16,10 +16,10 @@ tempfile = "3.7.1"
 
 [dependencies]
 anyhow = "1.0"
-ark-bls12-381 = "0.3.0"
+ark-bls12-381 = "0.4.0"
 ark-serialize = { version = "0.4.0", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
-	"logging-utils",
+    "logging-utils",
 ] }
 async-std = "1.12.0"
 async-trait = "0.1.71"
@@ -35,6 +35,7 @@ ethers = { version = "2.0", features = ["ws"] }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"
 lazy_static = "1.4"
+sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
@@ -46,8 +47,13 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branc
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
 
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
+# jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
+#     "std",
+#     "test-srs", # TODO temporary
+# ], rev = "1a9db506f011b168ead863e1dfcb5fd094fa2550" }
+jf-primitives = { path = "../../jellyfish/primitives", features = [
     "std",
+    "test-srs", # TODO temporary
 ] }
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"

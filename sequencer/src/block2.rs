@@ -1,5 +1,10 @@
 use crate::Transaction;
+use ark_bls12_381::Bls12_381;
 use hotshot_query_service::QueryableBlock;
+use jf_primitives::{
+    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::advz::payload_prover::SmallRangeProof,
+};
 use serde::{Deserialize, Serialize};
 use std::{mem::size_of, ops::Range};
 
@@ -63,7 +68,7 @@ impl BlockPayload {
     }
 
     // TODO comment
-    fn get_tx_bytes(&self, index: TxIndex) -> Option<&[u8]> {
+    fn get_tx_range(&self, index: TxIndex) -> Option<Range<usize>> {
         let tx_bodies_offset = self.tx_bodies_offset()?;
 
         // TODO clean up this comment.
@@ -83,7 +88,7 @@ impl BlockPayload {
             .get_value_usize(index.checked_add(1)?)?
             .checked_add(tx_bodies_offset)?;
 
-        self.payload.get(start..end)
+        Some(start..end)
     }
 
     // TODO comment
@@ -117,10 +122,14 @@ impl BlockPayload {
 
 type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
 
+// TODO expose `KzgProof<E>` type alias from jellyfish
+type TxInclusionProof =
+    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
 impl QueryableBlock for BlockPayload {
     type TransactionIndex = u32;
     type Iter<'a> = Range<Self::TransactionIndex>;
-    type InclusionProof = ();
+    type InclusionProof = TxInclusionProof;
 
     fn len(&self) -> usize {
         self.tx_table_len_usize().unwrap_or(0)
@@ -132,10 +141,33 @@ impl QueryableBlock for BlockPayload {
 
     fn transaction_with_proof(
         &self,
-        _index: &Self::TransactionIndex,
+        index: &Self::TransactionIndex,
     ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
-        // let tx_bytes = self.get_tx_bytes(index)?;
-        // jf_primitives::vid::advz::
+        // TODO temporary VID construction
+        let vid = {
+            let (payload_chunk_size, num_storage_nodes) = (5, 10);
+            use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
+            use sha2::Sha256;
+
+            let mut rng = rand::thread_rng();
+            let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+                &mut rng,
+                checked_fft_size(payload_chunk_size - 1).unwrap(),
+            )
+            .unwrap();
+            Advz::<Bls12_381, Sha256>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+        };
+
+        let tx_range = self.get_tx_range(*index)?;
+
+        use jf_primitives::vid::payload_prover::PayloadProver;
+        let _proof: SmallRangeProof<_> =
+            vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
+
+        // Some((
+        //     &Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
+        //     proof,
+        // ))
         todo!()
     }
 }
@@ -254,15 +286,14 @@ mod test {
             let tx_payloads_flat: Vec<u8> = tx_bodies.iter().flatten().cloned().collect();
             assert_eq!(payload, tx_payloads_flat);
 
-            // test get_tx_bytes()
+            // test get_tx_range()
             assert_eq!(tx_bodies.len(), block.len());
             for (index, tx_body) in tx_bodies.iter().enumerate() {
-                assert_eq!(
-                    tx_body,
-                    block
-                        .get_tx_bytes(TxIndex::try_from(index).unwrap())
-                        .unwrap()
-                )
+                let tx_range = block
+                    .get_tx_range(TxIndex::try_from(index).unwrap())
+                    .unwrap();
+                let block_tx_body = block.payload.get(tx_range).unwrap();
+                assert_eq!(tx_body, block_tx_body);
             }
         }
     }
