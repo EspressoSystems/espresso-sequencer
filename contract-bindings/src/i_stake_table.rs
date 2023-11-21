@@ -26,9 +26,11 @@ pub mod i_stake_table {
                                 kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ],),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                    ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -68,9 +70,11 @@ pub mod i_stake_table {
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
@@ -103,9 +107,11 @@ pub mod i_stake_table {
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
@@ -193,9 +199,11 @@ pub mod i_stake_table {
                                 kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ],),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                    ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -226,9 +234,12 @@ pub mod i_stake_table {
                             },
                             ::ethers::core::abi::ethabi::Param {
                                 name: ::std::borrow::ToOwned::to_owned("blsSig"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ],),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("bytes"),
+                                    ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -259,9 +270,11 @@ pub mod i_stake_table {
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
@@ -341,9 +354,11 @@ pub mod i_stake_table {
                             kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct BN254.G1Point"),
+                                ::std::borrow::ToOwned::to_owned("struct BN254.G2Point"),
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
@@ -404,32 +419,32 @@ pub mod i_stake_table {
                 client,
             ))
         }
-        ///Calls the contract's `deposit` (0xf7bfb01c) function
+        ///Calls the contract's `deposit` (0x771f6f44) function
         pub fn deposit(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
             amount: u64,
         ) -> ::ethers::contract::builders::ContractCall<M, (u64, u64)> {
             self.0
-                .method_hash([247, 191, 176, 28], (bls_vk, amount))
+                .method_hash([119, 31, 111, 68], (bls_vk, amount))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `lookupNode` (0x52f92fc4) function
+        ///Calls the contract's `lookupNode` (0x2adda1c1) function
         pub fn lookup_node(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
         ) -> ::ethers::contract::builders::ContractCall<M, Node> {
             self.0
-                .method_hash([82, 249, 47, 196], (bls_vk,))
+                .method_hash([42, 221, 161, 193], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `lookupStake` (0xcdf7788f) function
+        ///Calls the contract's `lookupStake` (0xdd2ed3ec) function
         pub fn lookup_stake(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([205, 247, 120, 143], (bls_vk,))
+                .method_hash([221, 46, 211, 236], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `nextExitEpoch` (0x3b09c267) function
@@ -460,19 +475,19 @@ pub mod i_stake_table {
                 .method_hash([22, 254, 254, 215], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `register` (0x096fbae3) function
+        ///Calls the contract's `register` (0xc72cc717) function
         pub fn register(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
             schnorr_vk: EdOnBN254Point,
             amount: u64,
             stake_type: u8,
-            bls_sig: ::ethers::core::types::Bytes,
+            bls_sig: G1Point,
             valid_until_epoch: u64,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
                 .method_hash(
-                    [9, 111, 186, 227],
+                    [199, 44, 199, 23],
                     (
                         bls_vk,
                         schnorr_vk,
@@ -484,13 +499,13 @@ pub mod i_stake_table {
                 )
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `requestExit` (0xd4b83f45) function
+        ///Calls the contract's `requestExit` (0x4aa7c27f) function
         pub fn request_exit(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
-                .method_hash([212, 184, 63, 69], (bls_vk,))
+                .method_hash([74, 167, 194, 127], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `totalKeys` (0x488bdabc) function
@@ -518,13 +533,13 @@ pub mod i_stake_table {
                 .method_hash([67, 23, 208, 11], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `withdrawFunds` (0x162d4e7c) function
+        ///Calls the contract's `withdrawFunds` (0x0c24af18) function
         pub fn withdraw_funds(
             &self,
-            bls_vk: G1Point,
+            bls_vk: G2Point,
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
-                .method_hash([22, 45, 78, 124], (bls_vk,))
+                .method_hash([12, 36, 175, 24], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
     }
@@ -533,7 +548,7 @@ pub mod i_stake_table {
             Self::new(contract.address(), contract.client())
         }
     }
-    ///Container type for all input parameters for the `deposit` function with signature `deposit((uint256,uint256),uint64)` and selector `0xf7bfb01c`
+    ///Container type for all input parameters for the `deposit` function with signature `deposit((uint256,uint256,uint256,uint256),uint64)` and selector `0x771f6f44`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -546,12 +561,15 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "deposit", abi = "deposit((uint256,uint256),uint64)")]
+    #[ethcall(
+        name = "deposit",
+        abi = "deposit((uint256,uint256,uint256,uint256),uint64)"
+    )]
     pub struct DepositCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
         pub amount: u64,
     }
-    ///Container type for all input parameters for the `lookupNode` function with signature `lookupNode((uint256,uint256))` and selector `0x52f92fc4`
+    ///Container type for all input parameters for the `lookupNode` function with signature `lookupNode((uint256,uint256,uint256,uint256))` and selector `0x2adda1c1`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -564,11 +582,14 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "lookupNode", abi = "lookupNode((uint256,uint256))")]
+    #[ethcall(
+        name = "lookupNode",
+        abi = "lookupNode((uint256,uint256,uint256,uint256))"
+    )]
     pub struct LookupNodeCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
     }
-    ///Container type for all input parameters for the `lookupStake` function with signature `lookupStake((uint256,uint256))` and selector `0xcdf7788f`
+    ///Container type for all input parameters for the `lookupStake` function with signature `lookupStake((uint256,uint256,uint256,uint256))` and selector `0xdd2ed3ec`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -581,9 +602,12 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "lookupStake", abi = "lookupStake((uint256,uint256))")]
+    #[ethcall(
+        name = "lookupStake",
+        abi = "lookupStake((uint256,uint256,uint256,uint256))"
+    )]
     pub struct LookupStakeCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
     }
     ///Container type for all input parameters for the `nextExitEpoch` function with signature `nextExitEpoch()` and selector `0x3b09c267`
     #[derive(
@@ -645,7 +669,7 @@ pub mod i_stake_table {
     )]
     #[ethcall(name = "numPendingRegistrations", abi = "numPendingRegistrations()")]
     pub struct NumPendingRegistrationsCall;
-    ///Container type for all input parameters for the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)` and selector `0x096fbae3`
+    ///Container type for all input parameters for the `register` function with signature `register((uint256,uint256,uint256,uint256),(uint256,uint256),uint64,uint8,(uint256,uint256),uint64)` and selector `0xc72cc717`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -660,17 +684,17 @@ pub mod i_stake_table {
     )]
     #[ethcall(
         name = "register",
-        abi = "register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)"
+        abi = "register((uint256,uint256,uint256,uint256),(uint256,uint256),uint64,uint8,(uint256,uint256),uint64)"
     )]
     pub struct RegisterCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
         pub schnorr_vk: EdOnBN254Point,
         pub amount: u64,
         pub stake_type: u8,
-        pub bls_sig: ::ethers::core::types::Bytes,
+        pub bls_sig: G1Point,
         pub valid_until_epoch: u64,
     }
-    ///Container type for all input parameters for the `requestExit` function with signature `requestExit((uint256,uint256))` and selector `0xd4b83f45`
+    ///Container type for all input parameters for the `requestExit` function with signature `requestExit((uint256,uint256,uint256,uint256))` and selector `0x4aa7c27f`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -683,9 +707,12 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "requestExit", abi = "requestExit((uint256,uint256))")]
+    #[ethcall(
+        name = "requestExit",
+        abi = "requestExit((uint256,uint256,uint256,uint256))"
+    )]
     pub struct RequestExitCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
     }
     ///Container type for all input parameters for the `totalKeys` function with signature `totalKeys()` and selector `0x488bdabc`
     #[derive(
@@ -732,7 +759,7 @@ pub mod i_stake_table {
     )]
     #[ethcall(name = "totalVotingStake", abi = "totalVotingStake()")]
     pub struct TotalVotingStakeCall;
-    ///Container type for all input parameters for the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256))` and selector `0x162d4e7c`
+    ///Container type for all input parameters for the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256,uint256,uint256))` and selector `0x0c24af18`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -745,9 +772,12 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethcall(name = "withdrawFunds", abi = "withdrawFunds((uint256,uint256))")]
+    #[ethcall(
+        name = "withdrawFunds",
+        abi = "withdrawFunds((uint256,uint256,uint256,uint256))"
+    )]
     pub struct WithdrawFundsCall {
-        pub bls_vk: G1Point,
+        pub bls_vk: G2Point,
     }
     ///Container type for all of the contract's call
     #[derive(
@@ -939,7 +969,7 @@ pub mod i_stake_table {
             Self::WithdrawFunds(value)
         }
     }
-    ///Container type for all return fields from the `deposit` function with signature `deposit((uint256,uint256),uint64)` and selector `0xf7bfb01c`
+    ///Container type for all return fields from the `deposit` function with signature `deposit((uint256,uint256,uint256,uint256),uint64)` and selector `0x771f6f44`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -953,7 +983,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct DepositReturn(pub u64, pub u64);
-    ///Container type for all return fields from the `lookupNode` function with signature `lookupNode((uint256,uint256))` and selector `0x52f92fc4`
+    ///Container type for all return fields from the `lookupNode` function with signature `lookupNode((uint256,uint256,uint256,uint256))` and selector `0x2adda1c1`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -967,7 +997,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct LookupNodeReturn(pub Node);
-    ///Container type for all return fields from the `lookupStake` function with signature `lookupStake((uint256,uint256))` and selector `0xcdf7788f`
+    ///Container type for all return fields from the `lookupStake` function with signature `lookupStake((uint256,uint256,uint256,uint256))` and selector `0xdd2ed3ec`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1037,7 +1067,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct NumPendingRegistrationsReturn(pub u64);
-    ///Container type for all return fields from the `register` function with signature `register((uint256,uint256),(uint256,uint256),uint64,uint8,bytes,uint64)` and selector `0x096fbae3`
+    ///Container type for all return fields from the `register` function with signature `register((uint256,uint256,uint256,uint256),(uint256,uint256),uint64,uint8,(uint256,uint256),uint64)` and selector `0xc72cc717`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1051,7 +1081,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct RegisterReturn(pub bool);
-    ///Container type for all return fields from the `requestExit` function with signature `requestExit((uint256,uint256))` and selector `0xd4b83f45`
+    ///Container type for all return fields from the `requestExit` function with signature `requestExit((uint256,uint256,uint256,uint256))` and selector `0x4aa7c27f`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -1110,7 +1140,7 @@ pub mod i_stake_table {
         Hash,
     )]
     pub struct TotalVotingStakeReturn(pub ::ethers::core::types::U256);
-    ///Container type for all return fields from the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256))` and selector `0x162d4e7c`
+    ///Container type for all return fields from the `withdrawFunds` function with signature `withdrawFunds((uint256,uint256,uint256,uint256))` and selector `0x0c24af18`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,

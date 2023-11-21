@@ -26,7 +26,11 @@ use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
+use jf_primitives::constants::CS_ID_BLS_BN254;
+
 use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
+use jf_primitives::signatures::bls_over_bn254::KeyPair;
+use jf_primitives::signatures::bls_over_bn254::Signature;
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -76,6 +80,8 @@ enum Action {
     DummyProof,
     /// Test only logic
     TestOnly,
+    /// Generate a BLS Signature
+    GenBLSSig,
 }
 
 #[allow(clippy::type_complexity)]
@@ -386,6 +392,26 @@ fn main() {
         }
         Action::TestOnly => {
             println!("args: {:?}", cli.args);
+        }
+        Action::GenBLSSig => {
+            let mut rng = jf_utils::test_rng();
+
+            let key_pair = KeyPair::generate(&mut rng);
+            let vk = key_pair.ver_key();
+            let vk_g2_proj: G2Affine = vk.to_affine();
+            let msg = Bytes::from(vec![54u8, 12u8]);
+            let pk_x_c0 = field_to_u256::<Fq>(vk_g2_proj.x.c0);
+            let pk_x_c1 = field_to_u256::<Fq>(vk_g2_proj.x.c1);
+            let pk_y_c0 = field_to_u256::<Fq>(vk_g2_proj.y.c0);
+            let pk_y_c1 = field_to_u256::<Fq>(vk_g2_proj.y.c1);
+
+            let sig: Signature = key_pair.sign(&msg, CS_ID_BLS_BN254);
+            let sig_affine_point = sig.sigma.into_affine();
+            let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
+            let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
+
+            let res = (sig_x, sig_y, pk_x_c0, pk_x_c1, pk_y_c0, pk_y_c1, msg);
+            println!("{}", res.encode_hex());
         }
     };
 }

@@ -21,8 +21,8 @@ interface IStakeTable {
     // We avoid declaring another struct even if the type info helps with readability,
     // extra layer of struct introduces overhead and more gas cost.
     //
-    /// @dev BLS verification key (used for Consensus voting in HotShot) is `BN254.G1Point`.
-    // `type BlsVerKey is BN254.G1Point;`
+    /// @dev BLS verification key (used for Consensus voting in HotShot) is `BN254.G2Point`.
+    // `type BlsVerKey is BN254.G2Point;`
     //
     /// @dev Verification key of a Schnorr signature is just a `EdOnBN254.EdOnBN254Point`
     // `type SchnorrVerKey is EdOnBN254.EdOnBN254Point;`
@@ -56,9 +56,9 @@ interface IStakeTable {
     function totalVotingStake() external view returns (uint256);
 
     /// @notice Look up the balance of `blsVK`
-    function lookupStake(BN254.G1Point calldata blsVK) external view returns (uint64);
+    function lookupStake(BN254.G2Point calldata blsVK) external view returns (uint64);
     /// @notice Look up the full `Node` state associated with `blsVK`
-    function lookupNode(BN254.G1Point calldata blsVK) external view returns (Node memory);
+    function lookupNode(BN254.G2Point calldata blsVK) external view returns (Node memory);
 
     // === Queuing Stats ===
 
@@ -89,11 +89,11 @@ interface IStakeTable {
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
     /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
     function register(
-        BN254.G1Point calldata blsVK,
+        BN254.G2Point calldata blsVK,
         EdOnBN254.EdOnBN254Point calldata schnorrVK,
         uint64 amount,
         StakeType stakeType,
-        bytes calldata blsSig,
+        BN254.G1Point calldata blsSig,
         uint64 validUntilEpoch
     ) external returns (bool);
 
@@ -102,7 +102,7 @@ interface IStakeTable {
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G1Point calldata blsVK, uint64 amount)
+    function deposit(BN254.G2Point calldata blsVK, uint64 amount)
         external
         returns (uint64, uint64);
 
@@ -110,12 +110,12 @@ interface IStakeTable {
     ///
     /// @param blsVK The BLS verification key to exit
     /// @return success status
-    function requestExit(BN254.G1Point calldata blsVK) external returns (bool);
+    function requestExit(BN254.G2Point calldata blsVK) external returns (bool);
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.
     ///
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G1Point calldata blsVK) external returns (uint64);
+    function withdrawFunds(BN254.G2Point calldata blsVK) external returns (uint64);
 }
