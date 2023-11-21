@@ -24,18 +24,19 @@ additional, application-specific features (such as a JSON-RPC service in the cas
 application).
 
 ## Features
-* Provides a query interface to a persistent store containing the history of a blockchain
+
+- Provides a query interface to a persistent store containing the history of a blockchain
   (represented as a chain of HotShot
   [leaves](https://hotshot.docs.espressosys.com/hotshot/data/struct.Leaf.html))
-* Provides a query interface for validator status and metrics
-* Integrates with HotShot to populate the persistent database
-* Generic over application types (within a leaf, the block and block commitment can be any type the
+- Provides a query interface for validator status and metrics
+- Integrates with HotShot to populate the persistent database
+- Generic over application types (within a leaf, the block and block commitment can be any type the
   application specifieds)
-* Transparently handles asynchronous data availability &mdash; block commitments are provided as
+- Transparently handles asynchronous data availability &mdash; block commitments are provided as
   soon as they are committed by consensus; block data is provided once it has disseminated from the
   data availability committee; missing data is fetched asynchronously from other nodes
-* Serves as a source of data for HotShot catchup
-* Easily extensible with application-specific functionality
+- Serves as a source of data for HotShot catchup
+- Easily extensible with application-specific functionality
 
 ## Development
 
@@ -102,4 +103,12 @@ configure a default stack size to run the development build. 3MB seems to work w
 
 ```bash
 RUST_MIN_STACK=3145728 cargo test --all-features
+```
+
+#### Doctest
+
+Doctests require the `testing` feature. Due to a [limitation of doctest](https://stackoverflow.com/a/55727482) it is recommended to run doctests via
+
+```bash
+cargo test --doc --features testing
 ```
