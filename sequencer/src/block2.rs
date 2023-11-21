@@ -3,7 +3,7 @@ use ark_bls12_381::Bls12_381;
 use hotshot_query_service::QueryableBlock;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::advz::payload_prover::SmallRangeProof,
+    vid::{advz::payload_prover::SmallRangeProof, payload_prover::PayloadProver},
 };
 use serde::{Deserialize, Serialize};
 use std::{mem::size_of, ops::Range};
@@ -30,30 +30,30 @@ impl BlockPayload {
         let mut tx_bodies = Vec::<u8>::new();
 
         // build tx_table, tx_bodies
-        let mut end: u32 = 0;
+        let mut end: TxIndex = 0;
         for tx in txs.into_iter() {
             // TODO do not panic, return Result instead:
             // https://github.com/EspressoSystems/espresso-sequencer/pull/756#discussion_r1394550640
-            let len: u32 = tx
+            let len: TxIndex = tx
                 .payload()
                 .len()
                 .try_into()
-                .expect("tx byte length should fit into u32");
+                .expect("tx byte length should fit into TxIndex");
 
             end = end
                 .checked_add(len)
-                .expect("total byte length of all tx bodies should fit into u32");
+                .expect("total byte length of all tx bodies should fit into TxIndex");
 
             tx_table.extend(end.to_le_bytes());
             tx_bodies.extend(tx.payload());
         }
 
-        // tx_table_len is the number of 4-byte entries.
-        // tx_table.len() is the number of bytes in the tx table,
-        // so we divide by size_of::<u32>()
-        let tx_table_len: u32 = (tx_table.len() / size_of::<u32>())
+        // `tx_table_len`: number of `TxIndex` words in the tx table.
+        // `tx_table.len()`: number of bytes in the tx table.
+        // so `tx_table_len` = `tx_table.len()` divided by size_of::<TxIndex>()
+        let tx_table_len: TxIndex = (tx_table.len() / size_of::<TxIndex>())
             .try_into()
-            .expect("tx_table len should fit into u32");
+            .expect("tx_table len should fit into TxIndex");
 
         // Naively copy all pieces into a flat payload.
         // We could avoid this by allocating memory in advance,
@@ -67,11 +67,10 @@ impl BlockPayload {
         Self { payload }
     }
 
-    // TODO comment
+    // Return the range `r` such that the `index`th tx bytes are at `self.payload[r]`.
     fn get_tx_range(&self, index: TxIndex) -> Option<Range<usize>> {
         let tx_bodies_offset = self.tx_bodies_offset()?;
 
-        // TODO clean up this comment.
         // tx_table[i] is end index for the ith tx,
         // so the range for the ith tx is tx_table[i-1..i].
         // But tx_table starts at index 1 in the payload
@@ -84,6 +83,7 @@ impl BlockPayload {
             self.get_value_usize(index)?
         }
         .checked_add(tx_bodies_offset)?;
+
         let end = self
             .get_value_usize(index.checked_add(1)?)?
             .checked_add(tx_bodies_offset)?;
@@ -91,14 +91,16 @@ impl BlockPayload {
         Some(start..end)
     }
 
-    // TODO comment
-    // View self.payload as a bunch of TxIndex, return the indexth one.
+    // Viewing `self.payload` bytes as a vec of words of type `TxIndex`,
+    // return the `index`th word.
     fn get_value(&self, index: TxIndex) -> Option<TxIndex> {
         // TODO idiomatic usize <-> TxIndex conversion.
         let start = usize::try_from(index)
             .unwrap()
             .checked_mul(size_of::<TxIndex>())?;
+
         let end = start.checked_add(size_of::<TxIndex>())?;
+
         Some(TxIndex::from_le_bytes(
             self.payload.get(start..end)?.try_into().unwrap(),
         ))
@@ -107,12 +109,17 @@ impl BlockPayload {
         Some(usize::try_from(self.get_value(index)?).unwrap())
     }
 
+    // Return length of the tx table
+    // == number of txs in the payload
+    // == the first `TxIndex` word of `self.payload`.
     fn tx_table_len(&self) -> Option<TxIndex> {
         self.get_value(0)
     }
     fn tx_table_len_usize(&self) -> Option<usize> {
         self.get_value_usize(0)
     }
+
+    // Return the index in `self.payload` of the start of the tx bodies (after the tx table).
     fn tx_bodies_offset(&self) -> Option<usize> {
         self.tx_table_len_usize()?
             .checked_add(1)?
@@ -159,11 +166,10 @@ impl QueryableBlock for BlockPayload {
         };
 
         let tx_range = self.get_tx_range(*index)?;
-
-        use jf_primitives::vid::payload_prover::PayloadProver;
         let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
 
         Some((
+            // TODO temporary: copy the tx bytes to the return value
             Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
             proof,
         ))
@@ -215,9 +221,7 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
-    use super::{BlockPayload, QueryableBlock, TxIndex};
-    use crate::Transaction;
-    use std::mem::size_of;
+    use super::{size_of, BlockPayload, QueryableBlock, Transaction, TxIndex};
 
     #[test]
     fn build_basic_correctness() {
@@ -257,10 +261,10 @@ mod test {
                 .iter()
                 .cloned()
                 .map(|payload| Transaction::new(crate::VmId(0), payload));
-            let tx_offsets: Vec<u32> = tx_bodies
+            let tx_offsets: Vec<TxIndex> = tx_bodies
                 .iter()
                 .scan(0, |end, tx| {
-                    *end += u32::try_from(tx.len()).unwrap();
+                    *end += TxIndex::try_from(tx.len()).unwrap();
                     Some(*end)
                 })
                 .collect();
@@ -268,15 +272,16 @@ mod test {
             let block = BlockPayload::build(txs);
 
             // test tx table length
-            let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<u32>());
-            let tx_table_len = u32::from_le_bytes(tx_table_len_bytes.try_into().unwrap());
-            assert_eq!(tx_table_len, u32::try_from(tx_bodies.len()).unwrap());
+            let (tx_table_len_bytes, payload) = block.payload.split_at(size_of::<TxIndex>());
+            let tx_table_len = TxIndex::from_le_bytes(tx_table_len_bytes.try_into().unwrap());
+            assert_eq!(tx_table_len, TxIndex::try_from(tx_bodies.len()).unwrap());
 
             // test tx table contents
-            let (tx_table_bytes, payload) = payload.split_at(tx_bodies.len() * size_of::<u32>());
-            let tx_table: Vec<u32> = tx_table_bytes
-                .chunks(size_of::<u32>())
-                .map(|len_bytes| u32::from_le_bytes(len_bytes.try_into().unwrap()))
+            let (tx_table_bytes, payload) =
+                payload.split_at(tx_bodies.len() * size_of::<TxIndex>());
+            let tx_table: Vec<TxIndex> = tx_table_bytes
+                .chunks(size_of::<TxIndex>())
+                .map(|len_bytes| TxIndex::from_le_bytes(len_bytes.try_into().unwrap()))
                 .collect();
             assert_eq!(tx_table, tx_offsets);
 
