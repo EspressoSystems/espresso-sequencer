@@ -151,6 +151,9 @@ where
         Option<HotShotTaskCompleted>,
         VoteCollectionTaskState<TYPES, VOTE, CERT>,
     );
+
+    /// Event filter to use for this event
+    fn filter(event: &HotShotEvent<TYPES>) -> bool;
 }
 
 /// Info needed to create a vote accumulator task
@@ -233,7 +236,9 @@ where
         },
     ));
 
-    let filter = FilterEvent::default();
+    let filter = FilterEvent(Arc::new(
+        <VoteCollectionTaskState<TYPES, VOTE, CERT> as HandleVoteEvent<TYPES, VOTE, CERT>>::filter,
+    ));
     let builder = TaskBuilder::<VoteTaskStateTypes<TYPES, VOTE, CERT>>::new(name)
         .register_event_stream(state.event_stream.clone(), filter)
         .await
@@ -374,6 +379,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificat
             _ => (None, self),
         }
     }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::QuorumVoteRecv(_))
+    }
 }
 
 #[async_trait]
@@ -389,6 +397,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, DAVote<TYPES>, DACertificate<TYPES>
             _ => (None, self),
         }
     }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::DAVoteRecv(_))
+    }
 }
 
 #[async_trait]
@@ -403,6 +414,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertific
             HotShotEvent::TimeoutVoteRecv(vote) => self.accumulate_vote(&vote).await,
             _ => (None, self),
         }
+    }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::TimeoutVoteRecv(_))
     }
 }
 
@@ -420,6 +434,9 @@ impl<TYPES: NodeType>
             _ => (None, self),
         }
     }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::ViewSyncPreCommitVoteRecv(_))
+    }
 }
 
 #[async_trait]
@@ -435,6 +452,9 @@ impl<TYPES: NodeType>
             HotShotEvent::ViewSyncCommitVoteRecv(vote) => self.accumulate_vote(&vote).await,
             _ => (None, self),
         }
+    }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::ViewSyncCommitVoteRecv(_))
     }
 }
 
@@ -454,5 +474,8 @@ impl<TYPES: NodeType>
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => self.accumulate_vote(&vote).await,
             _ => (None, self),
         }
+    }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::ViewSyncFinalizeVoteRecv(_))
     }
 }
