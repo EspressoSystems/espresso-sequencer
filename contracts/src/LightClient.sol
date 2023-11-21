@@ -15,7 +15,7 @@ contract LightClient {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-    uint32 public constant BLOCKS_PER_EPOCH = 20_000;
+    uint32 public immutable BLOCKS_PER_EPOCH;
 
     // === Storage ===
     //
@@ -37,7 +37,7 @@ contract LightClient {
     /// @notice The finalized HotShot state (as the digest of the entire HotShot state)
     /// @param viewNum The latest view number of the finalized HotShot chain
     /// @param blockHeight The block height of the latest finalized block
-    /// @param blockComm The block commitment (type: BN254::ScalarField)
+    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
     /// @param feeLedgerComm The commitment to the fee ledger state (type: BN254::ScalarField)
     /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
     /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
@@ -46,7 +46,7 @@ contract LightClient {
     struct LightClientState {
         uint64 viewNum;
         uint64 blockHeight;
-        uint256 blockComm;
+        uint256 blockCommRoot;
         uint256 feeLedgerComm;
         uint256 stakeTableBlsKeyComm;
         uint256 stakeTableSchnorrKeyComm;
@@ -55,7 +55,7 @@ contract LightClient {
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
-    event NewState(uint64 indexed viewNum, uint64 indexed blockHeight, uint256 blockComm);
+    event NewState(uint64 indexed viewNum, uint64 indexed blockHeight, uint256 blockCommRoot);
 
     /// @notice The state is outdated and older than currently known `finalizedState`
     error OutdatedState();
@@ -65,7 +65,7 @@ contract LightClient {
     /// @notice Invalid user inputs: wrong format or non-sensible arguments
     error InvalidArgs();
 
-    constructor(LightClientState memory genesis) {
+    constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
         if (genesis.viewNum != 0 || genesis.blockHeight != 0) {
             revert InvalidArgs();
         }
@@ -73,6 +73,7 @@ contract LightClient {
         genesisState = genesis;
         finalizedState = genesis;
         currentEpoch = 0;
+        BLOCKS_PER_EPOCH = numBlockPerEpoch;
         // TODO: (alex) initialized stake table or at least store its contract address ref here
     }
 
@@ -98,7 +99,7 @@ contract LightClient {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
         // format validity check
-        BN254.validateScalarField(newState.blockComm);
+        BN254.validateScalarField(newState.blockCommRoot);
         BN254.validateScalarField(newState.feeLedgerComm);
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
@@ -119,7 +120,7 @@ contract LightClient {
         }
 
         finalizedState = newState;
-        emit NewState(newState.viewNum, newState.blockHeight, newState.blockComm);
+        emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
 
     // === Pure or View-only APIs ===
@@ -135,7 +136,7 @@ contract LightClient {
         uint256[] memory publicInput = new uint256[](8);
         publicInput[0] = uint256(state.viewNum);
         publicInput[1] = uint256(state.blockHeight);
-        publicInput[2] = state.blockComm;
+        publicInput[2] = state.blockCommRoot;
         publicInput[3] = state.feeLedgerComm;
         publicInput[4] = state.stakeTableBlsKeyComm;
         publicInput[5] = state.stakeTableSchnorrKeyComm;

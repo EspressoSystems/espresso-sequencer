@@ -15,22 +15,31 @@ pub mod light_client {
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
             constructor: ::core::option::Option::Some(::ethers::core::abi::ethabi::Constructor {
-                inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                    name: ::std::borrow::ToOwned::to_owned("genesis"),
-                    kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                        ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                    ],),
-                    internal_type: ::core::option::Option::Some(::std::borrow::ToOwned::to_owned(
-                        "struct LightClient.LightClientState",
-                    ),),
-                },],
+                inputs: ::std::vec![
+                    ::ethers::core::abi::ethabi::Param {
+                        name: ::std::borrow::ToOwned::to_owned("genesis"),
+                        kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                            ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                        ],),
+                        internal_type: ::core::option::Option::Some(
+                            ::std::borrow::ToOwned::to_owned("struct LightClient.LightClientState",),
+                        ),
+                    },
+                    ::ethers::core::abi::ethabi::Param {
+                        name: ::std::borrow::ToOwned::to_owned("numBlockPerEpoch"),
+                        kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                        internal_type: ::core::option::Option::Some(
+                            ::std::borrow::ToOwned::to_owned("uint32"),
+                        ),
+                    },
+                ],
             }),
             functions: ::core::convert::From::from([
                 (
@@ -86,7 +95,7 @@ pub mod light_client {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockComm"),
+                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint256"),
@@ -169,7 +178,7 @@ pub mod light_client {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockComm"),
+                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint256"),
@@ -349,7 +358,7 @@ pub mod light_client {
                             indexed: true,
                         },
                         ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::borrow::ToOwned::to_owned("blockComm"),
+                            name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
                             kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                             indexed: false,
                         },
@@ -700,7 +709,7 @@ pub mod light_client {
         pub view_num: u64,
         #[ethevent(indexed)]
         pub block_height: u64,
-        pub block_comm: ::ethers::core::types::U256,
+        pub block_comm_root: ::ethers::core::types::U256,
     }
     ///Container type for all input parameters for the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
     #[derive(
@@ -975,7 +984,7 @@ pub mod light_client {
     pub struct FinalizedStateReturn {
         pub view_num: u64,
         pub block_height: u64,
-        pub block_comm: ::ethers::core::types::U256,
+        pub block_comm_root: ::ethers::core::types::U256,
         pub fee_ledger_comm: ::ethers::core::types::U256,
         pub stake_table_bls_key_comm: ::ethers::core::types::U256,
         pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
@@ -1012,7 +1021,7 @@ pub mod light_client {
     pub struct GenesisStateReturn {
         pub view_num: u64,
         pub block_height: u64,
-        pub block_comm: ::ethers::core::types::U256,
+        pub block_comm_root: ::ethers::core::types::U256,
         pub fee_ledger_comm: ::ethers::core::types::U256,
         pub stake_table_bls_key_comm: ::ethers::core::types::U256,
         pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
@@ -1049,7 +1058,7 @@ pub mod light_client {
     pub struct LightClientState {
         pub view_num: u64,
         pub block_height: u64,
-        pub block_comm: ::ethers::core::types::U256,
+        pub block_comm_root: ::ethers::core::types::U256,
         pub fee_ledger_comm: ::ethers::core::types::U256,
         pub stake_table_bls_key_comm: ::ethers::core::types::U256,
         pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
