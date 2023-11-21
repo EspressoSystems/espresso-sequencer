@@ -1,13 +1,13 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
-use async_std::{sync::Arc, task::sleep};
+use async_std::task::sleep;
 use commit::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
     contract::builders::ContractCall,
     prelude::*,
-    providers::Middleware as _,
+    providers::Middleware,
     providers::{Http, Provider},
-    signers::coins_bip39::English,
+    signers::{coins_bip39::English, Signer as _},
     types::U256,
 };
 use std::path::{Path, PathBuf};
@@ -18,8 +18,8 @@ use url::Url;
 
 pub mod test_utils;
 
-pub type Middleware = NonceManagerMiddleware<SignerMiddleware<Provider<Http>, LocalWallet>>;
-pub type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
+pub type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
+pub type NonceManager = NonceManagerMiddleware<Signer>;
 
 #[derive(Clone, Debug, Default)]
 pub struct AnvilOptions {
@@ -230,7 +230,7 @@ pub async fn connect_rpc(
     mnemonic: &str,
     index: u32,
     chain_id: Option<u64>,
-) -> Option<Arc<Middleware>> {
+) -> Option<Signer> {
     let provider = match Provider::try_from(provider.to_string()) {
         Ok(provider) => provider,
         Err(err) => {
@@ -266,11 +266,12 @@ pub async fn connect_rpc(
         }
     };
     let wallet = wallet.with_chain_id(chain_id);
-    let address = wallet.address();
-    Some(Arc::new(NonceManagerMiddleware::new(
-        SignerMiddleware::new(provider, wallet),
-        address,
-    )))
+    Some(SignerMiddleware::new(provider, wallet))
+}
+
+pub fn nonce_manager(signer: Signer) -> NonceManager {
+    let address = signer.address();
+    NonceManager::new(signer, address)
 }
 
 pub async fn wait_for_http(
@@ -321,9 +322,12 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
     Commitment::deserialize(&*commit_bytes.to_vec())
 }
 
-pub async fn contract_send<T: Detokenize>(
-    call: &ContractCall<Middleware, T>,
-) -> Option<(TransactionReceipt, u64)> {
+pub async fn contract_send<M: Middleware, T: Detokenize>(
+    call: &ContractCall<M, T>,
+) -> Option<(TransactionReceipt, u64)>
+where
+    M::Provider: Clone,
+{
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
@@ -364,7 +368,10 @@ pub async fn contract_send<T: Detokenize>(
     Some((receipt, block_number.as_u64()))
 }
 
-async fn wait_for_transaction_to_be_mined(provider: &Provider<Http>, hash: H256) -> bool {
+async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
+    provider: &Provider<P>,
+    hash: H256,
+) -> bool {
     let retries = 10;
     // It's common to have to try a few times before the transactions is mined. It is too noisy if
     // we log every retry. However, if it is not mined after several retries, something might be

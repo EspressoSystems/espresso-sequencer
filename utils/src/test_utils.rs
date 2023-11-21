@@ -1,17 +1,17 @@
-use crate::EthMiddleware;
+use crate::Signer;
 use anyhow::Result;
 use contract_bindings::hot_shot::HotShot;
 use ethers::{
     prelude::{Address, SignerMiddleware},
     providers::{Http, Middleware, Provider},
-    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer as _},
 };
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct TestClient {
     pub index: u32,
-    pub provider: Arc<EthMiddleware>,
+    pub provider: Arc<Signer>,
 }
 
 impl TestClient {
@@ -59,7 +59,7 @@ impl TestClients {
 #[derive(Debug, Clone)]
 pub struct TestL1System {
     pub clients: TestClients,
-    pub hotshot: HotShot<EthMiddleware>,
+    pub hotshot: HotShot<Signer>,
     pub provider: Provider<Http>,
 }
 
