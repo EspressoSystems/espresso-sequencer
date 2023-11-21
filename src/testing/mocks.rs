@@ -227,8 +227,8 @@ impl QueryableBlock for MockBlock {
     fn transaction_with_proof(
         &self,
         index: &Self::TransactionIndex,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
-        Some((self.transactions.get(*index)?, ()))
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        Some((self.transactions.get(*index)?.clone(), ()))
     }
 }
 
