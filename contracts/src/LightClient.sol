@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
-import { IStakeTable } from "./interfaces/IStakeTable.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
 
 // TODO: replace these, for now WIP and test only
@@ -26,8 +25,12 @@ contract LightClient {
     LightClientState public finalizedState;
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
-    /// @notice address of the stake table contract
-    IStakeTable internal stakeTable;
+    /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
+    /// of last epoch)
+    bytes32 public votingStakeTableCommitment;
+    /// @notice The commitment of the stake table frozen for change (i.e. snapshot at the start of
+    /// last epoch)
+    bytes32 public frozenStakeTableCommitment;
 
     // === Data Structure ===
     //
@@ -62,7 +65,7 @@ contract LightClient {
     /// @notice Invalid user inputs: wrong format or non-sensible arguments
     error InvalidArgs();
 
-    constructor(LightClientState memory genesis, address stakeTableAddr) {
+    constructor(LightClientState memory genesis) {
         if (genesis.viewNum != 0 || genesis.blockHeight != 0) {
             revert InvalidArgs();
         }
@@ -70,7 +73,6 @@ contract LightClient {
         genesisState = genesis;
         finalizedState = genesis;
         currentEpoch = 0;
-        stakeTable = IStakeTable(stakeTableAddr);
         // TODO: (alex) initialized stake table or at least store its contract address ref here
     }
 
@@ -91,10 +93,8 @@ contract LightClient {
             revert OutdatedState();
         }
         uint64 epochEndingBlockHeight = (currentEpoch + 1) * BLOCKS_PER_EPOCH - 1;
-        if (
-            finalizedState.blockHeight != epochEndingBlockHeight
-                && newState.blockHeight > epochEndingBlockHeight
-        ) {
+        bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
+        if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
         // format validity check
@@ -103,33 +103,19 @@ contract LightClient {
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
-        // sanity check on the threshold
-        if (newState.threshold <= stakeTable.totalVotingStake() * 2 / 3) {
-            revert InvalidArgs();
-        }
 
         // check plonk proof
         // TODO: (alex) replace the vk with the correct one
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
-        uint256[] memory publicInput = preparePublicInput(newState);
+        uint256[] memory publicInput = preparePublicInput(newState, isNewEpoch);
         PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
 
         // upon successful verification, update state.
         // If the newState is in a new epoch, only then should we increment the `currentEpoch`, and
         // update the stake table. The `finalizedState` (before update) should have the
         // `epochEndingBlockHeight`
-        if (finalizedState.blockHeight == epochEndingBlockHeight) {
-            // solhint-disable-next-line no-unused-vars
-            bytes32 newStakeTableComm = keccak256(
-                abi.encodePacked(
-                    finalizedState.stakeTableBlsKeyComm,
-                    finalizedState.stakeTableSchnorrKeyComm,
-                    finalizedState.stakeTableAmountComm
-                )
-            );
-
-            // stakeTable.advanceEpoch(newStakeTableComm);
-            currentEpoch += 1;
+        if (isNewEpoch) {
+            _advanceEpoch();
         }
 
         finalizedState = newState;
@@ -139,9 +125,11 @@ contract LightClient {
     // === Pure or View-only APIs ===
     /// @dev Transform a state into an array of field elements, prepared as public inputs of the
     /// plonk proof verification
-    function preparePublicInput(LightClientState calldata state)
-        public
-        pure
+    /// @param isNewEpoch Indicate if the `state` is in the new epoch, thus won't reuse threshold
+    /// from `finalizedState`
+    function preparePublicInput(LightClientState calldata state, bool isNewEpoch)
+        internal
+        view
         returns (uint256[] memory)
     {
         uint256[] memory publicInput = new uint256[](8);
@@ -152,7 +140,27 @@ contract LightClient {
         publicInput[4] = state.stakeTableBlsKeyComm;
         publicInput[5] = state.stakeTableSchnorrKeyComm;
         publicInput[6] = state.stakeTableAmountComm;
-        publicInput[7] = state.threshold;
+        if (isNewEpoch) {
+            publicInput[7] = state.threshold;
+        } else {
+            publicInput[7] = finalizedState.threshold;
+        }
         return publicInput;
+    }
+
+    /// @notice Advance to the next epoch (without any precondition check!)
+    /// @dev This meant to be invoked only internally after appropriate precondition checks are done
+    function _advanceEpoch() private {
+        bytes32 newStakeTableComm = keccak256(
+            abi.encodePacked(
+                finalizedState.stakeTableBlsKeyComm,
+                finalizedState.stakeTableSchnorrKeyComm,
+                finalizedState.stakeTableAmountComm
+            )
+        );
+
+        votingStakeTableCommitment = frozenStakeTableCommitment;
+        frozenStakeTableCommitment = newStakeTableComm;
+        currentEpoch += 1;
     }
 }
