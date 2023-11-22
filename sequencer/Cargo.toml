@@ -48,6 +48,7 @@ hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branc
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "fa6638821573c61320fcd281685a338a795d174f" } # TODO remove `rev` and upgrade to latest main
 
 jf-primitives = { workspace = true }
+jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }

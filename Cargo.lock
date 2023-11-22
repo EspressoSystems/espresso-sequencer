@@ -6922,6 +6922,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-web-server",
  "jf-primitives",
+ "jf-utils",
  "lazy_static",
  "nll",
  "portpicker",

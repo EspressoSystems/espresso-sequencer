@@ -150,24 +150,15 @@ impl QueryableBlock for BlockPayload {
         &self,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        // TODO temporary VID construction
-        let vid = {
-            let (payload_chunk_size, num_storage_nodes) = (5, 10);
-            use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
-            use sha2::Sha256;
-
-            let mut rng = rand::thread_rng();
-            let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
-                &mut rng,
-                checked_fft_size(payload_chunk_size - 1).unwrap(),
-            )
-            .unwrap();
-            Advz::<Bls12_381, Sha256>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
-        };
-
+        let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
         let tx_range = self.get_tx_range(*index)?;
+        println!(
+            "production: payload len {} tx start {} end {}",
+            self.payload.len(),
+            tx_range.start,
+            tx_range.end
+        );
         let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
-
         Some((
             // TODO temporary: copy the tx bytes to the return value
             Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
@@ -177,8 +168,10 @@ impl QueryableBlock for BlockPayload {
 }
 
 mod boilerplate {
-    use super::{BlockPayload, Transaction};
+    use super::{BlockPayload, PolynomialCommitmentScheme, Transaction, UnivariateKzgPCS};
+    use ark_bls12_381::Bls12_381;
     use commit::Committable;
+    use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
     use std::fmt::Display;
 
     // TODO temporary.
@@ -217,11 +210,29 @@ mod boilerplate {
             todo!()
         }
     }
+
+    // TODO temporary
+    pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+        let (payload_chunk_size, num_storage_nodes) = (8, 10);
+
+        let mut rng = jf_utils::test_rng();
+        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+            &mut rng,
+            checked_fft_size(payload_chunk_size - 1).unwrap(),
+        )
+        .unwrap();
+        Advz::<_, _>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{size_of, BlockPayload, QueryableBlock, Transaction, TxIndex};
+    use jf_primitives::vid::{payload_prover::Statement, VidScheme};
+
+    use super::{
+        boilerplate::test_vid_factory, size_of, BlockPayload, PayloadProver, QueryableBlock,
+        Transaction, TxIndex,
+    };
 
     #[test]
     fn build_basic_correctness() {
@@ -254,6 +265,8 @@ mod test {
             // zero txs
             vec![],
         ];
+
+        let vid = test_vid_factory();
 
         for tx_bodies in test_cases {
             // prepare things as a function of the test case
@@ -289,14 +302,36 @@ mod test {
             let tx_payloads_flat: Vec<u8> = tx_bodies.iter().flatten().cloned().collect();
             assert_eq!(payload, tx_payloads_flat);
 
-            // test get_tx_range()
             assert_eq!(tx_bodies.len(), block.len());
             for (index, tx_body) in tx_bodies.iter().enumerate() {
-                let tx_range = block
-                    .get_tx_range(TxIndex::try_from(index).unwrap())
-                    .unwrap();
-                let block_tx_body = block.payload.get(tx_range).unwrap();
+                let index = TxIndex::try_from(index).unwrap();
+
+                // test get_tx_range()
+                let tx_range = block.get_tx_range(index).unwrap();
+                let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
                 assert_eq!(tx_body, block_tx_body);
+
+                // test `transaction_with_proof()`
+                println!(
+                    "test: index {} tx range start {} end {}",
+                    index, tx_range.start, tx_range.end
+                );
+                let (tx, proof) = block.transaction_with_proof(&index).unwrap();
+                assert_eq!(tx_body, tx.payload());
+
+                // test proof verification
+                let d = vid.disperse(&block.payload).unwrap();
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: tx_body,
+                        range: tx_range,
+                        commit: &d.commit,
+                        common: &d.common,
+                    },
+                    &proof,
+                )
+                .unwrap()
+                .unwrap();
             }
         }
     }
