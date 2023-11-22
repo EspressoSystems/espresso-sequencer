@@ -152,12 +152,6 @@ impl QueryableBlock for BlockPayload {
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
         let tx_range = self.get_tx_range(*index)?;
-        println!(
-            "production: payload len {} tx start {} end {}",
-            self.payload.len(),
-            tx_range.start,
-            tx_range.end
-        );
         let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
         Some((
             // TODO temporary: copy the tx bytes to the return value
@@ -267,8 +261,15 @@ mod test {
         ];
 
         let vid = test_vid_factory();
+        let num_test_cases = test_cases.len();
+        for (t, tx_bodies) in test_cases.into_iter().enumerate() {
+            println!(
+                "test payload {} of {} with {} txs",
+                t + 1,
+                num_test_cases,
+                tx_bodies.len()
+            );
 
-        for tx_bodies in test_cases {
             // prepare things as a function of the test case
             let txs = tx_bodies
                 .iter()
@@ -301,8 +302,10 @@ mod test {
             // test block payload body
             let tx_payloads_flat: Vec<u8> = tx_bodies.iter().flatten().cloned().collect();
             assert_eq!(payload, tx_payloads_flat);
-
             assert_eq!(tx_bodies.len(), block.len());
+
+            // tests for individual txs
+            let d = vid.disperse(&block.payload).unwrap();
             for (index, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index).unwrap();
 
@@ -311,16 +314,22 @@ mod test {
                 let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
                 assert_eq!(tx_body, block_tx_body);
 
-                // test `transaction_with_proof()`
-                println!(
+                // test `transaction_with_proof()` (nonempty txs only)
+                print!(
                     "test: index {} tx range start {} end {}",
                     index, tx_range.start, tx_range.end
                 );
+                if tx_range.is_empty() {
+                    println!(" empty, skipping");
+                    continue;
+                } else {
+                    println!();
+                }
+
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
                 // test proof verification
-                let d = vid.disperse(&block.payload).unwrap();
                 vid.payload_verify(
                     Statement {
                         payload_subslice: tx_body,

@@ -5,15 +5,10 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-  "test-apis",
-  "test-srs",
-] }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
+jf-plonk = { path = "../jellyfish/plonk", features = ["test-apis", "test-srs"] }
+jf-primitives = { path = "../jellyfish/primitives", features = [
   "std",
   "test-srs",
 ] }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-  "std",
-] }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish" }
+jf-relation = { path = "../jellyfish/relation", features = ["std"] }
+jf-utils = { path = "../jellyfish/utilities" }
