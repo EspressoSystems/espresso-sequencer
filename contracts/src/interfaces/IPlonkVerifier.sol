@@ -84,6 +84,19 @@ interface IPlonkVerifier {
         BN254.G1Point qEcc; // 0x260
     }
 
+    /// @dev Verify a single TurboPlonk proofs.
+    /// @param verifyingKey The Plonk verification key
+    /// @param publicInput The public input fields
+    /// @param proof The TurboPlonk proof
+    /// @param extraTranscriptInitMsg Optional bytes for transcript init message
+    /// @return _ A boolean indicating successful verification, false otherwise
+    function verify(
+        VerifyingKey memory verifyingKey,
+        uint256[] memory publicInput,
+        PlonkProof memory proof,
+        bytes memory extraTranscriptInitMsg
+    ) external view returns (bool);
+
     /// @dev Batch verify multiple TurboPlonk proofs.
     /// @param verifyingKeys An array of verifying keys
     /// @param publicInputs A two-dimensional array of public inputs.

@@ -9,7 +9,7 @@ use hotshot_query_service::{
     Block, Deltas, Resolvable,
 };
 use hotshot_types::traits::node_implementation::NodeImplementation;
-use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Middleware};
+use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
@@ -90,7 +90,7 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
 async fn sequence<I: NodeImplementation<SeqTypes>>(
     max_blocks: u64,
     hotshot: HotShotClient,
-    contract: HotShot<Middleware>,
+    contract: HotShot<Signer>,
 ) where
     Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
 {
@@ -140,7 +140,7 @@ impl<I: NodeImplementation<SeqTypes>> HotShotDataSource<I> for HotShotClient {
 async fn sync_with_l1<I: NodeImplementation<SeqTypes>>(
     max_blocks: u64,
     hotshot: &impl HotShotDataSource<I>,
-    contract: &HotShot<Middleware>,
+    contract: &HotShot<Signer>,
 ) -> Result<(), anyhow::Error>
 where
     Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
@@ -171,7 +171,7 @@ where
     tracing::info!("sending {} leaves to the contract", leaves.len());
 
     // Send the leaves to the contract.
-    let txn = build_sequence_batches_txn::<I, Middleware>(contract, leaves);
+    let txn = build_sequence_batches_txn::<I, Signer>(contract, leaves);
     // If the transaction fails for any reason -- not mined, reverted, etc. -- just return the
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
@@ -201,7 +201,7 @@ where
     contract.new_blocks(qcs)
 }
 
-pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> {
+pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Signer>> {
     connect_rpc(
         &opt.l1_provider,
         &opt.sequencer_mnemonic,
@@ -209,6 +209,7 @@ pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Middleware>> 
         opt.l1_chain_id,
     )
     .await
+    .map(Arc::new)
 }
 
 #[cfg(test)]
@@ -309,14 +310,16 @@ mod test {
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
         let initial_batch_num = l1.hotshot.block_height().call().await.unwrap();
 
-        let adaptor_l1_signer = connect_rpc(
-            l1.provider.url(),
-            TEST_MNEMONIC,
-            l1.clients.funded[0].index,
-            None,
-        )
-        .await
-        .unwrap();
+        let adaptor_l1_signer = Arc::new(
+            connect_rpc(
+                l1.provider.url(),
+                TEST_MNEMONIC,
+                l1.clients.funded[0].index,
+                None,
+            )
+            .await
+            .unwrap(),
+        );
 
         // Create a few test batches.
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_u64();
@@ -373,14 +376,16 @@ mod test {
         let anvil = AnvilOptions::default().spawn().await;
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let mut from_block = l1.provider.get_block_number().await.unwrap();
-        let adaptor_l1_signer = connect_rpc(
-            l1.provider.url(),
-            TEST_MNEMONIC,
-            l1.clients.funded[0].index,
-            None,
-        )
-        .await
-        .unwrap();
+        let adaptor_l1_signer = Arc::new(
+            connect_rpc(
+                l1.provider.url(),
+                TEST_MNEMONIC,
+                l1.clients.funded[0].index,
+                None,
+            )
+            .await
+            .unwrap(),
+        );
 
         // Create a test batch.
         let mut data = MockDataSource::default();

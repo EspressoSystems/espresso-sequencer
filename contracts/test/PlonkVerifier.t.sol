@@ -141,6 +141,150 @@ contract PlonkVerifier_constants_Test is Test {
     }
 }
 
+// Mostly identical with `PlonkVerifier_batchVerify_Test`
+contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
+    /// @dev Test happy path of `verify`.
+    function test_verify_succeeds() external {
+        vm.pauseGasMetering();
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        vm.resumeGasMetering();
+        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+    }
+
+    /// @dev Test when bad verifying key is supplied, the verification should fail
+    function testFuzz_badVerifyingKey_fails(uint256 nthPoint) external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        // there are 18 points in verifying key
+        // randomly choose one to mutate
+        nthPoint = bound(nthPoint, 0, 17);
+
+        BN254.G1Point memory badPoint;
+        assembly {
+            // the first 32 bytes is array length
+            let firstVkRef := add(verifyingKeys, 0x20)
+            // the first point offset is 0x40
+            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
+            badPoint := mload(badPointRef)
+        }
+
+        // modify the point to be invalid
+        badPoint = BN254.add(badPoint, BN254.P1());
+
+        assembly {
+            let firstVkRef := add(verifyingKeys, 0x20)
+            let badPointRef := add(mload(firstVkRef), add(mul(nthPoint, 0x20), 0x40))
+            mstore(badPointRef, badPoint)
+        }
+
+        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+    }
+
+    /// @dev Test when bad public input is supplied, the verification should fail
+    /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
+    function testFuzz_badPublicInput_fails(uint256[3] calldata randPublicInput) external {
+        uint256[] memory badPublicInput = new uint256[](3);
+        badPublicInput[0] = randPublicInput[0];
+        badPublicInput[1] = randPublicInput[1];
+        badPublicInput[2] = randPublicInput[2];
+        badPublicInput = sanitizeScalarFields(badPublicInput);
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            // solhint-disable-next-line no-unused-vars
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        assert(!V.verify(verifyingKeys[0], badPublicInput, proofs[0], extraTranscriptInitMsgs[0]));
+    }
+
+    /// @dev Test when bad proof is supplied, the verification should fail
+    function testFuzz_badProof_fails(uint64 seed) external {
+        IPlonkVerifier.PlonkProof memory badProof = dummyProof(seed);
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            // solhint-disable-next-line no-unused-vars
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof, extraTranscriptInitMsgs[0]));
+    }
+
+    /// @dev Test when bad extraTranscriptInitMsg is supplied, the verification should fail
+    function testFuzz_badExtraTranscriptInitMsg_fails(bytes calldata badMsg) external {
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "plonk-batch-verify";
+        cmds[2] = vm.toString(uint32(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            IPlonkVerifier.VerifyingKey[] memory verifyingKeys,
+            uint256[][] memory publicInputs,
+            IPlonkVerifier.PlonkProof[] memory proofs,
+            // solhint-disable-next-line no-unused-vars
+            bytes[] memory extraTranscriptInitMsgs
+        ) = abi.decode(
+            result,
+            (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
+        );
+
+        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], badMsg));
+    }
+}
+
 contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
     /// @dev Test if some of the user inputs are invalid
     function testFuzz_revertWhenInvalidArgs(
@@ -157,7 +301,7 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
         V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs);
     }
 
-    /// @dev Test happy and unhappy path of `batchVerify`.
+    /// @dev Test happy path of `batchVerify`.
     function test_batchVerify_succeeds() external {
         for (uint32 i = 1; i < 6; i++) {
             string[] memory cmds = new string[](3);

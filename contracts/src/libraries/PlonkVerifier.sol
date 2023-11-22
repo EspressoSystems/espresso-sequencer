@@ -83,6 +83,27 @@ library PlonkVerifier {
         uint256 u; // 0xE0
     }
 
+    /// @dev Verify a single TurboPlonk proofs.
+    /// @param verifyingKey The Plonk verification key
+    /// @param publicInput The public input fields
+    /// @param proof The TurboPlonk proof
+    /// @param extraTranscriptInitMsg Optional bytes for transcript init message
+    /// @return _ A boolean indicating successful verification, false otherwise
+    function verify(
+        IPlonkVerifier.VerifyingKey memory verifyingKey,
+        uint256[] memory publicInput,
+        IPlonkVerifier.PlonkProof memory proof,
+        bytes memory extraTranscriptInitMsg
+    ) external view returns (bool) {
+        _validateProof(proof);
+        for (uint256 i = 0; i < publicInput.length; i++) {
+            BN254.validateScalarField(publicInput[i]);
+        }
+        PcsInfo[] memory pcsInfos = new PcsInfo[](1);
+        pcsInfos[0] = _preparePcsInfo(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
+        return _batchVerifyOpeningProofs(pcsInfos);
+    }
+
     /// @dev Batch verify multiple TurboPlonk proofs.
     /// @param verifyingKeys An array of verifier keys
     /// @param publicInputs A two-dimensional array of public inputs.

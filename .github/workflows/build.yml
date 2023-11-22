@@ -17,9 +17,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-
 env:
-  RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
@@ -34,6 +33,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        # TODO: remove version pinning once our tests work again
+        with:
+          version: "nightly-60ec00296f00754bc21ed68fd05ab6b54b50e024"
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -98,7 +100,6 @@ jobs:
             target/release/sequencer
             target/release/cli
             target/release/commitment-task
-
 
   build-dockers:
     runs-on: ubuntu-latest
