@@ -98,7 +98,6 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                                 HotShotEvent::DAVoteRecv(vote.clone())
                             }
                             CommitteeConsensusMessage::DACertificate(cert) => {
-                                // panic!("Recevid DA C! ");
                                 HotShotEvent::DACRecv(cert)
                             }
                             CommitteeConsensusMessage::VidDisperseMsg(proposal) => {

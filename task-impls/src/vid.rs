@@ -13,7 +13,7 @@ use hotshot_task::{
 };
 use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
-    consensus::{Consensus, View},
+    consensus::Consensus,
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -21,7 +21,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    utils::ViewInner,
 };
 use hotshot_types::{
     simple_certificate::VIDCertificate,
@@ -117,7 +116,6 @@ where
                 "VID vote recv, collection task {:?}",
                 vote.get_view_number()
             );
-            // panic!("Vote handle received VID vote for view {}", *vote.current_view);
 
             // For the case where we receive votes after we've made a certificate
             if state.accumulator.is_right() {
@@ -172,11 +170,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::VidVoteRecv(vote) => {
-                // warn!(
-                //     "VID vote recv, Main Task {:?}, key: {:?}",
-                //     vote.current_view,
-                //     self.committee_exchange.public_key()
-                // );
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.get_view_number();
                 if self.membership.get_leader(view) != self.public_key {
@@ -248,11 +241,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
             }
             HotShotEvent::VidDisperseRecv(disperse, sender) => {
-                // TODO copy-pasted from DAProposalRecv https://github.com/EspressoSystems/HotShot/issues/1690
-                debug!(
-                    "VID disperse received for view: {:?}",
-                    disperse.data.get_view_number()
-                );
+                let view = disperse.data.get_view_number();
+
+                debug!("VID disperse received for view: {:?}", view);
 
                 // stop polling for the received disperse
                 self.network
@@ -261,12 +252,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     ))
                     .await;
 
-                // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
-                let view = disperse.data.get_view_number();
-
                 // Allow VID disperse date that is one view older, in case we have updated the
                 // view.
-                // Adding `+ 1` on the LHS rather tahn `- 1` on the RHS, to avoid the overflow
+                // Adding `+ 1` on the LHS rather than `- 1` on the RHS, to avoid the overflow
                 // error due to subtracting the genesis view number.
                 if view + 1 < self.cur_view {
                     warn!("Throwing away VID disperse data that is more than one view older");
@@ -276,7 +264,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("VID disperse data is fresh.");
                 let payload_commitment = disperse.data.payload_commitment;
 
-                // ED Is this the right leader?
+                // Check whether the sender is the right leader for this view
                 let view_leader_key = self.membership.get_leader(view);
                 if view_leader_key != sender {
                     error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
@@ -287,16 +275,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Could not verify VID proposal sig.");
                     return None;
                 }
-
+                // Sishan NOTE TODO: check whether this part is needed? How consensus committee functioned in vid task?
                 if !self.membership.has_stake(&self.public_key) {
-                    debug!(
-                        "We were not chosen for consensus committee on {:?}",
+                    error!(
+                        "We were not chosen for consensus-vid committee on {:?}",
                         self.cur_view
                     );
                     return None;
                 }
 
-                // Generate and send vote
+                // Generate and send vote after receive and validate disperse (VID share)
                 let vote = VIDVote::create_signed_vote(
                     VIDData {
                         payload_commit: payload_commitment,
@@ -306,9 +294,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     &self.private_key,
                 );
 
-                // ED Don't think this is necessary?
-                // self.cur_view = view;
-
                 debug!(
                     "Sending vote to the VID leader {:?}",
                     vote.get_view_number()
@@ -316,16 +301,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 self.event_stream
                     .publish(HotShotEvent::VidVoteSend(vote))
                     .await;
-                let mut consensus = self.consensus.write().await;
 
-                // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                // there is already a view there: the replica task may have inserted a `Leaf` view which
-                // contains strictly more information.
-                consensus.state_map.entry(view).or_insert(View {
-                    view_inner: ViewInner::DA {
-                        block: payload_commitment,
-                    },
-                });
+                // Sishan NOTE TODO: what is consensus.state_map?
+                // let mut consensus = self.consensus.write().await;
+                // // Ensure this view is in the view map for garbage collection, but do not overwrite if
+                // // there is already a view there: the replica task may have inserted a `Leaf` view which
+                // // contains strictly more information.
+                // consensus.state_map.entry(view).or_insert(View {
+                //     view_inner: ViewInner::DA {
+                //         block: payload_commitment,
+                //     },
+                // });
 
                 // Record the block we have promised to make available.
                 // TODO https://github.com/EspressoSystems/HotShot/issues/1692

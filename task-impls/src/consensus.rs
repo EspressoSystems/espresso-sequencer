@@ -1103,7 +1103,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let view = cert.get_view_number();
                 self.vid_certs.insert(view, cert);
-
+                // Sishan NOTE TODO
                 // RM TODO: VOTING
             }
 
