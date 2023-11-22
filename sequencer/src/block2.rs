@@ -129,7 +129,7 @@ impl BlockPayload {
 
 type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
 
-// TODO expose `KzgProof<E>` type alias from jellyfish
+// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
 type TxInclusionProof =
     SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
 
