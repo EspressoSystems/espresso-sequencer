@@ -8,6 +8,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
+import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
@@ -34,9 +35,14 @@ contract StableTable_keyRegister_Test is Test {
             uint256 blsVkx1,
             uint256 blsVky0,
             uint256 blsVky1,
-            bytes memory message
-        ) = abi.decode(result, (uint256, uint256, uint256, uint256, uint256, uint256, bytes));
+            uint256 schnorrVKx,
+            uint256 schnorrVKy
+        ) = abi.decode(
+            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+        );
 
+        EdOnBN254.EdOnBN254Point memory schnorrVK = EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy);
+        bytes memory message = abi.encode(schnorrVK.x, schnorrVK.y);
         BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
 
         // Note: (x,y) coordinates for each field component must be inverted.
