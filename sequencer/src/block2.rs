@@ -154,7 +154,8 @@ impl QueryableBlock for BlockPayload {
         let tx_range = self.get_tx_range(*index)?;
         let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
         Some((
-            // TODO temporary: copy the tx bytes to the return value
+            // TODO don't copy the tx bytes into the return value
+            // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
             proof,
         ))
