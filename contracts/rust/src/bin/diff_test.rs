@@ -12,6 +12,7 @@ use ark_std::{
     UniformRand,
 };
 use clap::{Parser, ValueEnum};
+use ethers::abi::Address;
 use ethers::{
     abi::{AbiDecode, AbiEncode},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
@@ -400,16 +401,20 @@ fn main() {
         Action::GenBLSSig => {
             let mut rng = jf_utils::test_rng();
 
-            // The message is the schnorr key
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=senderAddress");
+            }
+
+            let sender_address_string = cli.args[0].clone();
+            let sender_address: Address = AbiDecode::decode_hex(sender_address_string).unwrap();
+            let sender_address_bytes = AbiEncode::encode(sender_address);
+
+            // Generate the Schnorr key
             let schnorr_key_pair: KeyPair<Param254> = SchnorrKeyPair::generate(&mut rng);
             let schnorr_ver_key = schnorr_key_pair.ver_key();
             let schnorr_ver_key_affine = schnorr_ver_key.to_affine();
             let schnorr_pk_x = field_to_u256::<FqEd254>(schnorr_ver_key_affine.x);
             let schnorr_pk_y = field_to_u256::<FqEd254>(schnorr_ver_key_affine.y);
-            // let mut ser_bytes: Vec<u8> = Vec::new();
-            // schnorr_ver_key_affine.serialize_uncompressed(&mut ser_bytes).unwrap();
-            let schnorr_pk_bytes = (schnorr_pk_x, schnorr_pk_y).encode();
-            let msg = Bytes::from(schnorr_pk_bytes);
 
             // BLS ver key
             let key_pair = BLSKeyPair::generate(&mut rng);
@@ -421,7 +426,7 @@ fn main() {
             let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
             let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
 
-            let sig: Signature = key_pair.sign(&msg, CS_ID_BLS_BN254);
+            let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
             let sig_affine_point = sig.sigma.into_affine();
             let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
             let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
@@ -435,6 +440,7 @@ fn main() {
                 pk_y_c1,
                 schnorr_pk_x,
                 schnorr_pk_y,
+                sender_address,
             );
             println!("{}", res.encode_hex());
         }

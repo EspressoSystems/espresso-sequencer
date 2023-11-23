@@ -9,6 +9,7 @@ import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
+import "../src/interfaces/IStakeTable.sol";
 
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
@@ -20,12 +21,27 @@ contract StableTable_keyRegister_Test is Test {
         stakeTable = new S();
     }
 
+    function iToHex(bytes memory buffer) public pure returns (string memory) {
+        // Fixed buffer size for hexadecimal convertion
+        bytes memory converted = new bytes(buffer.length * 2);
+
+        bytes memory _base = "0123456789abcdef";
+
+        for (uint256 i = 0; i < buffer.length; i++) {
+            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
+            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
+        }
+
+        return string(abi.encodePacked("0x", converted));
+    }
+
     /// @dev Tests the key registering process
-    function testKeyRegister() external {
+    function testRegister() external {
         // Generate a BLS signature in rust and read it in solidity
-        string[] memory cmds = new string[](2);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-bls-sig";
+        cmds[2] = iToHex(abi.encode(msg.sender));
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -36,18 +52,20 @@ contract StableTable_keyRegister_Test is Test {
             uint256 blsVky0,
             uint256 blsVky1,
             uint256 schnorrVKx,
-            uint256 schnorrVKy
+            uint256 schnorrVKy,
+            address msgSenderAddress
         ) = abi.decode(
-            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+            result,
+            (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, address)
         );
 
-        EdOnBN254.EdOnBN254Point memory schnorrVK = EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy);
-        bytes memory message = abi.encode(schnorrVK.x, schnorrVK.y);
-        BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
-
         // Note: (x,y) coordinates for each field component must be inverted.
-        BN254.G2Point memory vk = BN254.G2Point(blsVkx1, blsVkx0, blsVky1, blsVky0);
+        BN254.G2Point memory blsVk = BN254.G2Point(blsVkx1, blsVkx0, blsVky1, blsVky0);
+        BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
+        EdOnBN254.EdOnBN254Point memory schnorrVK = EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy);
 
-        BLSSig.verifyBlsSig(message, sig, vk);
+        assertEq(msg.sender, msgSenderAddress);
+        vm.prank(msgSenderAddress);
+        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 5);
     }
 }

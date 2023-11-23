@@ -2,7 +2,6 @@ pragma solidity ^0.8.0;
 
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
-
 import "./interfaces/IStakeTable.sol";
 
 contract StakeTable is IStakeTable {
@@ -77,16 +76,37 @@ contract StakeTable is IStakeTable {
         BN254.G1Point calldata blsSig,
         uint64 validUntilEpoch
     ) external returns (bool) {
-        uint64 thisEpoch = 0; // TODO
-        Node memory node =
-            Node(msg.sender, stakeType, amount, thisEpoch, validUntilEpoch, schnorrVK);
-        // TODO Check blsSig
-        if (blsSig.x == 0) {
-            return false;
+        bytes32 key = hashBlsKey(blsVK);
+        Node memory node = nodesTable[key];
+
+        // The node must not already be registered.
+        require(node.account == address(0x0));
+
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        // Find the earliest epoch at which this node can register. Usually, this will be
+        // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
+        // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
+        // the caller's desired maximum wait, abort.
+        uint64 registerEpoch = this.nextRegistrationEpoch();
+        if (registerEpoch > validUntilEpoch) {
+            revert();
         }
-        bytes32 hash = hashBlsKey(blsVK);
-        nodesTable[hash] = node;
-        return true; // TODO
+
+        // Create an entry for the node.
+        node.account = msg.sender;
+        node.balance = amount;
+        node.stakeType = stakeType;
+        node.schnorrVK = schnorrVK;
+        node.registerEpoch = registerEpoch;
+
+        emit Register(blsVK, node);
+
+        // Lock the deposited tokens in this contract.
+        // TODO take the BEANS tokens
+
+        return true;
     }
 
     function deposit(BN254.G2Point calldata blsVK, uint64 amount)
