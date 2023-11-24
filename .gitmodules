@@ -10,3 +10,6 @@
 	path = contracts/lib/bn254
 	url = https://github.com/EspressoSystems/solidity-bn254
 	branch = v0.1.1
+[submodule "contracts/lib/openzeppelin-contracts"]
+	path = contracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
