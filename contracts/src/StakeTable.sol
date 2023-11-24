@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import "./interfaces/IStakeTable.sol";
+import { ExampleToken } from "../src/ExampleToken.sol";
 
 contract StakeTable is IStakeTable {
     mapping(bytes32 keyHash => Node node) private nodesTable;
@@ -13,6 +14,7 @@ contract StakeTable is IStakeTable {
     uint64 private numPendingExits;
     uint64 private constant BLOCKS_PER_EPOCH = 10;
     uint256 private creationBlock;
+    address private tokenAddress;
 
     // TODO check
     function hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
@@ -24,8 +26,9 @@ contract StakeTable is IStakeTable {
         return hash;
     }
 
-    constructor() {
+    constructor(address _tokenAddress) {
         creationBlock = block.number;
+        tokenAddress = _tokenAddress;
     }
 
     function currentEpoch() private view returns (uint64) {
@@ -110,10 +113,11 @@ contract StakeTable is IStakeTable {
 
         nodesTable[key] = node;
 
-        emit Register(blsVK, node);
-
         // Lock the deposited tokens in this contract.
-        // TODO take the BEANS tokens
+        ExampleToken token = ExampleToken(tokenAddress);
+        token.transferFrom(msg.sender, address(this), amount);
+
+        emit Register(blsVK, node);
 
         return true;
     }

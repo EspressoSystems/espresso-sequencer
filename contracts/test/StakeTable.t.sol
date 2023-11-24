@@ -11,14 +11,27 @@ import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import "../src/interfaces/IStakeTable.sol";
 
+// Token contract
+import { ExampleToken } from "../src/ExampleToken.sol";
+
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StableTable_keyRegister_Test is Test {
+contract StakeTable_keyRegister_Test is Test {
+    event Register(BN254.G2Point, IStakeTable.Node);
+
     S public stakeTable;
+    ExampleToken public token;
+    address public tokenAddress;
+    address exampleTokenCreator;
+    uint256 constant INITIAL_BALANCE = 1_000;
 
     function setUp() public {
-        stakeTable = new S();
+        exampleTokenCreator = msg.sender;
+        vm.prank(exampleTokenCreator);
+        token = new ExampleToken(INITIAL_BALANCE);
+        tokenAddress = address(token);
+        stakeTable = new S(tokenAddress);
     }
 
     // TODO move to some utils library
@@ -39,7 +52,7 @@ contract StableTable_keyRegister_Test is Test {
 
     /// @dev Tests the key registering process
     function testRegister() external {
-        // Generate a BLS signature in rust and read it in solidity
+        // Generate a BLS signature and other values in rust and read it in solidity
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-bls-sig";
@@ -61,6 +74,12 @@ contract StableTable_keyRegister_Test is Test {
             (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, address)
         );
 
+        uint64 depositAmount = 10;
+
+        // Prepare for the token transfer
+        vm.prank(msgSenderAddress);
+        token.approve(address(stakeTable), depositAmount);
+
         // Note: (x,y) coordinates for each field component must be inverted.
         BN254.G2Point memory blsVk = BN254.G2Point(blsVkx1, blsVkx0, blsVky1, blsVky0);
         BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
@@ -72,24 +91,45 @@ contract StableTable_keyRegister_Test is Test {
         // Failed signature verification
         BN254.G1Point memory badSig = BN254.P1();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
-        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, badSig, 5);
+        uint64 validUntilEpoch = 5;
+        stakeTable.register(
+            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
+        );
 
         // Invalid next registration epoch
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("Invalid next registration epoch."));
-        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 0);
+        stakeTable.register(blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
+
+        // Balance before registration
+        assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE);
+
+        // Check event is emitted
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        IStakeTable.Node memory node;
+        node.account = msgSenderAddress;
+        node.balance = depositAmount;
+        node.stakeType = IStakeTable.StakeType.Native;
+        node.schnorrVK = schnorrVK;
+        node.registerEpoch = 1;
+
+        emit Register(blsVk, node);
 
         // Happy path
         vm.prank(msgSenderAddress);
-        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 5);
+        bool res = stakeTable.register(
+            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+        );
+        assertTrue(res);
 
-        // Check the BEANS tokens have been transfered
-
-        // Check event is emitted
+        // Balance after registration
+        assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE - depositAmount);
 
         // The node is already registered
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("The node has already been registered"));
-        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 5);
+        stakeTable.register(
+            blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, validUntilEpoch
+        );
     }
 }
