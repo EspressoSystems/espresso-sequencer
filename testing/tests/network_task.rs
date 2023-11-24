@@ -24,7 +24,7 @@ async fn test_network_task() {
     use hotshot_types::{
         block_impl::{VIDBlockPayload, VIDTransaction},
         data::VidDisperse,
-        message::Proposal,
+        message::Proposal, traits::node_implementation::NodeType,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -60,6 +60,7 @@ async fn test_network_task() {
         _pd: PhantomData,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
+    let quorum_signature : &<<TestTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType = &da_proposal.signature;
     // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
@@ -69,7 +70,7 @@ async fn test_network_task() {
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },
-        signature: da_proposal.signature.clone(),
+        signature: quorum_signature.clone(),
         _pd: PhantomData,
     };
 

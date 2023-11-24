@@ -341,7 +341,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
                 let vote = QuorumVote::<TYPES>::create_signed_vote(
                     QuorumData {
@@ -401,7 +401,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: self.quorum_membership.get_leader(view).to_bytes(),
+                    proposer_id: self.quorum_membership.get_leader(view),
                 };
 
                 // Validate the DAC.
@@ -623,7 +623,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         block_payload: None,
                         rejected: Vec::new(),
                         timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                        proposer_id: sender.to_bytes(),
+                        proposer_id: sender,
                     };
 
                     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
@@ -648,7 +648,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     block_payload: None,
                     rejected: Vec::new(),
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                    proposer_id: sender.to_bytes(),
+                    proposer_id: sender,
                 };
                 let leaf_commitment = leaf.commit();
 
@@ -1248,7 +1248,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 block_payload: None,
                 rejected: vec![],
                 timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-                proposer_id: self.api.public_key().to_bytes(),
+                proposer_id: self.api.public_key().clone(),
             };
 
             let signature = TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref());

@@ -40,6 +40,7 @@ pub trait StakeTableEntryType {
 }
 
 /// Trait for abstracting public key signatures
+/// Self is the public key type
 pub trait SignatureKey:
     Send
     + Sync
@@ -103,9 +104,9 @@ pub trait SignatureKey:
     // Signature type represented as a vec/slice of bytes to let the implementer handle the nuances
     // of serialization, to avoid Cryptographic pitfalls
     /// Validate a signature
-    fn validate(&self, signature: &EncodedSignature, data: &[u8]) -> bool;
+    fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool;
     /// Produce a signature
-    fn sign(private_key: &Self::PrivateKey, data: &[u8]) -> EncodedSignature;
+    fn sign(private_key: &Self::PrivateKey, data: &[u8]) -> Self::PureAssembledSignatureType;
     /// Produce a public key from a private key
     fn from_private(private_key: &Self::PrivateKey) -> Self;
     /// Serialize a public key to bytes

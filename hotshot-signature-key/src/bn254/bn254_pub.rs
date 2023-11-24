@@ -1,4 +1,4 @@
-use super::{BLSPrivKey, EncodedPublicKey, EncodedSignature, SignatureKey};
+use super::{BLSPrivKey, EncodedPublicKey, SignatureKey};
 use bincode::Options;
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
@@ -53,21 +53,15 @@ impl SignatureKey for BLSPubKey {
     type QCType = (Self::PureAssembledSignatureType, BitVec);
 
     #[instrument(skip(self))]
-    fn validate(&self, signature: &EncodedSignature, data: &[u8]) -> bool {
+    fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool {
         let ver_key = self.pub_key;
-        let x: Result<<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature, _> =
-            bincode_opts().deserialize(&signature.0);
-        match x {
-            Ok(s) => {
-                // This is the validation for QC partial signature before append().
-                let generic_msg: &GenericArray<u8, U32> = GenericArray::from_slice(data);
-                BLSOverBN254CurveSignatureScheme::verify(&(), &ver_key, generic_msg, &s).is_ok()
-            }
-            Err(_) => false,
-        }
+
+        // This is the validation for QC partial signature before append().
+        let generic_msg: &GenericArray<u8, U32> = GenericArray::from_slice(data);
+        BLSOverBN254CurveSignatureScheme::verify(&(), &ver_key, generic_msg, &signature).is_ok()
     }
 
-    fn sign(sk: &Self::PrivateKey, data: &[u8]) -> EncodedSignature {
+    fn sign(sk: &Self::PrivateKey, data: &[u8]) -> Self::PureAssembledSignatureType {
         let generic_msg = GenericArray::from_slice(data);
         let agg_signature_wrap = BitVectorQC::<BLSOverBN254CurveSignatureScheme>::sign(
             &(),
@@ -77,19 +71,12 @@ impl SignatureKey for BLSPubKey {
         );
         match agg_signature_wrap {
             Ok(agg_signature) => {
-                // Convert the signature to bytes and return
-                let bytes = bincode_opts().serialize(&agg_signature);
-                match bytes {
-                    Ok(bytes) => EncodedSignature(bytes),
-                    Err(e) => {
-                        warn!(?e, "Failed to serialize signature in sign()");
-                        EncodedSignature(vec![])
-                    }
-                }
+                agg_signature
             }
-            Err(e) => {
-                warn!(?e, "Failed to sign");
-                EncodedSignature(vec![])
+            Err(_e) => {
+                unreachable!("TODO is this possible");
+                // warn!(?e, "Failed to sign");
+                // EncodedSignature(vec![])
             }
         }
     }

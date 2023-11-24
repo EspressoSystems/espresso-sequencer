@@ -85,11 +85,11 @@ mod sealed {
     impl<C: Committable> Sealed for C {}
 }
 
-/// A simple yes vote over some votable type.  
+/// A simple yes vote over some votable type.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     /// The signature share associated with this vote
-    pub signature: (EncodedPublicKey, EncodedSignature),
+    pub signature: (TYPES::SignatureKey, <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType),
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
@@ -106,10 +106,10 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
     type Commitment = DATA;
 
     fn get_signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
-        <TYPES::SignatureKey as SignatureKey>::from_bytes(&self.signature.0).unwrap()
+        self.signature.0.clone()
     }
 
-    fn get_signature(&self) -> EncodedSignature {
+    fn get_signature(&self) -> <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType {
         self.signature.1.clone()
     }
 
@@ -132,7 +132,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     ) -> Self {
         let signature = TYPES::SignatureKey::sign(private_key, data.commit().as_ref());
         Self {
-            signature: (pub_key.to_bytes(), signature),
+            signature: (pub_key.clone(), signature),
             data,
             view_number: view,
         }

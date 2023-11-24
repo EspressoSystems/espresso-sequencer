@@ -104,7 +104,7 @@ async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
-) -> (QuorumProposal<TestTypes>, EncodedSignature) {
+) -> (QuorumProposal<TestTypes>, <BLSPubKey as SignatureKey>::PureAssembledSignatureType) {
     let consensus_lock = handle.get_consensus();
     let consensus = consensus_lock.read().await;
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
@@ -134,7 +134,7 @@ async fn build_quorum_proposal_and_signature(
         block_payload: None,
         rejected: vec![],
         timestamp: 0,
-        proposer_id: api.public_key().to_bytes(),
+        proposer_id: *api.public_key(),
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
     let proposal = QuorumProposal::<TestTypes> {
