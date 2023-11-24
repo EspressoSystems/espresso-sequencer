@@ -34,10 +34,11 @@ contract StakeTable_keyRegister_Test is Test {
         stakeTable = new S(tokenAddress);
     }
 
-    // TODO move to some utils library
+    // TODO move to some utils library?
     // https://ethereum.stackexchange.com/a/126928
+    /// @dev Convert some bytes to an hexadecimal string
     function iToHex(bytes memory buffer) public pure returns (string memory) {
-        // Fixed buffer size for hexadecimal convertion
+        // Fixed buffer size for hexadecimal conversion
         bytes memory converted = new bytes(buffer.length * 2);
 
         bytes memory _base = "0123456789abcdef";
@@ -52,7 +53,7 @@ contract StakeTable_keyRegister_Test is Test {
 
     /// @dev Tests the key registering process
     function testRegister() external {
-        // Generate a BLS signature and other values in rust and read it in solidity
+        // Generate a BLS signature and other values using rust code
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-bls-sig";
@@ -75,6 +76,7 @@ contract StakeTable_keyRegister_Test is Test {
         );
 
         uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
 
         // Prepare for the token transfer
         vm.prank(msgSenderAddress);
@@ -91,7 +93,6 @@ contract StakeTable_keyRegister_Test is Test {
         // Failed signature verification
         BN254.G1Point memory badSig = BN254.P1();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
-        uint64 validUntilEpoch = 5;
         stakeTable.register(
             blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
         );
@@ -101,8 +102,14 @@ contract StakeTable_keyRegister_Test is Test {
         vm.expectRevert(bytes("Invalid next registration epoch."));
         stakeTable.register(blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
 
-        // Balance before registration
+        // Balances before registration
         assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE);
+
+        uint256 nativeAmount;
+        uint256 restakedAmount;
+        (nativeAmount, restakedAmount) = stakeTable.totalStake();
+        assertEq(nativeAmount, 0);
+        assertEq(restakedAmount, 0);
 
         // Check event is emitted
         vm.expectEmit(false, false, false, true, address(stakeTable));
@@ -124,12 +131,15 @@ contract StakeTable_keyRegister_Test is Test {
 
         // Balance after registration
         assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE - depositAmount);
+        (nativeAmount, restakedAmount) = stakeTable.totalStake();
+        assertEq(nativeAmount, depositAmount);
+        assertEq(restakedAmount, 0);
 
         // The node is already registered
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("The node has already been registered"));
         stakeTable.register(
-            blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
     }
 }

@@ -1,5 +1,7 @@
 pragma solidity ^0.8.0;
 
+import "solmate/utils/SafeTransferLib.sol";
+
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import "./interfaces/IStakeTable.sol";
@@ -12,11 +14,13 @@ contract StakeTable is IStakeTable {
     uint256 private totalVotingStakeVal;
     uint64 private numRegistrations;
     uint64 private numPendingExits;
-    uint64 private constant BLOCKS_PER_EPOCH = 10;
+    uint64 private constant BLOCKS_PER_EPOCH = 10; // TODO make an argument of the constructor?
     uint256 private creationBlock;
     address private tokenAddress;
 
-    // TODO check
+    /// @dev Computes a hash value of some G2 point
+    /// @param blsVK BLS verification key in G2
+    /// @return keccak256(blsVK)
     function hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
         uint256 x0 = blsVK.x0;
         uint256 x1 = blsVK.x1;
@@ -114,8 +118,8 @@ contract StakeTable is IStakeTable {
         nodesTable[key] = node;
 
         // Lock the deposited tokens in this contract.
-        ExampleToken token = ExampleToken(tokenAddress);
-        token.transferFrom(msg.sender, address(this), amount);
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+        totalStakeArr[0] += amount;
 
         emit Register(blsVK, node);
 

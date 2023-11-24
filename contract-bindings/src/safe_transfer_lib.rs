@@ -1,4 +1,4 @@
-pub use transcript::*;
+pub use safe_transfer_lib::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,7 +9,7 @@ pub use transcript::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod transcript {
+pub mod safe_transfer_lib {
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
@@ -22,43 +22,43 @@ pub mod transcript {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static TRANSCRIPT_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static SAFETRANSFERLIB_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
     #[rustfmt::skip]
-    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 2\xF6\xFB\xC1\x05^\x14\xB3^\xB4\xBB\xDF$\xFD\xAF\x95\xDE\x95*~\x1F\xFA\xE2\"\x16=\xB0Q\xB2\x8Ef\xB8dsolcC\0\x08\x14\x003";
+    const __BYTECODE: &[u8] = b"`V`7`\x0B\x82\x82\x829\x80Q`\0\x1A`s\x14`*WcNH{q`\xE0\x1B`\0R`\0`\x04R`$`\0\xFD[0`\0R`s\x81S\x82\x81\xF3\xFEs\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 4\xA9\xD5\xF4\x14xB\xD9\xF2\xB3T,^\x0E\xC7\x96\xAD\xBB\xAC\x9B\xBB\x95\xEA,\r\xA2L\xE2\xCA\x18`4dsolcC\0\x08\x14\x003";
     /// The bytecode of the contract.
-    pub static TRANSCRIPT_BYTECODE: ::ethers::core::types::Bytes =
+    pub static SAFETRANSFERLIB_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__BYTECODE);
     #[rustfmt::skip]
-    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 2\xF6\xFB\xC1\x05^\x14\xB3^\xB4\xBB\xDF$\xFD\xAF\x95\xDE\x95*~\x1F\xFA\xE2\"\x16=\xB0Q\xB2\x8Ef\xB8dsolcC\0\x08\x14\x003";
+    const __DEPLOYED_BYTECODE: &[u8] = b"s\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x000\x14`\x80`@R`\0\x80\xFD\xFE\xA2dipfsX\"\x12 4\xA9\xD5\xF4\x14xB\xD9\xF2\xB3T,^\x0E\xC7\x96\xAD\xBB\xAC\x9B\xBB\x95\xEA,\r\xA2L\xE2\xCA\x18`4dsolcC\0\x08\x14\x003";
     /// The deployed bytecode of the contract.
-    pub static TRANSCRIPT_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
+    pub static SAFETRANSFERLIB_DEPLOYED_BYTECODE: ::ethers::core::types::Bytes =
         ::ethers::core::types::Bytes::from_static(__DEPLOYED_BYTECODE);
-    pub struct Transcript<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for Transcript<M> {
+    pub struct SafeTransferLib<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for SafeTransferLib<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for Transcript<M> {
+    impl<M> ::core::ops::Deref for SafeTransferLib<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for Transcript<M> {
+    impl<M> ::core::ops::DerefMut for SafeTransferLib<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for Transcript<M> {
+    impl<M> ::core::fmt::Debug for SafeTransferLib<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(Transcript))
+            f.debug_tuple(::core::stringify!(SafeTransferLib))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> Transcript<M> {
+    impl<M: ::ethers::providers::Middleware> SafeTransferLib<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -67,7 +67,7 @@ pub mod transcript {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                TRANSCRIPT_ABI.clone(),
+                SAFETRANSFERLIB_ABI.clone(),
                 client,
             ))
         }
@@ -102,8 +102,8 @@ pub mod transcript {
             ::ethers::contract::ContractError<M>,
         > {
             let factory = ::ethers::contract::ContractFactory::new(
-                TRANSCRIPT_ABI.clone(),
-                TRANSCRIPT_BYTECODE.clone().into(),
+                SAFETRANSFERLIB_ABI.clone(),
+                SAFETRANSFERLIB_BYTECODE.clone().into(),
                 client,
             );
             let deployer = factory.deploy(constructor_args)?;
@@ -111,7 +111,9 @@ pub mod transcript {
             Ok(deployer)
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for Transcript<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+        for SafeTransferLib<M>
+    {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }

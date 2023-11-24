@@ -416,7 +416,7 @@ fn main() {
             let schnorr_pk_x = field_to_u256::<FqEd254>(schnorr_ver_key_affine.x);
             let schnorr_pk_y = field_to_u256::<FqEd254>(schnorr_ver_key_affine.y);
 
-            // BLS ver key
+            // Generate the BLS ver key
             let key_pair = BLSKeyPair::generate(&mut rng);
             let vk = key_pair.ver_key();
             let vk_g2_affine: G2Affine = vk.to_affine();
@@ -426,6 +426,7 @@ fn main() {
             let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
             let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
 
+            // Sign the ethereum address with the BLS key
             let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
             let sig_affine_point = sig.sigma.into_affine();
             let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
