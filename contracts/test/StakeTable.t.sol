@@ -21,6 +21,7 @@ contract StableTable_keyRegister_Test is Test {
         stakeTable = new S();
     }
 
+    // TODO move to some utils library
     // https://ethereum.stackexchange.com/a/126928
     function iToHex(bytes memory buffer) public pure returns (string memory) {
         // Fixed buffer size for hexadecimal convertion
@@ -67,6 +68,28 @@ contract StableTable_keyRegister_Test is Test {
 
         assertEq(msg.sender, msgSenderAddress);
         vm.prank(msgSenderAddress);
+
+        // Failed signature verification
+        BN254.G1Point memory badSig = BN254.P1();
+        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, badSig, 5);
+
+        // Invalid next registration epoch
+        vm.prank(msgSenderAddress);
+        vm.expectRevert(bytes("Invalid next registration epoch."));
+        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 0);
+
+        // Happy path
+        vm.prank(msgSenderAddress);
+        stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 5);
+
+        // Check the BEANS tokens have been transfered
+
+        // Check event is emitted
+
+        // The node is already registered
+        vm.prank(msgSenderAddress);
+        vm.expectRevert(bytes("The node has already been registered"));
         stakeTable.register(blsVk, schnorrVK, 10, IStakeTable.StakeType.Native, sig, 5);
     }
 }

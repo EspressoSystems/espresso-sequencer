@@ -11,6 +11,8 @@ contract StakeTable is IStakeTable {
     uint256 private totalVotingStakeVal;
     uint64 private numRegistrations;
     uint64 private numPendingExits;
+    uint64 private constant BLOCKS_PER_EPOCH = 10;
+    uint256 private creationBlock;
 
     // TODO check
     function hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
@@ -20,6 +22,14 @@ contract StakeTable is IStakeTable {
         uint256 y1 = blsVK.y1;
         bytes32 hash = keccak256(abi.encode(x0, x1, y0, y1));
         return hash;
+    }
+
+    constructor() {
+        creationBlock = block.number;
+    }
+
+    function currentEpoch() private view returns (uint64) {
+        return uint64((block.number - creationBlock) / BLOCKS_PER_EPOCH);
     }
 
     function totalStake() external view returns (uint256, uint256) {
@@ -45,11 +55,8 @@ contract StakeTable is IStakeTable {
     }
 
     function nextRegistrationEpoch() external view returns (uint64) {
-        if (numRegistrations == 0) {
-            return 0;
-        } else {
-            return 1;
-        }
+        // TODO implement queue logic
+        return currentEpoch() + 1;
     }
 
     function numPendingRegistrations() external view returns (uint64) {
@@ -80,7 +87,7 @@ contract StakeTable is IStakeTable {
         Node memory node = nodesTable[key];
 
         // The node must not already be registered.
-        require(node.account == address(0x0));
+        require(node.account == address(0x0), "The node has already been registered");
 
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
@@ -91,7 +98,7 @@ contract StakeTable is IStakeTable {
         // the caller's desired maximum wait, abort.
         uint64 registerEpoch = this.nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
-            revert();
+            revert("Invalid next registration epoch.");
         }
 
         // Create an entry for the node.
@@ -100,6 +107,8 @@ contract StakeTable is IStakeTable {
         node.stakeType = stakeType;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
+
+        nodesTable[key] = node;
 
         emit Register(blsVK, node);
 
