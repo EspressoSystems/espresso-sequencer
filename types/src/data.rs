@@ -8,7 +8,7 @@ use crate::{
     traits::{
         block_contents::BlockHeader,
         node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, SignatureKey},
+        signature_key::SignatureKey,
         state::{ConsensusTime, TestableBlock, TestableState},
         storage::StoredView,
         BlockPayload, State,
@@ -20,7 +20,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, Serializatio
 use bincode::Options;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
-use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
 use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use rand::Rng;

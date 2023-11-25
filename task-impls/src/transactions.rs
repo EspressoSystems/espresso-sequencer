@@ -250,25 +250,28 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // TODO (Keyao) Determine and update where to publish VidDisperseSend.
                 // <https://github.com/EspressoSystems/HotShot/issues/1817>
                 debug!("publishing VID disperse for view {}", *view + 1);
-                self.event_stream
-                    .publish(HotShotEvent::VidDisperseSend(
-                        Proposal {
-                            data: VidDisperse {
-                                view_number: view + 1,
-                                payload_commitment: payload.commit(),
-                                shares: vid_disperse.shares,
-                                common: vid_disperse.common,
+                if let Ok(signature) =
+                    TYPES::SignatureKey::sign(&self.private_key, payload.commit().as_ref())
+                {
+                    self.event_stream
+                        .publish(HotShotEvent::VidDisperseSend(
+                            Proposal {
+                                data: VidDisperse {
+                                    view_number: view + 1,
+                                    payload_commitment: payload.commit(),
+                                    shares: vid_disperse.shares,
+                                    common: vid_disperse.common,
+                                },
+                                // TODO (Keyao) This is also signed in DA task.
+                                signature,
+                                _pd: PhantomData,
                             },
-                            // TODO (Keyao) This is also signed in DA task.
-                            signature: TYPES::SignatureKey::sign(
-                                &self.private_key,
-                                payload.commit().as_ref(),
-                            ),
-                            _pd: PhantomData,
-                        },
-                        self.public_key.clone(),
-                    ))
-                    .await;
+                            self.public_key.clone(),
+                        ))
+                        .await;
+                } else {
+                    error!("Failed to sign payload for vid disperal!");
+                }
                 return None;
             }
             HotShotEvent::Shutdown => {

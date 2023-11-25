@@ -1,9 +1,5 @@
 use commit::Committable;
-use hotshot::{
-    tasks::add_consensus_task,
-    types::{SignatureKey, SystemContextHandle},
-    HotShotConsensusApi,
-};
+use hotshot::{tasks::add_consensus_task, types::SystemContextHandle, HotShotConsensusApi};
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
@@ -75,7 +71,8 @@ async fn build_vote(
         view,
         api.public_key(),
         api.private_key(),
-    );
+    )
+    .expect("Failed to create quorum vote");
     GeneralConsensusMessage::<TestTypes>::Vote(vote)
 }
 

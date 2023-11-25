@@ -19,7 +19,6 @@ use crate::{
     traits::{
         network::{NetworkMsg, ViewMessage},
         node_implementation::NodeType,
-        signature_key::EncodedSignature,
     },
 };
 

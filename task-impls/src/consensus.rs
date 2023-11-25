@@ -343,25 +343,29 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
                     proposer_id: self.quorum_membership.get_leader(view),
                 };
-                let vote = QuorumVote::<TYPES>::create_signed_vote(
+                if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                     QuorumData {
                         leaf_commit: leaf.commit(),
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
-                let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
+                ) {
+                    let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
-                if let GeneralConsensusMessage::Vote(vote) = message {
-                    debug!(
-                        "Sending vote to next quorum leader {:?}",
-                        vote.get_view_number() + 1
-                    );
-                    self.event_stream
-                        .publish(HotShotEvent::QuorumVoteSend(vote))
-                        .await;
-                    return true;
+                    if let GeneralConsensusMessage::Vote(vote) = message {
+                        debug!(
+                            "Sending vote to next quorum leader {:?}",
+                            vote.get_view_number() + 1
+                        );
+                        self.event_stream
+                            .publish(HotShotEvent::QuorumVoteSend(vote))
+                            .await;
+                        return true;
+                    }
+                } else {
+                    error!("Unable to sign quorum vote!");
+                    return false;
                 }
             }
 
@@ -414,15 +418,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         error!("Block payload commitment does not equal parent commitment");
                         return false;
                     }
-                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                    if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
                         QuorumData {
                             leaf_commit: leaf.commit(),
                         },
                         view,
                         &self.public_key,
                         &self.private_key,
-                    );
-                    GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    ) {
+                        GeneralConsensusMessage::<TYPES>::Vote(vote)
+                    } else {
+                        error!("Unable to sign quorum vote!");
+                        return false;
+                    }
                 } else {
                     error!(
                         "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
@@ -1141,12 +1149,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                let vote = TimeoutVote::create_signed_vote(
+                let Ok(vote) = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign timeout vote!");
+                    return;
+                };
 
                 self.event_stream
                     .publish(HotShotEvent::TimeoutVoteSend(vote))
@@ -1251,7 +1262,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 proposer_id: self.api.public_key().clone(),
             };
 
-            let signature = TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref());
+            let Ok(signature) =
+                TYPES::SignatureKey::sign(&self.private_key, leaf.commit().as_ref())
+            else {
+                error!("Failed to sign leaf!");
+                return false;
+            };
             // TODO: DA cert is sent as part of the proposal here, we should split this out so we don't have to wait for it.
             let proposal = QuorumProposal {
                 block_header: leaf.block_header.clone(),

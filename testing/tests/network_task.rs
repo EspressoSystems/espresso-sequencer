@@ -24,7 +24,8 @@ async fn test_network_task() {
     use hotshot_types::{
         block_impl::{VIDBlockPayload, VIDTransaction},
         data::VidDisperse,
-        message::Proposal, traits::node_implementation::NodeType,
+        message::Proposal,
+        traits::node_implementation::NodeType,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -50,7 +51,8 @@ async fn test_network_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             block.commit().as_ref(),
-        );
+        )
+        .expect("Failed to sign block commitment");
     let da_proposal = Proposal {
         data: DAProposal {
             block_payload: block.clone(),

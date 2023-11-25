@@ -7,10 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     data::Leaf,
-    traits::{
-        node_implementation::NodeType,
-        signature_key::{EncodedPublicKey, EncodedSignature, SignatureKey},
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vote::{HasViewNumber, Vote},
 };
 
@@ -89,7 +86,10 @@ mod sealed {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     /// The signature share associated with this vote
-    pub signature: (TYPES::SignatureKey, <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType),
+    pub signature: (
+        TYPES::SignatureKey,
+        <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ),
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
@@ -124,17 +124,21 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
 
 impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     /// Creates and signs a simple vote
+    /// # Errors
+    /// If we are unable to sign the data
     pub fn create_signed_vote(
         data: DATA,
         view: TYPES::Time,
         pub_key: &TYPES::SignatureKey,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Self {
-        let signature = TYPES::SignatureKey::sign(private_key, data.commit().as_ref());
-        Self {
-            signature: (pub_key.clone(), signature),
-            data,
-            view_number: view,
+    ) -> Result<Self, <TYPES::SignatureKey as SignatureKey>::SignError> {
+        match TYPES::SignatureKey::sign(private_key, data.commit().as_ref()) {
+            Ok(signature) => Ok(Self {
+                signature: (pub_key.clone(), signature),
+                data,
+                view_number: view,
+            }),
+            Err(e) => Err(e),
         }
     }
 }

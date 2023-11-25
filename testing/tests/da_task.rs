@@ -41,7 +41,8 @@ async fn test_da_task() {
     };
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref())
+            .expect("Faild to sign block payload!");
     let proposal = DAProposal {
         block_payload: block.clone(),
         view_number: ViewNumber::new(2),
@@ -88,7 +89,8 @@ async fn test_da_task() {
         ViewNumber::new(2),
         api.public_key(),
         api.private_key(),
-    );
+    )
+    .expect("Failed to sign da vote");
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
     output.insert(HotShotEvent::DAProposalRecv(message, pub_key), 1);

@@ -34,7 +34,8 @@ async fn test_view_sync_task() {
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
         hotshot_types::traits::consensus_api::ConsensusSharedApi::public_key(&api),
         hotshot_types::traits::consensus_api::ConsensusSharedApi::private_key(&api),
-    );
+    )
+    .unwrap();
 
     tracing::error!("Vote in test is {:?}", vote.clone());
 

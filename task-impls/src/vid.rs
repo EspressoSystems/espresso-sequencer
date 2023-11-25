@@ -297,14 +297,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 // Generate and send vote
-                let vote = VIDVote::create_signed_vote(
+                let Ok(vote) = VIDVote::create_signed_vote(
                     VIDData {
                         payload_commit: payload_commitment,
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign VID Vote");
+                    return None;
+                };
 
                 // ED Don't think this is necessary?
                 // self.cur_view = view;

@@ -222,14 +222,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
                 // Generate and send vote
-                let vote = DAVote::create_signed_vote(
+                let Ok(vote) = DAVote::create_signed_vote(
                     DAData {
                         payload_commit: payload_commitment,
                     },
                     view,
                     &self.public_key,
                     &self.private_key,
-                );
+                ) else {
+                    error!("Failed to sign DA Vote!");
+                    return None;
+                };
 
                 // ED Don't think this is necessary?
                 // self.cur_view = view;
@@ -377,8 +380,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 let payload_commitment = payload.commit();
-                let signature =
-                    TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
+                let Ok(signature) =
+                    TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref())
+                else {
+                    // TODO is this correct?
+                    // Should we be doing more?
+                    error!("Failed to sign block payload!");
+                    return None;
+                };
                 // TODO (Keyao) Fix the payload sending and receiving for the DA proposal.
                 // <https://github.com/EspressoSystems/HotShot/issues/2026>
                 let data: DAProposal<TYPES> = DAProposal {

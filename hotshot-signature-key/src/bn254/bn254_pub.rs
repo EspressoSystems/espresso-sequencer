@@ -8,6 +8,7 @@ use hotshot_qc::bit_vector_old::{
 };
 use hotshot_types::traits::qc::QuorumCertificate;
 use hotshot_utils::bincode::bincode_opts;
+use jf_primitives::errors::PrimitivesError;
 use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey},
     SignatureScheme,
@@ -51,6 +52,7 @@ impl SignatureKey for BLSPubKey {
     type PureAssembledSignatureType =
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
     type QCType = (Self::PureAssembledSignatureType, BitVec);
+    type SignError = PrimitivesError;
 
     #[instrument(skip(self))]
     fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool {
@@ -58,27 +60,20 @@ impl SignatureKey for BLSPubKey {
 
         // This is the validation for QC partial signature before append().
         let generic_msg: &GenericArray<u8, U32> = GenericArray::from_slice(data);
-        BLSOverBN254CurveSignatureScheme::verify(&(), &ver_key, generic_msg, &signature).is_ok()
+        BLSOverBN254CurveSignatureScheme::verify(&(), &ver_key, generic_msg, signature).is_ok()
     }
 
-    fn sign(sk: &Self::PrivateKey, data: &[u8]) -> Self::PureAssembledSignatureType {
+    fn sign(
+        sk: &Self::PrivateKey,
+        data: &[u8],
+    ) -> Result<Self::PureAssembledSignatureType, Self::SignError> {
         let generic_msg = GenericArray::from_slice(data);
-        let agg_signature_wrap = BitVectorQC::<BLSOverBN254CurveSignatureScheme>::sign(
+        BitVectorQC::<BLSOverBN254CurveSignatureScheme>::sign(
             &(),
             generic_msg,
             &sk.priv_key,
             &mut rand::thread_rng(),
-        );
-        match agg_signature_wrap {
-            Ok(agg_signature) => {
-                agg_signature
-            }
-            Err(_e) => {
-                unreachable!("TODO is this possible");
-                // warn!(?e, "Failed to sign");
-                // EncodedSignature(vec![])
-            }
-        }
+        )
     }
 
     fn from_private(private_key: &Self::PrivateKey) -> Self {

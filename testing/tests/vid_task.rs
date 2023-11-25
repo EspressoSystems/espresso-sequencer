@@ -45,7 +45,8 @@ async fn test_vid_task() {
     };
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref())
+            .expect("Failed to sign block payload!");
     let proposal: DAProposal<TestTypes> = DAProposal {
         block_payload: block.clone(),
         view_number: ViewNumber::new(2),
@@ -95,7 +96,8 @@ async fn test_vid_task() {
         ViewNumber::new(2),
         api.public_key(),
         api.private_key(),
-    );
+    )
+    .expect("Failed to sign vid vote");
     output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);

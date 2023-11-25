@@ -1,6 +1,6 @@
 //! Abstraction over on-disk storage of node state
 
-use super::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use super::node_implementation::NodeType;
 use crate::{
     data::Leaf, simple_certificate::QuorumCertificate, traits::BlockPayload, vote::HasViewNumber,
 };
