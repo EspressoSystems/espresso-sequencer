@@ -149,4 +149,8 @@ pub trait SignatureKey:
         signers: &BitSlice,
         sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType;
+
+    /// generates the genesis public key. Meant to be dummy/filler
+    #[must_use]
+    fn genesis_proposer_pk() -> Self;
 }

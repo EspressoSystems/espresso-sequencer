@@ -98,13 +98,6 @@ impl std::ops::Sub<u64> for ViewNumber {
     }
 }
 
-/// Generate the genesis block proposer ID from the defined constant
-#[must_use]
-pub fn genesis_proposer_id<SIGKEY: SignatureKey>() -> SIGKEY {
-    todo!()
-    // EncodedPublicKey(GENESIS_PROPOSER_ID.to_vec())
-}
-
 /// The `Transaction` type associated with a `State`, as a syntactic shortcut
 pub type Transaction<STATE> = <<STATE as State>::BlockPayload as BlockPayload>::Transaction;
 /// `Commitment` to the `Transaction` type associated with a `State`, as a syntactic shortcut
@@ -334,7 +327,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             block_payload: Some(block_payload),
             rejected: Vec::new(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos(),
-            proposer_id: genesis_proposer_id(),
+            proposer_id: <<TYPES as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         }
     }
 

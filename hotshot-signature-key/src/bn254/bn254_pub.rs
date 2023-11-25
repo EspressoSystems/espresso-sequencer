@@ -146,4 +146,10 @@ impl SignatureKey for BLSPubKey {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::assemble(real_qc_pp, signers, sigs)
             .expect("this assembling shouldn't fail")
     }
+
+    fn genesis_proposer_pk() -> Self {
+        BLSPubKey {
+            pub_key: unimplemented!(),
+        }
+    }
 }

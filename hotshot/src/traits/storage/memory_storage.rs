@@ -112,9 +112,10 @@ mod test {
     use super::*;
     use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
+    use hotshot_types::traits::signature_key::SignatureKey;
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
+        data::{fake_commitment, Leaf, ViewNumber},
         simple_certificate::QuorumCertificate,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
@@ -171,7 +172,7 @@ mod test {
             Some(payload),
             dummy_leaf_commit,
             Vec::new(),
-            genesis_proposer_id(),
+            <<DummyTypes as NodeType>::SignatureKey as SignatureKey>::genesis_proposer_pk(),
         )
     }
 
