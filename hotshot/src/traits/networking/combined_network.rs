@@ -20,15 +20,16 @@ use futures::join;
 
 use async_compatibility_layer::channel::UnboundedSendError;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
     data::ViewNumber,
     message::Message,
     traits::{
         election::Membership,
         network::{
-            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, NetworkReliability,
-            TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
-            ViewMessage,
+            CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent,
+            TestableChannelImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
     },
@@ -144,6 +145,7 @@ pub struct CombinedNetworks<TYPES: NodeType>(
     pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
 );
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetworks<TYPES> {
     fn generator(
         expected_node_count: usize,
@@ -184,6 +186,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
     }
 }
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommChannel<TYPES> {
     fn generator(
         expected_node_count: usize,

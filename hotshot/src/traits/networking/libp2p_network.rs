@@ -2,8 +2,10 @@
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
 use super::NetworkingMetricsValue;
+#[cfg(feature = "hotshot-testing")]
+use async_compatibility_layer::art::async_block_on;
 use async_compatibility_layer::{
-    art::{async_block_on, async_sleep, async_spawn},
+    art::{async_sleep, async_spawn},
     channel::{unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
 };
 use async_lock::RwLock;
@@ -12,6 +14,8 @@ use bimap::BiHashMap;
 use bincode::Options;
 use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::network::{NetworkReliability, TestableNetworkingImplementation};
 use hotshot_types::{
     data::ViewNumber,
     message::{Message, MessageKind},
@@ -19,34 +23,36 @@ use hotshot_types::{
         election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
-            NetworkError, NetworkMsg, NetworkReliability, TestableChannelImplementation,
-            TestableNetworkingImplementation, TransmitType, ViewMessage,
+            NetworkError, NetworkMsg, TestableChannelImplementation, TransmitType, ViewMessage,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
         state::ConsensusTime,
     },
 };
+
 use hotshot_utils::bincode::bincode_opts;
 use libp2p_identity::PeerId;
+#[cfg(feature = "hotshot-testing")]
+use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder};
+
 use libp2p_networking::{
     network::{
-        MeshParams,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
-        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError,
-        NetworkNodeType,
+        NetworkNodeConfig, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeType,
     },
     reexport::Multiaddr,
 };
 
 use serde::Serialize;
 use snafu::ResultExt;
+#[cfg(feature = "hotshot-testing")]
+use std::{collections::HashSet, num::NonZeroUsize, str::FromStr};
+
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::BTreeSet,
     fmt::Debug,
     marker::PhantomData,
-    num::NonZeroUsize,
-    str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
@@ -127,6 +133,7 @@ pub struct Libp2pNetwork<M: NetworkMsg, K: SignatureKey + 'static> {
     inner: Arc<Libp2pNetworkInner<M, K>>,
 }
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
     for Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>
 where
@@ -240,6 +247,7 @@ where
                         num_bootstrap,
                         node_id as usize,
                         keys,
+                        #[cfg(feature = "hotshot-testing")]
                         reliability_config_dup,
                         da.clone(),
                         da.contains(&pubkey),
@@ -295,7 +303,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         id: usize,
         // HACK
         committee_pks: BTreeSet<K>,
-        reliability_config: Option<Box<dyn NetworkReliability>>,
+        #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
         da_pks: BTreeSet<K>,
         is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
@@ -622,35 +630,37 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         }
 
         // NOTE: metrics is threadsafe, so clone is fine (and lightweight)
-        let metrics = self.inner.metrics.clone();
         #[cfg(feature = "hotshot-testing")]
-        if let Some(ref config) = &self.inner.reliability_config {
-            let handle = self.inner.handle.clone();
+        {
+            let metrics = self.inner.metrics.clone();
+            if let Some(ref config) = &self.inner.reliability_config {
+                let handle = self.inner.handle.clone();
 
-            let serialized_msg = bincode_opts()
-                .serialize(&message)
-                .context(FailedToSerializeSnafu)?;
-            let fut = config.clone().chaos_send_msg(
-                serialized_msg,
-                Arc::new(move |msg: Vec<u8>| {
-                    let topic_2 = topic.clone();
-                    let handle_2 = handle.clone();
-                    let metrics_2 = metrics.clone();
-                    boxed_sync(async move {
-                        match handle_2.gossip_no_serialize(topic_2, msg).await {
-                            Err(e) => {
-                                metrics_2.message_failed_to_send.add(1);
-                                warn!("Failed to broadcast to libp2p: {:?}", e);
+                let serialized_msg = bincode_opts()
+                    .serialize(&message)
+                    .context(FailedToSerializeSnafu)?;
+                let fut = config.clone().chaos_send_msg(
+                    serialized_msg,
+                    Arc::new(move |msg: Vec<u8>| {
+                        let topic_2 = topic.clone();
+                        let handle_2 = handle.clone();
+                        let metrics_2 = metrics.clone();
+                        boxed_sync(async move {
+                            match handle_2.gossip_no_serialize(topic_2, msg).await {
+                                Err(e) => {
+                                    metrics_2.message_failed_to_send.add(1);
+                                    warn!("Failed to broadcast to libp2p: {:?}", e);
+                                }
+                                Ok(()) => {
+                                    metrics_2.outgoing_direct_message_count.add(1);
+                                }
                             }
-                            Ok(()) => {
-                                metrics_2.outgoing_direct_message_count.add(1);
-                            }
-                        }
-                    })
-                }),
-            );
-            async_spawn(fut);
-            return Ok(());
+                        })
+                    }),
+                );
+                async_spawn(fut);
+                return Ok(());
+            }
         }
 
         match self.inner.handle.gossip(topic, &message).await {
@@ -701,34 +711,36 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
             }
         };
 
-        let metrics = self.inner.metrics.clone();
         #[cfg(feature = "hotshot-testing")]
-        if let Some(ref config) = &self.inner.reliability_config {
-            let handle = self.inner.handle.clone();
+        {
+            let metrics = self.inner.metrics.clone();
+            if let Some(ref config) = &self.inner.reliability_config {
+                let handle = self.inner.handle.clone();
 
-            let serialized_msg = bincode_opts()
-                .serialize(&message)
-                .context(FailedToSerializeSnafu)?;
-            let fut = config.clone().chaos_send_msg(
-                serialized_msg,
-                Arc::new(move |msg: Vec<u8>| {
-                    let handle_2 = handle.clone();
-                    let metrics_2 = metrics.clone();
-                    boxed_sync(async move {
-                        match handle_2.direct_request_no_serialize(pid, msg).await {
-                            Err(e) => {
-                                metrics_2.message_failed_to_send.add(1);
-                                warn!("Failed to broadcast to libp2p: {:?}", e);
+                let serialized_msg = bincode_opts()
+                    .serialize(&message)
+                    .context(FailedToSerializeSnafu)?;
+                let fut = config.clone().chaos_send_msg(
+                    serialized_msg,
+                    Arc::new(move |msg: Vec<u8>| {
+                        let handle_2 = handle.clone();
+                        let metrics_2 = metrics.clone();
+                        boxed_sync(async move {
+                            match handle_2.direct_request_no_serialize(pid, msg).await {
+                                Err(e) => {
+                                    metrics_2.message_failed_to_send.add(1);
+                                    warn!("Failed to broadcast to libp2p: {:?}", e);
+                                }
+                                Ok(()) => {
+                                    metrics_2.outgoing_direct_message_count.add(1);
+                                }
                             }
-                            Ok(()) => {
-                                metrics_2.outgoing_direct_message_count.add(1);
-                            }
-                        }
-                    })
-                }),
-            );
-            async_spawn(fut);
-            return Ok(());
+                        })
+                    }),
+                );
+                async_spawn(fut);
+                return Ok(());
+            }
         }
 
         match self.inner.handle.direct_request(pid, &message).await {
@@ -832,6 +844,7 @@ impl<TYPES: NodeType> Libp2pCommChannel<TYPES> {
     }
 }
 
+#[cfg(feature = "hotshot-testing")]
 impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for Libp2pCommChannel<TYPES>
 where
     MessageKind<TYPES>: ViewMessage<TYPES>,
