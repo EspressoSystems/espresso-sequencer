@@ -1,19 +1,19 @@
 //! Utilities and internals for maintaining a local stake table
 
-use super::config::{u256_to_field, Digest, FieldType, TREE_BRANCH};
-use ark_ff::{Field, PrimeField};
+use super::config::{Digest, FieldType, TREE_BRANCH};
+use crate::utils::{u256_to_field, ToFields};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{hash::Hash, sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
 use hotshot_types::traits::stake_table::StakeTableError;
-use jf_primitives::{crhf::CRHF, signatures::bls_over_bn254};
+use jf_primitives::crhf::CRHF;
 use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
 /// Common trait bounds for generic key type `K` for [`PersistentMerkleNode`]
 pub trait Key:
-    Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + IntoFields<FieldType> + Hash
+    Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + ToFields<FieldType> + Hash
 {
 }
 impl<T> Key for T where
@@ -22,30 +22,9 @@ impl<T> Key for T where
         + CanonicalDeserialize
         + PartialEq
         + Eq
-        + IntoFields<FieldType>
+        + ToFields<FieldType>
         + Hash
 {
-}
-
-/// A trait that converts into a field element.
-/// Help avoid "cannot impl foreign traits on foreign types" problem
-pub trait IntoFields<F: Field> {
-    fn into_fields(self) -> [F; 2];
-}
-
-impl IntoFields<FieldType> for FieldType {
-    fn into_fields(self) -> [FieldType; 2] {
-        [FieldType::default(), self]
-    }
-}
-
-impl IntoFields<FieldType> for bls_over_bn254::VerKey {
-    fn into_fields(self) -> [FieldType; 2] {
-        let bytes = jf_utils::to_bytes!(&self.to_affine()).unwrap();
-        let x = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[..32]);
-        let y = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[32..]);
-        [x, y]
-    }
 }
 
 /// A persistent merkle tree tailored for the stake table.
@@ -129,7 +108,8 @@ impl<K: Key> MerkleProof<K> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => {
                 let mut input = [FieldType::default(); 3];
-                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[..<K as ToFields<FieldType>>::SIZE]
+                    .copy_from_slice(&(*key).clone().to_fields()[..]);
                 input[2] = u256_to_field(value);
                 let init = Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0];
                 self.path
@@ -344,7 +324,8 @@ impl<K: Key> PersistentMerkleNode<K> {
         if height == 0 {
             if matches!(self, PersistentMerkleNode::Empty) {
                 let mut input = [FieldType::default(); 3];
-                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[..<K as ToFields<FieldType>>::SIZE]
+                    .copy_from_slice(&(*key).clone().to_fields()[..]);
                 input[2] = u256_to_field(&value);
                 Ok(Arc::new(PersistentMerkleNode::Leaf {
                     comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
@@ -439,7 +420,8 @@ impl<K: Key> PersistentMerkleNode<K> {
                             .ok_or(StakeTableError::StakeOverflow)
                     }?;
                     let mut input = [FieldType::default(); 3];
-                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[..<K as ToFields<FieldType>>::SIZE]
+                        .copy_from_slice(&(*key).clone().to_fields()[..]);
                     input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
@@ -506,7 +488,8 @@ impl<K: Key> PersistentMerkleNode<K> {
             } => {
                 if key == cur_key {
                     let mut input = [FieldType::default(); 3];
-                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[..<K as ToFields<FieldType>>::SIZE]
+                        .copy_from_slice(&(*key).clone().to_fields()[..]);
                     input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
@@ -529,7 +512,6 @@ impl<K: Key> PersistentMerkleNode<K> {
 /// Traverse using post-order: children from left to right, finally visit the current.
 pub struct IntoIter<K: Key> {
     unvisited: Vec<Arc<PersistentMerkleNode<K>>>,
-    num_visited: usize,
 }
 
 impl<K: Key> IntoIter<K> {
@@ -539,47 +521,42 @@ impl<K: Key> IntoIter<K> {
     pub(crate) fn new(root: Arc<PersistentMerkleNode<K>>) -> Self {
         Self {
             unvisited: vec![root],
-            num_visited: 0,
         }
     }
 }
 
 impl<K: Key> Iterator for IntoIter<K> {
-    type Item = (K, U256);
+    type Item = (K, U256, ());
     fn next(&mut self) -> Option<Self::Item> {
         if self.unvisited.is_empty() {
             return None;
         }
 
-        let visiting = (**self.unvisited.last()?).clone();
+        // This unwrap always succeed because `unvisited` is nonempty
+        let visiting = (*self.unvisited.pop().unwrap()).clone();
         match visiting {
             PersistentMerkleNode::Empty => None,
-            PersistentMerkleNode::Leaf {
-                comm: _,
-                key,
-                value,
-            } => {
-                self.unvisited.pop();
-                self.num_visited += 1;
-                Some((key, value))
-            }
             PersistentMerkleNode::Branch {
                 comm: _,
                 children,
                 num_keys: _,
                 total_stakes: _,
             } => {
-                self.unvisited.pop();
                 // put the left-most child to the last, so it is visited first.
                 self.unvisited.extend(children.into_iter().rev());
                 self.next()
             }
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key,
+                value,
+            } => Some((key, value, ())),
         }
     }
 }
 
 impl<K: Key> IntoIterator for PersistentMerkleNode<K> {
-    type Item = (K, U256);
+    type Item = (K, U256, ());
     type IntoIter = self::IntoIter<K>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -755,7 +732,7 @@ mod tests {
                     .register(height as usize, &paths[i], &keys[i], amounts[i])
                     .unwrap();
             }
-            for (i, (k, v)) in (*root).clone().into_iter().enumerate() {
+            for (i, (k, v, _)) in (*root).clone().into_iter().enumerate() {
                 assert_eq!((k, v), (keys[i], amounts[i]));
             }
         }

@@ -7,9 +7,9 @@ pub use crate::{
 use displaydoc::Display;
 
 use crate::{
-    data::LeafType,
+    data::Leaf,
     error::HotShotError,
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::QuorumCertificate,
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
@@ -32,10 +32,10 @@ type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 ///
 /// This will contain the state of all rounds.
 #[derive(custom_debug::Debug)]
-pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct Consensus<TYPES: NodeType> {
     /// The phases that are currently loaded in memory
     // TODO(https://github.com/EspressoSystems/hotshot/issues/153): Allow this to be loaded from `Storage`?
-    pub state_map: BTreeMap<TYPES::Time, View<TYPES, LEAF>>,
+    pub state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 
     /// cur_view from pseudocode
     pub cur_view: TYPES::Time,
@@ -46,7 +46,7 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
-    pub saved_leaves: CommitmentMap<LEAF>,
+    pub saved_leaves: CommitmentMap<Leaf<TYPES>>,
 
     /// Saved block payloads
     ///
@@ -57,10 +57,9 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate2<TYPES, LEAF>,
+    pub high_qc: QuorumCertificate<TYPES>,
 
     /// A reference to the metrics trait
-    #[debug(skip)]
     pub metrics: Arc<ConsensusMetricsValue>,
 }
 
@@ -238,7 +237,7 @@ impl Default for ConsensusMetricsValue {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
+impl<TYPES: NodeType> Consensus<TYPES> {
     /// increment the current view
     /// NOTE may need to do gc here
     pub fn increment_view(&mut self) -> TYPES::Time {
@@ -257,7 +256,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
         mut f: F,
     ) -> Result<(), HotShotError<TYPES>>
     where
-        F: FnMut(&LEAF) -> bool,
+        F: FnMut(&Leaf<TYPES>) -> bool,
     {
         let mut next_leaf = if let Some(view) = self.state_map.get(&start_from) {
             view.get_leaf_commitment()
@@ -343,7 +342,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     /// if the last decided view's state does not exist in the state map
     /// this should never happen.
     #[must_use]
-    pub fn get_decided_leaf(&self) -> LEAF {
+    pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
         let decided_view_num = self.last_decided_view;
         let view = self.state_map.get(&decided_view_num).unwrap();
         let leaf = view

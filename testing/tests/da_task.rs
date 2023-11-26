@@ -1,19 +1,16 @@
 use commit::Committable;
-use hotshot::HotShotConsensusApi;
+use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
-use hotshot_testing::{
-    node_types::{MemoryImpl, TestTypes},
-    task_helpers::vid_init,
-};
+use hotshot_testing::node_types::{MemoryImpl, TestTypes};
 use hotshot_types::{
     block_impl::VIDTransaction,
-    data::{DAProposal, VidSchemeTrait, ViewNumber},
+    data::{DAProposal, ViewNumber},
+    simple_vote::{DAData, DAVote},
     traits::{
-        consensus_api::ConsensusSharedApi, election::ConsensusExchange,
-        node_implementation::ExchangesType, state::ConsensusTime,
+        consensus_api::ConsensusSharedApi, node_implementation::NodeType, state::ConsensusTime,
     },
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -24,9 +21,7 @@ async fn test_da_task() {
     use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{
-        block_impl::VIDBlockPayload, message::Proposal, traits::election::CommitteeExchangeType,
-    };
+    use hotshot_types::{block_impl::VIDBlockPayload, message::Proposal};
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -36,18 +31,17 @@ async fn test_da_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let committee_exchange = api.inner.exchanges.committee_exchange().clone();
     let pub_key = *api.public_key();
-    let vid = vid_init();
-    let txn = vec![0u8];
-    let vid_disperse = vid.disperse(&txn).unwrap();
-    let payload_commitment = vid_disperse.commit;
+    let transactions = vec![VIDTransaction(vec![0])];
+    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
+    let payload_commitment = VIDBlockPayload::vid_commitment(&encoded_txns);
     let block = VIDBlockPayload {
-        transactions: vec![VIDTransaction(txn)],
+        transactions,
         payload_commitment,
     };
 
-    let signature = committee_exchange.sign_da_proposal(&block.commit());
+    let signature =
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
     let proposal = DAProposal {
         block_payload: block.clone(),
         view_number: ViewNumber::new(2),
@@ -55,6 +49,7 @@ async fn test_da_task() {
     let message = Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     };
 
     // TODO for now reuse the same block payload commitment and signature as DA committee
@@ -67,24 +62,33 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
+    input.push(HotShotEvent::BlockReady(
+        block.clone(),
+        (),
+        ViewNumber::new(2),
+    ));
     input.push(HotShotEvent::DAProposalRecv(message.clone(), pub_key));
 
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
         1,
     );
-    output.insert(HotShotEvent::SendPayloadCommitment(block.commit()), 1);
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        1,
+    );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
-    let vote_token = committee_exchange
-        .make_vote_token(ViewNumber::new(2))
-        .unwrap()
-        .unwrap();
-    let da_vote =
-        committee_exchange.create_da_message(block.commit(), ViewNumber::new(2), vote_token);
+    let da_vote = DAVote::create_signed_vote(
+        DAData {
+            payload_commit: block.commit(),
+        },
+        ViewNumber::new(2),
+        api.public_key(),
+        api.private_key(),
+    );
     output.insert(HotShotEvent::DAVoteSend(da_vote), 1);
 
     output.insert(HotShotEvent::DAProposalRecv(message, pub_key), 1);
@@ -92,9 +96,7 @@ async fn test_da_task() {
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::Shutdown, 1);
 
-    let build_fn = |task_runner, event_stream| {
-        add_da_task(task_runner, event_stream, committee_exchange, handle)
-    };
+    let build_fn = |task_runner, event_stream| add_da_task(task_runner, event_stream, handle);
 
     run_harness(input, output, None, build_fn).await;
 }

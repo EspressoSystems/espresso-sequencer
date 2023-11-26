@@ -12,8 +12,11 @@ use libp2p_networking::network::NetworkNodeHandleError;
 use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
-use super::{election::Membership, node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{data::ViewNumber, message::MessagePurpose};
+use super::{node_implementation::NodeType, signature_key::SignatureKey};
+use crate::{
+    data::ViewNumber,
+    message::{Message, MessagePurpose},
+};
 use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
 use rand::{
@@ -227,9 +230,7 @@ pub trait ViewMessage<TYPES: NodeType> {
 /// API for interacting directly with a consensus committee
 /// intended to be implemented for both DA and for validating consensus committees
 #[async_trait]
-pub trait CommunicationChannel<TYPES: NodeType, M: NetworkMsg, MEMBERSHIP: Membership<TYPES>>:
-    Clone + Debug + Send + Sync + 'static
-{
+pub trait CommunicationChannel<TYPES: NodeType>: Clone + Debug + Send + Sync + 'static {
     /// Underlying Network implementation's type
     type NETWORK;
     /// Blocks until node is successfully initialized
@@ -252,15 +253,15 @@ pub trait CommunicationChannel<TYPES: NodeType, M: NetworkMsg, MEMBERSHIP: Membe
     /// blocking
     async fn broadcast_message(
         &self,
-        message: M,
-        election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError>;
 
     /// Sends a direct message to a specific node
     /// blocking
     async fn direct_message(
         &self,
-        message: M,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError>;
 
@@ -271,7 +272,7 @@ pub trait CommunicationChannel<TYPES: NodeType, M: NetworkMsg, MEMBERSHIP: Membe
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b;
@@ -352,7 +353,7 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
 }
 
 /// Describes additional functionality needed by the test network implementation
-pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
+pub trait TestableNetworkingImplementation<TYPES: NodeType> {
     /// generates a network given an expected node count
     fn generator(
         expected_node_count: usize,
@@ -369,15 +370,11 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
     fn in_flight_message_count(&self) -> Option<usize>;
 }
 /// Describes additional functionality needed by the test communication channel
-pub trait TestableChannelImplementation<
-    TYPES: NodeType,
-    M: NetworkMsg,
-    MEMBERSHIP: Membership<TYPES>,
-    NETWORK,
->: CommunicationChannel<TYPES, M, MEMBERSHIP>
-{
+pub trait TestableChannelImplementation<TYPES: NodeType>: CommunicationChannel<TYPES> {
     /// generates the `CommunicationChannel` given it's associated network type
-    fn generate_network() -> Box<dyn Fn(Arc<NETWORK>) -> Self + 'static>;
+    #[allow(clippy::type_complexity)]
+    fn generate_network(
+    ) -> Box<dyn Fn(Arc<<Self as CommunicationChannel<TYPES>>::NETWORK>) -> Self + 'static>;
 }
 
 /// Changes that can occur in the network

@@ -4,17 +4,15 @@ mod dual_key_value_store;
 mod hash_map_store;
 
 use self::{dual_key_value_store::DualKeyValueStore, hash_map_store::HashMapStore};
-use crate::{data::Leaf, traits::StateContents, QuorumCertificate};
+use crate::{data::Leaf, traits::StateContents};
 use async_std::sync::Mutex;
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader};
 use commit::Commitment;
-use hotshot_types::{
-    traits::storage::{
+use hotshot_types::traits::storage::{
         AtomicStoreSnafu, Storage, StorageError, StorageResult, StorageState, StorageUpdater,
         TestableStorage,
-    },
-};
+    };
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::{path::Path, sync::Arc};
@@ -157,7 +155,7 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
 
     #[instrument(name = "AtomicStorage::get_newest_qc", skip_all)]
     async fn get_newest_qc(&self) -> StorageResult<Option<QuorumCertificate<STATE>>> {
-        Ok(self.inner.qcs.load_latest(|qc| qc.view_number()).await)
+        Ok(self.inner.qcs.load_latest(|qc| qc.get_view_number()).await)
     }
 
     #[instrument(name = "AtomicStorage::get_qc_for_view", skip_all)]

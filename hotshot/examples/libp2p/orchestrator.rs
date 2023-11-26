@@ -4,7 +4,6 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot::demo::DemoTypes;
 use tracing::instrument;
-use types::ThisMembership;
 
 use crate::infra::run_orchestrator;
 use crate::infra::OrchestratorArgs;
@@ -24,14 +23,8 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<
-        DemoTypes,
-        ThisMembership,
-        DANetwork,
-        QuorumNetwork,
-        ViewSyncNetwork,
-        VIDNetwork,
-        NodeImpl,
-    >(args)
+    run_orchestrator::<DemoTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
+        args,
+    )
     .await;
 }

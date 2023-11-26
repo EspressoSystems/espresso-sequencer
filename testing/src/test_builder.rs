@@ -1,13 +1,12 @@
-use hotshot::types::SignatureKey;
-use hotshot_types::traits::election::{ConsensusExchange, Membership};
+use hotshot::{traits::NetworkReliability, types::SignatureKey};
+use hotshot_orchestrator::config::ValidatorConfigFile;
+use hotshot_types::traits::election::Membership;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
-use hotshot_types::message::{Message, SequencingMessage};
+use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
 
 use hotshot_types::{
-    traits::node_implementation::{NodeType, QuorumEx, TestableExchange},
-    ExecutionType, HotShotConfig,
+    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
 
 use super::completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription};
@@ -20,7 +19,6 @@ use super::{
     overall_safety_task::OverallSafetyPropertiesDescription, txn_task::TxnTaskDescription,
 };
 use hotshot::{HotShotType, SystemContext};
-
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {
@@ -68,12 +66,12 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 10000,
+            next_view_timeout: 1000,
             timeout_ratio: (11, 10),
-            round_start_delay: 1,
-            start_delay: 1,
+            round_start_delay: 100,
+            start_delay: 100,
             propose_min_round_time: Duration::new(0, 0),
-            propose_max_round_time: Duration::new(5, 0),
+            propose_max_round_time: Duration::from_millis(100),
         }
     }
 }
@@ -127,7 +125,7 @@ impl TestMetadata {
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
-    pub fn default_more_nodes_less_success() -> TestMetadata {
+    pub fn default_more_nodes() -> TestMetadata {
         TestMetadata {
             total_nodes: 20,
             start_nodes: 20,
@@ -145,8 +143,11 @@ impl TestMetadata {
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
-                num_successful_views: 8,
                 ..Default::default()
+            },
+            timing_data: TimingData {
+                next_view_timeout: 1000,
+                ..TimingData::default()
             },
             ..TestMetadata::default()
         }
@@ -183,11 +184,10 @@ impl Default for TestMetadata {
 impl TestMetadata {
     pub fn gen_launcher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
+        node_id: u64,
     ) -> TestLauncher<TYPES, I>
     where
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-        <I as NodeImplementation<TYPES>>::Exchanges:
-            TestableExchange<TYPES, <I as NodeImplementation<TYPES>>::Leaf, Message<TYPES, I>>,
+        I: NodeImplementation<TYPES>,
         SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
@@ -204,17 +204,25 @@ impl TestMetadata {
             ..
         } = self.clone();
 
-        let known_nodes: Vec<<TYPES as NodeType>::SignatureKey> = (0..total_nodes)
-            .map(|id| {
-                let priv_key =
-                    TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], id as u64).1;
-                TYPES::SignatureKey::from_private(&priv_key)
+        // We assign known_nodes' public key and stake value here rather than read from config file since it's a test.
+        let known_nodes_with_stake = (0..total_nodes)
+            .map(|node_id| {
+                let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> =
+                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id as u64, 1);
+
+                cur_validator_config
+                    .public_key
+                    .get_stake_table_entry(cur_validator_config.stake_value)
             })
             .collect();
-        let known_nodes_with_stake: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
-            (0..total_nodes)
-                .map(|id| known_nodes[id].get_stake_table_entry(1u64))
-                .collect();
+        // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
+        let mut my_own_validator_config =
+            ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
+        if node_id == 0 {
+            my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file(
+                "config/ValidatorConfigFile.toml",
+            ));
+        }
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
             // TODO this doesn't exist anymore
@@ -224,6 +232,7 @@ impl TestMetadata {
             min_transactions,
             max_transactions: NonZeroUsize::new(99999).unwrap(),
             known_nodes_with_stake,
+            my_own_validator_config,
             da_committee_size,
             next_view_timeout: 500,
             timeout_ratio: (11, 10),
@@ -233,11 +242,8 @@ impl TestMetadata {
             propose_min_round_time: Duration::from_millis(0),
             propose_max_round_time: Duration::from_millis(1000),
             // TODO what's the difference between this and the second config?
-            election_config: Some(<QuorumEx<TYPES, I> as ConsensusExchange<
-                TYPES,
-                Message<TYPES, I>,
-            >>::Membership::default_election_config(
-                total_nodes as u64
+            election_config: Some(TYPES::Membership::default_election_config(
+                total_nodes as u64,
             )),
         };
         let TimingData {
@@ -250,7 +256,7 @@ impl TestMetadata {
         } = timing_data;
         let mod_config =
             // TODO this should really be using the timing config struct
-            |a: &mut HotShotConfig<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry, TYPES::ElectionConfigType>| {
+            |a: &mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>| {
                 a.next_view_timeout = next_view_timeout;
                 a.timeout_ratio = timeout_ratio;
                 a.round_start_delay = round_start_delay;
@@ -264,19 +270,16 @@ impl TestMetadata {
         let overall_safety_task_generator = overall_safety_properties.build();
         let spinning_task_generator = spinning_properties.build();
         TestLauncher {
-            resource_generator:
-                ResourceGenerators {
-                    channel_generator:
-                        <<I as NodeImplementation<TYPES>>::Exchanges as TestableExchange<
-                            _,
-                            _,
-                            _,
-                        >>::gen_comm_channels(
-                            total_nodes, num_bootstrap_nodes, da_committee_size, unreliable_network
-                        ),
-                    storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
-                    config,
-                },
+            resource_generator: ResourceGenerators {
+                channel_generator: <I as TestableNodeImplementation<TYPES>>::gen_comm_channels(
+                    total_nodes,
+                    num_bootstrap_nodes,
+                    da_committee_size,
+                    unreliable_network,
+                ),
+                storage: Box::new(|_| I::construct_tmp_storage().unwrap()),
+                config,
+            },
             metadata: self,
             txn_task_generator,
             overall_safety_task_generator,

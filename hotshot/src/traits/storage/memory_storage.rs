@@ -3,13 +3,10 @@
 //! This module provides a non-persisting, dummy adapter for the [`Storage`] trait
 use async_lock::RwLock;
 use async_trait::async_trait;
-use hotshot_types::{
-    data::LeafType,
-    traits::{
-        node_implementation::NodeType,
-        storage::{
-            Result, Storage, StorageError, StorageState, StoredView, TestableStorage, ViewEntry,
-        },
+use hotshot_types::traits::{
+    node_implementation::NodeType,
+    storage::{
+        Result, Storage, StorageError, StorageState, StoredView, TestableStorage, ViewEntry,
     },
 };
 use std::{
@@ -18,21 +15,21 @@ use std::{
 };
 
 /// Internal state for a [`MemoryStorage`]
-struct MemoryStorageInternal<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+struct MemoryStorageInternal<TYPES: NodeType> {
     /// The views that have been stored
-    stored: BTreeMap<TYPES::Time, StoredView<TYPES, LEAF>>,
+    stored: BTreeMap<TYPES::Time, StoredView<TYPES>>,
     /// The views that have failed
     failed: BTreeSet<TYPES::Time>,
 }
 
 /// In memory, ephemeral, storage for a [`HotShot`](crate::HotShot) instance
 #[derive(Clone)]
-pub struct MemoryStorage<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct MemoryStorage<TYPES: NodeType> {
     /// The inner state of this [`MemoryStorage`]
-    inner: Arc<RwLock<MemoryStorageInternal<TYPES, LEAF>>>,
+    inner: Arc<RwLock<MemoryStorageInternal<TYPES>>>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> MemoryStorage<TYPES, LEAF> {
+impl<TYPES: NodeType> MemoryStorage<TYPES> {
     /// Create a new instance of the memory storage with the given block and state
     #[must_use]
     pub fn empty() -> Self {
@@ -47,14 +44,12 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> MemoryStorage<TYPES, LEA
 }
 
 #[async_trait]
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> TestableStorage<TYPES, LEAF>
-    for MemoryStorage<TYPES, LEAF>
-{
+impl<TYPES: NodeType> TestableStorage<TYPES> for MemoryStorage<TYPES> {
     fn construct_tmp_storage() -> Result<Self> {
         Ok(Self::empty())
     }
 
-    async fn get_full_state(&self) -> StorageState<TYPES, LEAF> {
+    async fn get_full_state(&self) -> StorageState<TYPES> {
         let inner = self.inner.read().await;
         StorageState {
             stored: inner.stored.clone(),
@@ -64,10 +59,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> TestableStorage<TYPES, L
 }
 
 #[async_trait]
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Storage<TYPES, LEAF>
-    for MemoryStorage<TYPES, LEAF>
-{
-    async fn append(&self, views: Vec<ViewEntry<TYPES, LEAF>>) -> Result {
+impl<TYPES: NodeType> Storage<TYPES> for MemoryStorage<TYPES> {
+    async fn append(&self, views: Vec<ViewEntry<TYPES>>) -> Result {
         let mut inner = self.inner.write().await;
         for view in views {
             match view {
@@ -97,7 +90,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Storage<TYPES, LEAF>
         Ok(old_stored.len() + old_failed.len())
     }
 
-    async fn get_anchored_view(&self) -> Result<StoredView<TYPES, LEAF>> {
+    async fn get_anchored_view(&self) -> Result<StoredView<TYPES>> {
         let inner = self.inner.read().await;
         let last = inner
             .stored
@@ -114,15 +107,15 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Storage<TYPES, LEAF>
 
 #[cfg(test)]
 mod test {
-    use crate::traits::election::static_committee::{StaticElectionConfig, StaticVoteToken};
+    use crate::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 
     use super::*;
     use commit::Committable;
     use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::{
         block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        data::{fake_commitment, genesis_proposer_id, ValidatingLeaf, ViewNumber},
-        simple_certificate::QuorumCertificate2,
+        data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
+        simple_certificate::QuorumCertificate,
         traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
     };
     use std::{fmt::Debug, hash::Hash, marker::PhantomData};
@@ -148,29 +141,25 @@ mod test {
         type BlockHeader = VIDBlockHeader;
         type BlockPayload = VIDBlockPayload;
         type SignatureKey = BLSPubKey;
-        type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
         type Transaction = VIDTransaction;
         type ElectionConfigType = StaticElectionConfig;
         type StateType = DummyState;
+        type Membership = GeneralStaticCommittee<DummyTypes, BLSPubKey>;
     }
 
-    #[instrument(skip(rng))]
-    fn random_stored_view(
-        rng: &mut dyn rand::RngCore,
-        view_number: <DummyTypes as NodeType>::Time,
-    ) -> StoredView<DummyTypes, ValidatingLeaf<DummyTypes>> {
+    fn random_stored_view(view_number: <DummyTypes as NodeType>::Time) -> StoredView<DummyTypes> {
         let payload = VIDBlockPayload::genesis();
         let header = VIDBlockHeader {
             block_number: 0,
             payload_commitment: payload.commit(),
         };
-        let dummy_leaf_commit = fake_commitment::<ValidatingLeaf<DummyTypes>>();
+        let dummy_leaf_commit = fake_commitment::<Leaf<DummyTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {
             leaf_commit: dummy_leaf_commit,
         };
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
-            QuorumCertificate2 {
+            QuorumCertificate {
                 is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
                 data,
                 vote_commitment: commit,
@@ -180,7 +169,6 @@ mod test {
             },
             header,
             Some(payload),
-            DummyState::random(rng),
             dummy_leaf_commit,
             Vec::new(),
             genesis_proposer_id(),
@@ -194,9 +182,8 @@ mod test {
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     #[instrument]
     async fn memory_storage() {
-        let mut rng = rand::thread_rng();
         let storage = MemoryStorage::construct_tmp_storage().unwrap();
-        let genesis = random_stored_view(&mut rng, <DummyTypes as NodeType>::Time::genesis());
+        let genesis = random_stored_view(<DummyTypes as NodeType>::Time::genesis());
         storage
             .append_single_view(genesis.clone())
             .await

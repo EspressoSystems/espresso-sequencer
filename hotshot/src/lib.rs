@@ -19,8 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-/// Contains structures and functions for committee election
-pub mod certificate;
 #[cfg(feature = "demo")]
 pub mod demo;
 /// Contains traits consumed by [`HotShot`]
@@ -31,7 +29,6 @@ pub mod types;
 pub mod tasks;
 
 use crate::{
-    certificate::QuorumCertificate,
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
         add_transaction_task, add_view_sync_task,
@@ -46,44 +43,31 @@ use async_compatibility_layer::{
 };
 use async_lock::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use custom_debug::Debug;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     task_launcher::TaskRunner,
 };
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
-use hotshot_types::{
-    certificate::{TimeoutCertificate, VIDCertificate},
-    data::VidDisperse,
-    simple_certificate::QuorumCertificate2,
-    traits::node_implementation::TimeoutEx,
-};
 
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    certificate::{DACertificate, ViewSyncCertificate},
     consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
-    data::{DAProposal, Leaf, LeafType, QuorumProposal},
+    data::Leaf,
     error::StorageSnafu,
     message::{
-        ConsensusMessageType, DataMessage, InternalTrigger, Message, MessageKind,
-        ProcessedGeneralConsensusMessage, SequencingMessage,
+        DataMessage, InternalTrigger, Message, MessageKind, ProcessedGeneralConsensusMessage,
+        SequencingMessage,
     },
+    simple_certificate::QuorumCertificate,
     traits::{
         consensus_api::{ConsensusApi, ConsensusSharedApi},
-        election::{ConsensusExchange, Membership},
         network::{CommunicationChannel, NetworkError},
-        node_implementation::{
-            ChannelMaps, CommitteeEx, ExchangesType, NodeType, QuorumEx, SendToTasks, VIDEx,
-            ViewSyncEx,
-        },
+        node_implementation::{ChannelMaps, NodeType, SendToTasks},
         signature_key::SignatureKey,
         state::ConsensusTime,
         storage::StoredView,
-        State,
     },
-    vote::ViewSyncData,
     HotShotConfig,
 };
 use snafu::ResultExt;
@@ -109,6 +93,38 @@ pub const H_512: usize = 64;
 /// Length, in bytes, of a 256 bit hash
 pub const H_256: usize = 32;
 
+/// Bundle of the networks used in consensus
+pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Newtork for reaching all nodes
+    pub quorum_network: I::QuorumNetwork,
+
+    /// Network for reaching the DA committee
+    pub da_network: I::CommitteeNetwork,
+
+    /// Phantom for TYPES and I
+    pub _pd: PhantomData<(TYPES, I)>,
+}
+
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Networks<TYPES, I> {
+    /// wait for all networks to be ready
+    pub async fn wait_for_networks_ready(&self) {
+        self.quorum_network.wait_for_ready().await;
+        self.da_network.wait_for_ready().await;
+    }
+}
+
+/// Bundle of all the memberships a consensus instance uses
+pub struct Memberships<TYPES: NodeType> {
+    /// Quorum Membership
+    pub quorum_membership: TYPES::Membership,
+    /// DA
+    pub da_membership: TYPES::Membership,
+    /// VID
+    pub vid_membership: TYPES::Membership,
+    /// View Sync
+    pub view_sync_membership: TYPES::Membership,
+}
+
 /// Holds the state needed to participate in `HotShot` consensus
 pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The public key of this node
@@ -118,39 +134,38 @@ pub struct SystemContextInner<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// Configuration items for this hotshot instance
-    config: HotShotConfig<
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >,
-
-    /// Networking interface for this hotshot instance
-    // networking: I::Networking,
+    config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 
     /// This `HotShot` instance's storage backend
     storage: I::Storage,
 
-    /// This `HotShot` instance's way to interact with the nodes needed to form a quorum and/or DA certificate.
-    pub exchanges: Arc<I::Exchanges>,
+    /// Networks used by the instance of hotshot
+    pub networks: Arc<Networks<TYPES, I>>,
 
+    /// Memberships used by consensus
+    pub memberships: Arc<Memberships<TYPES>>,
+
+    // pub quorum_network: Arc<I::QuorumNetwork>;
+    // pub committee_network: Arc<I::CommitteeNetwork>;
     /// Sender for [`Event`]s
-    event_sender: RwLock<Option<BroadcastSender<Event<TYPES, I::Leaf>>>>,
+    event_sender: RwLock<Option<BroadcastSender<Event<TYPES>>>>,
 
     /// the metrics that the implementor is using.
     _metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
-    consensus: Arc<RwLock<Consensus<TYPES, I::Leaf>>>,
+    consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// Channels for sending/recv-ing proposals and votes for quorum and committee exchanges, the
     /// latter of which is only applicable for sequencing consensus.
-    channel_maps: (ChannelMaps<TYPES, I>, Option<ChannelMaps<TYPES, I>>),
+    channel_maps: (ChannelMaps<TYPES>, Option<ChannelMaps<TYPES>>),
 
     // global_registry: GlobalRegistry,
     /// Access to the output event stream.
-    output_event_stream: ChannelStream<Event<TYPES, I::Leaf>>,
+    output_event_stream: ChannelStream<Event<TYPES>>,
 
     /// access to the internal event stream, in case we need to, say, shut something down
-    internal_event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    internal_event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
     /// uid for instrumentation
     id: u64,
@@ -168,18 +183,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Creates a new hotshot with the given configuration options and sets it up with the given
     /// genesis block
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(private_key, storage, exchanges, initializer, metrics))]
+    #[instrument(skip(private_key, storage, memberships, networks, initializer, metrics))]
     pub async fn new(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
-        config: HotShotConfig<
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
-        exchanges: I::Exchanges,
-        initializer: HotShotInitializer<TYPES, I::Leaf>,
+        memberships: Memberships<TYPES>,
+        networks: Networks<TYPES, I>,
+        initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<Self, HotShotError<TYPES>> {
         debug!("Creating a new hotshot");
@@ -235,7 +248,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             private_key,
             config,
             storage,
-            exchanges: Arc::new(exchanges),
+            networks: Arc::new(networks),
+            memberships: Arc::new(memberships),
             event_sender: RwLock::default(),
             _metrics: consensus_metrics.clone(),
             internal_event_stream: ChannelStream::new(),
@@ -250,7 +264,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.inner
             .internal_event_stream
             .publish(HotShotEvent::QCFormed(either::Left(
-                QuorumCertificate2::genesis(),
+                QuorumCertificate::genesis(),
             )))
             .await;
     }
@@ -269,28 +283,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     pub async fn timeout_view(
         &self,
         current_view: TYPES::Time,
-        send_replica: UnboundedSender<
-            <I::ConsensusMessage as ConsensusMessageType<TYPES, I>>::ProcessedConsensusMessage,
-        >,
-        send_next_leader: Option<
-            UnboundedSender<
-                <I::ConsensusMessage as ConsensusMessageType<TYPES, I>>::ProcessedConsensusMessage,
-            >,
-        >,
-    ) where
-        <I::ConsensusMessage as ConsensusMessageType<TYPES, I>>::ProcessedConsensusMessage:
-            From<ProcessedGeneralConsensusMessage<TYPES, I>>,
-    {
-        let msg = ProcessedGeneralConsensusMessage::<TYPES, I>::InternalTrigger(
+        send_replica: UnboundedSender<ProcessedGeneralConsensusMessage<TYPES>>,
+        send_next_leader: Option<UnboundedSender<ProcessedGeneralConsensusMessage<TYPES>>>,
+    ) {
+        let msg = ProcessedGeneralConsensusMessage::<TYPES>::InternalTrigger(
             InternalTrigger::Timeout(current_view),
         );
         if let Some(chan) = send_next_leader {
-            if chan.send(msg.clone().into()).await.is_err() {
+            if chan.send(msg.clone()).await.is_err() {
                 debug!("Error timing out next leader task");
             }
         };
         // NOTE this should always exist
-        if send_replica.send(msg.into()).await.is_err() {
+        if send_replica.send(msg).await.is_err() {
             debug!("Error timing out replica task");
         };
     }
@@ -317,20 +322,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         async_spawn(async move {
             let _result = api
                 .inner
-                .exchanges
-                .committee_exchange()
-                .network()
+                .networks
+                .da_network
                 .broadcast_message(
                     Message {
                         sender: api.inner.public_key.clone(),
                         kind: MessageKind::from(message),
-                        _phantom: PhantomData,
                     },
-                    &api.inner
-                        .exchanges
-                        .committee_exchange()
-                        .membership()
-                        .clone(),
+                    &api.inner.memberships.da_membership.clone(),
                 )
                 .await;
         });
@@ -342,25 +341,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Panics
     ///
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_state(&self) -> <I::Leaf as LeafType>::MaybeState {
+    pub async fn get_state(&self) {
         self.inner
             .consensus
             .read()
             .await
             .get_decided_leaf()
-            .get_state()
+            .get_state();
     }
 
     /// Returns a copy of the consensus struct
     #[must_use]
-    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
+    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
         self.inner.consensus.clone()
     }
 
     /// Returns a copy of the last decided leaf
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
-    pub async fn get_decided_leaf(&self) -> I::Leaf {
+    pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
         self.inner.consensus.read().await.get_decided_leaf()
     }
 
@@ -381,18 +380,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
-        config: HotShotConfig<
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-            TYPES::ElectionConfigType,
-        >,
+        config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
         storage: I::Storage,
-        exchanges: I::Exchanges,
-        initializer: HotShotInitializer<TYPES, I::Leaf>,
+        memberships: Memberships<TYPES>,
+        networks: Networks<TYPES, I>,
+        initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
-            ChannelStream<HotShotEvent<TYPES, I>>,
+            ChannelStream<HotShotEvent<TYPES>>,
         ),
         HotShotError<TYPES>,
     >
@@ -406,7 +403,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             node_id,
             config,
             storage,
-            exchanges,
+            memberships,
+            networks,
             initializer,
             metrics,
         )
@@ -428,7 +426,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     #[allow(clippy::unused_async)]
     pub async fn send_broadcast_message(
         &self,
-        kind: impl Into<MessageKind<TYPES, I>>,
+        kind: impl Into<MessageKind<TYPES>>,
     ) -> std::result::Result<(), NetworkError> {
         let inner = self.inner.clone();
         let pk = self.inner.public_key.clone();
@@ -436,17 +434,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         async_spawn_local(async move {
             if inner
-                .exchanges
-                .quorum_exchange()
-                .network()
+                .networks
+                .quorum_network
                 .broadcast_message(
-                    Message {
-                        sender: pk,
-                        kind,
-                        _phantom: PhantomData,
-                    },
+                    Message { sender: pk, kind },
                     // TODO this is morally wrong
-                    &inner.exchanges.quorum_exchange().membership().clone(),
+                    &inner.memberships.quorum_membership.clone(),
                 )
                 .await
                 .is_err()
@@ -466,18 +459,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Will return any errors that the underlying `message_node` can return.
     pub async fn send_direct_message(
         &self,
-        kind: impl Into<MessageKind<TYPES, I>>,
+        kind: impl Into<MessageKind<TYPES>>,
         recipient: TYPES::SignatureKey,
     ) -> std::result::Result<(), NetworkError> {
         self.inner
-            .exchanges
-            .quorum_exchange()
-            .network()
+            .networks
+            .quorum_network
             .direct_message(
                 Message {
                     sender: self.inner.public_key.clone(),
                     kind: kind.into(),
-                    _phantom: PhantomData,
                 },
                 recipient,
             )
@@ -495,15 +486,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// doesn't exist, or creates entry. Then returns a clone of the entry
     pub async fn create_or_obtain_chan_from_read(
         view_num: TYPES::Time,
-        channel_map: RwLockUpgradableReadGuard<'_, SendToTasks<TYPES, I>>,
-    ) -> ViewQueue<TYPES, I> {
+        channel_map: RwLockUpgradableReadGuard<'_, SendToTasks<TYPES>>,
+    ) -> ViewQueue<TYPES> {
         // check if we have the entry
         // if we don't, insert
         if let Some(vq) = channel_map.channel_map.get(&view_num) {
             vq.clone()
         } else {
             let mut channel_map =
-                RwLockUpgradableReadGuard::<'_, SendToTasks<TYPES, I>>::upgrade(channel_map).await;
+                RwLockUpgradableReadGuard::<'_, SendToTasks<TYPES>>::upgrade(channel_map).await;
             let new_view_queue = ViewQueue::default();
             let vq = new_view_queue.clone();
             // NOTE: the read lock is held until all other read locks are DROPPED and
@@ -521,8 +512,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     #[allow(clippy::unused_async)] // async for API compatibility reasons
     pub async fn create_or_obtain_chan_from_write(
         view_num: TYPES::Time,
-        mut channel_map: RwLockWriteGuard<'_, SendToTasks<TYPES, I>>,
-    ) -> ViewQueue<TYPES, I> {
+        mut channel_map: RwLockWriteGuard<'_, SendToTasks<TYPES>>,
+    ) -> ViewQueue<TYPES> {
         channel_map.channel_map.entry(view_num).or_default().clone()
     }
 }
@@ -531,7 +522,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 #[async_trait]
 pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Get the [`hotstuff`] field of [`HotShot`].
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>>;
+    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>>;
 
     /// Spawn all tasks that operate on the given [`HotShot`].
     ///
@@ -539,7 +530,7 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     async fn run_tasks(self) -> SystemContextHandle<TYPES, I>;
 
     // decide which handler to call based on the message variant and `transmit_type`
-    // async fn handle_message(&self, item: Message<TYPES, I>, transmit_type: TransmitType) {
+    // async fn handle_message(&self, item: Message<TYPES>, transmit_type: TransmitType) {
     //     match (item.kind, transmit_type) {
     //         (MessageKind::Consensus(msg), TransmitType::Broadcast) => {
     //             self.handle_broadcast_consensus_message(msg, item.sender)
@@ -628,62 +619,10 @@ pub trait HotShotType<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType<
-            BlockHeader = VIDBlockHeader,
-            BlockPayload = VIDBlockPayload,
-            Transaction = VIDTransaction,
-        >,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        MEMBERSHIP: Membership<TYPES>,
-    > HotShotType<TYPES, I> for SystemContext<TYPES, I>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-            Certificate = QuorumCertificate<TYPES, Commitment<Leaf<TYPES>>>,
-            Commitment = Commitment<Leaf<TYPES>>,
-            Membership = MEMBERSHIP,
-        > + 'static,
-    CommitteeEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = DAProposal<TYPES>,
-            Certificate = DACertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockPayload>,
-            Membership = MEMBERSHIP,
-        > + 'static,
-    ViewSyncEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = ViewSyncCertificate<TYPES>,
-            Certificate = ViewSyncCertificate<TYPES>,
-            Commitment = Commitment<ViewSyncData<TYPES>>,
-            Membership = MEMBERSHIP,
-        > + 'static,
-    VIDEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = VidDisperse<TYPES>,
-            Certificate = VIDCertificate<TYPES>,
-            Commitment = Commitment<TYPES::BlockPayload>,
-            Membership = MEMBERSHIP,
-        > + 'static,
-    TimeoutEx<TYPES, I>: ConsensusExchange<
-            TYPES,
-            Message<TYPES, I>,
-            Proposal = QuorumProposal<TYPES, Leaf<TYPES>>,
-            Certificate = TimeoutCertificate<TYPES>,
-            Commitment = Commitment<TYPES::Time>,
-            Membership = MEMBERSHIP,
-        > + 'static,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> HotShotType<TYPES, I>
+    for SystemContext<TYPES, I>
 {
-    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES, I::Leaf>>> {
+    fn consensus(&self) -> &Arc<RwLock<Consensus<TYPES>>> {
         &self.inner.consensus
     }
 
@@ -696,10 +635,12 @@ where
         let output_event_stream = self.inner.output_event_stream.clone();
         let internal_event_stream = self.inner.internal_event_stream.clone();
 
-        let quorum_exchange = self.inner.exchanges.quorum_exchange().clone();
-        let committee_exchange = self.inner.exchanges.committee_exchange().clone();
-        let view_sync_exchange = self.inner.exchanges.view_sync_exchange().clone();
-        let vid_exchange = self.inner.exchanges.vid_exchange().clone();
+        let quorum_network = self.inner.networks.quorum_network.clone();
+        let da_network = self.inner.networks.da_network.clone();
+        let quorum_membership = self.inner.memberships.quorum_membership.clone();
+        let da_membership = self.inner.memberships.da_membership.clone();
+        let vid_membership = self.inner.memberships.vid_membership.clone();
+        let view_sync_membership = self.inner.memberships.view_sync_membership.clone();
 
         let handle = SystemContextHandle {
             registry,
@@ -712,52 +653,45 @@ where
         let task_runner = add_network_message_task(
             task_runner,
             internal_event_stream.clone(),
-            quorum_exchange.clone(),
+            quorum_network.clone(),
         )
         .await;
         let task_runner = add_network_message_task(
             task_runner,
             internal_event_stream.clone(),
-            committee_exchange.clone(),
+            da_network.clone(),
         )
         .await;
-        let task_runner = add_network_message_task(
-            task_runner,
-            internal_event_stream.clone(),
-            view_sync_exchange.clone(),
-        )
-        .await;
-        let task_runner = add_network_message_task(
-            task_runner,
-            internal_event_stream.clone(),
-            vid_exchange.clone(),
-        )
-        .await;
+
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            quorum_exchange.clone(),
+            quorum_network.clone(),
+            quorum_membership,
             NetworkTaskKind::Quorum,
         )
         .await;
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            committee_exchange.clone(),
+            da_network.clone(),
+            da_membership,
             NetworkTaskKind::Committee,
         )
         .await;
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            view_sync_exchange.clone(),
+            quorum_network.clone(),
+            view_sync_membership,
             NetworkTaskKind::ViewSync,
         )
         .await;
         let task_runner = add_network_event_task(
             task_runner,
             internal_event_stream.clone(),
-            vid_exchange.clone(),
+            quorum_network.clone(),
+            vid_membership,
             NetworkTaskKind::VID,
         )
         .await;
@@ -768,33 +702,14 @@ where
             handle.clone(),
         )
         .await;
-        let task_runner = add_da_task(
-            task_runner,
-            internal_event_stream.clone(),
-            committee_exchange.clone(),
-            handle.clone(),
-        )
-        .await;
-        let task_runner = add_vid_task(
-            task_runner,
-            internal_event_stream.clone(),
-            vid_exchange.clone(),
-            handle.clone(),
-        )
-        .await;
-        let task_runner = add_transaction_task(
-            task_runner,
-            internal_event_stream.clone(),
-            quorum_exchange,
-            handle.clone(),
-        )
-        .await;
-        let task_runner = add_view_sync_task::<TYPES, I>(
-            task_runner,
-            internal_event_stream.clone(),
-            handle.clone(),
-        )
-        .await;
+        let task_runner =
+            add_da_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
+        let task_runner =
+            add_vid_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
+        let task_runner =
+            add_transaction_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
+        let task_runner =
+            add_view_sync_task(task_runner, internal_event_stream.clone(), handle.clone()).await;
         async_spawn(async move {
             task_runner.launch().await;
             info!("Task runner exited!");
@@ -811,7 +726,7 @@ pub struct HotShotConsensusApi<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I::Leaf, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I>
     for HotShotConsensusApi<TYPES, I>
 {
     fn total_nodes(&self) -> NonZeroUsize {
@@ -840,7 +755,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
         false
     }
 
-    async fn send_event(&self, event: Event<TYPES, I::Leaf>) {
+    async fn send_event(&self, event: Event<TYPES>) {
         debug!(?event, "send_event");
         let mut event_sender = self.inner.event_sender.write().await;
         if let Some(sender) = &*event_sender {
@@ -862,7 +777,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
     async fn store_leaf(
         &self,
         old_anchor_view: TYPES::Time,
-        leaf: I::Leaf,
+        leaf: Leaf<TYPES>,
     ) -> std::result::Result<(), hotshot_types::traits::storage::StorageError> {
         let view_to_insert = StoredView::from(leaf);
         let storage = &self.inner.storage;
@@ -874,28 +789,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusSharedApi<TYPES, I:
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    > ConsensusApi<TYPES, I::Leaf, I> for HotShotConsensusApi<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
+    for HotShotConsensusApi<TYPES, I>
 {
     async fn send_direct_message(
         &self,
         recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError> {
         let inner = self.inner.clone();
         debug!(?message, ?recipient, "send_direct_message");
         async_spawn_local(async move {
             inner
-                .exchanges
-                .quorum_exchange()
-                .network()
+                .networks
+                .quorum_network
                 .direct_message(
                     Message {
                         sender: inner.public_key.clone(),
                         kind: MessageKind::from_consensus_message(message),
-                        _phantom: PhantomData,
                     },
                     recipient,
                 )
@@ -907,20 +818,18 @@ impl<
     async fn send_direct_da_message(
         &self,
         recipient: TYPES::SignatureKey,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError> {
         let inner = self.inner.clone();
         debug!(?message, ?recipient, "send_direct_message");
         async_spawn_local(async move {
             inner
-                .exchanges
-                .committee_exchange()
-                .network()
+                .networks
+                .da_network
                 .direct_message(
                     Message {
                         sender: inner.public_key.clone(),
                         kind: MessageKind::from_consensus_message(message),
-                        _phantom: PhantomData,
                     },
                     recipient,
                 )
@@ -933,20 +842,18 @@ impl<
     // <https://github.com/EspressoSystems/HotShot/issues/1194>
     async fn send_broadcast_message(
         &self,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError> {
         debug!(?message, "send_broadcast_message");
         self.inner
-            .exchanges
-            .quorum_exchange()
-            .network()
+            .networks
+            .quorum_network
             .broadcast_message(
                 Message {
                     sender: self.inner.public_key.clone(),
                     kind: MessageKind::from_consensus_message(message),
-                    _phantom: PhantomData,
                 },
-                &self.inner.exchanges.quorum_exchange().membership().clone(),
+                &self.inner.memberships.quorum_membership.clone(),
             )
             .await?;
         Ok(())
@@ -954,25 +861,18 @@ impl<
 
     async fn send_da_broadcast(
         &self,
-        message: SequencingMessage<TYPES, I>,
+        message: SequencingMessage<TYPES>,
     ) -> std::result::Result<(), NetworkError> {
         debug!(?message, "send_da_broadcast_message");
         self.inner
-            .exchanges
-            .committee_exchange()
-            .network()
+            .networks
+            .da_network
             .broadcast_message(
                 Message {
                     sender: self.inner.public_key.clone(),
                     kind: MessageKind::from_consensus_message(message),
-                    _phantom: PhantomData,
                 },
-                &self
-                    .inner
-                    .exchanges
-                    .committee_exchange()
-                    .membership()
-                    .clone(),
+                &self.inner.memberships.da_membership.clone(),
             )
             .await?;
         Ok(())
@@ -987,20 +887,14 @@ impl<
         async_spawn(async move {
             let _result = api
                 .inner
-                .exchanges
-                .committee_exchange()
-                .network()
+                .networks
+                .da_network
                 .broadcast_message(
                     Message {
                         sender: api.inner.public_key.clone(),
                         kind: MessageKind::from(message),
-                        _phantom: PhantomData,
                     },
-                    &api.inner
-                        .exchanges
-                        .committee_exchange()
-                        .membership()
-                        .clone(),
+                    &api.inner.memberships.da_membership.clone(),
                 )
                 .await;
         });
@@ -1009,27 +903,23 @@ impl<
 }
 
 /// initializer struct for creating starting block
-pub struct HotShotInitializer<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct HotShotInitializer<TYPES: NodeType> {
     /// the leaf specified initialization
-    inner: LEAF,
+    inner: Leaf<TYPES>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> HotShotInitializer<TYPES, LEAF> {
+impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(genesis_payload: TYPES::BlockPayload) -> Result<Self, HotShotError<TYPES>> {
-        let state = TYPES::StateType::initialize();
-        let time = TYPES::Time::genesis();
-        let justify_qc = QuorumCertificate2::<TYPES, LEAF>::genesis();
-
+    pub fn from_genesis() -> Result<Self, HotShotError<TYPES>> {
         Ok(Self {
-            inner: LEAF::new(time, justify_qc, genesis_payload, state),
+            inner: Leaf::genesis(),
         })
     }
 
     /// reload previous state based on most recent leaf
-    pub fn from_reload(anchor_leaf: LEAF) -> Self {
+    pub fn from_reload(anchor_leaf: Leaf<TYPES>) -> Self {
         Self { inner: anchor_leaf }
     }
 }

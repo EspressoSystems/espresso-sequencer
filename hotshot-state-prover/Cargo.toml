@@ -1,0 +1,35 @@
+[package]
+name = "hotshot-state-prover"
+description = "Generate state update proof for HotShot light client"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+ark-bn254 = "0.4.0"
+ark-ec = "0.4.0"
+ark-ed-on-bn254 = "0.4.0"
+ark-ff = "0.4.0"
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+bincode = { workspace = true }
+bitvec = { workspace = true }
+digest = { workspace = true }
+displaydoc = { version = "0.2.3", default-features = false }
+ethereum-types = { workspace = true }
+generic-array = "0.14.7"
+hotshot-types = { path = "../types" }
+jf-plonk = { workspace = true }
+jf-primitives = { workspace = true }
+jf-relation = { workspace = true }
+jf-utils = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
+tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
+typenum = { workspace = true }
+hotshot-stake-table = { path = "../hotshot-stake-table" }
+
+[features]
+default = ["parallel"]
+std = ["ark-std/std", "ark-serialize/std", "ark-ff/std"]
+parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]

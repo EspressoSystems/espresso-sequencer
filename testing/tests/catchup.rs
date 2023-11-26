@@ -53,7 +53,7 @@ async fn test_catchup() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -108,7 +108,7 @@ async fn test_catchup_web() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, WebImpl>()
+        .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -167,7 +167,7 @@ async fn test_catchup_one_node() {
     metadata.overall_safety_properties.num_failed_views = 5;
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -231,7 +231,7 @@ async fn test_catchup_in_view_sync() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;

@@ -4,7 +4,6 @@
 //! integration tests.
 
 use super::{FailedToSerializeSnafu, NetworkError, NetworkReliability, NetworkingMetricsValue};
-use crate::NodeImplementation;
 use async_compatibility_layer::{
     art::async_spawn,
     channel::{bounded, Receiver, SendError, Sender},
@@ -33,7 +32,6 @@ use snafu::ResultExt;
 use std::{
     collections::BTreeSet,
     fmt::Debug,
-    marker::PhantomData,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -242,9 +240,8 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
+    for MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>
 {
     fn generator(
         _expected_node_count: usize,
@@ -255,6 +252,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
         reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let master: Arc<_> = MasterMap::new();
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         Box::new(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
@@ -454,30 +452,21 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Memory
 
 /// memory identity communication channel
 #[derive(Clone, Debug)]
-pub struct MemoryCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
-    Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
-    PhantomData<(I, MEMBERSHIP)>,
+pub struct MemoryCommChannel<TYPES: NodeType>(
+    Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>,
 );
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    MemoryCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> MemoryCommChannel<TYPES> {
     /// create new communication channel
     #[must_use]
-    pub fn new(network: Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self {
-        Self(network, PhantomData)
+    pub fn new(network: Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
+        Self(network)
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for MemoryCommChannel<TYPES>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     fn generator(
         expected_node_count: usize,
@@ -488,9 +477,9 @@ where
         reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <MemoryNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        > as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
@@ -498,7 +487,7 @@ where
             is_da,
             reliability_config,
         );
-        Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
+        Box::new(move |node_id| Self(generator(node_id).into()))
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {
@@ -507,13 +496,11 @@ where
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    CommunicationChannel<TYPES, Message<TYPES, I>, MEMBERSHIP>
-    for MemoryCommChannel<TYPES, I, MEMBERSHIP>
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for MemoryCommChannel<TYPES>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
-    type NETWORK = MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>;
+    type NETWORK = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
@@ -536,10 +523,10 @@ where
 
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
-        let recipients = <MEMBERSHIP as Membership<TYPES>>::get_committee(
+        let recipients = <TYPES as NodeType>::Membership::get_committee(
             election,
             message.kind.get_view_number(),
         );
@@ -548,7 +535,7 @@ where
 
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -557,7 +544,7 @@ where
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -567,16 +554,9 @@ where
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES>>
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES, I>,
-        MEMBERSHIP,
-        MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
-    > for MemoryCommChannel<TYPES, I, MEMBERSHIP>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for MemoryCommChannel<TYPES> {
     fn generate_network(
-    ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>
+    ) -> Box<dyn Fn(Arc<MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {
         Box::new(move |network| MemoryCommChannel::new(network))
     }

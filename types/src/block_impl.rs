@@ -1,13 +1,15 @@
-//! This module provides an implementation of the `HotShot` suite of traits.
+//! This module provides implementations of block traits for examples and tests only.
+//! TODO (Keyao) Organize non-production code.
+//! <https://github.com/EspressoSystems/HotShot/issues/2059>
 use std::{
-    collections::HashSet,
     fmt::{Debug, Display},
+    mem::size_of,
 };
 
 use crate::{
     data::{test_srs, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{BlockHeader, Transaction},
+        block_contents::{BlockError, BlockHeader, Transaction},
         state::TestableBlock,
         BlockPayload,
     },
@@ -16,7 +18,6 @@ use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-use snafu::Snafu;
 
 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
 /// Number of storage nodes for VID initiation.
@@ -28,6 +29,33 @@ pub const NUM_CHUNKS: usize = 8;
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDTransaction(pub Vec<u8>);
+
+impl VIDTransaction {
+    /// Encode a list of transactions into bytes.
+    ///
+    /// # Errors
+    /// If the transaction length conversion fails.
+    pub fn encode(transactions: Vec<Self>) -> Result<Vec<u8>, BlockError> {
+        let mut encoded = Vec::new();
+
+        for txn in transactions {
+            // The transaction length is converted from `usize` to `u32` to ensure consistent
+            // number of bytes on different platforms.
+            let txn_size = match u32::try_from(txn.0.len()) {
+                Ok(len) => len.to_le_bytes(),
+                Err(_) => {
+                    return Err(BlockError::InvalidTransactionLength);
+                }
+            };
+
+            // Concatenate the bytes of the transaction size and the transaction itself.
+            encoded.extend(txn_size);
+            encoded.extend(txn.0);
+        }
+
+        Ok(encoded)
+    }
+}
 
 impl Committable for VIDTransaction {
     fn commit(&self) -> Commitment<Self> {
@@ -45,21 +73,6 @@ impl Committable for VIDTransaction {
 
 impl Transaction for VIDTransaction {}
 
-/// The error type for block payload.
-#[derive(Snafu, Debug)]
-pub enum BlockPayloadError {
-    /// Previous state commitment does not match
-    PreviousStateMismatch,
-    /// Nonce was reused
-    ReusedTxn,
-    /// Genesis failure
-    GenesisFailed,
-    /// Genesis reencountered after initialization
-    GenesisAfterStart,
-    /// invalid block
-    InvalidBlock,
-}
-
 /// A [`BlockPayload`] that contains a list of `VIDTransaction`.
 #[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
 pub struct VIDBlockPayload {
@@ -70,23 +83,32 @@ pub struct VIDBlockPayload {
 }
 
 impl VIDBlockPayload {
+    #[must_use]
+    /// Compute the VID payload commitment.
+    /// # Panics
+    /// If the VID computation fails.
+    pub fn vid_commitment(encoded_transactions: &[u8]) -> <VidScheme as VidSchemeTrait>::Commit {
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+        let srs = test_srs(NUM_STORAGE_NODES);
+        // TODO We are using constant numbers for now, but they will change as the quorum size
+        // changes.
+        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap();
+        vid.disperse(encoded_transactions).unwrap().commit
+    }
+
     /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
     /// consensus task initiation.
     /// # Panics
     /// If the `VidScheme` construction fails.
     #[must_use]
     pub fn genesis() -> Self {
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-        let srs = test_srs(NUM_STORAGE_NODES);
-        // TODO We are using constant numbers for now, but they will change as the quorum size
-        // changes.
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-        let txn = vec![0];
-        let vid_disperse = vid.disperse(&txn).unwrap();
+        let txns: Vec<u8> = vec![0];
+        // It's impossible for `encode` to fail because the transaciton length is very small.
+        let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]).unwrap();
         VIDBlockPayload {
-            transactions: vec![VIDTransaction(txn)],
-            payload_commitment: vid_disperse.commit,
+            transactions: vec![VIDTransaction(txns)],
+            payload_commitment: Self::vid_commitment(&encoded),
         }
     }
 }
@@ -119,11 +141,62 @@ impl TestableBlock for VIDBlockPayload {
 }
 
 impl BlockPayload for VIDBlockPayload {
-    type Error = BlockPayloadError;
-
+    type Error = BlockError;
     type Transaction = VIDTransaction;
+    type Metadata = ();
+    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
-    fn transaction_commitments(&self) -> HashSet<Commitment<Self::Transaction>> {
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        let txns_vec: Vec<VIDTransaction> = transactions.into_iter().collect();
+        let encoded = VIDTransaction::encode(txns_vec.clone())?;
+        Ok((
+            Self {
+                transactions: txns_vec,
+                payload_commitment: Self::vid_commitment(&encoded),
+            },
+            (),
+        ))
+    }
+
+    fn from_bytes<E>(encoded_transactions: E, _metadata: Self::Metadata) -> Self
+    where
+        E: Iterator<Item = u8>,
+    {
+        let encoded_vec: Vec<u8> = encoded_transactions.collect();
+        let mut transactions = Vec::new();
+        let mut current_index = 0;
+        while current_index < encoded_vec.len() {
+            // Decode the transaction length.
+            let txn_start_index = current_index + size_of::<u32>();
+            let mut txn_len_bytes = [0; size_of::<u32>()];
+            txn_len_bytes.copy_from_slice(&encoded_vec[current_index..txn_start_index]);
+            let txn_len: usize = u32::from_le_bytes(txn_len_bytes) as usize;
+
+            // Get the transaction.
+            let next_index = txn_start_index + txn_len;
+            transactions.push(VIDTransaction(
+                encoded_vec[txn_start_index..next_index].to_vec(),
+            ));
+            current_index = next_index;
+        }
+
+        Self {
+            transactions,
+            payload_commitment: Self::vid_commitment(&encoded_vec),
+        }
+    }
+
+    fn genesis() -> (Self, Self::Metadata) {
+        (Self::genesis(), ())
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(VIDTransaction::encode(self.transactions.clone())?.into_iter())
+    }
+
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
         self.transactions
             .iter()
             .map(commit::Committable::commit)
@@ -143,18 +216,31 @@ pub struct VIDBlockHeader {
 impl BlockHeader for VIDBlockHeader {
     type Payload = VIDBlockPayload;
 
-    fn new(payload_commitment: Commitment<Self::Payload>, parent_header: &Self) -> Self {
+    fn new(
+        payload_commitment: Commitment<Self::Payload>,
+        _metadata: <Self::Payload as BlockPayload>::Metadata,
+        parent_header: &Self,
+    ) -> Self {
         Self {
             block_number: parent_header.block_number + 1,
             payload_commitment,
         }
     }
 
-    fn genesis(payload: Self::Payload) -> Self {
-        Self {
-            block_number: 0,
-            payload_commitment: payload.commit(),
-        }
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    ) {
+        let (payload, metadata) = <Self::Payload as BlockPayload>::genesis();
+        (
+            Self {
+                block_number: 0,
+                payload_commitment: payload.commit(),
+            },
+            payload,
+            metadata,
+        )
     }
 
     fn block_number(&self) -> u64 {

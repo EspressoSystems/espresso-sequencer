@@ -13,15 +13,15 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
-    certificate::QuorumCertificate,
+    block_impl::{NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::Consensus,
-    data::{Leaf, VidDisperse, VidScheme, VidSchemeTrait},
-    message::{Message, Proposal, SequencingMessage},
+    data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
+    message::Proposal,
     traits::{
         consensus_api::ConsensusApi,
-        election::{ConsensusExchange, QuorumExchangeType},
-        node_implementation::{NodeImplementation, NodeType, QuorumEx},
+        election::Membership,
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         BlockPayload,
     },
 };
@@ -29,6 +29,7 @@ use hotshot_utils::bincode::bincode_opts;
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     sync::Arc,
     time::Instant,
 };
@@ -44,15 +45,9 @@ pub struct ConsensusTaskError {}
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
-    I: NodeImplementation<TYPES, Leaf = Leaf<TYPES>, ConsensusMessage = SequencingMessage<TYPES, I>>,
-    A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-> where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
-{
+    I: NodeImplementation<TYPES>,
+    A: ConsensusApi<TYPES, I> + 'static,
+> {
     /// The state's api
     pub api: A,
     /// Global registry task for the state
@@ -62,7 +57,7 @@ pub struct TransactionTaskState<
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES, Leaf<TYPES>>>>,
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
     /// A list of undecided transactions
     pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
@@ -70,41 +65,32 @@ pub struct TransactionTaskState<
     /// A list of transactions we've seen decided, but didn't receive
     pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// the committee exchange
-    pub quorum_exchange: Arc<QuorumEx<TYPES, I>>,
+    /// Network for all nodes
+    pub network: Arc<I::QuorumNetwork>,
+
+    /// Membership for teh quorum
+    pub membership: Arc<TYPES::Membership>,
 
     /// Global events stream to publish events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES, I>>,
+    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
+    /// This Nodes Public Key
+    pub public_key: TYPES::SignatureKey,
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// This state's ID
     pub id: u64,
 }
 
-// We have two `TransactionTaskState` implementations with different bounds. The implementation
-// here requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
-// whereas it's just `TYPES: NodeType` in the second implementation.
-impl<
-        TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
+    TransactionTaskState<TYPES, I, A>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
 
     pub async fn handle_event(
         &mut self,
-        event: HotShotEvent<TYPES, I>,
+        event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
             HotShotEvent::TransactionsRecv(transactions) => {
@@ -191,9 +177,7 @@ where
                 }
                 self.cur_view = view;
 
-                // If we are not the next leader (DA leader for this view) immediately exit
-                if !self.quorum_exchange.is_leader(self.cur_view + 1) {
-                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
+                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     return None;
                 }
 
@@ -228,39 +212,39 @@ where
                 // TODO (Keyao) Determine whether to allow empty blocks.
                 // <https://github.com/EspressoSystems/HotShot/issues/1822>
                 let txns = self.wait_for_transactions(parent_leaf).await?;
-
-                // TODO move all VID stuff to a new VID task
-                // details here: https://github.com/EspressoSystems/HotShot/issues/1817#issuecomment-1747143528
-                let num_storage_nodes = 8;
-                debug!("Prepare VID shares for {} storage nodes", num_storage_nodes);
-
-                // TODO Secure SRS for VID
-                // https://github.com/EspressoSystems/HotShot/issues/1686
-                let srs = hotshot_types::data::test_srs(num_storage_nodes);
-
-                // TODO proper source for VID erasure code rate
-                // https://github.com/EspressoSystems/HotShot/issues/1734
-                let num_chunks = 8;
-
-                let vid = VidScheme::new(num_chunks, num_storage_nodes, &srs).unwrap();
-
-                // TODO Wasteful flattening of tx bytes to accommodate VID API
-                // https://github.com/EspressoSystems/jellyfish/issues/375
-                let mut txns_flatten = Vec::new();
-                for txn in &txns {
-                    txns_flatten.extend(txn.0.clone());
-                }
-
-                let vid_disperse = vid.disperse(&txns_flatten).unwrap();
-                let block = VIDBlockPayload {
-                    transactions: txns,
-                    payload_commitment: vid_disperse.commit,
+                let (payload, metadata) =
+                    match <TYPES::BlockPayload as BlockPayload>::from_transactions(txns) {
+                        Ok((payload, metadata)) => (payload, metadata),
+                        Err(e) => {
+                            error!("Failed to build the block payload: {:?}.", e);
+                            return None;
+                        }
+                    };
+                let encoded_txns = match payload.encode() {
+                    Ok(encoded) => encoded,
+                    Err(e) => {
+                        error!("Failed to encode the block payload: {:?}.", e);
+                        return None;
+                    }
                 };
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+                let srs = test_srs(NUM_STORAGE_NODES);
+                // TODO We are using constant numbers for now, but they will change as the quorum size
+                // changes.
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                let vid_disperse = vid
+                    .disperse(encoded_txns.into_iter().collect::<Vec<u8>>())
+                    .unwrap();
 
                 // TODO never clone a block
                 // https://github.com/EspressoSystems/HotShot/issues/1858
                 self.event_stream
-                    .publish(HotShotEvent::BlockReady(block.clone(), view + 1))
+                    .publish(HotShotEvent::BlockReady(
+                        payload.clone(),
+                        metadata,
+                        view + 1,
+                    ))
                     .await;
 
                 // TODO (Keyao) Determine and update where to publish VidDisperseSend.
@@ -271,14 +255,18 @@ where
                         Proposal {
                             data: VidDisperse {
                                 view_number: view + 1,
-                                payload_commitment: block.commit(),
+                                payload_commitment: payload.commit(),
                                 shares: vid_disperse.shares,
                                 common: vid_disperse.common,
                             },
                             // TODO (Keyao) This is also signed in DA task.
-                            signature: self.quorum_exchange.sign_payload_commitment(block.commit()),
+                            signature: TYPES::SignatureKey::sign(
+                                &self.private_key,
+                                payload.commit().as_ref(),
+                            ),
+                            _pd: PhantomData,
                         },
-                        self.quorum_exchange.public_key().clone(),
+                        self.public_key.clone(),
                     ))
                     .await;
                 return None;
@@ -290,27 +278,7 @@ where
         }
         None
     }
-}
 
-// We have two `TransactionTaskState` implementations with different bounds. The implementation
-// above requires `TYPES: NodeType<Transaction = VIDTransaction, BlockPayload = VIDBlockPayload>`,
-// whereas here it's just `TYPES: NodeType`.
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
-{
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction Handling Task", level = "error")]
     async fn wait_for_transactions(
         &self,
@@ -380,7 +348,7 @@ where
     }
 
     /// Event filter for the transaction task
-    pub fn filter(event: &HotShotEvent<TYPES, I>) -> bool {
+    pub fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(
             event,
             HotShotEvent::TransactionsRecv(_)
@@ -392,28 +360,15 @@ where
 }
 
 /// task state implementation for Transactions Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<
-            TYPES,
-            Leaf = Leaf<TYPES>,
-            ConsensusMessage = SequencingMessage<TYPES, I>,
-        >,
-        A: ConsensusApi<TYPES, Leaf<TYPES>, I> + 'static,
-    > TS for TransactionTaskState<TYPES, I, A>
-where
-    QuorumEx<TYPES, I>: ConsensusExchange<
-        TYPES,
-        Message<TYPES, I>,
-        Certificate = QuorumCertificate<TYPES, Commitment<I::Leaf>>,
-    >,
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TS
+    for TransactionTaskState<TYPES, I, A>
 {
 }
 
 /// Type alias for DA Task Types
 pub type TransactionsTaskTypes<TYPES, I, A> = HSTWithEvent<
     ConsensusTaskError,
-    HotShotEvent<TYPES, I>,
-    ChannelStream<HotShotEvent<TYPES, I>>,
+    HotShotEvent<TYPES>,
+    ChannelStream<HotShotEvent<TYPES>>,
     TransactionTaskState<TYPES, I, A>,
 >;

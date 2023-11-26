@@ -1,12 +1,9 @@
 use std::collections::BTreeSet;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
 use hotshot::demo::DemoState;
-use hotshot::traits::election::static_committee::{
-    GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-};
+use hotshot::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 use hotshot::traits::implementations::{
     MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
 };
@@ -14,21 +11,14 @@ use hotshot::traits::NodeImplementation;
 use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
 use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
-use hotshot_types::certificate::ViewSyncCertificate;
-use hotshot_types::data::{DAProposal, Leaf, QuorumProposal};
-use hotshot_types::message::{Message, SequencingMessage};
-use hotshot_types::traits::election::{
-    CommitteeExchange, QuorumExchange, VIDExchange, ViewSyncExchange,
-};
+use hotshot_types::message::Message;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
-use hotshot_types::traits::node_implementation::{ChannelMaps, Exchanges, NodeType};
-use hotshot_types::vote::{DAVote, ViewSyncVote};
+use hotshot_types::traits::node_implementation::{ChannelMaps, NodeType};
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, MessageKind},
     traits::state::ConsensusTime,
-    vote::QuorumVote,
 };
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
@@ -56,60 +46,29 @@ impl NodeType for Test {
     type BlockHeader = VIDBlockHeader;
     type BlockPayload = VIDBlockPayload;
     type SignatureKey = BLSPubKey;
-    type VoteTokenType = StaticVoteToken<Self::SignatureKey>;
     type Transaction = VIDTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = DemoState;
+    type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type ThisLeaf = Leaf<Test>;
-pub type ThisMembership = GeneralStaticCommittee<Test, ThisLeaf, <Test as NodeType>::SignatureKey>;
-pub type DANetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type QuorumNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type ViewSyncNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-pub type VIDNetwork = MemoryCommChannel<Test, TestImpl, ThisMembership>;
-
-pub type ThisDAProposal = DAProposal<Test>;
-pub type ThisDAVote = DAVote<Test>;
-
-pub type ThisQuorumProposal = QuorumProposal<Test, ThisLeaf>;
-pub type ThisQuorumVote = QuorumVote<Test, ThisLeaf>;
-
-pub type ThisViewSyncProposal = ViewSyncCertificate<Test>;
-pub type ThisViewSyncVote = ViewSyncVote<Test>;
+pub type ThisMembership = GeneralStaticCommittee<Test, <Test as NodeType>::SignatureKey>;
+pub type DANetwork = MemoryCommChannel<Test>;
+pub type QuorumNetwork = MemoryCommChannel<Test>;
+pub type ViewSyncNetwork = MemoryCommChannel<Test>;
+pub type VIDNetwork = MemoryCommChannel<Test>;
 
 impl NodeImplementation<Test> for TestImpl {
-    type Storage = MemoryStorage<Test, Self::Leaf>;
-    type Leaf = Leaf<Test>;
-    type Exchanges = Exchanges<
-        Test,
-        Message<Test, Self>,
-        QuorumExchange<
-            Test,
-            Self::Leaf,
-            ThisQuorumProposal,
-            ThisMembership,
-            QuorumNetwork,
-            Message<Test, Self>,
-        >,
-        CommitteeExchange<Test, ThisMembership, DANetwork, Message<Test, Self>>,
-        ViewSyncExchange<
-            Test,
-            ThisViewSyncProposal,
-            ThisMembership,
-            ViewSyncNetwork,
-            Message<Test, Self>,
-        >,
-        VIDExchange<Test, ThisMembership, VIDNetwork, Message<Test, Self>>,
-    >;
-    type ConsensusMessage = SequencingMessage<Test, Self>;
+    type Storage = MemoryStorage<Test>;
+    type QuorumNetwork = QuorumNetwork;
+    type CommitteeNetwork = DANetwork;
 
     fn new_channel_maps(
         start_view: <Test as NodeType>::Time,
-    ) -> (ChannelMaps<Test, Self>, Option<ChannelMaps<Test, Self>>) {
+    ) -> (ChannelMaps<Test>, Option<ChannelMaps<Test>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
@@ -119,7 +78,7 @@ impl NodeImplementation<Test> for TestImpl {
 /// derive EQ on `VoteType<TYPES>` and thereby message
 /// we are only sending data messages, though so we compare key and
 /// data message
-fn fake_message_eq(message_1: Message<Test, TestImpl>, message_2: Message<Test, TestImpl>) {
+fn fake_message_eq(message_1: Message<Test>, message_2: Message<Test>) {
     assert_eq!(message_1.sender, message_2.sender);
     if let MessageKind::Data(DataMessage::SubmitTransaction(d_1, _)) = message_1.kind {
         if let MessageKind::Data(DataMessage::SubmitTransaction(d_2, _)) = message_2.kind {
@@ -139,7 +98,7 @@ fn get_pubkey() -> BLSPubKey {
 }
 
 /// create a message
-fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test, TestImpl>> {
+fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test>> {
     let mut messages = Vec::new();
     for _ in 0..num_messages {
         // create a random transaction from seed
@@ -153,7 +112,6 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
                 VIDTransaction(bytes.to_vec()),
                 <ViewNumber as ConsensusTime>::new(0),
             )),
-            _phantom: PhantomData,
         };
         messages.push(message);
     }
@@ -169,8 +127,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
 #[instrument]
 async fn memory_network_spawn_single() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key = get_pubkey();
 }
@@ -184,8 +141,7 @@ async fn memory_network_spawn_single() {
 #[instrument]
 async fn memory_network_spawn_double() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key_1 = get_pubkey();
     let _pub_key_2 = get_pubkey();
@@ -203,8 +159,7 @@ async fn memory_network_direct_queue() {
     // Create some dummy messages
 
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
 
     let pub_key_1 = get_pubkey();
@@ -223,7 +178,7 @@ async fn memory_network_direct_queue() {
         Option::None,
     );
 
-    let first_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
     // Test 1 -> 2
     // Send messages
@@ -241,7 +196,7 @@ async fn memory_network_direct_queue() {
         fake_message_eq(sent_message, recv_message);
     }
 
-    let second_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 200, pub_key_2);
+    let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
 
     // Test 2 -> 1
     // Send messages
@@ -270,8 +225,7 @@ async fn memory_network_direct_queue() {
 async fn memory_network_broadcast_queue() {
     setup_logging();
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
@@ -288,7 +242,7 @@ async fn memory_network_broadcast_queue() {
         Option::None,
     );
 
-    let first_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
     // Test 1 -> 2
     // Send messages
@@ -309,7 +263,7 @@ async fn memory_network_broadcast_queue() {
         fake_message_eq(sent_message, recv_message);
     }
 
-    let second_messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 200, pub_key_2);
+    let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
 
     // Test 2 -> 1
     // Send messages
@@ -341,8 +295,7 @@ async fn memory_network_broadcast_queue() {
 async fn memory_network_test_in_flight_message_count() {
     setup_logging();
 
-    let group: Arc<MasterMap<Message<Test, TestImpl>, <Test as NodeType>::SignatureKey>> =
-        MasterMap::new();
+    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
@@ -360,7 +313,7 @@ async fn memory_network_test_in_flight_message_count() {
     );
 
     // Create some dummy messages
-    let messages: Vec<Message<Test, TestImpl>> = gen_messages(5, 100, pub_key_1);
+    let messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
     let broadcast_recipients = BTreeSet::from([pub_key_1, pub_key_2]);
 
     assert_eq!(network1.in_flight_message_count(), Some(0));

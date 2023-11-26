@@ -40,7 +40,7 @@ async fn libp2p_network_sync() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await
@@ -76,7 +76,7 @@ async fn test_memory_network_sync() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -111,7 +111,7 @@ async fn libp2p_network_async() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await
@@ -149,7 +149,7 @@ async fn test_memory_network_async() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -195,7 +195,7 @@ async fn test_memory_network_partially_sync() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -238,7 +238,7 @@ async fn libp2p_network_partially_sync() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await
@@ -278,7 +278,7 @@ async fn test_memory_network_chaos() {
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -315,7 +315,7 @@ async fn libp2p_network_chaos() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>()
+        .gen_launcher::<TestTypes, Libp2pImpl>(0)
         .launch()
         .run_test()
         .await

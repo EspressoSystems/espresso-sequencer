@@ -10,12 +10,16 @@ use commit::{Commitment, CommitmentBoundsArkless, Committable};
 use ethereum_types::U256;
 
 use crate::{
-    simple_vote::{QuorumData, Voteable},
+    data::Leaf,
+    simple_vote::{
+        DAData, QuorumData, TimeoutData, VIDData, ViewSyncCommitData, ViewSyncFinalizeData,
+        ViewSyncPreCommitData, Voteable,
+    },
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
         state::ConsensusTime,
     },
-    vote2::{Certificate2, HasViewNumber},
+    vote::{Certificate, HasViewNumber},
 };
 
 use serde::{Deserialize, Serialize};
@@ -37,7 +41,7 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
     pub _pd: PhantomData<TYPES>,
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate2<TYPES>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
     for SimpleCertificate<TYPES, VOTEABLE>
 {
     type Voteable = VOTEABLE;
@@ -89,9 +93,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> HasViewNumber<TYPES>
         self.view_number
     }
 }
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
-    for QuorumCertificate2<TYPES, VOTEABLE>
-{
+impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -101,16 +103,12 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Display
     }
 }
 
-impl<
-        TYPES: NodeType,
-        LEAF: Committable + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq + 'static,
-    > QuorumCertificate2<TYPES, LEAF>
-{
+impl<TYPES: NodeType> QuorumCertificate<TYPES> {
     #[must_use]
     /// Creat the Genisis certificate
     pub fn genesis() -> Self {
         let data = QuorumData {
-            leaf_commit: Commitment::<LEAF>::default_commitment_no_preimage(),
+            leaf_commit: Commitment::<Leaf<TYPES>>::default_commitment_no_preimage(),
         };
         let commit = data.commit();
         Self {
@@ -125,4 +123,21 @@ impl<
 }
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
-pub type QuorumCertificate2<TYPES, LEAF> = SimpleCertificate<TYPES, QuorumData<LEAF>>;
+pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
+/// Type alias for a DA certificate over `DAData`
+pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData<<TYPES as NodeType>::BlockPayload>>;
+/// Type alias for a Timeout certificate over a view number
+pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
+/// type alias for a VID certificate
+pub type VIDCertificate<TYPES> =
+    SimpleCertificate<TYPES, VIDData<<TYPES as NodeType>::BlockPayload>>;
+
+// TODO ED Update this to use the correct threshold instead of the default `success_threshold`
+/// Type alias for a `ViewSyncPreCommit` certificate over a view number
+pub type ViewSyncPreCommitCertificate2<TYPES> =
+    SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>>;
+/// Type alias for a `ViewSyncCommit` certificate over a view number
+pub type ViewSyncCommitCertificate2<TYPES> = SimpleCertificate<TYPES, ViewSyncCommitData<TYPES>>;
+/// Type alias for a `ViewSyncFinalize` certificate over a view number
+pub type ViewSyncFinalizeCertificate2<TYPES> =
+    SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>>;

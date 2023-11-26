@@ -4,6 +4,7 @@
 //! network state, which is modified by the transactions contained within blocks.
 
 use crate::traits::BlockPayload;
+use ark_ff::PrimeField;
 use commit::Committable;
 use espresso_systems_common::hotshot::tag;
 use serde::{de::DeserializeOwned, Serialize};
@@ -216,5 +217,47 @@ pub mod dummy {
         ) -> VIDTransaction {
             VIDTransaction(vec![0u8])
         }
+    }
+}
+
+/// A serialized light client state for proof generation
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct LightClientState<F: PrimeField> {
+    /// Current view number
+    pub view_number: usize,
+    /// Current block height
+    pub block_height: usize,
+    /// Root of the block commitment tree
+    pub block_comm_root: F,
+    /// Commitment for fee ledger
+    pub fee_ledger_comm: F,
+    /// Commitment for the stake table
+    pub stake_table_comm: (F, F, F),
+}
+
+impl<F: PrimeField> From<LightClientState<F>> for [F; 7] {
+    fn from(state: LightClientState<F>) -> Self {
+        [
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm_root,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
+        ]
+    }
+}
+impl<F: PrimeField> From<&LightClientState<F>> for [F; 7] {
+    fn from(state: &LightClientState<F>) -> Self {
+        [
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm_root,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
+        ]
     }
 }

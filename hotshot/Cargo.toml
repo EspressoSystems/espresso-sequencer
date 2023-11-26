@@ -25,55 +25,78 @@ docs = []
 doc-images = []
 hotshot-testing = []
 
+# libp2p
 [[example]]
-name = "libp2p-validator"
+name = "validator-libp2p"
 required-features = ["demo", "libp2p/rsa"]
 path = "examples/libp2p/validator.rs"
 
 [[example]]
-name = "libp2p-multi-validator"
+name = "multi-validator-libp2p"
 required-features = ["demo", "libp2p/rsa"]
 path = "examples/libp2p/multi-validator.rs"
 
 [[example]]
-name = "libp2p-orchestrator"
+name = "orchestrator-libp2p"
 required-features = ["demo", "libp2p/rsa"]
 path = "examples/libp2p/orchestrator.rs"
 
-# [[example]]
-# name = "web-server-orchestrator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/web-server/orchestrator.rs"
-#
-# [[example]]
-# name = "web-server-validator"
-# required-features = ["demo", "libp2p/rsa"]
-# path = "examples/web-server/validator.rs"
+[[example]]
+name = "all-libp2p"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/libp2p/all.rs"
+
+# webserver
+[[example]]
+name = "webserver"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/webserver/webserver.rs"
 
 [[example]]
-name = "web-server"
+name = "orchestrator-webserver"
 required-features = ["demo", "libp2p/rsa"]
-path = "examples/web-server-da/web-server.rs"
+path = "examples/webserver/orchestrator.rs"
 
 [[example]]
-name = "web-server-da-orchestrator"
+name = "validator-webserver"
 required-features = ["demo", "libp2p/rsa"]
-path = "examples/web-server-da/orchestrator.rs"
+path = "examples/webserver/validator.rs"
 
 [[example]]
-name = "web-server-da-validator"
+name = "multi-validator-webserver"
 required-features = ["demo", "libp2p/rsa"]
-path = "examples/web-server-da/validator.rs"
+path = "examples/webserver/multi-validator.rs"
 
 [[example]]
-name = "multi-validator"
+name = "multi-webserver"
 required-features = ["demo", "libp2p/rsa"]
-path = "examples/web-server-da/multi-validator.rs"
+path = "examples/webserver/multi-webserver.rs"
 
 [[example]]
-name = "multi-web-server"
+name = "all-webserver"
 required-features = ["demo", "libp2p/rsa"]
-path = "examples/web-server-da/multi-web-server.rs"
+path = "examples/webserver/all.rs"
+
+# combined
+[[example]]
+name = "all-combined"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/combined/all.rs"
+
+[[example]]
+name = "multi-validator-combined"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/combined/multi-validator.rs"
+
+[[example]]
+name = "validator-combined"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/combined/validator.rs"
+
+[[example]]
+name = "orchestrator-combined"
+required-features = ["demo", "libp2p/rsa"]
+path = "examples/combined/orchestrator.rs"
 
 [dependencies]
 async-compatibility-layer = { workspace = true }
@@ -110,7 +133,8 @@ serde = { workspace = true, features = ["rc"] }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
-dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.14" }
+local-ip-address = "0.5.6"
+dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.16" }
 
 tracing = { workspace = true }
 typenum = { workspace = true }
@@ -124,4 +148,3 @@ blake3 = { workspace = true }
 clap = { version = "4.4", features = ["derive", "env"] }
 serde_json = "1.0.108"
 toml = { workspace = true }
-

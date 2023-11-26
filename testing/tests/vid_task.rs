@@ -1,20 +1,18 @@
 use commit::Committable;
-use hotshot::{tasks::add_vid_task, HotShotConsensusApi};
+use hotshot::{tasks::add_vid_task, types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::vid_init,
 };
-use hotshot_types::traits::election::VIDExchangeType;
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
-    traits::{
-        consensus_api::ConsensusSharedApi, election::ConsensusExchange,
-        node_implementation::ExchangesType, state::ConsensusTime,
-    },
+    traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
+use hotshot_types::{simple_vote::VIDVote, traits::node_implementation::NodeType};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 #[cfg_attr(
     async_executor_impl = "tokio",
@@ -34,19 +32,20 @@ async fn test_vid_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let vid_exchange = api.inner.exchanges.vid_exchange().clone();
     let pub_key = *api.public_key();
 
     let vid = vid_init();
-    let txn = vec![0u8];
-    let vid_disperse = vid.disperse(&txn).unwrap();
+    let transactions = vec![VIDTransaction(vec![0])];
+    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
     let payload_commitment = vid_disperse.commit;
     let block = VIDBlockPayload {
-        transactions: vec![VIDTransaction(txn)],
+        transactions,
         payload_commitment,
     };
 
-    let signature = vid_exchange.sign_vid_disperse(&block.commit());
+    let signature =
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
     let proposal: DAProposal<TestTypes> = DAProposal {
         block_payload: block.clone(),
         view_number: ViewNumber::new(2),
@@ -54,6 +53,7 @@ async fn test_vid_task() {
     let message = Proposal {
         data: proposal,
         signature,
+        _pd: PhantomData,
     };
     let vid_proposal = Proposal {
         data: VidDisperse {
@@ -63,6 +63,7 @@ async fn test_vid_task() {
             common: vid_disperse.common,
         },
         signature: message.signature.clone(),
+        _pd: PhantomData,
     };
 
     // Every event input is seen on the event stream in the output.
@@ -72,30 +73,36 @@ async fn test_vid_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)));
+    input.push(HotShotEvent::BlockReady(
+        block.clone(),
+        (),
+        ViewNumber::new(2),
+    ));
 
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
         1,
     );
 
-    let vote_token = vid_exchange
-        .make_vote_token(ViewNumber::new(2))
-        .unwrap()
-        .unwrap();
-    let vid_vote = vid_exchange.create_vid_message(block.commit(), ViewNumber::new(2), vote_token);
+    let vid_vote = VIDVote::create_signed_vote(
+        hotshot_types::simple_vote::VIDData {
+            payload_commit: block.commit(),
+        },
+        ViewNumber::new(2),
+        api.public_key(),
+        api.private_key(),
+    );
     output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::Shutdown, 1);
 
-    let build_fn =
-        |task_runner, event_stream| add_vid_task(task_runner, event_stream, vid_exchange, handle);
+    let build_fn = |task_runner, event_stream| add_vid_task(task_runner, event_stream, handle);
 
     run_harness(input, output, None, build_fn).await;
 }

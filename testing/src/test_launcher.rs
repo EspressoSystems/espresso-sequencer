@@ -8,18 +8,7 @@ use hotshot_task::{
     task::HotShotTaskCompleted,
     task_launcher::TaskRunner,
 };
-use hotshot_types::{
-    message::Message,
-    traits::{
-        election::ConsensusExchange,
-        network::CommunicationChannel,
-        node_implementation::{
-            ExchangesType, NodeType, QuorumCommChannel, QuorumEx, QuorumNetwork,
-        },
-        signature_key::SignatureKey,
-    },
-    HotShotConfig,
-};
+use hotshot_types::{traits::node_implementation::NodeType, HotShotConfig};
 
 use crate::spinning_task::SpinningTask;
 
@@ -29,34 +18,12 @@ use super::{
 };
 
 pub type Networks<TYPES, I> = (
-    <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::QuorumExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
-    <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::CommitteeExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
-    <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::ViewSyncExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
-    <<<I as NodeImplementation<TYPES>>::Exchanges as ExchangesType<
-        TYPES,
-        <I as NodeImplementation<TYPES>>::Leaf,
-        Message<TYPES, I>,
-    >>::VIDExchange as ConsensusExchange<TYPES, Message<TYPES, I>>>::Networking,
+    <I as NodeImplementation<TYPES>>::QuorumNetwork,
+    <I as NodeImplementation<TYPES>>::CommitteeNetwork,
 );
 
 /// Wrapper for a function that takes a `node_id` and returns an instance of `T`.
 pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
-
-/// Wrapper Type for quorum function that takes a `ConnectedNetwork` and returns a `CommunicationChannel`
-pub type QuorumNetworkGenerator<TYPES, I, T> =
-    Box<dyn Fn(Arc<QuorumNetwork<TYPES, I>>) -> T + 'static>;
 
 /// Wrapper Type for committee function that takes a `ConnectedNetwork` and returns a `CommunicationChannel`
 pub type CommitteeNetworkGenerator<N, T> = Box<dyn Fn(Arc<N>) -> T + 'static>;
@@ -83,23 +50,13 @@ pub type Hook = Box<
 >;
 
 /// generators for resources used by each node
-pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>
-where
-    QuorumCommChannel<TYPES, I>: CommunicationChannel<
-        TYPES,
-        Message<TYPES, I>,
-        <QuorumEx<TYPES, I> as ConsensusExchange<TYPES, Message<TYPES, I>>>::Membership,
-    >,
-{
+pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     // generate channels
     pub channel_generator: Generator<Networks<TYPES, I>>,
     /// generate a new storage for each node
     pub storage: Generator<<I as NodeImplementation<TYPES>>::Storage>,
     /// configuration used to generate each hotshot node
-    pub config: HotShotConfig<
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    >,
+    pub config: HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
 }
 
 /// test launcher
@@ -198,12 +155,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
     /// Modifies the config used when generating nodes with `f`
     pub fn modify_default_config(
         mut self,
-        mut f: impl FnMut(
-            &mut HotShotConfig<
-                <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-                TYPES::ElectionConfigType,
-            >,
-        ),
+        mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>),
     ) -> Self {
         f(&mut self.resource_generator.config);
         self

@@ -142,12 +142,18 @@ async fn run_request_response_increment<'a>(
 
         let requestee_pid = requestee_handle.peer_id();
 
-        stream.next().await.unwrap().unwrap();
+        match stream.next().await.unwrap() {
+            Ok(()) => {}
+            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+        }
         requester_handle
             .direct_request(requestee_pid, &CounterMessage::AskForCounter)
             .await
             .context(HandleSnafu)?;
-        stream.next().await.unwrap().unwrap();
+        match stream.next().await.unwrap() {
+            Ok(()) => {}
+            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+        }
 
         let s1 = requester_handle.state().await;
 
@@ -324,7 +330,6 @@ async fn run_dht_rounds(
                 }
                 Ok(v) => {
                     assert_eq!(v, value);
-                    break;
                 }
             }
         }

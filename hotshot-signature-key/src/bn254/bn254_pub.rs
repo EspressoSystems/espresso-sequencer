@@ -19,7 +19,7 @@ use typenum::U32;
 
 /// Public key type for an bn254 [`SignatureKey`] pair
 ///
-/// This type makes use of noise for non-determinisitc signatures.
+/// This type makes use of noise for non-deterministic signatures.
 #[derive(Clone, PartialEq, Eq, Hash, Copy, Serialize, Deserialize, Debug)]
 
 pub struct BLSPubKey {
@@ -27,12 +27,9 @@ pub struct BLSPubKey {
     pub_key: VerKey,
 }
 
-#[allow(clippy::incorrect_partial_ord_impl_on_ord_type)]
 impl PartialOrd for BLSPubKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let self_bytes = &self.pub_key.to_string();
-        let other_bytes = &other.pub_key.to_string();
-        self_bytes.partial_cmp(other_bytes)
+        Some(self.cmp(other))
     }
 }
 

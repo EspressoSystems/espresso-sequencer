@@ -15,6 +15,7 @@ libp2p = { workspace = true }
 blake3 = { workspace = true, features = ["traits-preview"] }
 hotshot-types = { version = "0.1.0", path = "../types", default-features = false }
 hotshot-utils = { path = "../utils" }
+hotshot-signature-key = { path = "../hotshot-signature-key" }
 libp2p-networking = { workspace = true }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
 surf-disco = { workspace = true }

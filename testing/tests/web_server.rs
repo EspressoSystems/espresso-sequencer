@@ -33,13 +33,13 @@ async fn web_server_network() {
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_secs(20),
+                duration: Duration::from_secs(60),
             },
         ),
         ..TestMetadata::default()
     };
     metadata
-        .gen_launcher::<TestTypes, WebImpl>()
+        .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
         .run_test()
         .await;

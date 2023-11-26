@@ -33,6 +33,11 @@ impl AsRef<[u8]> for EncodedSignature {
         self.0.as_slice()
     }
 }
+/// Type representing stake table entries in a `StakeTable`
+pub trait StakeTableEntryType {
+    /// Get the stake value
+    fn get_stake(&self) -> U256;
+}
 
 /// Trait for abstracting public key signatures
 pub trait SignatureKey:
@@ -50,9 +55,18 @@ pub trait SignatureKey:
     + Ord
 {
     /// The private key type for this signature algorithm
-    type PrivateKey: Send + Sync + Sized + Clone;
+    type PrivateKey: Send
+        + Sync
+        + Sized
+        + Clone
+        + Debug
+        + Eq
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Hash;
     /// The type of the entry that contain both public key and stake value
-    type StakeTableEntry: Send
+    type StakeTableEntry: StakeTableEntryType
+        + Send
         + Sync
         + Sized
         + Clone
