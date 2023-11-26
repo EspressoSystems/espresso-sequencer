@@ -1277,7 +1277,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, MEMBERSHIP: Membership<TYPES
             network_id,
             da_committee_size,
             is_da,
-            // unsupported
+            // network reliability is a testing feature
+            // not yet implemented for webcommchannel
             None,
         );
         Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))

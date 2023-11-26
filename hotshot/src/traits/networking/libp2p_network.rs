@@ -113,6 +113,7 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// NOTE: supposed to represent a ViewNumber but we
     /// haven't made that atomic yet and we prefer lock-free
     latest_seen_view: Arc<AtomicU64>,
+    #[cfg(feature = "hotshot-testing")]
     /// reliability_config
     reliability_config: Option<Box<dyn NetworkReliability>>,
     /// if we're a member of the DA committee or not
@@ -346,6 +347,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 // proposals on". We need this because to have consensus info injected we need a working
                 // network already. In the worst case, we send a few lookups we don't need.
                 latest_seen_view: Arc::new(AtomicU64::new(0)),
+                #[cfg(feature = "hotshot-testing")]
                 reliability_config,
                 is_da,
             }),
@@ -614,10 +616,9 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                 .map_err(|_| NetworkError::ShutDown)?;
         }
 
-        // TODO maybe we should lift the metrics mutex up a level and copy the inner pattern
-        // ask during pair programming
-        // or maybe channels would be better?
+        // NOTE: metrics is threadsafe, so clone is fine (and lightweight)
         let metrics = self.inner.metrics.clone();
+        #[cfg(feature = "hotshot-testing")]
         if let Some(ref config) = &self.inner.reliability_config {
             let handle = self.inner.handle.clone();
 
@@ -695,10 +696,8 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
             }
         };
 
-        // TODO maybe we should lift the metrics mutex up a level and copy the inner pattern
-        // ask during pair programming
-        // or maybe channels would be better?
         let metrics = self.inner.metrics.clone();
+        #[cfg(feature = "hotshot-testing")]
         if let Some(ref config) = &self.inner.reliability_config {
             let handle = self.inner.handle.clone();
 

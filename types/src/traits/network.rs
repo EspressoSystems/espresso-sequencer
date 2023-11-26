@@ -453,6 +453,7 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send + DynClone + 'sta
     }
 }
 
+// hack to get clone
 dyn_clone::clone_trait_object!(NetworkReliability);
 
 /// ideal network
@@ -465,8 +466,8 @@ impl NetworkReliability for PerfectNetwork {}
 /// to arrive within `timeout` ns
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SynchronousNetwork {
-    /// Max delay of packet before arrival
-    pub timeout_ms: u64,
+    /// Max value in milliseconds that a packet may be delayed
+    pub delay_high_ms: u64,
     /// Lowest value in milliseconds that a packet may be delayed
     pub delay_low_ms: u64,
 }
@@ -478,7 +479,7 @@ impl NetworkReliability for SynchronousNetwork {
     }
     fn sample_delay(&self) -> Duration {
         Duration::from_millis(
-            Uniform::new_inclusive(self.delay_low_ms, self.timeout_ms)
+            Uniform::new_inclusive(self.delay_low_ms, self.delay_high_ms)
                 .sample(&mut rand::thread_rng()),
         )
     }
@@ -580,7 +581,7 @@ impl SynchronousNetwork {
     #[must_use]
     pub fn new(timeout: u64, delay_low_ms: u64) -> Self {
         SynchronousNetwork {
-            timeout_ms: timeout,
+            delay_high_ms: timeout,
             delay_low_ms,
         }
     }

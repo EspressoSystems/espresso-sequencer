@@ -33,7 +33,7 @@ async fn libp2p_network_sync() {
             },
         ),
         unreliable_network: Some(Box::new(SynchronousNetwork {
-            timeout_ms: 30,
+            delay_high_ms: 30,
             delay_low_ms: 4,
         })),
         ..TestMetadata::default_multiple_rounds()
@@ -70,7 +70,7 @@ async fn test_memory_network_sync() {
             },
         ),
         unreliable_network: Some(Box::new(SynchronousNetwork {
-            timeout_ms: 30,
+            delay_high_ms: 30,
             delay_low_ms: 4,
         })),
         ..TestMetadata::default()
@@ -186,7 +186,7 @@ async fn test_memory_network_partially_sync() {
                 delay_high_ms: 30,
             },
             synchronous: SynchronousNetwork {
-                timeout_ms: 30,
+                delay_high_ms: 30,
                 delay_low_ms: 4,
             },
             gst: std::time::Duration::from_millis(1000),
@@ -228,7 +228,7 @@ async fn libp2p_network_partially_sync() {
                 delay_high_ms: 30,
             },
             synchronous: SynchronousNetwork {
-                timeout_ms: 30,
+                delay_high_ms: 30,
                 delay_low_ms: 4,
             },
             gst: std::time::Duration::from_millis(1000),
