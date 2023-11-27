@@ -10,7 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::ledger_log::{Iter, LedgerLog};
+#![cfg(feature = "file-system-data-source")]
+
+use super::{
+    ledger_log::{Iter, LedgerLog},
+    VersionedDataSource,
+};
 use crate::{
     availability::{
         data_source::{
@@ -51,49 +56,44 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// A data source for the APIs provided in this crate, backed by the local file system.
 ///
 /// Synchronization and atomicity of persisted data structures are provided via [`atomic_store`].
-/// The methods [`commit_version`](Self::commit_version), [`revert_version`](Self::revert_version),
-/// and [`skip_version`](Self::skip_version) of this type can be used to control synchronization in
-/// the underlying [`AtomicStore`].
+/// The methods [`commit`](Self::commit), [`revert`](Self::revert), and
+/// [`skip_version`](Self::skip_version) of this type can be used to control synchronization in the
+/// underlying [`AtomicStore`].
+///
+/// # Extension and Composition
 ///
 /// [`FileSystemDataSource`] is designed to be both extensible (so you can add additional state to
 /// the API modules defined in this crate) and composable (so you can use [`FileSystemDataSource`]
 /// as one component of a larger state type for an application with additional modules).
 ///
-/// # Extension
+/// ## Extension
 ///
-/// Extending [`FileSystemDataSource`] is possible through the `UserData` type parameter --
-/// [`FileSystemDataSource`] implements `AsRef<UserData>` and `AsMut<UserData>`, so your API
-/// extensions can always access `UserData` from [`FileSystemDataSource`].
-///
-/// We can use this to complete the [UTXO example](crate#extension) by extending our data source
-/// with an index to look up transactions by the UTXOs they contain:
+/// Adding additional, application-specific state to [`FileSystemDataSource`] is possible by
+/// wrapping it in [`ExtensibleDataSource`](super::ExtensibleDataSource):
 ///
 /// ```
-/// # use async_trait::async_trait;
-/// # use hotshot_query_service::availability::{AvailabilityDataSource, TransactionIndex};
-/// # use hotshot_query_service::data_source::FileSystemDataSource;
-/// # use hotshot_query_service::testing::{
-/// #   mocks::{
-/// #       MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// #   },
+/// # use atomic_store::PersistenceError;
+/// # use hotshot_query_service::data_source::{ExtensibleDataSource, FileSystemDataSource};
+/// # use hotshot_query_service::testing::mocks::{
+/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
-/// # use std::collections::HashMap;
-/// # #[async_trait]
-/// # trait UtxoDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> {
-/// #   async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
-/// # }
-/// type UtxoIndex = HashMap<u64, (usize, TransactionIndex<AppTypes>, usize)>;
-/// type AvailabilityState = FileSystemDataSource<AppTypes, AppNodeImpl, UtxoIndex>;
+/// # use std::path::Path;
+/// # fn doc(storage_path: &Path) -> Result<(), PersistenceError> {
+/// type AppState = &'static str;
 ///
-/// #[async_trait]
-/// impl UtxoDataSource for AvailabilityState {
-///     async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)> {
-///         self.as_ref().get(&utxo).cloned()
-///     }
-/// }
+/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes, AppNodeImpl>, AppState> =
+///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path)?, "app state");
+/// # Ok(())
+/// # }
 /// ```
 ///
-/// # Composition
+/// The [`ExtensibleDataSource`](super::ExtensibleDataSource) wrapper implements all the same data
+/// source traits as [`FileSystemDataSource`], and also provides access to the `AppState` parameter
+/// for use in API endpoint handlers. This can be used to implement an app-specific data source
+/// trait and add a new API endpoint that uses this app-specific data, as described in the
+/// [extension guide](crate#extension).
+///
+/// ## Composition
 ///
 /// Composing [`FileSystemDataSource`] with other module states is in principle simple -- just
 /// create an aggregate struct containing both [`FileSystemDataSource`] and your additional module
@@ -110,7 +110,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// the persistent data. Note, though, that when you choose to use
 /// [`create_with_store`](Self::create_with_store) or [`open_with_store`](Self::open_with_store),
 /// you become responsible for ensuring that calls to [`AtomicStore::commit_version`] alternate with
-/// calls to [`FileSystemDataSource::commit_version`] or [`FileSystemDataSource::skip_version`].
+/// calls to [`FileSystemDataSource::commit`] or [`FileSystemDataSource::revert`].
 ///
 /// In the following example, we compose HotShot query service modules with other application-
 /// specific modules, using a single top-level [`AtomicStore`] to synchronize all persistent
@@ -122,17 +122,18 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// # use futures::StreamExt;
 /// # use hotshot::types::SystemContextHandle;
 /// # use hotshot_query_service::Error;
-/// # use hotshot_query_service::data_source::{UpdateDataSource, FileSystemDataSource};
+/// # use hotshot_query_service::data_source::{
+/// #   FileSystemDataSource, UpdateDataSource, VersionedDataSource,
+/// # };
 /// # use hotshot_query_service::testing::mocks::{
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
 /// # use std::path::Path;
 /// # use tide_disco::App;
-/// # type AppQueryData = ();
 /// struct AppState {
 ///     // Top-level storage coordinator
 ///     store: AtomicStore,
-///     hotshot_qs: FileSystemDataSource<AppTypes, AppNodeImpl, AppQueryData>,
+///     hotshot_qs: FileSystemDataSource<AppTypes, AppNodeImpl>,
 ///     // additional state for other modules
 /// }
 ///
@@ -142,11 +143,8 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;
-///     let hotshot_qs = FileSystemDataSource::create_with_store(
-///         &mut loader,
-///         AppQueryData::default(),
-///     )
-///     .map_err(Error::internal)?;
+///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader)
+///         .map_err(Error::internal)?;
 ///     // Initialize storage for other modules using the same loader.
 ///
 ///     let store = AtomicStore::open(loader).map_err(Error::internal)?;
@@ -165,7 +163,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 ///             state.hotshot_qs.update(&event).await.unwrap();
 ///             // Update other modules' states based on `event`.
 ///
-///             state.hotshot_qs.commit_version().await.unwrap();
+///             state.hotshot_qs.commit().await.unwrap();
 ///             // Commit or skip versions for other modules' storage.
 ///             state.store.commit_version().unwrap();
 ///         }
@@ -175,7 +173,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// }
 /// ```
 #[derive(custom_debug::Debug)]
-pub struct FileSystemDataSource<Types: NodeType, I: NodeImplementation<Types>, UserData>
+pub struct FileSystemDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
@@ -188,11 +186,9 @@ where
     leaf_storage: LedgerLog<LeafQueryData<Types, I>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
-    user_data: UserData,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData>
-    FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
 {
@@ -201,9 +197,9 @@ where
     /// If there is already data at `path`, it will be archived.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn create(path: &Path, user_data: UserData) -> Result<Self, PersistenceError> {
-        let mut loader = AtomicStoreLoader::create(path, "hotshot_data_soure")?;
-        let mut data_source = Self::create_with_store(&mut loader, user_data)?;
+    pub fn create(path: &Path) -> Result<Self, PersistenceError> {
+        let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
+        let mut data_source = Self::create_with_store(&mut loader)?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -213,12 +209,12 @@ where
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn open(path: &Path, user_data: UserData) -> Result<Self, PersistenceError>
+    pub fn open(path: &Path) -> Result<Self, PersistenceError>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
     {
-        let mut loader = AtomicStoreLoader::load(path, "hotshot_data_soure")?;
-        let mut data_source = Self::open_with_store(&mut loader, user_data)?;
+        let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
+        let mut data_source = Self::open_with_store(&mut loader)?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -231,10 +227,7 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn create_with_store(
-        loader: &mut AtomicStoreLoader,
-        user_data: UserData,
-    ) -> Result<Self, PersistenceError> {
+    pub fn create_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
         Ok(Self {
             index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
@@ -244,7 +237,6 @@ where
             leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
             metrics: Default::default(),
-            user_data,
         })
     }
 
@@ -256,10 +248,7 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn open_with_store(
-        loader: &mut AtomicStoreLoader,
-        user_data: UserData,
-    ) -> Result<Self, PersistenceError>
+    pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
     {
@@ -300,23 +289,7 @@ where
             block_storage,
             top_storage: None,
             metrics: Default::default(),
-            user_data,
         })
-    }
-
-    /// Commit the current state to persistent storage.
-    ///
-    /// If the [FileSystemDataSource] is managing its own [AtomicStore] (i.e. it was created with
-    /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
-    /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
-    /// this function.
-    pub async fn commit_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.commit_version().await?;
-        self.block_storage.commit_version().await?;
-        if let Some(store) = &mut self.top_storage {
-            store.commit_version()?;
-        }
-        Ok(())
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
@@ -325,7 +298,7 @@ where
     /// [FileSystemDataSource] is being managed by the caller. The caller may want to persist some
     /// changes to other modules whose state is managed by the same [AtomicStore]. In order to call
     /// [AtomicStore::commit_version], the version of this [FileSystemDataSource] must be advanced,
-    /// either by [commit_version](Self::commit_version) or, if there are no outstanding changes,
+    /// either by [commit](Self::commit) or, if there are no outstanding changes,
     /// [skip_version](Self::skip_version).
     pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.skip_version()?;
@@ -335,33 +308,36 @@ where
         }
         Ok(())
     }
+}
 
-    /// Revert changes made to persistent storage since the last call to
-    /// [commit_version](Self::commit_version).
-    pub fn revert_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.revert_version()?;
-        self.block_storage.revert_version()?;
+#[async_trait]
+impl<Types: NodeType, I: NodeImplementation<Types>> VersionedDataSource
+    for FileSystemDataSource<Types, I>
+where
+    Block<Types>: QueryableBlock,
+{
+    type Error = PersistenceError;
+
+    /// Commit the current state to persistent storage.
+    ///
+    /// If the [FileSystemDataSource] is managing its own [AtomicStore] (i.e. it was created with
+    /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
+    /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
+    /// this function.
+    async fn commit(&mut self) -> Result<(), PersistenceError> {
+        self.leaf_storage.commit_version().await?;
+        self.block_storage.commit_version().await?;
+        if let Some(store) = &mut self.top_storage {
+            store.commit_version()?;
+        }
         Ok(())
     }
-}
 
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsRef<UserData>
-    for FileSystemDataSource<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn as_ref(&self) -> &UserData {
-        &self.user_data
-    }
-}
-
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AsMut<UserData>
-    for FileSystemDataSource<Types, I, UserData>
-where
-    Block<Types>: QueryableBlock,
-{
-    fn as_mut(&mut self) -> &mut UserData {
-        &mut self.user_data
+    /// Revert changes made to persistent storage since the last call to
+    /// [commit](Self::commit).
+    async fn revert(&mut self) {
+        self.leaf_storage.revert_version().unwrap();
+        self.block_storage.revert_version().unwrap();
     }
 }
 
@@ -406,11 +382,10 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> AvailabilityDataSource<Types, I>
-    for FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> AvailabilityDataSource<Types, I>
+    for FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
-    UserData: Send + Sync,
 {
     type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
     type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
@@ -519,11 +494,10 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateAvailabilityData<Types, I>
-    for FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> UpdateAvailabilityData<Types, I>
+    for FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
-    UserData: Send,
 {
     type Error = PersistenceError;
 
@@ -579,8 +553,7 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 }
 
 /// Metric-related functions.
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData>
-    FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
 {
@@ -590,11 +563,10 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> StatusDataSource
-    for FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> StatusDataSource
+    for FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
-    UserData: Sync,
 {
     type Error = MetricsError;
 
@@ -626,8 +598,8 @@ where
     }
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>, UserData> UpdateStatusData
-    for FileSystemDataSource<Types, I, UserData>
+impl<Types: NodeType, I: NodeImplementation<Types>> UpdateStatusData
+    for FileSystemDataSource<Types, I>
 where
     Block<Types>: QueryableBlock,
 {
@@ -643,18 +615,12 @@ mod impl_testable_data_source {
     use tempdir::TempDir;
 
     #[async_trait]
-    impl<UserData: Default + Send + Sync + 'static> TestableDataSource
-        for FileSystemDataSource<MockTypes, MockNodeImpl, UserData>
-    {
+    impl TestableDataSource for FileSystemDataSource<MockTypes, MockNodeImpl> {
         type TmpData = TempDir;
 
         async fn create(node_id: usize) -> (Self, Self::TmpData) {
             let dir = TempDir::new(&format!("file_system_data_source_{node_id}")).unwrap();
-            (Self::create(dir.path(), Default::default()).unwrap(), dir)
-        }
-
-        async fn commit_version(&mut self) {
-            Self::commit_version(self).await.unwrap();
+            (Self::create(dir.path()).unwrap(), dir)
         }
     }
 }
@@ -669,5 +635,5 @@ mod test {
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(FileSystemDataSource<MockTypes, MockNodeImpl, ()>);
+    instantiate_data_source_tests!(FileSystemDataSource<MockTypes, MockNodeImpl>);
 }

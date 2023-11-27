@@ -20,10 +20,7 @@ use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
 use hotshot_types::{
     data::LeafType,
-    traits::{
-        metrics::Metrics,
-        node_implementation::{NodeImplementation, NodeType},
-    },
+    traits::node_implementation::{NodeImplementation, NodeType},
 };
 use std::error::Error;
 use std::fmt::Debug;
@@ -33,21 +30,15 @@ use std::iter::once;
 ///
 /// If a type implements both [UpdateAvailabilityData] and [UpdateStatusData], then it can be fully
 /// kept up to date through two interfaces:
-/// * [metrics](UpdateDataSource::metrics), to get a handle for populating the status metrics, which
+/// * [metrics](UpdateStatusData::metrics), to get a handle for populating the status metrics, which
 ///   should be used when initializing a [SystemContextHandle](hotshot::types::SystemContextHandle)
-/// * [update](UpdateDataSource::update), to update the query state when a new HotShot event is
-///   emitted
+/// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
-pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>> {
-    type Error: Error + Debug;
-
-    /// Get a handle for populating status metrics.
-    ///
-    /// This function should be called before creating a
-    /// [SystemContextHandle](hotshot::types::SystemContextHandle), and the resulting [Metrics]
-    /// handle should be passed to HotShot, which will update it.
-    fn metrics(&self) -> Box<dyn Metrics>;
-
+pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>>:
+    UpdateAvailabilityData<Types, I> + UpdateStatusData
+where
+    Block<Types>: QueryableBlock,
+{
     /// Update query state based on a new consensus event.
     ///
     /// The caller is responsible for authenticating `event`. This function does not perform any
@@ -74,12 +65,6 @@ impl<
 where
     Block<Types>: QueryableBlock,
 {
-    type Error = <Self as UpdateAvailabilityData<Types, I>>::Error;
-
-    fn metrics(&self) -> Box<dyn Metrics> {
-        UpdateStatusData::metrics(self)
-    }
-
     async fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
@@ -125,4 +110,22 @@ where
         }
         Ok(())
     }
+}
+
+/// A data source with an atomic transaction-based synchronization interface.
+#[async_trait]
+pub trait VersionedDataSource {
+    type Error: Error + Debug;
+
+    /// Atomically commit to all outstanding modifications to the data.
+    ///
+    /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
+    /// or to erase outstanding changes with [`revert`](Self::revert).
+    async fn commit(&mut self) -> Result<(), Self::Error>;
+
+    /// Erase all oustanding modifications to the data.
+    ///
+    /// This function must not return if it has failed to revert changes. Inability to revert
+    /// changes to the database is considered a fatal error, and this function may panic.
+    async fn revert(&mut self);
 }
