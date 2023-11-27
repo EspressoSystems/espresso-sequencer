@@ -11,15 +11,16 @@ contract StakeTable is IStakeTable {
     error RestakingNotImplemented();
     error InvalidNextRegistrationEpoch(uint64, uint64);
 
-    mapping(bytes32 keyHash => Node node) private nodesTable;
-    uint256[2] private totalStakeArr;
-    uint32 private totalNumberOfKeys;
-    uint256 private totalVotingStakeVal;
-    uint64 private numRegistrations;
-    uint64 private numPendingExits;
+    mapping(bytes32 keyHash => Node node) public nodes;
+    uint256 public totalNativeStake;
+    uint256 public totalRestakedStake;
+    uint32 public totalKeysVar;
+    uint256 public totalVotingStakeVar;
+    uint64 public numRegistrations;
+    uint64 public numPendingExits;
     uint64 private constant BLOCKS_PER_EPOCH = 10; // TODO make an argument of the constructor?
     uint256 private creationBlock;
-    address private tokenAddress;
+    address public tokenAddress;
 
     constructor(address _tokenAddress) {
         creationBlock = block.number;
@@ -38,15 +39,15 @@ contract StakeTable is IStakeTable {
     }
 
     function totalStake() external view returns (uint256, uint256) {
-        return (totalStakeArr[0], totalStakeArr[1]);
+        return (totalNativeStake, totalRestakedStake);
     }
 
     function totalKeys() external view returns (uint32) {
-        return totalNumberOfKeys;
+        return totalKeysVar;
     }
 
     function totalVotingStake() external view returns (uint256) {
-        return totalVotingStakeVal;
+        return totalVotingStakeVar;
     }
 
     function lookupStake(BN254.G2Point memory blsVK) external view returns (uint64) {
@@ -55,7 +56,7 @@ contract StakeTable is IStakeTable {
     }
 
     function lookupNode(BN254.G2Point memory blsVK) external view returns (Node memory) {
-        return nodesTable[_hashBlsKey(blsVK)];
+        return nodes[_hashBlsKey(blsVK)];
     }
 
     function nextRegistrationEpoch() external view returns (uint64) {
@@ -88,7 +89,7 @@ contract StakeTable is IStakeTable {
         uint64 validUntilEpoch
     ) external returns (bool) {
         bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodesTable[key];
+        Node memory node = nodes[key];
 
         // The node must not already be registered.
         require(node.account == address(0x0), "The node has already been registered");
@@ -116,11 +117,11 @@ contract StakeTable is IStakeTable {
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
-        nodesTable[key] = node;
+        nodes[key] = node;
 
         // Lock the deposited tokens in this contract.
         if (stakeType == StakeType.Native) {
-            totalStakeArr[0] += amount;
+            totalNativeStake += amount;
             SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
         } // Other case will be implemented when we support restaking
 
@@ -131,19 +132,19 @@ contract StakeTable is IStakeTable {
 
     function deposit(BN254.G2Point memory blsVK, uint64 amount) external returns (uint64, uint64) {
         bytes32 hash = _hashBlsKey(blsVK);
-        nodesTable[hash].balance += amount;
+        nodes[hash].balance += amount;
         return (0, 0);
     }
 
     function requestExit(BN254.G2Point memory blsVK) external returns (bool) {
         bytes32 hash = _hashBlsKey(blsVK);
-        nodesTable[hash].exitEpoch = 0;
+        nodes[hash].exitEpoch = 0;
         return true;
     }
 
     function withdrawFunds(BN254.G2Point memory blsVK) external returns (uint64) {
         bytes32 hash = _hashBlsKey(blsVK);
-        nodesTable[hash].balance = 0;
+        nodes[hash].balance = 0;
         return 0;
     }
 }
