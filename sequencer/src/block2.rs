@@ -221,6 +221,7 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use jf_primitives::vid::{payload_prover::Statement, VidScheme};
 
     use super::{
@@ -260,10 +261,13 @@ mod test {
             vec![],
         ];
 
+        setup_logging();
+        setup_backtrace();
+
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, tx_bodies) in test_cases.into_iter().enumerate() {
-            println!(
+            tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
@@ -315,15 +319,15 @@ mod test {
                 assert_eq!(tx_body, block_tx_body);
 
                 // test `transaction_with_proof()` (nonempty txs only)
-                print!(
+                let log_msg = format!(
                     "test: index {} tx range start {} end {}",
                     index, tx_range.start, tx_range.end
                 );
                 if tx_range.is_empty() {
-                    println!(" empty, skipping");
+                    tracing::info!("{} empty, skipping", log_msg);
                     continue;
                 } else {
-                    println!();
+                    tracing::info!("{}", log_msg);
                 }
 
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
