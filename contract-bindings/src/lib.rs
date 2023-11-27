@@ -21,6 +21,7 @@ pub mod ierc20;
 pub mod ierc20_errors;
 pub mod ierc20_metadata;
 pub mod ierc721_errors;
+pub mod light_client;
 pub mod plonk_verifier;
 pub mod polynomial_eval;
 pub mod safe_transfer_lib;
