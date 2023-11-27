@@ -337,7 +337,9 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 bootstrap_addrs_len,
                 bootstrap_addrs,
                 is_ready: Arc::new(AtomicBool::new(false)),
-                dht_timeout: Duration::from_secs(30),
+                // This is optimal for 10-30 nodes. TODO: parameterize this for both tests and examples
+                // https://github.com/EspressoSystems/HotShot/issues/2088
+                dht_timeout: Duration::from_secs(8),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
                 metrics,
                 topic_map,
@@ -541,7 +543,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     }
                 }
             }
-            error!("Network receiever shut down!");
+            warn!("Network receiever shut down!");
             Ok::<(), NetworkError>(())
         });
     }
@@ -566,11 +568,11 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         Self: 'b,
     {
         let closure = async move {
-            self.inner.node_lookup_send.send(None).await.unwrap();
             if self.inner.handle.is_killed() {
                 error!("Called shut down when already shut down! Noop.");
             } else {
-                self.inner.handle.shutdown().await.unwrap();
+                let _ = self.inner.node_lookup_send.send(None).await;
+                let _ = self.inner.handle.shutdown().await;
             }
         };
         boxed_sync(closure)
@@ -814,6 +816,14 @@ where
     MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     type NETWORK = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
+
+    fn pause(&self) {
+        unimplemented!("Pausing not implemented for the Libp2p network");
+    }
+
+    fn resume(&self) {
+        unimplemented!("Resuming not implemented for the Libp2p network");
+    }
 
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
