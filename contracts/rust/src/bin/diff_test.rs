@@ -4,6 +4,7 @@ use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
@@ -27,15 +28,11 @@ use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
-
-use ark_ed_on_bn254::{EdwardsConfig as Param254, Fq as FqEd254};
 use jf_primitives::constants::CS_ID_BLS_BN254;
+use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
 use jf_primitives::signatures::bls_over_bn254::KeyPair as BLSKeyPair;
 use jf_primitives::signatures::bls_over_bn254::Signature;
-use jf_primitives::signatures::schnorr::KeyPair;
 use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
-
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -410,7 +407,8 @@ fn main() {
             let sender_address_bytes = AbiEncode::encode(sender_address);
 
             // Generate the Schnorr key
-            let schnorr_key_pair: KeyPair<Param254> = SchnorrKeyPair::generate(&mut rng);
+            let schnorr_key_pair: SchnorrKeyPair<EdOnBn254Config> =
+                SchnorrKeyPair::generate(&mut rng);
             let schnorr_ver_key = schnorr_key_pair.ver_key();
             let schnorr_ver_key_affine = schnorr_ver_key.to_affine();
             let schnorr_pk_x = field_to_u256::<FqEd254>(schnorr_ver_key_affine.x);
