@@ -428,8 +428,8 @@ fn main() {
             let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
             let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
 
-            // TODO (Alex) add a TODO:
-            // Return ParsedG1Point and ParsedG2Point in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
+            // TODO (Alex) Return ParsedG1Point and ParsedG2Point
+            // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
                 sig_x,
                 sig_y,
