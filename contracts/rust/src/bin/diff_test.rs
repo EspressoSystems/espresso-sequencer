@@ -13,9 +13,8 @@ use ark_std::{
     UniformRand,
 };
 use clap::{Parser, ValueEnum};
-use ethers::abi::Address;
 use ethers::{
-    abi::{AbiDecode, AbiEncode},
+    abi::{AbiDecode, AbiEncode, Address},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
