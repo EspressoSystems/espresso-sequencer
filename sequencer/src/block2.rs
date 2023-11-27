@@ -18,10 +18,14 @@ pub struct BlockPayload {
 impl BlockPayload {
     #[allow(dead_code)] // TODO temporary
     fn build(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
-        // tx_table[i] is the end index (exclusive) of the ith tx
-        // so that the payload bytes of the ith tx is
-        // tx_bodies[tx_table[i-1]..tx_table[i]].
-        // edge case: tx_table[-1] is defined as 0.
+        // `tx_table` is a bytes representation of the following table:
+        // word[0]: [number n of entries in tx table]
+        // word[i>0]: [end byte index of the ith tx in the payload]
+        //
+        // Thus, the ith tx payload bytes range is word[i-1]..word[i].
+        // Edge case: tx_table[-1] is implicitly 0.
+        //
+        // Word type is `TxTableEntry`.
         //
         // TODO final entry should be implicit:
         // https://github.com/EspressoSystems/espresso-sequencer/issues/757
@@ -57,31 +61,27 @@ impl BlockPayload {
     fn get_tx_range(&self, index: TxIndex) -> Option<Range<usize>> {
         let tx_bodies_offset = self.tx_bodies_offset()?;
 
-        // tx_table[i] is end index for the ith tx,
-        // so the range for the ith tx is tx_table[i-1..i].
-        // But tx_table starts at index 1 in the payload
-        // because index 0 in the payload is the length of the tx_table.
-        // So the range for the ith tx in the payload is actually
-        // [index..index+1].
-        let start = usize::try_from(if index == 0 {
-            TxTableEntry::zero()
+        // See `build()` comment.
+        // Recall: tx table entry i is the *end* byte index for tx i.
+        // Thus, the *start* byte index for tx i is at the (i-1)th tx table entry.
+        // Edge case i=0: start index is implicitly 0.
+        let start = if index == 0 {
+            0
         } else {
             self.get_tx_table_entry(index - 1)?
-        })
-        .ok()?
+        }
         .checked_add(tx_bodies_offset)?;
 
-        let end = usize::try_from(self.get_tx_table_entry(index)?)
-            .ok()?
+        let end = self
+            .get_tx_table_entry(index)?
             .checked_add(tx_bodies_offset)?;
 
         Some(start..end)
     }
 
-    // TODO fix this comment. 1st word is table len so entries are offset by 1.
-    // Viewing `self.payload` bytes as a vec of words of type `TxIndex`,
-    // return the `index`th word.
-    fn get_tx_table_entry(&self, index: TxIndex) -> Option<TxTableEntry> {
+    // Return the `index`th entry from the tx table as `usize`
+    // Return `None` if `index` exceeds the tx table length.
+    fn get_tx_table_entry(&self, index: TxIndex) -> Option<usize> {
         // check args
         if index >= self.get_tx_table_len()?.try_into().ok()? {
             return None;
@@ -93,7 +93,9 @@ impl BlockPayload {
             .checked_mul(TxTableEntry::byte_len())?;
 
         let end = start.checked_add(TxTableEntry::byte_len())?;
-        TxTableEntry::from_bytes(self.payload.get(start..end)?)
+        TxTableEntry::from_bytes(self.payload.get(start..end)?)?
+            .try_into()
+            .ok()
     }
 
     // Return length of the tx table
