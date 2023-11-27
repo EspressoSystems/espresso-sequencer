@@ -152,12 +152,11 @@ impl QueryableBlock for BlockPayload {
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
         let tx_range = self.get_tx_range(*index)?;
-        let proof: SmallRangeProof<_> = vid.payload_proof(&self.payload, tx_range.clone()).unwrap();
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-            Transaction::new(crate::VmId(0), self.payload.get(tx_range)?.to_vec()),
-            proof,
+            Transaction::new(crate::VmId(0), self.payload.get(tx_range.clone())?.to_vec()),
+            vid.payload_proof(&self.payload, tx_range).ok()?,
         ))
     }
 }
