@@ -90,7 +90,7 @@ pub fn vid_commitment(encoded_transactions: Vec<u8>) -> <VidScheme as VidSchemeT
     // changes.
     // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
     let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap();
-    vid.disperse(encoded_transactions).unwrap().commit
+    vid.commit_only(encoded_transactions).unwrap()
 }
 
 /// Header of a block, which commits to a [`BlockPayload`].
@@ -119,4 +119,7 @@ pub trait BlockHeader:
 
     /// Get the payload commitment.
     fn payload_commitment(&self) -> VidCommitment;
+
+    /// Get the metadata.
+    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata;
 }

@@ -327,7 +327,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Record the block we have promised to make available.
                 // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                // consensus.saved_block_payloads.insert(proposal.data.block_payload);
+                // consensus.saved_payload_commitments.insert(proposal.data.block_payload);
             }
             HotShotEvent::VidCertRecv(cert) => {
                 self.network

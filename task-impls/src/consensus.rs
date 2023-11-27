@@ -735,11 +735,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
-                                if let Some(payload) = consensus
-                                    .saved_block_payloads
+                                if let Some(encoded_txns) = consensus
+                                    .saved_payload_commitments
                                     .get(leaf.get_payload_commitment())
                                 {
-                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
+                                    let payload = BlockPayload::from_bytes(
+                                        encoded_txns.clone().into_iter(),
+                                        leaf.get_block_header().metadata(),
+                                    );
+                                    if let Err(e) = leaf.fill_block_payload(payload) {
                                         error!(
                                             "Saved block payload and commitment don't match: {:?}",
                                             e

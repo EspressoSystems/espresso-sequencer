@@ -376,6 +376,8 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         block_payload: TYPES::BlockPayload,
     ) -> Result<(), BlockError> {
         let encoded_txns = match block_payload.encode() {
+            // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
+            // <https://github.com/EspressoSystems/HotShot/issues/2115>
             Ok(encoded) => encoded.into_iter().collect(),
             Err(_) => return Err(BlockError::InvalidTransactionLength),
         };

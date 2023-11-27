@@ -217,4 +217,6 @@ impl BlockHeader for VIDBlockHeader {
     fn payload_commitment(&self) -> VidCommitment {
         self.payload_commitment
     }
+
+    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata {}
 }

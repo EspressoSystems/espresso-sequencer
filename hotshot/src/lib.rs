@@ -52,7 +52,9 @@ use hotshot_task::{
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
-    consensus::{BlockPayloadStore, Consensus, ConsensusMetricsValue, View, ViewInner, ViewQueue},
+    consensus::{
+        Consensus, ConsensusMetricsValue, PayloadCommitmentStore, View, ViewInner, ViewQueue,
+    },
     data::Leaf,
     error::StorageSnafu,
     message::{
@@ -67,6 +69,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         state::ConsensusTime,
         storage::StoredView,
+        BlockPayload,
     },
     HotShotConfig,
 };
@@ -218,12 +221,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let mut saved_leaves = HashMap::new();
-        let mut saved_block_payloads = BlockPayloadStore::default();
+        let mut saved_payload_commitments = PayloadCommitmentStore::default();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
+        let payload_commitment = anchored_leaf.get_payload_commitment();
         if let Some(payload) = anchored_leaf.get_block_payload() {
-            if let Err(e) = saved_block_payloads.insert(payload) {
-                return Err(HotShotError::BlockError { source: e });
-            }
+            let encoded_txns = match payload.encode() {
+                // TODO (Keyao) [VALIDATED_STATE] - Avoid collect/copy on the encoded transaction bytes.
+                // <https://github.com/EspressoSystems/HotShot/issues/2115>
+                Ok(encoded) => encoded.into_iter().collect(),
+                Err(e) => {
+                    return Err(HotShotError::BlockError { source: e });
+                }
+            };
+            saved_payload_commitments.insert(payload_commitment, encoded_txns);
         }
 
         let start_view = anchored_leaf.get_view_number();
@@ -233,7 +243,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
-            saved_block_payloads,
+            saved_payload_commitments,
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),

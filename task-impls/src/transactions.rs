@@ -239,7 +239,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // https://github.com/EspressoSystems/HotShot/issues/1858
                 self.event_stream
                     .publish(HotShotEvent::BlockReady(
-                        encoded_transactions.into_iter().collect::<Vec<u8>>(),
+                        encoded_transactions,
                         metadata,
                         view + 1,
                     ))

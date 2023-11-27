@@ -18,7 +18,7 @@ use hotshot_types::{
     message::Proposal,
     simple_vote::{DAData, DAVote},
     traits::{
-        block_contents::{vid_commitment, BlockPayload},
+        block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
         network::{CommunicationChannel, ConsensusIntentEvent},
@@ -242,16 +242,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_inner: ViewInner::DA { payload_commitment },
                 });
 
-                // Record the block payload we have promised to make available.
-                if let Err(e) = consensus
-                    .saved_block_payloads
-                    .insert(BlockPayload::from_bytes(
-                        proposal.data.encoded_transactions.into_iter(),
-                        proposal.data.metadata,
-                    ))
-                {
-                    error!("Failed to build the block payload: {:?}.", e);
-                }
+                // Record the block payload commitment we have promised to make available.
+                consensus
+                    .saved_payload_commitments
+                    .insert(payload_commitment, proposal.data.encoded_transactions);
             }
             HotShotEvent::DAVoteRecv(vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
