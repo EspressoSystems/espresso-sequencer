@@ -17,7 +17,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
 
-contract StakeTable_keyRegister_Test is Test {
+contract StakeTable_register_Test is Test {
     event Registered(bytes32, uint64, IStakeTable.StakeType, uint256);
 
     S public stakeTable;
