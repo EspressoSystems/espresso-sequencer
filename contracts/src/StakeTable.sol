@@ -26,7 +26,7 @@ contract StakeTable is IStakeTable {
     /// @dev Computes a hash value of some G2 point
     /// @param blsVK BLS verification key in G2
     /// @return keccak256(blsVK)
-    function _hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
+    function _hashBlsKey(BN254.G2Point memory blsVK) private pure returns (bytes32) {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
@@ -46,12 +46,12 @@ contract StakeTable is IStakeTable {
         return totalVotingStakeVal;
     }
 
-    function lookupStake(BN254.G2Point calldata blsVK) external view returns (uint64) {
+    function lookupStake(BN254.G2Point memory blsVK) external view returns (uint64) {
         Node memory node = this.lookupNode(blsVK);
         return node.balance;
     }
 
-    function lookupNode(BN254.G2Point calldata blsVK) external view returns (Node memory) {
+    function lookupNode(BN254.G2Point memory blsVK) external view returns (Node memory) {
         return nodesTable[_hashBlsKey(blsVK)];
     }
 
@@ -77,11 +77,11 @@ contract StakeTable is IStakeTable {
     }
 
     function register(
-        BN254.G2Point calldata blsVK,
-        EdOnBN254.EdOnBN254Point calldata schnorrVK,
+        BN254.G2Point memory blsVK,
+        EdOnBN254.EdOnBN254Point memory schnorrVK,
         uint64 amount,
         StakeType stakeType,
-        BN254.G1Point calldata blsSig,
+        BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external returns (bool) {
         bytes32 key = _hashBlsKey(blsVK);
@@ -120,22 +120,19 @@ contract StakeTable is IStakeTable {
         return true;
     }
 
-    function deposit(BN254.G2Point calldata blsVK, uint64 amount)
-        external
-        returns (uint64, uint64)
-    {
+    function deposit(BN254.G2Point memory blsVK, uint64 amount) external returns (uint64, uint64) {
         bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].balance += amount;
         return (0, 0);
     }
 
-    function requestExit(BN254.G2Point calldata blsVK) external returns (bool) {
+    function requestExit(BN254.G2Point memory blsVK) external returns (bool) {
         bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].exitEpoch = 0;
         return true;
     }
 
-    function withdrawFunds(BN254.G2Point calldata blsVK) external returns (uint64) {
+    function withdrawFunds(BN254.G2Point memory blsVK) external returns (uint64) {
         bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].balance = 0;
         return 0;
