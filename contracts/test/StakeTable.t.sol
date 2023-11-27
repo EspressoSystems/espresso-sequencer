@@ -97,6 +97,12 @@ contract StakeTable_keyRegister_Test is Test {
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
         );
 
+        // Throw "Restaking not implemented" error
+        vm.expectRevert(S.RestakingNotImplemented.selector);
+        stakeTable.register(
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Restake, sig, validUntilEpoch
+        );
+
         // Invalid next registration epoch
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("Invalid next registration epoch."));

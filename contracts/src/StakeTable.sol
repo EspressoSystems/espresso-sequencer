@@ -8,6 +8,8 @@ import "./interfaces/IStakeTable.sol";
 import { ExampleToken } from "../src/ExampleToken.sol";
 
 contract StakeTable is IStakeTable {
+    error RestakingNotImplemented();
+
     mapping(bytes32 keyHash => Node node) private nodesTable;
     uint256[2] private totalStakeArr;
     uint32 private totalNumberOfKeys;
@@ -90,6 +92,10 @@ contract StakeTable is IStakeTable {
         // The node must not already be registered.
         require(node.account == address(0x0), "The node has already been registered");
 
+        if (stakeType != StakeType.Native) {
+            revert RestakingNotImplemented();
+        }
+
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
@@ -112,8 +118,10 @@ contract StakeTable is IStakeTable {
         nodesTable[key] = node;
 
         // Lock the deposited tokens in this contract.
-        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
-        totalStakeArr[0] += amount;
+        if (stakeType == StakeType.Native) {
+            totalStakeArr[0] += amount;
+            SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+        } // Other case will be implemented when we support restaking
 
         emit Registered(key, registerEpoch, stakeType, amount);
 
