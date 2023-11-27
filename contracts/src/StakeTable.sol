@@ -9,6 +9,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 
 contract StakeTable is IStakeTable {
     error RestakingNotImplemented();
+    error InvalidNextRegistrationEpoch(uint64, uint64);
 
     mapping(bytes32 keyHash => Node node) private nodesTable;
     uint256[2] private totalStakeArr;
@@ -105,7 +106,7 @@ contract StakeTable is IStakeTable {
         // the caller's desired maximum wait, abort.
         uint64 registerEpoch = this.nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
-            revert("Invalid next registration epoch.");
+            revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
 
         // Create an entry for the node.

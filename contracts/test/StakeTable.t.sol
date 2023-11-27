@@ -105,7 +105,7 @@ contract StakeTable_keyRegister_Test is Test {
 
         // Invalid next registration epoch
         vm.prank(msgSenderAddress);
-        vm.expectRevert(bytes("Invalid next registration epoch."));
+        vm.expectRevert(abi.encodeWithSelector(S.InvalidNextRegistrationEpoch.selector, 1, 0));
         stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
 
         // Balances before registration
