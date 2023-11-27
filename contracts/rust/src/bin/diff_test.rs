@@ -401,8 +401,7 @@ fn main() {
                 panic!("Should provide arg1=senderAddress");
             }
 
-            let sender_address_string = cli.args[0].clone();
-            let sender_address: Address = AbiDecode::decode_hex(sender_address_string).unwrap();
+            let sender_address: Address = AbiDecode::decode_hex(&cli.args[0]).unwrap();
             let sender_address_bytes = AbiEncode::encode(sender_address);
 
             // Generate the Schnorr key
