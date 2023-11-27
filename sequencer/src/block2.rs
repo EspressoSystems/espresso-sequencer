@@ -306,7 +306,7 @@ mod test {
             assert_eq!(tx_bodies.len(), block.len());
 
             // tests for individual txs
-            let d = vid.disperse(&block.payload).unwrap();
+            let disperse_data = vid.disperse(&block.payload).unwrap();
             for (index, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index).unwrap();
 
@@ -335,8 +335,8 @@ mod test {
                     Statement {
                         payload_subslice: tx_body,
                         range: tx_range,
-                        commit: &d.commit,
-                        common: &d.common,
+                        commit: &disperse_data.commit,
+                        common: &disperse_data.common,
                     },
                     &proof,
                 )
