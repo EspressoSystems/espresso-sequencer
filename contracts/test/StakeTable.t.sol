@@ -10,6 +10,7 @@ import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import "../src/interfaces/IStakeTable.sol";
+import { LightClient } from "../src/LightClient.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -22,6 +23,8 @@ contract StakeTable_register_Test is Test {
 
     S public stakeTable;
     ExampleToken public token;
+    LightClient public lightClientContract;
+    address public lightClientAddress;
     address public tokenAddress;
     address exampleTokenCreator;
     uint256 constant INITIAL_BALANCE = 1_000;
@@ -31,7 +34,21 @@ contract StakeTable_register_Test is Test {
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
         tokenAddress = address(token);
-        stakeTable = new S(tokenAddress);
+
+        LightClient.LightClientState memory genesis = LightClient.LightClientState({
+            viewNum: 0,
+            blockHeight: 0,
+            blockCommRoot: 0,
+            feeLedgerComm: 0,
+            stakeTableBlsKeyComm: 0,
+            stakeTableSchnorrKeyComm: 0,
+            stakeTableAmountComm: 0,
+            threshold: 0
+        });
+        lightClientContract = new LightClient(genesis,10);
+        lightClientAddress = address(lightClientContract);
+
+        stakeTable = new S(tokenAddress,lightClientAddress);
     }
 
     // TODO move to some utils library?

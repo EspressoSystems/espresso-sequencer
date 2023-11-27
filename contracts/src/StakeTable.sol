@@ -6,6 +6,7 @@ import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import "./interfaces/IStakeTable.sol";
 import { ExampleToken } from "../src/ExampleToken.sol";
+import { LightClient } from "../src/LightClient.sol";
 
 contract StakeTable is IStakeTable {
     error RestakingNotImplemented();
@@ -18,13 +19,12 @@ contract StakeTable is IStakeTable {
     uint256 public totalVotingStakeVar;
     uint64 public numRegistrations;
     uint64 public numPendingExits;
-    uint64 private constant BLOCKS_PER_EPOCH = 10; // TODO make an argument of the constructor?
-    uint256 private creationBlock;
     address public tokenAddress;
+    LightClient public lightClient;
 
-    constructor(address _tokenAddress) {
-        creationBlock = block.number;
+    constructor(address _tokenAddress, address _lightClientAddress) {
         tokenAddress = _tokenAddress;
+        lightClient = LightClient(_lightClientAddress);
     }
 
     /// @dev Computes a hash value of some G2 point
@@ -35,7 +35,7 @@ contract StakeTable is IStakeTable {
     }
 
     function currentEpoch() private view returns (uint64) {
-        return uint64((block.number - creationBlock) / BLOCKS_PER_EPOCH);
+        return lightClient.currentEpoch();
     }
 
     function totalStake() external view returns (uint256, uint256) {
