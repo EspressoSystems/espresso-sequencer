@@ -108,7 +108,21 @@ macro_rules! include_migrations {
 /// The migrations requied to build the default schema for this version of [`SqlDataSource`].
 pub fn default_migrations() -> Vec<Migration> {
     let mut migrations = include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect::<Vec<_>>();
-    validate_migrations(&mut migrations, true).expect("default migrations are invalid");
+
+    // Check version uniqueness and sort by version.
+    validate_migrations(&mut migrations).expect("default migrations are invalid");
+
+    // Check that all migration versions are multiples of 10, so that custom migrations can be
+    // inserted in between.
+    for m in &migrations {
+        if m.version() == 0 || m.version() % 10 != 0 {
+            panic!(
+                "default migration version {} is not a positive multiple of 10",
+                m.version()
+            );
+        }
+    }
+
     migrations
 }
 
@@ -116,9 +130,7 @@ pub fn default_migrations() -> Vec<Migration> {
 ///
 /// * Ensure all migrations have distinct versions
 /// * Ensure migrations are sorted by increasing version
-/// * If validating [`default_migrations`] (i.e. `default` is `true`), additionally check that all
-///   migration versions are multiples of 10, so that custom migrations can be inserted in between.
-fn validate_migrations(migrations: &mut [Migration], default: bool) -> Result<(), Error> {
+fn validate_migrations(migrations: &mut [Migration]) -> Result<(), Error> {
     migrations.sort_by_key(|m| m.version());
 
     // Check version uniqueness.
@@ -127,17 +139,6 @@ fn validate_migrations(migrations: &mut [Migration], default: bool) -> Result<()
             return Err(Error::msg(format!(
                 "migration versions are not strictly increasing ({prev}->{next})"
             )));
-        }
-    }
-
-    if default {
-        // Check version spacing.
-        for m in migrations {
-            if m.version() == 0 || m.version() % 10 != 0 {
-                return Err(Error::msg(
-                    "default migration versions are not positive multiples of 10",
-                ));
-            }
         }
     }
 
@@ -509,7 +510,7 @@ impl SqlDataSource {
         }));
 
         // Get migrations and interleave with custom migrations, sorting by version number.
-        validate_migrations(&mut config.migrations, false)?;
+        validate_migrations(&mut config.migrations)?;
         let migrations =
             add_custom_migrations(default_migrations(), config.migrations).collect::<Vec<_>>();
 
