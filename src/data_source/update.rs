@@ -120,12 +120,12 @@ pub trait VersionedDataSource {
     /// Atomically commit to all outstanding modifications to the data.
     ///
     /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
-    /// or to erase outstanding changes with [`revert_version`](Self::revert_version).
-    async fn commit_version(&mut self) -> Result<(), Self::Error>;
+    /// or to erase outstanding changes with [`revert`](Self::revert).
+    async fn commit(&mut self) -> Result<(), Self::Error>;
 
     /// Erase all oustanding modifications to the data.
     ///
     /// This function must not return if it has failed to revert changes. Inability to revert
     /// changes to the database is considered a fatal error, and this function may panic.
-    async fn revert_version(&mut self);
+    async fn revert(&mut self);
 }

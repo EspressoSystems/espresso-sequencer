@@ -120,12 +120,12 @@ where
 {
     type Error = D::Error;
 
-    async fn commit_version(&mut self) -> Result<(), Self::Error> {
-        self.data_source.commit_version().await
+    async fn commit(&mut self) -> Result<(), Self::Error> {
+        self.data_source.commit().await
     }
 
-    async fn revert_version(&mut self) {
-        self.data_source.revert_version().await
+    async fn revert(&mut self) {
+        self.data_source.revert().await
     }
 }
 

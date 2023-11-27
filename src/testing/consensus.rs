@@ -181,7 +181,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut ds = ds.write().await;
                     ds.update(&event).await.unwrap();
-                    ds.commit_version().await.unwrap();
+                    ds.commit().await.unwrap();
                 }
             });
         }

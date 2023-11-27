@@ -56,9 +56,9 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// A data source for the APIs provided in this crate, backed by the local file system.
 ///
 /// Synchronization and atomicity of persisted data structures are provided via [`atomic_store`].
-/// The methods [`commit_version`](Self::commit_version), [`revert_version`](Self::revert_version),
-/// and [`skip_version`](Self::skip_version) of this type can be used to control synchronization in
-/// the underlying [`AtomicStore`].
+/// The methods [`commit`](Self::commit), [`revert`](Self::revert), and
+/// [`skip_version`](Self::skip_version) of this type can be used to control synchronization in the
+/// underlying [`AtomicStore`].
 ///
 /// # Extension and Composition
 ///
@@ -110,7 +110,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// the persistent data. Note, though, that when you choose to use
 /// [`create_with_store`](Self::create_with_store) or [`open_with_store`](Self::open_with_store),
 /// you become responsible for ensuring that calls to [`AtomicStore::commit_version`] alternate with
-/// calls to [`FileSystemDataSource::commit_version`] or [`FileSystemDataSource::skip_version`].
+/// calls to [`FileSystemDataSource::commit`] or [`FileSystemDataSource::revert`].
 ///
 /// In the following example, we compose HotShot query service modules with other application-
 /// specific modules, using a single top-level [`AtomicStore`] to synchronize all persistent
@@ -163,7 +163,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 ///             state.hotshot_qs.update(&event).await.unwrap();
 ///             // Update other modules' states based on `event`.
 ///
-///             state.hotshot_qs.commit_version().await.unwrap();
+///             state.hotshot_qs.commit().await.unwrap();
 ///             // Commit or skip versions for other modules' storage.
 ///             state.store.commit_version().unwrap();
 ///         }
@@ -298,7 +298,7 @@ where
     /// [FileSystemDataSource] is being managed by the caller. The caller may want to persist some
     /// changes to other modules whose state is managed by the same [AtomicStore]. In order to call
     /// [AtomicStore::commit_version], the version of this [FileSystemDataSource] must be advanced,
-    /// either by [commit_version](Self::commit_version) or, if there are no outstanding changes,
+    /// either by [commit](Self::commit) or, if there are no outstanding changes,
     /// [skip_version](Self::skip_version).
     pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.skip_version()?;
@@ -324,7 +324,7 @@ where
     /// [create](Self::create) or [open](Self::open)) it will update the global version as well.
     /// Otherwise, the caller is responsible for calling [AtomicStore::commit_version] after calling
     /// this function.
-    async fn commit_version(&mut self) -> Result<(), PersistenceError> {
+    async fn commit(&mut self) -> Result<(), PersistenceError> {
         self.leaf_storage.commit_version().await?;
         self.block_storage.commit_version().await?;
         if let Some(store) = &mut self.top_storage {
@@ -334,8 +334,8 @@ where
     }
 
     /// Revert changes made to persistent storage since the last call to
-    /// [commit_version](Self::commit_version).
-    async fn revert_version(&mut self) {
+    /// [commit](Self::commit).
+    async fn revert(&mut self) {
         self.leaf_storage.revert_version().unwrap();
         self.block_storage.revert_version().unwrap();
     }

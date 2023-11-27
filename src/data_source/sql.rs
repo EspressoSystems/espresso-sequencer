@@ -342,18 +342,17 @@ impl Config {
 ///
 /// # Synchronization
 ///
-/// [`SqlDataSource`] implements [`VersionedDataSource`], which means changes are not applied
-/// to the underlying database with every operation. Instead, outstanding changes are batched and
-/// applied all at once, atomically, whenever [`commit_version`](Self::commit_version) is called.
-/// Outstanding, uncommitted changes can also be rolled back completely using
-/// [`revert_version`](Self::revert_version).
+/// [`SqlDataSource`] implements [`VersionedDataSource`], which means changes are not applied to the
+/// underlying database with every operation. Instead, outstanding changes are batched and applied
+/// all at once, atomically, whenever [`commit`](Self::commit) is called. Outstanding, uncommitted
+/// changes can also be rolled back completely using [`revert`](Self::revert).
 ///
 /// Internally, the data source maintains an open [`Transaction`] whenever there are outstanding
-/// changes, and commits the transaction on [`commit_version`](Self::commit_version). The underlying
-/// database transaction can be accessed directly via [`transaction`](Self::transaction), which
-/// makes it possible to compose application-specific database updates atomically with updates made
-/// by the [`SqlDataSource`] itself. This is useful for
-/// [extension and composition](#extension-and-composition).
+/// changes, and commits the transaction on [`commit`](Self::commit). The underlying database
+/// transaction can be accessed directly via [`transaction`](Self::transaction), which makes it
+/// possible to compose application-specific database updates atomically with updates made by the
+/// [`SqlDataSource`] itself. This is useful for [extension and
+/// composition](#extension-and-composition).
 ///
 /// # Extension and Composition
 ///
@@ -395,8 +394,8 @@ impl Config {
 /// data you want to store. You can then access this data through the [`SqlDataSource`] using
 /// [`query`](Self::query) to run a custom read-only SQL query or [`transaction`](Self::transaction)
 /// to execute a custom atomic mutation of the database. If you use
-/// [`transaction`](Self::transaction), be sure to call [`commit_version`](Self::commit_version)
-/// when you are ready to persist your changes.
+/// [`transaction`](Self::transaction), be sure to call [`commit`](Self::commit) when you are ready
+/// to persist your changes.
 ///
 /// You will typically use [`query`](Self::query) to read custom data in API endpoint handlers and
 /// [`transaction`](Self::transaction) to populate custom data in your web server's update loop.
@@ -461,7 +460,7 @@ impl Config {
 ///             let tx = state.hotshot_qs.transaction().await.unwrap();
 ///
 ///             // Commit all outstanding changes to the entire state at the same time.
-///             state.hotshot_qs.commit_version().await.unwrap();
+///             state.hotshot_qs.commit().await.unwrap();
 ///         }
 ///     });
 ///
@@ -564,7 +563,7 @@ impl SqlDataSource {
     ///
     /// If there is no currently open transaction, a new transaction will be opened. No changes
     /// made through the transaction objeect returned by this method will be persisted until
-    /// [`commit_version`](Self::commit_version) is called.
+    /// [`commit`](Self::commit) is called.
     pub async fn transaction(&mut self) -> Result<Transaction<'_>, Error> {
         if !self.tx_in_progress {
             // If there is no transaction in progress, open one.
@@ -593,8 +592,8 @@ impl VersionedDataSource for SqlDataSource {
     /// Atomically commit to all outstanding modifications to the data.
     ///
     /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
-    /// or to erase outstanding changes with [`revert_version`](Self::revert_version).
-    async fn commit_version(&mut self) -> Result<(), Self::Error> {
+    /// or to erase outstanding changes with [`revert`](Self::revert).
+    async fn commit(&mut self) -> Result<(), Self::Error> {
         if !self.tx_in_progress {
             // Nothing to do if there is no outstanding transaction.
             return Ok(());
@@ -608,7 +607,7 @@ impl VersionedDataSource for SqlDataSource {
     ///
     /// This function must not return if it has failed to revert changes. Inability to revert
     /// changes to the database is considered a fatal error, and this function may panic.
-    async fn revert_version(&mut self) {
+    async fn revert(&mut self) {
         if !self.tx_in_progress {
             // Nothing to do if there is no outstanding transaction.
             return;
@@ -747,11 +746,11 @@ impl UpdateStatusData for SqlDataSource {
 // Rust object: a `BEGIN` statement is executed every time a `Transaction` is created and a `COMMIT`
 // is executed whenever the `Transaction` is dropped. This is undesirable here because, logically,
 // the underlying SQL transaction may persist between several calls into the `SqlDataSource`, and is
-// only closed when `commit_version` is finally called. However, due to the lifetime of the
-// reference within `Transaction`, we cannot actually store the `Transaction` object in the
-// `SqlDataSource`, and so we create a new `Transaction` wrapper each time
-// `SqlDataSource::transaction` is called. Thus, the lifecycle of the underlying logical transaction
-// is not the same as the lifecycle of the Rust wrapper object.
+// only closed when `commit` is finally called. However, due to the lifetime of the reference within
+// `Transaction`, we cannot actually store the `Transaction` object in the `SqlDataSource`, and so
+// we create a new `Transaction` wrapper each time `SqlDataSource::transaction` is called. Thus, the
+// lifecycle of the underlying logical transaction is not the same as the lifecycle of the Rust
+// wrapper object.
 pub struct Transaction<'a> {
     client: &'a mut Client,
 }
@@ -775,7 +774,7 @@ impl<'a> Transaction<'a> {
     ///
     /// The results of the statement will be reflected immediately in future statements made within
     /// this transaction, but will not be reflected in the underlying database until the transaction
-    /// is committed with [`SqlDataSource::commit_version`].
+    /// is committed with [`SqlDataSource::commit`].
     pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> Result<(), Error>
     where
         T: ?Sized + ToStatement,

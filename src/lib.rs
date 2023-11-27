@@ -75,7 +75,7 @@
 //!
 //!     // Update the query data based on this event.
 //!     data_source.update(&event);
-//!     data_source.commit_version().await.map_err(Error::internal)?;
+//!     data_source.commit().await.map_err(Error::internal)?;
 //! }
 //! # Ok(())
 //! # }
