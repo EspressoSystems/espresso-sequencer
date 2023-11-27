@@ -41,7 +41,7 @@ pub struct VoteCollectionTaskState<
     pub public_key: TYPES::SignatureKey,
 
     /// Membership for voting
-    pub membership: TYPES::Membership,
+    pub membership: Arc<TYPES::Membership>,
 
     /// accumulator handles aggregating the votes
     pub accumulator: Option<VoteAccumulator<TYPES, VOTE, CERT>>,
@@ -158,9 +158,9 @@ where
 
 /// Info needed to create a vote accumulator task
 #[allow(missing_docs)]
-pub struct AccumulatorInfo<'a, TYPES: NodeType> {
+pub struct AccumulatorInfo<TYPES: NodeType> {
     pub public_key: TYPES::SignatureKey,
-    pub membership: &'a TYPES::Membership,
+    pub membership: Arc<TYPES::Membership>,
     pub view: TYPES::Time,
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
     pub id: u64,
@@ -171,28 +171,26 @@ pub struct AccumulatorInfo<'a, TYPES: NodeType> {
 /// # Panics
 /// Calls unwrap but should never panic.
 pub async fn spawn_vote_accumulator<TYPES, VOTE, CERT>(
-    info: &AccumulatorInfo<'_, TYPES>,
+    info: &AccumulatorInfo<TYPES>,
     vote: VOTE,
     event: HotShotEvent<TYPES>,
     name: String,
-) -> Option<(TYPES::Time, usize, usize>
+) -> Option<(TYPES::Time, usize, usize)>
 where
     TYPES: NodeType,
     VOTE: Vote<TYPES>
-        + AggregatableVote<TYPES, VOTE, CERT>
         + AggregatableVote<TYPES, VOTE, CERT>
         + std::marker::Send
         + std::marker::Sync
         + 'static,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>
         + Debug
-        + AggregatableVote<TYPES, VOTE, CERT>
         + std::marker::Send
         + std::marker::Sync
         + 'static,
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
-    if vote.get_leader(info.membership) != info.public_key {
+    if vote.get_leader(info.membership.as_ref()) != info.public_key {
         return None;
     }
 
@@ -247,7 +245,7 @@ where
         .register_event_handler(relay_handle_event);
 
     let event_stream_id = builder.get_stream_id().unwrap();
-    let id = builder.get_task_id().unwrap()
+    let id = builder.get_task_id().unwrap();
 
     let _task = async_spawn(async move { VoteTaskStateTypes::build(builder).launch().await });
 
