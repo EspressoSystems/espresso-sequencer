@@ -17,7 +17,7 @@ interface IStakeTable {
         Restake
     }
 
-    event Register(BN254.G2Point, Node);
+    event Registered(bytes32, uint64, StakeType, uint256);
 
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,

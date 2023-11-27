@@ -18,7 +18,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_keyRegister_Test is Test {
-    event Register(BN254.G2Point, IStakeTable.Node);
+    event Registered(bytes32, uint64, IStakeTable.StakeType, uint256);
 
     S public stakeTable;
     ExampleToken public token;
@@ -63,10 +63,10 @@ contract StakeTable_keyRegister_Test is Test {
         (
             uint256 blsSigX,
             uint256 blsSigY,
-            uint256 blsVkx0,
-            uint256 blsVkx1,
-            uint256 blsVky0,
-            uint256 blsVky1,
+            uint256 blsVKx0,
+            uint256 blsVKx1,
+            uint256 blsVKy0,
+            uint256 blsVKy1,
             uint256 schnorrVKx,
             uint256 schnorrVKy,
             address msgSenderAddress
@@ -83,7 +83,7 @@ contract StakeTable_keyRegister_Test is Test {
         token.approve(address(stakeTable), depositAmount);
 
         // Note: (x,y) coordinates for each field component must be inverted.
-        BN254.G2Point memory blsVk = BN254.G2Point(blsVkx1, blsVkx0, blsVky1, blsVky0);
+        BN254.G2Point memory blsVK = BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0);
         BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
         EdOnBN254.EdOnBN254Point memory schnorrVK = EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy);
 
@@ -94,13 +94,13 @@ contract StakeTable_keyRegister_Test is Test {
         BN254.G1Point memory badSig = BN254.P1();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         stakeTable.register(
-            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
         );
 
         // Invalid next registration epoch
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("Invalid next registration epoch."));
-        stakeTable.register(blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
 
         // Balances before registration
         assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE);
@@ -120,12 +120,19 @@ contract StakeTable_keyRegister_Test is Test {
         node.schnorrVK = schnorrVK;
         node.registerEpoch = 1;
 
-        emit Register(blsVk, node);
+        // The function IStakeTable._hashBlsKey is private but its code is small hence we copy it
+        // there.
+        emit Registered(
+            keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1)),
+            node.registerEpoch,
+            node.stakeType,
+            node.balance
+        );
 
         // Happy path
         vm.prank(msgSenderAddress);
         bool res = stakeTable.register(
-            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
         assertTrue(res);
 
@@ -139,7 +146,7 @@ contract StakeTable_keyRegister_Test is Test {
         vm.prank(msgSenderAddress);
         vm.expectRevert(bytes("The node has already been registered"));
         stakeTable.register(
-            blsVk, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
     }
 }

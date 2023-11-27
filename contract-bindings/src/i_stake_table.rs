@@ -374,33 +374,28 @@ pub mod i_stake_table {
                 ),
             ]),
             events: ::core::convert::From::from([(
-                ::std::borrow::ToOwned::to_owned("Register"),
+                ::std::borrow::ToOwned::to_owned("Registered"),
                 ::std::vec![::ethers::core::abi::ethabi::Event {
-                    name: ::std::borrow::ToOwned::to_owned("Register"),
+                    name: ::std::borrow::ToOwned::to_owned("Registered"),
                     inputs: ::std::vec![
                         ::ethers::core::abi::ethabi::EventParam {
                             name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
                             indexed: false,
                         },
                         ::ethers::core::abi::ethabi::EventParam {
                             name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Address,
-                                ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ],),
-                            ],),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            indexed: false,
+                        },
+                        ::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
+                            indexed: false,
+                        },
+                        ::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                             indexed: false,
                         },
                     ],
@@ -575,16 +570,16 @@ pub mod i_stake_table {
                 .method_hash([12, 36, 175, 24], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
-        ///Gets the contract's `Register` event
-        pub fn register_filter(
+        ///Gets the contract's `Registered` event
+        pub fn registered_filter(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, RegisterFilter> {
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, RegisteredFilter> {
             self.0.event()
         }
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, RegisterFilter> {
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, RegisteredFilter> {
             self.0
                 .event_with_filter(::core::default::Default::default())
         }
@@ -606,11 +601,13 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    #[ethevent(
-        name = "Register",
-        abi = "Register((uint256,uint256,uint256,uint256),(address,uint8,uint64,uint64,uint64,(uint256,uint256)))"
-    )]
-    pub struct RegisterFilter(pub G2Point, pub Node);
+    #[ethevent(name = "Registered", abi = "Registered(bytes32,uint64,uint8,uint256)")]
+    pub struct RegisteredFilter(
+        pub [u8; 32],
+        pub u64,
+        pub u8,
+        pub ::ethers::core::types::U256,
+    );
     ///Container type for all input parameters for the `deposit` function with signature `deposit((uint256,uint256,uint256,uint256),uint64)` and selector `0x771f6f44`
     #[derive(
         Clone,

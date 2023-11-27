@@ -18,21 +18,16 @@ contract StakeTable is IStakeTable {
     uint256 private creationBlock;
     address private tokenAddress;
 
-    /// @dev Computes a hash value of some G2 point
-    /// @param blsVK BLS verification key in G2
-    /// @return keccak256(blsVK)
-    function hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
-        uint256 x0 = blsVK.x0;
-        uint256 x1 = blsVK.x1;
-        uint256 y0 = blsVK.y0;
-        uint256 y1 = blsVK.y1;
-        bytes32 hash = keccak256(abi.encode(x0, x1, y0, y1));
-        return hash;
-    }
-
     constructor(address _tokenAddress) {
         creationBlock = block.number;
         tokenAddress = _tokenAddress;
+    }
+
+    /// @dev Computes a hash value of some G2 point
+    /// @param blsVK BLS verification key in G2
+    /// @return keccak256(blsVK)
+    function _hashBlsKey(BN254.G2Point calldata blsVK) private pure returns (bytes32) {
+        return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
     function currentEpoch() private view returns (uint64) {
@@ -57,8 +52,7 @@ contract StakeTable is IStakeTable {
     }
 
     function lookupNode(BN254.G2Point calldata blsVK) external view returns (Node memory) {
-        bytes32 hash = hashBlsKey(blsVK);
-        return nodesTable[hash];
+        return nodesTable[_hashBlsKey(blsVK)];
     }
 
     function nextRegistrationEpoch() external view returns (uint64) {
@@ -90,7 +84,7 @@ contract StakeTable is IStakeTable {
         BN254.G1Point calldata blsSig,
         uint64 validUntilEpoch
     ) external returns (bool) {
-        bytes32 key = hashBlsKey(blsVK);
+        bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodesTable[key];
 
         // The node must not already be registered.
@@ -121,7 +115,7 @@ contract StakeTable is IStakeTable {
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
         totalStakeArr[0] += amount;
 
-        emit Register(blsVK, node);
+        emit Registered(key, registerEpoch, stakeType, amount);
 
         return true;
     }
@@ -130,19 +124,19 @@ contract StakeTable is IStakeTable {
         external
         returns (uint64, uint64)
     {
-        bytes32 hash = hashBlsKey(blsVK);
+        bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].balance += amount;
         return (0, 0);
     }
 
     function requestExit(BN254.G2Point calldata blsVK) external returns (bool) {
-        bytes32 hash = hashBlsKey(blsVK);
+        bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].exitEpoch = 0;
         return true;
     }
 
     function withdrawFunds(BN254.G2Point calldata blsVK) external returns (uint64) {
-        bytes32 hash = hashBlsKey(blsVK);
+        bytes32 hash = _hashBlsKey(blsVK);
         nodesTable[hash].balance = 0;
         return 0;
     }
