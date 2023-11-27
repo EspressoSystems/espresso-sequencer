@@ -322,7 +322,7 @@ impl Config {
 ///
 /// It is also possible to take complete control over migrating the schema using
 /// [`Config::no_migrations`] to prevent the [`SqlDataSource`] from running its own migrations. The
-/// database adminstrator then becomes responsible for manually migrating the database, ensuring the
+/// database administrator then becomes responsible for manually migrating the database, ensuring the
 /// schema is up to date, and ensuring that the schema is at all times compatible with the schema
 /// expected by the current version of this software. Nevertheless, this may be the best option when
 /// your application-specific schema has diverged significantly from the default schema.
