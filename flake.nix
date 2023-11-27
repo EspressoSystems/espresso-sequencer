@@ -26,17 +26,23 @@
   inputs.pre-commit-hooks.inputs.flake-utils.follows = "flake-utils";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, pre-commit-hooks, ... }:
+  inputs.poetry2nixFlake = {
+    url = "github:nix-community/poetry2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, pre-commit-hooks, poetry2nixFlake, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+        poetry2nix = poetry2nixFlake.lib.mkPoetry2Nix { inherit pkgs; };
         rustToolchain = pkgs.rust-bin.stable.latest.minimal.override {
           extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
         };
         rustDeps = with pkgs;
           [
-            pkgconfig
+            pkg-config
             openssl
             bash
 
@@ -48,7 +54,9 @@
             cargo-sort
             cmake
 
-            postgresql_15
+            # `postgresql` defaults to an older version (15), so we select the latest version (16)
+            # explicitly.
+            postgresql_16
           ] ++ lib.optionals stdenv.isDarwin [
             darwin.apple_sdk.frameworks.Security
             darwin.apple_sdk.frameworks.CoreFoundation
@@ -56,7 +64,7 @@
 
             # https://github.com/NixOS/nixpkgs/issues/126182
             libiconv
-          ] ++ lib.optionals (stdenv.system != "aarch64-darwin") [
+          ] ++ lib.optionals (!stdenv.isDarwin) [
             cargo-watch # broken: https://github.com/NixOS/nixpkgs/issues/146349
           ];
         # nixWithFlakes allows pre v2.4 nix installations to use
@@ -87,14 +95,13 @@
             license = with licenses; [ mit asl20 ];
           };
         };
-        pythonEnv = pkgs.poetry2nix.mkPoetryEnv { projectDir = ./.; };
+        pythonEnv = poetry2nix.mkPoetryEnv { projectDir = ./.; };
         myPython = with pkgs; [ poetry pythonEnv ];
         shellHook  = ''
-          # on mac os `bin/pwd -P` returns the canonical path on case insensitive file-systems
-          my_pwd=$(/bin/pwd -P 2> /dev/null || pwd)
-
-          export PATH=${pkgs.xdot}/bin:$PATH
-          export PATH=''${my_pwd}/bin:$PATH
+          # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts with rustup
+          # installations.
+          export CARGO_HOME=$HOME/.cargo-nix
+          export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
         '';
 
         RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
