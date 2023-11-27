@@ -616,7 +616,10 @@ impl VersionedDataSource for SqlDataSource {
         // If we're trying to roll back a transaction, something has already gone wrong and we're
         // trying to recover. If we're unable to revert the changes and recover, all we can do is
         // panic.
-        self.client.batch_execute("ROLLBACK").await.unwrap();
+        self.client
+            .batch_execute("ROLLBACK")
+            .await
+            .expect("DB rollback succeeds");
         self.tx_in_progress = false;
     }
 }
