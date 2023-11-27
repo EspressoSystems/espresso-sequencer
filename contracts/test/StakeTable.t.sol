@@ -167,7 +167,7 @@ contract StakeTable_register_Test is Test {
 
         // The node is already registered
         vm.prank(msgSenderAddress);
-        vm.expectRevert(bytes("The node has already been registered"));
+        vm.expectRevert(S.NodeAlreadyRegistered.selector);
         stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );

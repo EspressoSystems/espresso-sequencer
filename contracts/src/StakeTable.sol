@@ -11,6 +11,7 @@ import { LightClient } from "../src/LightClient.sol";
 contract StakeTable is IStakeTable {
     error RestakingNotImplemented();
     error InvalidNextRegistrationEpoch(uint64, uint64);
+    error NodeAlreadyRegistered();
 
     mapping(bytes32 keyHash => Node node) public nodes;
     uint256 public totalNativeStake;
@@ -92,7 +93,9 @@ contract StakeTable is IStakeTable {
         Node memory node = nodes[key];
 
         // The node must not already be registered.
-        require(node.account == address(0x0), "The node has already been registered");
+        if (node.account != address(0x0)) {
+            revert NodeAlreadyRegistered();
+        }
 
         if (stakeType != StakeType.Native) {
             revert RestakingNotImplemented();
