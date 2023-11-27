@@ -72,6 +72,15 @@ pub use include_dir::include_dir;
 /// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
+///
+/// Note that a similar macro is available from Refinery:
+/// [embed_migrations](https://docs.rs/refinery/0.8.11/refinery/macro.embed_migrations.html). This
+/// macro differs in that it evaluates to an iterator of [migrations](Migration), making it an
+/// expression macro, while `embed_migrations` is a statement macro that defines a module which
+/// provides access to the embedded migrations only indirectly via a
+/// [`Runner`](https://docs.rs/refinery/0.8.11/refinery/struct.Runner.html). The direct access to
+/// migrations provided by [`include_migrations`] makes this macro easier to use with
+/// [`Config::migrations`], for combining custom migrations with [`default_migrations`].
 #[macro_export]
 macro_rules! include_migrations {
     ($dir:tt) => {
@@ -135,20 +144,23 @@ fn validate_migrations(migrations: &mut [Migration], default: bool) -> Result<()
     Ok(())
 }
 
-/// Merge two migration sequences.
+/// Add custom migrations to a default migration sequence.
 ///
-/// Migrations in `right` replace migrations in `left` with the same version. Each of `left` and
-/// `right` is assumed to be the output of [`validate_migrations`]; that is, each is sorted by
-/// version and contains no duplicate versions.
-fn merge_migrations(
-    left: impl IntoIterator<Item = Migration>,
-    right: impl IntoIterator<Item = Migration>,
+/// Migrations in `custom` replace migrations in `default` with the same version. Otherwise, the two
+/// sequences `default` and `custom` are merged so that the resulting sequence is sorted by
+/// ascending version number. Each of `default` and `custom` is assumed to be the output of
+/// [`validate_migrations`]; that is, each is sorted by version and contains no duplicate versions.
+fn add_custom_migrations(
+    default: impl IntoIterator<Item = Migration>,
+    custom: impl IntoIterator<Item = Migration>,
 ) -> impl Iterator<Item = Migration> {
-    left.into_iter()
+    default
+        .into_iter()
         // Merge sorted lists, joining pairs of equal version into `EitherOrBoth::Both`.
-        .merge_join_by(right, |l, r| l.version().cmp(&r.version()))
-        // Prefer the right migration for a given version when both left and right are present.
-        .map(|m| m.reduce(|_, r| r))
+        .merge_join_by(custom, |l, r| l.version().cmp(&r.version()))
+        // Prefer the custom migration for a given version when both default and custom versions
+        // are present.
+        .map(|pair| pair.reduce(|_, custom| custom))
 }
 
 /// Postgres client config.
@@ -499,7 +511,7 @@ impl SqlDataSource {
         // Get migrations and interleave with custom migrations, sorting by version number.
         validate_migrations(&mut config.migrations, false)?;
         let migrations =
-            merge_migrations(default_migrations(), config.migrations).collect::<Vec<_>>();
+            add_custom_migrations(default_migrations(), config.migrations).collect::<Vec<_>>();
 
         // Get a migration runner. Depending on the config, we can either use this to actually run
         // the migrations or just check if the database is up to date.
@@ -724,6 +736,18 @@ impl UpdateStatusData for SqlDataSource {
     }
 }
 
+/// An atomic SQL transaction.
+//
+// Note: we use a custom `Transaction` type instead of `tokio_postgres::Transaction` because with
+// the latter, the lifecycle of the underlying SQL transaction is coupled to the lifecycle of the
+// Rust object: a `BEGIN` statement is executed every time a `Transaction` is created and a `COMMIT`
+// is executed whenever the `Transaction` is dropped. This is undesirable here because, logically,
+// the underlying SQL transaction may persist between several calls into the `SqlDataSource`, and is
+// only closed when `commit_version` is finally called. However, due to the lifetime of the
+// reference within `Transaction`, we cannot actually store the `Transaction` object in the
+// `SqlDataSource`, and so we create a new `Transaction` wrapper each time
+// `SqlDataSource::transaction` is called. Thus, the lifecycle of the underlying logical transaction
+// is not the same as the lifecycle of the Rust wrapper object.
 pub struct Transaction<'a> {
     client: &'a mut Client,
 }
