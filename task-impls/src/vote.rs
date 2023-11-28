@@ -191,6 +191,7 @@ where
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
     if vote.get_leader(info.membership.as_ref()) != info.public_key {
+        error!("Vote is not to the leader");
         return None;
     }
 
@@ -339,7 +340,7 @@ impl<TYPES: NodeType>
     for ViewSyncCommitVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number())
+        membership.get_leader(self.get_data().round + self.get_data().relay)
     }
     fn make_cert_event(
         certificate: ViewSyncCommitCertificate2<TYPES>,
@@ -354,7 +355,7 @@ impl<TYPES: NodeType>
     for ViewSyncPreCommitVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number())
+        membership.get_leader(self.get_data().round + self.get_data().relay)
     }
     fn make_cert_event(
         certificate: ViewSyncPreCommitCertificate2<TYPES>,
@@ -369,7 +370,7 @@ impl<TYPES: NodeType>
     for ViewSyncFinalizeVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number())
+        membership.get_leader(self.get_data().round + self.get_data().relay)
     }
     fn make_cert_event(
         certificate: ViewSyncFinalizeCertificate2<TYPES>,
