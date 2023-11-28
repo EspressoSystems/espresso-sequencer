@@ -14,11 +14,11 @@ use hotshot_task::{
 };
 use hotshot_types::{
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncCommitCertificate2,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
+        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{election::Membership, node_implementation::NodeType},
@@ -255,21 +255,23 @@ where
 /// Alias for Quorum vote accumulator
 type QuorumVoteState<TYPES> =
     VoteCollectionTaskState<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>;
-/// Alias for Quorum vote accumulator
+/// Alias for DA vote accumulator
 type DAVoteState<TYPES> = VoteCollectionTaskState<TYPES, DAVote<TYPES>, DACertificate<TYPES>>;
-/// Alias for Quorum vote accumulator
+/// Alias for VID vote accumulator state
+type VIDVoteState<TYPES> = VoteCollectionTaskState<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>;
+/// Alias for Timeout vote accumulator
 type TimeoutVoteState<TYPES> =
     VoteCollectionTaskState<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>;
-/// Alias for Quorum vote accumulator
+/// Alias for View Sync Pre Commit vote accumulator
 type ViewSyncPreCommitState<TYPES> = VoteCollectionTaskState<
     TYPES,
     ViewSyncPreCommitVote<TYPES>,
     ViewSyncPreCommitCertificate2<TYPES>,
 >;
-/// Alias for Quorum vote accumulator
+/// Alias for View Sync Commit vote accumulator
 type ViewSyncCommitVoteState<TYPES> =
     VoteCollectionTaskState<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>;
-/// Alias for Quorum vote accumulator
+/// Alias for View Sync Finalize vote accumulator
 type ViewSyncFinalizeVoteState<TYPES> = VoteCollectionTaskState<
     TYPES,
     ViewSyncFinalizeVote<TYPES>,
@@ -315,6 +317,20 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, TimeoutVote<TYPES>, TimeoutCertifi
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
         HotShotEvent::QCFormed(Right(certificate))
+    }
+}
+
+impl<TYPES: NodeType> AggregatableVote<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>
+    for VIDVote<TYPES>
+{
+    fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
+        membership.get_leader(self.get_view_number() + 1)
+    }
+    fn make_cert_event(
+        certificate: VIDCertificate<TYPES>,
+        key: &TYPES::SignatureKey,
+    ) -> HotShotEvent<TYPES> {
+        HotShotEvent::VidCertSend(certificate, key.clone())
     }
 }
 
@@ -415,6 +431,24 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertific
     }
     fn filter(event: &HotShotEvent<TYPES>) -> bool {
         matches!(event, HotShotEvent::TimeoutVoteRecv(_))
+    }
+}
+
+#[async_trait]
+impl<TYPES: NodeType> HandleVoteEvent<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>
+    for VIDVoteState<TYPES>
+{
+    async fn handle_event(
+        self,
+        event: HotShotEvent<TYPES>,
+    ) -> (Option<HotShotTaskCompleted>, VIDVoteState<TYPES>) {
+        match event {
+            HotShotEvent::VidVoteRecv(vote) => self.accumulate_vote(&vote).await,
+            _ => (None, self),
+        }
+    }
+    fn filter(event: &HotShotEvent<TYPES>) -> bool {
+        matches!(event, HotShotEvent::VidVoteRecv(_))
     }
 }
 

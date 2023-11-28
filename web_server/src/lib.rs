@@ -5,7 +5,6 @@ use async_compatibility_layer::channel::OneShotReceiver;
 use async_lock::RwLock;
 use clap::Args;
 use futures::FutureExt;
-use tracing::error;
 
 use hotshot_types::traits::signature_key::{EncodedPublicKey, SignatureKey};
 use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};

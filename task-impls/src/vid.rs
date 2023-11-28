@@ -1,15 +1,14 @@
-use crate::events::HotShotEvent;
-use async_compatibility_layer::art::async_spawn;
+use crate::{
+    events::HotShotEvent,
+    vote::{spawn_vote_accumulator, AccumulatorInfo},
+};
 use async_lock::RwLock;
 
-use bitvec::prelude::*;
-use either::{Either, Left, Right};
-use futures::FutureExt;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
-    task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEvent, TaskBuilder},
+    task::{HotShotTaskCompleted, TS},
+    task_impls::HSTWithEvent,
 };
 use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
@@ -24,15 +23,13 @@ use hotshot_types::{
     utils::ViewInner,
 };
 use hotshot_types::{
-    simple_certificate::VIDCertificate,
     simple_vote::{VIDData, VIDVote},
     traits::network::CommunicationChannel,
-    vote::{HasViewNumber, VoteAccumulator},
+    vote::HasViewNumber,
 };
 
 use snafu::Snafu;
-use std::marker::PhantomData;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
@@ -73,94 +70,6 @@ pub struct VIDTaskState<
     pub id: u64,
 }
 
-/// Struct to maintain VID Vote Collection task state
-pub struct VIDVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Network for all nodes
-    pub network: Arc<I::QuorumNetwork>,
-    /// Membership for teh quorum
-    pub membership: Arc<TYPES::Membership>,
-    /// This Nodes Public Key
-    pub public_key: TYPES::SignatureKey,
-    /// Our Private Key
-    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    #[allow(clippy::type_complexity)]
-    /// Accumulates VID votes
-    pub accumulator: Either<
-        VoteAccumulator<TYPES, VIDVote<TYPES>, VIDCertificate<TYPES>>,
-        VIDCertificate<TYPES>,
-    >,
-    /// the current view
-    pub cur_view: TYPES::Time,
-    /// event stream for channel events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    /// the id of this task state
-    pub id: u64,
-}
-
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for VIDVoteCollectionTaskState<TYPES, I> {}
-
-#[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "VID Vote Collection Task", level = "error")]
-async fn vote_handle<TYPES, I>(
-    mut state: VIDVoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES>,
-) -> (
-    Option<HotShotTaskCompleted>,
-    VIDVoteCollectionTaskState<TYPES, I>,
-)
-where
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-{
-    match event {
-        HotShotEvent::VidVoteRecv(vote) => {
-            debug!(
-                "VID vote recv, collection task {:?}",
-                vote.get_view_number()
-            );
-            // panic!("Vote handle received VID vote for view {}", *vote.current_view);
-
-            // For the case where we receive votes after we've made a certificate
-            if state.accumulator.is_right() {
-                debug!("VID accumulator finished view: {:?}", state.cur_view);
-                return (None, state);
-            }
-
-            let accumulator = state.accumulator.left().unwrap();
-            match accumulator.accumulate(&vote, state.membership.as_ref()) {
-                Left(new_accumulator) => {
-                    state.accumulator = either::Left(new_accumulator);
-                }
-
-                Right(vid_cert) => {
-                    debug!("Sending VID cert! {:?}", vid_cert.view_number);
-                    state
-                        .event_stream
-                        .publish(HotShotEvent::VidCertSend(
-                            vid_cert.clone(),
-                            state.public_key.clone(),
-                        ))
-                        .await;
-
-                    state.accumulator = Right(vid_cert.clone());
-                    state
-                        .network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDVotes(
-                            *vid_cert.view_number,
-                        ))
-                        .await;
-
-                    // Return completed at this point
-                    return (Some(HotShotTaskCompleted::ShutDown), state);
-                }
-            }
-        }
-        _ => {
-            error!("unexpected event {:?}", event);
-        }
-    }
-    (None, state)
-}
-
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     VIDTaskState<TYPES, I, A>
 {
@@ -171,13 +80,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            HotShotEvent::VidVoteRecv(vote) => {
-                // warn!(
-                //     "VID vote recv, Main Task {:?}, key: {:?}",
-                //     vote.current_view,
-                //     self.committee_exchange.public_key()
-                // );
-                // Check if we are the leader and the vote is from the sender.
+            HotShotEvent::VidVoteRecv(ref vote) => {
                 let view = vote.get_view_number();
                 if self.membership.get_leader(view) != self.public_key {
                     error!(
@@ -187,10 +90,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
                     return None;
                 }
-
-                let handle_event = HandleEvent(Arc::new(move |event, state| {
-                    async move { vote_handle(state, event).await }.boxed()
-                }));
                 let collection_view =
                     if let Some((collection_view, collection_id, _)) = &self.vote_collector {
                         // TODO: Is this correct for consecutive leaders?
@@ -204,46 +103,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     };
 
                 if view > collection_view {
-                    let new_accumulator = VoteAccumulator {
-                        vote_outcomes: HashMap::new(),
-                        sig_lists: Vec::new(),
-                        signers: bitvec![0; self.membership.total_nodes()],
-                        phantom: PhantomData,
-                    };
-
-                    let accumulator = new_accumulator.accumulate(&vote, self.membership.as_ref());
-
-                    let state = VIDVoteCollectionTaskState {
-                        network: self.network.clone(),
-                        membership: self.membership.clone(),
+                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
+                    let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
-                        private_key: self.private_key.clone(),
-                        accumulator,
-                        cur_view: view,
+                        membership: self.membership.clone(),
+                        view: vote.get_view_number(),
                         event_stream: self.event_stream.clone(),
                         id: self.id,
+                        registry: self.registry.clone(),
                     };
-                    let name = "VID Vote Collection";
-                    let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, HotShotEvent::VidVoteRecv(_))
-                    }));
-                    let builder =
-                        TaskBuilder::<VIDVoteCollectionTypes<TYPES, I>>::new(name.to_string())
-                            .register_event_stream(self.event_stream.clone(), filter)
-                            .await
-                            .register_registry(&mut self.registry.clone())
-                            .await
-                            .register_state(state)
-                            .register_event_handler(handle_event);
-                    let id = builder.get_task_id().unwrap();
-                    let stream_id = builder.get_stream_id().unwrap();
-                    let _task = async_spawn(async move {
-                        VIDVoteCollectionTypes::build(builder).launch().await
-                    });
-                    self.vote_collector = Some((view, id, stream_id));
+                    let name = "Quorum Vote Collection";
+                    self.vote_collector =
+                        spawn_vote_accumulator(&info, vote.clone(), event, name.to_string()).await;
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
-                        .direct_message(stream_id, HotShotEvent::VidVoteRecv(vote))
+                        .direct_message(stream_id, HotShotEvent::VidVoteRecv(vote.clone()))
                         .await;
                 };
             }
@@ -405,14 +279,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     for VIDTaskState<TYPES, I, A>
 {
 }
-
-/// Type alias for VID Vote Collection Types
-pub type VIDVoteCollectionTypes<TYPES, I> = HSTWithEvent<
-    ConsensusTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    VIDVoteCollectionTaskState<TYPES, I>,
->;
 
 /// Type alias for VID Task Types
 pub type VIDTaskTypes<TYPES, I, A> = HSTWithEvent<
