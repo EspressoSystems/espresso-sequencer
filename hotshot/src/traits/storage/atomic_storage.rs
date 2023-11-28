@@ -4,17 +4,15 @@ mod dual_key_value_store;
 mod hash_map_store;
 
 use self::{dual_key_value_store::DualKeyValueStore, hash_map_store::HashMapStore};
-use crate::{data::Leaf, traits::StateContents, QuorumCertificate};
+use crate::{data::Leaf, traits::StateContents};
 use async_std::sync::Mutex;
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader};
 use commit::Commitment;
-use hotshot_types::{
-    traits::storage::{
+use hotshot_types::traits::storage::{
         AtomicStoreSnafu, Storage, StorageError, StorageResult, StorageState, StorageUpdater,
         TestableStorage,
-    },
-};
+    };
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::ResultExt;
 use std::{path::Path, sync::Arc};
@@ -33,7 +31,7 @@ where
     atomic_store: Mutex<AtomicStore>,
 
     /// The Blocks stored by this [`AtomicStorage`]
-    blocks: HashMapStore<Commitment<STATE::Block>, STATE::Block>,
+    blocks: HashMapStore<Commitment<STATE::BlockPayload>, STATE::BlockPayload>,
 
     /// The [`QuorumCertificate`]s stored by this [`AtomicStorage`]
     qcs: DualKeyValueStore<QuorumCertificate<STATE>>,
@@ -142,22 +140,22 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
     #[instrument(name = "AtomicStorage::get_block", skip_all)]
     async fn get_block(
         &self,
-        hash: &Commitment<STATE::Block>,
-    ) -> StorageResult<Option<STATE::Block>> {
+        hash: &Commitment<STATE::BlockPayload>,
+    ) -> StorageResult<Option<STATE::BlockPayload>> {
         Ok(self.inner.blocks.get(hash).await)
     }
 
     #[instrument(name = "AtomicStorage::get_qc", skip_all)]
     async fn get_qc(
         &self,
-        hash: &Commitment<STATE::Block>,
+        hash: &Commitment<STATE::BlockPayload>,
     ) -> StorageResult<Option<QuorumCertificate<STATE>>> {
         Ok(self.inner.qcs.load_by_key_1_ref(hash).await)
     }
 
     #[instrument(name = "AtomicStorage::get_newest_qc", skip_all)]
     async fn get_newest_qc(&self) -> StorageResult<Option<QuorumCertificate<STATE>>> {
-        Ok(self.inner.qcs.load_latest(|qc| qc.view_number()).await)
+        Ok(self.inner.qcs.load_latest(|qc| qc.get_view_number()).await)
     }
 
     #[instrument(name = "AtomicStorage::get_qc_for_view", skip_all)]
@@ -176,7 +174,7 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
     #[instrument(name = "AtomicStorage::get_leaf_by_block", skip_all)]
     async fn get_leaf_by_block(
         &self,
-        hash: &Commitment<STATE::Block>,
+        hash: &Commitment<STATE::BlockPayload>,
     ) -> StorageResult<Option<Leaf<STATE>>> {
         Ok(self.inner.leaves.load_by_key_2_ref(hash).await)
     }
@@ -187,7 +185,7 @@ impl<STATE: StateContents> Storage<STATE> for AtomicStorage<STATE> {
     }
 
     async fn get_internal_state(&self) -> StorageState<STATE> {
-        let mut blocks: Vec<(Commitment<STATE::Block>, STATE::Block)> =
+        let mut blocks: Vec<(Commitment<STATE::BlockPayload>, STATE::BBlockPayloadlock)> =
             self.inner.blocks.load_all().await.into_iter().collect();
 
         blocks.sort_by_key(|(hash, _)| *hash);
@@ -226,8 +224,8 @@ impl<'a, STATE: StateContents + 'static> StorageUpdater<'a, STATE>
     #[instrument(name = "AtomicStorage::get_block", skip_all)]
     async fn insert_block(
         &mut self,
-        hash: Commitment<STATE::Block>,
-        block: STATE::Block,
+        hash: Commitment<STATE::BlockPayload>,
+        block: STATE::BlockPayload,
     ) -> StorageResult {
         trace!(?block, "inserting block");
         self.inner

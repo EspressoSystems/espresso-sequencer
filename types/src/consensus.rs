@@ -1,25 +1,26 @@
 //! Provides the core consensus types
 
-pub use crate::traits::node_implementation::ViewQueue;
-pub use crate::utils::{View, ViewInner};
-use async_compatibility_layer::async_primitives::subscribable_rwlock::SubscribableRwLock;
-use std::collections::HashSet;
+pub use crate::{
+    traits::node_implementation::ViewQueue,
+    utils::{View, ViewInner},
+};
+use displaydoc::Display;
 
-use crate::utils::Terminator;
 use crate::{
-    certificate::QuorumCertificate,
-    data::LeafType,
+    data::{Leaf, VidCommitment},
     error::HotShotError,
+    simple_certificate::QuorumCertificate,
     traits::{
-        metrics::{Counter, Gauge, Histogram, Metrics},
+        metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
     },
+    utils::Terminator,
 };
-use commit::{Commitment, Committable};
+use commit::Commitment;
 use derivative::Derivative;
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tracing::error;
 
@@ -30,10 +31,10 @@ type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 ///
 /// This will contain the state of all rounds.
 #[derive(custom_debug::Debug)]
-pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct Consensus<TYPES: NodeType> {
     /// The phases that are currently loaded in memory
     // TODO(https://github.com/EspressoSystems/hotshot/issues/153): Allow this to be loaded from `Storage`?
-    pub state_map: BTreeMap<TYPES::Time, View<TYPES, LEAF>>,
+    pub state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 
     /// cur_view from pseudocode
     pub cur_view: TYPES::Time,
@@ -41,131 +42,202 @@ pub struct Consensus<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// last view had a successful decide event
     pub last_decided_view: TYPES::Time,
 
-    /// A list of undecided transactions
-    pub transactions: Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>>,
-
-    /// A list of transactions we've seen decided, but didn't receive
-    pub seen_transactions: HashSet<Commitment<TYPES::Transaction>>,
-
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
-    pub saved_leaves: CommitmentMap<LEAF>,
+    pub saved_leaves: CommitmentMap<Leaf<TYPES>>,
 
-    /// Saved blocks
+    /// Saved payloads.
     ///
-    /// Contains the full block for every leaf in `saved_leaves` if that block is available.
-    pub saved_blocks: BlockStore<TYPES::BlockType>,
+    /// Contains the block payload commitment and encoded transactions for every leaf in
+    /// `saved_leaves` if that payload is available.
+    pub saved_payloads: PayloadStore,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate<TYPES, LEAF>,
+    pub high_qc: QuorumCertificate<TYPES>,
 
     /// A reference to the metrics trait
-    #[debug(skip)]
-    pub metrics: Arc<ConsensusMetrics>,
-
-    /// Amount of invalid QCs we've seen since the last commit
-    /// Used for metrics.  This resets to 0 on every decide event.
-    pub invalid_qc: usize,
+    pub metrics: Arc<ConsensusMetricsValue>,
 }
 
-/// The metrics being collected for the consensus algorithm
-pub struct ConsensusMetrics {
+/// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
+#[derive(Clone, Debug)]
+pub struct ConsensusMetricsValue {
+    /// The values that are being tracked
+    pub values: Arc<Mutex<InnerConsensusMetrics>>,
+    /// The number of last synced synced block height
+    pub last_synced_block_height: Box<dyn Gauge>,
+    /// The number of last decided view
+    pub last_decided_view: Box<dyn Gauge>,
     /// The current view
     pub current_view: Box<dyn Gauge>,
-    /// The duration to collect votes in a view (only applies when this insance is the leader)
-    pub vote_validate_duration: Box<dyn Histogram>,
-    /// The duration we waited for txns before building the proposal
-    pub proposal_wait_duration: Box<dyn Histogram>,
-    /// The duration to build the proposal
-    pub proposal_build_duration: Box<dyn Histogram>,
-    /// The duration of each view, in seconds
-    pub view_duration: Box<dyn Histogram>,
-    /// Number of views that are in-flight since the last committed view
-    pub number_of_views_since_last_commit: Box<dyn Gauge>,
+    /// Number of views that are in-flight since the last decided view
+    pub number_of_views_since_last_decide: Box<dyn Gauge>,
     /// Number of views that are in-flight since the last anchor view
     pub number_of_views_per_decide_event: Box<dyn Histogram>,
-    /// Number of invalid QCs between anchors
-    pub invalid_qc_views: Box<dyn Histogram>,
-    /// Number of views that were discarded since from one achor to the next
-    pub discarded_views_per_decide_event: Box<dyn Histogram>,
-    /// Views where no proposal was seen from one anchor to the next
-    pub empty_views_per_decide_event: Box<dyn Histogram>,
-    /// Number of rejected transactions
-    pub rejected_transactions: Box<dyn Counter>,
+    /// Number of invalid QCs we've seen since the last commit.
+    pub invalid_qc: Box<dyn Gauge>,
     /// Number of outstanding transactions
     pub outstanding_transactions: Box<dyn Gauge>,
     /// Memory size in bytes of the serialized transactions still outstanding
     pub outstanding_transactions_memory_size: Box<dyn Gauge>,
     /// Number of views that timed out
     pub number_of_timeouts: Box<dyn Counter>,
-    /// Total direct messages this node sent out
-    pub outgoing_direct_messages: Box<dyn Counter>,
-    /// Total broadcasts sent
-    pub outgoing_broadcast_messages: Box<dyn Counter>,
-    /// Total messages received
-    pub direct_messages_received: Box<dyn Counter>,
-    /// Total broadcast messages received
-    pub broadcast_messages_received: Box<dyn Counter>,
-    /// Total number of messages which couldn't be sent
-    pub failed_to_send_messages: Box<dyn Counter>,
+}
+
+/// The wrapper with a string name for the networking metrics
+#[derive(Clone, Debug)]
+pub struct ConsensusMetrics {
+    /// a prefix which tracks the name of the metric
+    prefix: String,
+    /// a map of values
+    values: Arc<Mutex<InnerConsensusMetrics>>,
+}
+
+/// the set of counters and gauges for the networking metrics
+#[derive(Clone, Debug, Default, Display)]
+pub struct InnerConsensusMetrics {
+    /// All the counters of the networking metrics
+    pub counters: HashMap<String, usize>,
+    /// All the gauges of the networking metrics
+    pub gauges: HashMap<String, usize>,
+    /// All the histograms of the networking metrics
+    pub histograms: HashMap<String, Vec<f64>>,
+    /// All the labels of the networking metrics
+    pub labels: HashMap<String, String>,
 }
 
 impl ConsensusMetrics {
-    /// Create a new instance of this [`ConsensusMetrics`] struct, setting all the counters and gauges
     #[must_use]
-    pub fn new(metrics: &dyn Metrics) -> Self {
+    /// For the creation and naming of gauge, counter, histogram and label.
+    pub fn sub(&self, name: String) -> Self {
+        let prefix = if self.prefix.is_empty() {
+            name
+        } else {
+            format!("{}-{name}", self.prefix)
+        };
         Self {
-            current_view: metrics.create_gauge(String::from("current_view"), None),
-            vote_validate_duration: metrics.create_histogram(
-                String::from("vote_validate_duration"),
-                Some(String::from("seconds")),
-            ),
-            proposal_build_duration: metrics.create_histogram(
-                String::from("proposal_build_duration"),
-                Some(String::from("seconds")),
-            ),
-            proposal_wait_duration: metrics.create_histogram(
-                String::from("proposal_wait_duration"),
-                Some(String::from("seconds")),
-            ),
-            view_duration: metrics
-                .create_histogram(String::from("view_duration"), Some(String::from("seconds"))),
-            number_of_views_since_last_commit: metrics
-                .create_gauge(String::from("number_of_views_since_last_commit"), None),
-            number_of_views_per_decide_event: metrics
-                .create_histogram(String::from("number_of_views_per_decide_event"), None),
-            invalid_qc_views: metrics.create_histogram(String::from("invalid_qc_views"), None),
-            discarded_views_per_decide_event: metrics
-                .create_histogram(String::from("discarded_views_per_decide_event"), None),
-            empty_views_per_decide_event: metrics
-                .create_histogram(String::from("empty_views_per_decide_event"), None),
-            rejected_transactions: metrics
-                .create_counter(String::from("rejected_transactions"), None),
-            outstanding_transactions: metrics
-                .create_gauge(String::from("outstanding_transactions"), None),
-            outstanding_transactions_memory_size: metrics
-                .create_gauge(String::from("outstanding_transactions_memory_size"), None),
-            outgoing_direct_messages: metrics
-                .create_counter(String::from("outgoing_direct_messages"), None),
-            outgoing_broadcast_messages: metrics
-                .create_counter(String::from("outgoing_broadcast_messages"), None),
-            direct_messages_received: metrics
-                .create_counter(String::from("direct_messages_received"), None),
-            broadcast_messages_received: metrics
-                .create_counter(String::from("broadcast_messages_received"), None),
-            failed_to_send_messages: metrics
-                .create_counter(String::from("failed_to_send_messages"), None),
-            number_of_timeouts: metrics
-                .create_counter(String::from("number_of_views_timed_out"), None),
+            prefix,
+            values: Arc::clone(&self.values),
         }
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
+impl Metrics for ConsensusMetrics {
+    fn create_counter(&self, label: String, _unit_label: Option<String>) -> Box<dyn Counter> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_gauge(&self, label: String, _unit_label: Option<String>) -> Box<dyn Gauge> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_histogram(&self, label: String, _unit_label: Option<String>) -> Box<dyn Histogram> {
+        Box::new(self.sub(label))
+    }
+
+    fn create_label(&self, label: String) -> Box<dyn Label> {
+        Box::new(self.sub(label))
+    }
+
+    fn subgroup(&self, subgroup_name: String) -> Box<dyn Metrics> {
+        Box::new(self.sub(subgroup_name))
+    }
+}
+
+impl Counter for ConsensusMetrics {
+    fn add(&self, amount: usize) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .counters
+            .entry(self.prefix.clone())
+            .or_default() += amount;
+    }
+}
+
+impl Gauge for ConsensusMetrics {
+    fn set(&self, amount: usize) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .gauges
+            .entry(self.prefix.clone())
+            .or_default() = amount;
+    }
+    fn update(&self, delta: i64) {
+        let mut values = self.values.lock().unwrap();
+        let value = values.gauges.entry(self.prefix.clone()).or_default();
+        let signed_value = i64::try_from(*value).unwrap_or(i64::MAX);
+        *value = usize::try_from(signed_value + delta).unwrap_or(0);
+    }
+}
+
+impl Histogram for ConsensusMetrics {
+    fn add_point(&self, point: f64) {
+        self.values
+            .lock()
+            .unwrap()
+            .histograms
+            .entry(self.prefix.clone())
+            .or_default()
+            .push(point);
+    }
+}
+
+impl Label for ConsensusMetrics {
+    fn set(&self, value: String) {
+        *self
+            .values
+            .lock()
+            .unwrap()
+            .labels
+            .entry(self.prefix.clone())
+            .or_default() = value;
+    }
+}
+
+impl ConsensusMetricsValue {
+    /// Create a new instance of this [`ConsensusMetricsValue`] struct, setting all the counters and gauges
+    #[must_use]
+    pub fn new() -> Self {
+        let values = Arc::default();
+        let metrics: Box<dyn Metrics> = Box::new(ConsensusMetrics {
+            prefix: String::new(),
+            values: Arc::clone(&values),
+        });
+        Self {
+            values,
+            last_synced_block_height: metrics
+                .create_gauge(String::from("last_synced_block_height"), None),
+            last_decided_view: metrics.create_gauge(String::from("last_decided_view"), None),
+            current_view: metrics.create_gauge(String::from("current_view"), None),
+            number_of_views_since_last_decide: metrics
+                .create_gauge(String::from("number_of_views_since_last_decide"), None),
+            number_of_views_per_decide_event: metrics
+                .create_histogram(String::from("number_of_views_per_decide_event"), None),
+            invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
+            outstanding_transactions: metrics
+                .create_gauge(String::from("outstanding_transactions"), None),
+            outstanding_transactions_memory_size: metrics
+                .create_gauge(String::from("outstanding_transactions_memory_size"), None),
+            number_of_timeouts: metrics.create_counter(String::from("number_of_timeouts"), None),
+        }
+    }
+}
+
+impl Default for ConsensusMetricsValue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<TYPES: NodeType> Consensus<TYPES> {
     /// increment the current view
     /// NOTE may need to do gc here
     pub fn increment_view(&mut self) -> TYPES::Time {
@@ -184,7 +256,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
         mut f: F,
     ) -> Result<(), HotShotError<TYPES>>
     where
-        F: FnMut(&LEAF) -> bool,
+        F: FnMut(&Leaf<TYPES>) -> bool,
     {
         let mut next_leaf = if let Some(view) = self.state_map.get(&start_from) {
             view.get_leaf_commitment()
@@ -224,9 +296,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
         Err(HotShotError::LeafNotFound {})
     }
 
-    /// garbage collects based on state change
-    /// right now, this removes from both the `saved_blocks`
-    /// and `state_map` fields of `Consensus`
+    /// Garbage collects based on state change right now, this removes from both the
+    /// `saved_payloads` and `state_map` fields of `Consensus`.
     /// # Panics
     /// On inconsistent stored entries
     #[allow(clippy::unused_async)] // async for API compatibility reasons
@@ -249,25 +320,19 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
         // perform gc
         self.state_map
             .range(old_anchor_view..new_anchor_view)
-            .filter_map(|(_view_number, view)| view.get_block_commitment())
-            .for_each(|block| {
-                self.saved_blocks.remove(block);
+            .filter_map(|(_view_number, view)| view.get_payload_commitment())
+            .for_each(|payload_commitment| {
+                self.saved_payloads.remove(payload_commitment);
             });
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 if let Some(removed) = self.saved_leaves.remove(&leaf) {
-                    self.saved_blocks.remove(removed.get_deltas_commitment());
+                    self.saved_payloads.remove(removed.get_payload_commitment());
                 }
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
-    }
-
-    /// return a clone of the internal storage of unclaimed transactions
-    #[must_use]
-    pub fn get_transactions(&self) -> Arc<SubscribableRwLock<CommitmentMap<TYPES::Transaction>>> {
-        self.transactions.clone()
     }
 
     /// Gets the last decided state
@@ -275,7 +340,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     /// if the last decided view's state does not exist in the state map
     /// this should never happen.
     #[must_use]
-    pub fn get_decided_leaf(&self) -> LEAF {
+    pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
         let decided_view_num = self.last_decided_view;
         let view = self.state_map.get(&decided_view_num).unwrap();
         let leaf = view
@@ -285,7 +350,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
     }
 }
 
-/// Mapping from block commitments to full blocks.
+/// Mapping from block payload commitments to the encoded transactions.
 ///
 /// Entries in this mapping are reference-counted, so multiple consensus objects can refer to the
 /// same block, and the block will only be deleted after _all_ such objects are garbage collected.
@@ -293,46 +358,46 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Consensus<TYPES, LEAF> {
 /// before all but one branch are ultimately garbage collected.
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct BlockStore<BLOCK: Committable>(HashMap<Commitment<BLOCK>, (BLOCK, u64)>);
+pub struct PayloadStore(HashMap<VidCommitment, (Vec<u8>, u64)>);
 
-impl<BLOCK: Committable> BlockStore<BLOCK> {
-    /// Save `block` for later retrieval.
+impl PayloadStore {
+    /// Save the encoded transactions for later retrieval.
     ///
     /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
-    /// `self.get(block.commit())` will return `Some(block)`.
+    /// `self.get(payload_commitment)` will return `Some(encoded_transactions)`.
     ///
-    /// This function will increment a reference count on the saved block, so that multiple calls to
-    /// [`insert`](Self::insert) for the same block result in multiple owning references to the
-    /// block. [`remove`](Self::remove) must be called once for each reference before the block will
-    /// be deallocated.
-    pub fn insert(&mut self, block: BLOCK) {
+    /// This function will increment a reference count on the saved payload commitment, so that
+    /// multiple calls to [`insert`](Self::insert) for the same payload commitment result in
+    /// multiple owning references to the payload commitment. [`remove`](Self::remove) must be
+    /// called once for each reference before the payload commitment will be deallocated.
+    pub fn insert(&mut self, payload_commitment: VidCommitment, encoded_transactions: Vec<u8>) {
         self.0
-            .entry(block.commit())
+            .entry(payload_commitment)
             .and_modify(|(_, refcount)| *refcount += 1)
-            .or_insert((block, 1));
+            .or_insert((encoded_transactions, 1));
     }
 
-    /// Get a saved block, if available.
+    /// Get the saved encoded transactions, if available.
     ///
-    /// If a block has been saved with [`insert`](Self::insert), this function will retrieve it. It
-    /// may return [`None`] if a block with the given commitment has not been saved or if the block
-    /// has been dropped with [`remove`](Self::remove).
+    /// If the encoded transactions has been saved with [`insert`](Self::insert), this function
+    /// will retrieve it. It may return [`None`] if a block with the given commitment has not been
+    /// saved or if the block has been dropped with [`remove`](Self::remove).
     #[must_use]
-    pub fn get(&self, block: Commitment<BLOCK>) -> Option<&BLOCK> {
-        self.0.get(&block).map(|(block, _)| block)
+    pub fn get(&self, payload_commitment: VidCommitment) -> Option<&Vec<u8>> {
+        self.0.get(&payload_commitment).map(|(encoded, _)| encoded)
     }
 
-    /// Drop a reference to a saved block.
+    /// Drop a reference to the saved encoded transactions.
     ///
-    /// If the block exists and this call drops the last reference to it, the block will be
-    /// returned. Otherwise, the return value is [`None`].
-    pub fn remove(&mut self, block: Commitment<BLOCK>) -> Option<BLOCK> {
-        if let Entry::Occupied(mut e) = self.0.entry(block) {
+    /// If the set exists and this call drops the last reference to it, the set will be returned,
+    /// Otherwise, the return value is [`None`].
+    pub fn remove(&mut self, payload_commitment: VidCommitment) -> Option<Vec<u8>> {
+        if let Entry::Occupied(mut e) = self.0.entry(payload_commitment) {
             let (_, refcount) = e.get_mut();
             *refcount -= 1;
             if *refcount == 0 {
-                let (block, _) = e.remove();
-                return Some(block);
+                let (encoded, _) = e.remove();
+                return Some(encoded);
             }
         }
         None

@@ -5,7 +5,7 @@ use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
 
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::{error::ClientError, Client};
 
 /// Holds the client connection to the orchestrator
@@ -65,19 +65,11 @@ impl OrchestratorClient {
     pub async fn get_config_from_orchestrator<TYPES: NodeType>(
         &self,
         node_index: u16,
-    ) -> NetworkConfig<
-        TYPES::SignatureKey,
-        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        TYPES::ElectionConfigType,
-    > {
+    ) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
         let f = |client: Client<ClientError>| {
             async move {
                 let config: Result<
-                    NetworkConfig<
-                        TYPES::SignatureKey,
-                        <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-                        TYPES::ElectionConfigType,
-                    >,
+                    NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
                     ClientError,
                 > = client
                     .post(&format!("api/config/{node_index}"))

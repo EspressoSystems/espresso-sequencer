@@ -1,8 +1,8 @@
 //! Config file for stake table
+use crate::utils::ToFields;
 use ark_ff::PrimeField;
 use ark_std::vec;
-use ethereum_types::U256;
-use jf_primitives::crhf::FixedLengthRescueCRHF;
+use jf_primitives::{crhf::FixedLengthRescueCRHF, signatures::bls_over_bn254};
 
 /// Branch of merkle tree.
 /// Set to 3 because we are currently using RATE-3 rescue hash function
@@ -13,9 +13,19 @@ pub(crate) type FieldType = ark_bn254::Fq;
 /// Hash algorithm used in Merkle tree, using a RATE-3 rescue
 pub(crate) type Digest = FixedLengthRescueCRHF<FieldType, TREE_BRANCH, 1>;
 
-/// convert a U256 to a field element.
-pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
-    let mut bytes = vec![0u8; 32];
-    v.to_little_endian(&mut bytes);
-    F::from_le_bytes_mod_order(&bytes)
+impl ToFields<FieldType> for FieldType {
+    const SIZE: usize = 1;
+    fn to_fields(&self) -> Vec<FieldType> {
+        vec![*self]
+    }
+}
+
+impl ToFields<FieldType> for bls_over_bn254::VerKey {
+    const SIZE: usize = 2;
+    fn to_fields(&self) -> Vec<FieldType> {
+        let bytes = jf_utils::to_bytes!(&self.to_affine()).unwrap();
+        let x = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[..32]);
+        let y = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[32..]);
+        vec![x, y]
+    }
 }

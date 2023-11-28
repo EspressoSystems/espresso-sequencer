@@ -1,12 +1,13 @@
 pub mod types;
 
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demos::vdemo::VDemoTypes;
+use hotshot::demo::DemoTypes;
 use tracing::instrument;
-use types::ThisMembership;
 
-use crate::infra::{run_orchestrator, OrchestratorArgs};
-use crate::types::{NodeImpl, ThisNetwork};
+use crate::infra::run_orchestrator;
+use crate::infra::OrchestratorArgs;
+use crate::types::{DANetwork, NodeImpl, QuorumNetwork, VIDNetwork, ViewSyncNetwork};
 
 #[path = "../infra/mod.rs"]
 pub mod infra;
@@ -18,7 +19,12 @@ pub mod infra;
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]
 #[instrument]
 async fn main() {
+    setup_logging();
+    setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<VDemoTypes, ThisMembership, ThisNetwork, NodeImpl>(args).await;
+    run_orchestrator::<DemoTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
+        args,
+    )
+    .await;
 }

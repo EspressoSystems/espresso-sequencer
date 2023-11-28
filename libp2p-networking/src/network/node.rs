@@ -15,6 +15,7 @@ use super::{
     error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
     gen_transport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal, NetworkNodeType,
 };
+
 use crate::network::{
     behaviours::{
         dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery},
@@ -31,6 +32,8 @@ use async_compatibility_layer::{
 };
 use either::Either;
 use futures::{select, FutureExt, StreamExt};
+use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
+use libp2p::core::transport::ListenerId;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::Boxed},
     gossipsub::{
@@ -42,12 +45,12 @@ use libp2p::{
         Info as IdentifyInfo,
     },
     identity::Keypair,
-    kad::{store::MemoryStore, Kademlia, KademliaConfig},
+    kad::{store::MemoryStore, Behaviour, Config},
     request_response::{
         Behaviour as RequestResponse, Config as RequestResponseConfig, ProtocolSupport,
     },
-    swarm::{SwarmBuilder, SwarmEvent},
-    Multiaddr, Swarm,
+    swarm::SwarmEvent,
+    Multiaddr, Swarm, SwarmBuilder,
 };
 use libp2p_identity::PeerId;
 use rand::{prelude::SliceRandom, thread_rng};
@@ -79,6 +82,8 @@ pub struct NetworkNode {
     swarm: Swarm<NetworkDef>,
     /// the configuration parameters of the netework
     config: NetworkNodeConfig,
+    /// the listener id we are listening on, if it exists
+    listener_id: Option<ListenerId>,
 }
 
 impl NetworkNode {
@@ -100,7 +105,7 @@ impl NetworkNode {
         &mut self,
         listen_addr: Multiaddr,
     ) -> Result<Multiaddr, NetworkError> {
-        self.swarm.listen_on(listen_addr).context(TransportSnafu)?;
+        self.listener_id = Some(self.swarm.listen_on(listen_addr).context(TransportSnafu)?);
         let addr = loop {
             if let Some(SwarmEvent::NewListenAddr { address, .. }) = self.swarm.next().await {
                 break address;
@@ -235,11 +240,11 @@ impl NetworkNode {
             let identify = IdentifyBehaviour::new(identify_cfg);
 
             // - Build DHT needed for peer discovery
-            let mut kconfig = KademliaConfig::default();
+            let mut kconfig = Config::default();
             // 8 hours by default
             let record_republication_interval = config
                 .republication_interval
-                .unwrap_or(Duration::from_secs(28800));
+                .unwrap_or(Duration::from_secs(KAD_DEFAULT_REPUB_INTERVAL_SEC));
             let ttl = Some(config.ttl.unwrap_or(16 * record_republication_interval));
             kconfig
                 .set_parallelism(NonZeroUsize::new(1).unwrap())
@@ -251,7 +256,7 @@ impl NetworkNode {
                 kconfig.set_replication_factor(factor);
             }
 
-            let kadem = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kconfig);
+            let kadem = Behaviour::with_config(peer_id, MemoryStore::new(peer_id), kconfig);
 
             let rrconfig = RequestResponseConfig::default();
 
@@ -268,16 +273,25 @@ impl NetworkNode {
                     config
                         .replication_factor
                         .unwrap_or_else(|| NonZeroUsize::new(4).unwrap()),
-                ),
+                    config.dht_cache_location.clone(),
+                )
+                .await,
                 identify,
                 DMBehaviour::new(request_response),
             );
-            let executor = Box::new(|fut| {
-                async_spawn(fut);
-            });
 
-            SwarmBuilder::with_executor(transport, network, peer_id, executor)
-                .dial_concurrency_factor(std::num::NonZeroU8::new(1).unwrap())
+            // build swarm
+            let swarm = SwarmBuilder::with_existing_identity(identity.clone());
+            #[cfg(async_executor_impl = "async-std")]
+            let swarm = swarm.with_async_std();
+            #[cfg(async_executor_impl = "tokio")]
+            let swarm = swarm.with_tokio();
+
+            swarm
+                .with_other_transport(|_| transport)
+                .unwrap()
+                .with_behaviour(|_| network)
+                .unwrap()
                 .build()
         };
         for (peer, addr) in &config.to_connect_addrs {
@@ -293,6 +307,7 @@ impl NetworkNode {
             peer_id,
             swarm,
             config,
+            listener_id: None,
         })
     }
 
@@ -361,7 +376,10 @@ impl NetworkNode {
                         // NOTE used by test with conductor only
                     }
                     ClientRequest::Shutdown => {
-                        warn!("Libp2p listener shutting down");
+                        if let Some(listener_id) = self.listener_id {
+                            self.swarm.remove_listener(listener_id);
+                        }
+
                         return Ok(true);
                     }
                     ClientRequest::GossipMsg(topic, contents) => {

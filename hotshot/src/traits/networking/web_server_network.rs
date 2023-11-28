@@ -13,19 +13,16 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
     message::{Message, MessagePurpose},
     traits::{
-        election::Membership,
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, NetworkError, NetworkMsg,
             TestableChannelImplementation, TestableNetworkingImplementation, TransmitType,
             WebServerNetworkError,
         },
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    vote::VoteType,
 };
 use hotshot_web_server::{self, config};
 use rand::random;
@@ -34,7 +31,6 @@ use serde::{Deserialize, Serialize};
 use hotshot_types::traits::network::ViewMessage;
 use std::{
     collections::{hash_map::Entry, BTreeSet, HashMap},
-    marker::PhantomData,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -42,49 +38,34 @@ use std::{
     time::Duration,
 };
 use surf_disco::error::ClientError;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
-pub struct WebCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
-    Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    PhantomData<(MEMBERSHIP, I, PROPOSAL, VOTE)>,
-);
+pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
+impl<TYPES: NodeType> WebCommChannel<TYPES> {
     /// Create new communication channel
     #[must_use]
-    pub fn new(
-        network: Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>,
-    ) -> Self {
-        Self(network, PhantomData)
+    pub fn new(network: Arc<WebServerNetwork<TYPES>>) -> Self {
+        Self(network)
     }
 }
 
 /// The web server network state
 #[derive(Clone, Debug)]
-pub struct WebServerNetwork<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
+pub struct WebServerNetwork<TYPES: NodeType> {
     /// The inner, core state of the web server network
-    inner: Arc<Inner<M, KEY, TYPES>>,
+    inner: Arc<Inner<TYPES>>,
     /// An optional shutdown signal. This is only used when this connection is created through the `TestableNetworkingImplementation` API.
     server_shutdown_signal: Option<Arc<OneShotSender<()>>>,
 }
 
-impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> WebServerNetwork<M, KEY, TYPES> {
+impl<TYPES: NodeType> WebServerNetwork<TYPES> {
     /// Post a message to the web server and return the result
-    async fn post_message_to_web_server(&self, message: SendMsg<M>) -> Result<(), NetworkError> {
+    async fn post_message_to_web_server(
+        &self,
+        message: SendMsg<Message<TYPES>>,
+    ) -> Result<(), NetworkError> {
         let result: Result<(), ClientError> = self
             .inner
             .client
@@ -98,19 +79,29 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> WebServerNetwork<M, KEY,
             source: WebServerNetworkError::ClientError,
         })
     }
+
+    /// Pauses the underlying network
+    pub fn pause(&self) {
+        error!("Pausing CDN network");
+        self.inner.running.store(false, Ordering::Relaxed);
+    }
+
+    /// Resumes the underlying network
+    pub fn resume(&self) {
+        error!("Resuming CDN network");
+        self.inner.running.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Represents the core of web server networking
 #[derive(Debug)]
-struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
-    /// Phantom data for generic types
-    phantom: PhantomData<(KEY, TYPES::ElectionConfigType)>,
+struct Inner<TYPES: NodeType> {
     /// Our own key
     _own_key: TYPES::SignatureKey,
     /// Queue for broadcasted messages
-    broadcast_poll_queue: Arc<RwLock<Vec<RecvMsg<M>>>>,
+    broadcast_poll_queue: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
     /// Queue for direct messages
-    direct_poll_queue: Arc<RwLock<Vec<RecvMsg<M>>>>,
+    direct_poll_queue: Arc<RwLock<Vec<RecvMsg<Message<TYPES>>>>>,
     /// Client is running
     running: AtomicBool,
     /// The web server connection is ready
@@ -125,28 +116,41 @@ struct Inner<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> {
     /// The last tx_index we saw from the web server
     tx_index: Arc<RwLock<u64>>,
 
-    // TODO ED This should be TYPES::Time
-    // Theoretically there should never be contention for this lock...
     /// Task map for quorum proposals.
-    proposal_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    proposal_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for quorum votes.
-    vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for vid votes
+    vid_vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for VID certs
+    vid_cert_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task map for VID disperse data
+    vid_disperse_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for DACs.
-    dac_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    dac_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync certificates.
-    view_sync_cert_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_cert_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for view sync votes.
-    view_sync_vote_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    view_sync_vote_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
     /// Task map for transactions
-    txn_task_map: Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent>>>>,
+    txn_task_map:
+        Arc<RwLock<HashMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
 }
 
-impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
+impl<TYPES: NodeType> Inner<TYPES> {
     #![allow(clippy::too_many_lines)]
     /// Pull a web server.
     async fn poll_web_server(
         &self,
-        receiver: UnboundedReceiver<ConsensusIntentEvent>,
+        receiver: UnboundedReceiver<ConsensusIntentEvent<TYPES::SignatureKey>>,
         message_purpose: MessagePurpose,
         view_number: u64,
     ) -> Result<(), NetworkError> {
@@ -172,6 +176,9 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                     config::get_view_sync_vote_route(view_number, vote_index)
                 }
                 MessagePurpose::DAC => config::get_da_certificate_route(view_number),
+                MessagePurpose::VidDisperse => config::get_vid_disperse_route(view_number), // like `Proposal`
+                MessagePurpose::VidVote => config::get_vid_vote_route(view_number, vote_index), // like `Vote`
+                MessagePurpose::VidCert => config::get_vid_certificate_route(view_number), // like `DAC`
             };
 
             if message_purpose == MessagePurpose::Data {
@@ -244,6 +251,14 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                     direct_poll_queue.push(vote.clone());
                                 }
                             }
+                            MessagePurpose::VidVote => {
+                                // TODO copy-pasted from `MessagePurpose::Vote` https://github.com/EspressoSystems/HotShot/issues/1690
+                                let mut direct_poll_queue = self.direct_poll_queue.write().await;
+                                for vote in &deserialized_messages {
+                                    vote_index += 1;
+                                    direct_poll_queue.push(vote.clone());
+                                }
+                            }
                             MessagePurpose::DAC => {
                                 debug!(
                                     "Received DAC from web server for view {} {}",
@@ -258,6 +273,41 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                                 // return if we found a DAC, since there will only be 1 per view
                                 // In future we should check to make sure DAC is valid
                                 return Ok(());
+                            }
+                            MessagePurpose::VidCert => {
+                                // TODO copy-pasted from `MessagePurpose::DAC` https://github.com/EspressoSystems/HotShot/issues/1690
+                                debug!(
+                                    "Received VID cert from web server for view {} {}",
+                                    view_number, self.is_da
+                                );
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                // return if we found a VID cert, since there will only be 1 per view
+                                // In future we should check to make sure VID cert is valid
+                                return Ok(());
+                            }
+                            MessagePurpose::VidDisperse => {
+                                // TODO copy-pasted from `MessagePurpose::Proposal` https://github.com/EspressoSystems/HotShot/issues/1690
+
+                                // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
+                                self.broadcast_poll_queue
+                                    .write()
+                                    .await
+                                    .push(deserialized_messages[0].clone());
+
+                                return Ok(());
+                                // Wait for the view to change before polling for proposals again
+                                // let event = receiver.recv().await;
+                                // match event {
+                                //     Ok(event) => view_number = event.view_number(),
+                                //     Err(_r) => {
+                                //         error!("Proposal receiver error!  It was likely shutdown")
+                                //     }
+                                // }
                             }
                             MessagePurpose::ViewSyncVote => {
                                 // error!(
@@ -310,8 +360,10 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                         // TODO ED Should add extra error checking here to make sure we are intending to cancel a task
                         ConsensusIntentEvent::CancelPollForVotes(event_view)
                         | ConsensusIntentEvent::CancelPollForProposal(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDVotes(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDCertificate(event_view)
                         | ConsensusIntentEvent::CancelPollForDAC(event_view)
-                        | ConsensusIntentEvent::CancelPollForViewSyncCertificate(event_view)
+                        | ConsensusIntentEvent::CancelPollForVIDDisperse(event_view)
                         | ConsensusIntentEvent::CancelPollForViewSyncVotes(event_view) => {
                             if view_number == event_view {
                                 debug!("Shutting down polling task for view {}", event_view);
@@ -330,7 +382,9 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
                             }
                         }
 
-                        _ => unimplemented!(),
+                        _ => {
+                            unimplemented!()
+                        }
                     }
                 }
                 // Nothing on receiving channel
@@ -346,7 +400,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     async fn get_txs_from_web_server(
         &self,
         endpoint: String,
-    ) -> Result<Option<(u64, Vec<RecvMsg<M>>)>, NetworkError> {
+    ) -> Result<Option<(u64, Vec<RecvMsg<Message<TYPES>>>)>, NetworkError> {
         let result: Result<Option<(u64, Vec<Vec<u8>>)>, ClientError> =
             self.client.get(&endpoint).send().await;
         match result {
@@ -373,7 +427,7 @@ impl<M: NetworkMsg, KEY: SignatureKey, TYPES: NodeType> Inner<M, KEY, TYPES> {
     async fn get_message_from_web_server(
         &self,
         endpoint: String,
-    ) -> Result<Option<Vec<RecvMsg<M>>>, NetworkError> {
+    ) -> Result<Option<Vec<RecvMsg<Message<TYPES>>>>, NetworkError> {
         let result: Result<Option<Vec<Vec<u8>>>, ClientError> =
             self.client.get(&endpoint).send().await;
         match result {
@@ -447,12 +501,7 @@ impl<M: NetworkMsg> RecvMsgTrait<M> for RecvMsg<M> {
 impl<M: NetworkMsg> NetworkMsg for SendMsg<M> {}
 impl<M: NetworkMsg> NetworkMsg for RecvMsg<M> {}
 
-impl<
-        M: NetworkMsg + 'static + ViewMessage<TYPES>,
-        K: SignatureKey + 'static,
-        TYPES: NodeType + 'static,
-    > WebServerNetwork<M, K, TYPES>
-{
+impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
     /// Creates a new instance of the `WebServerNetwork`
     /// # Panics
     /// if the web server url is malformed
@@ -475,7 +524,6 @@ impl<
         let client = surf_disco::Client::<ClientError>::new(base_url.unwrap());
 
         let inner = Arc::new(Inner {
-            phantom: PhantomData,
             broadcast_poll_queue: Arc::default(),
             direct_poll_queue: Arc::default(),
             running: AtomicBool::new(true),
@@ -487,6 +535,9 @@ impl<
             tx_index: Arc::default(),
             proposal_task_map: Arc::default(),
             vote_task_map: Arc::default(),
+            vid_vote_task_map: Arc::default(),
+            vid_cert_task_map: Arc::default(),
+            vid_disperse_task_map: Arc::default(),
             dac_task_map: Arc::default(),
             view_sync_cert_task_map: Arc::default(),
             view_sync_vote_task_map: Arc::default(),
@@ -503,7 +554,9 @@ impl<
 
     /// Parses a message to find the appropriate endpoint
     /// Returns a `SendMsg` containing the endpoint
-    fn parse_post_message(message: M) -> Result<SendMsg<M>, WebServerNetworkError> {
+    fn parse_post_message(
+        message: Message<TYPES>,
+    ) -> Result<SendMsg<Message<TYPES>>, WebServerNetworkError> {
         let view_number: TYPES::Time = message.get_view_number();
 
         let endpoint = match &message.purpose() {
@@ -519,9 +572,12 @@ impl<
             }
             MessagePurpose::ViewSyncVote => config::post_view_sync_vote_route(*view_number),
             MessagePurpose::DAC => config::post_da_certificate_route(*view_number),
+            MessagePurpose::VidVote => config::post_vid_vote_route(*view_number),
+            MessagePurpose::VidDisperse => config::post_vid_disperse_route(*view_number),
+            MessagePurpose::VidCert => config::post_vid_certificate_route(*view_number),
         };
 
-        let network_msg: SendMsg<M> = SendMsg {
+        let network_msg: SendMsg<Message<TYPES>> = SendMsg {
             message: Some(message),
             endpoint,
         };
@@ -530,33 +586,32 @@ impl<
 }
 
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
-    type NETWORK = WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>;
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for WebCommChannel<TYPES> {
+    type NETWORK = WebServerNetwork<TYPES>;
     /// Blocks until node is successfully initialized
     /// into the network
     async fn wait_for_ready(&self) {
-        <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+        <WebServerNetwork<_> as ConnectedNetwork<
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::wait_for_ready(&self.0)
         .await;
     }
 
+    fn pause(&self) {
+        self.0.pause();
+    }
+
+    fn resume(&self) {
+        self.0.resume();
+    }
+
     /// checks if the network is ready
     /// nonblocking
     async fn is_ready(&self) -> bool {
-        <WebServerNetwork<_, _, _,> as ConnectedNetwork<
-            Message<TYPES, I>,
-            TYPES::SignatureKey,
-        >>::is_ready(&self.0)
+        <WebServerNetwork<_> as ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>::is_ready(
+            &self.0,
+        )
         .await
     }
 
@@ -569,8 +624,8 @@ impl<
         Self: 'b,
     {
         let closure = async move {
-            <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+            <WebServerNetwork<_> as ConnectedNetwork<
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::shut_down(&self.0)
             .await;
@@ -582,8 +637,8 @@ impl<
     /// blocking
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        _election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        _election: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
         self.0.broadcast_message(message, BTreeSet::new()).await
     }
@@ -592,7 +647,7 @@ impl<
     /// blocking
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -605,14 +660,14 @@ impl<
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
     {
         let closure = async move {
-            <WebServerNetwork<_, _, _> as ConnectedNetwork<
-                Message<TYPES, I>,
+            <WebServerNetwork<_> as ConnectedNetwork<
+                Message<TYPES>,
                 TYPES::SignatureKey,
             >>::recv_msgs(&self.0, transmit_type)
             .await
@@ -620,15 +675,9 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
-        <WebServerNetwork<_, _, _> as ConnectedNetwork<
-            Message<TYPES, I>,
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
+        <WebServerNetwork<_> as ConnectedNetwork<
+            Message<TYPES>,
             TYPES::SignatureKey,
         >>::inject_consensus_info(&self.0, event)
         .await;
@@ -636,11 +685,8 @@ impl<
 }
 
 #[async_trait]
-impl<
-        M: NetworkMsg + 'static + ViewMessage<TYPES>,
-        K: SignatureKey + 'static,
-        TYPES: NodeType + 'static,
-    > ConnectedNetwork<M, K> for WebServerNetwork<M, K, TYPES>
+impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
+    for WebServerNetwork<TYPES>
 {
     /// Blocks until the network is successfully initialized
     async fn wait_for_ready(&self) {
@@ -672,9 +718,15 @@ impl<
     /// blocking
     async fn broadcast_message(
         &self,
-        message: M,
-        _recipients: BTreeSet<K>,
+        message: Message<TYPES>,
+        _recipients: BTreeSet<TYPES::SignatureKey>,
     ) -> Result<(), NetworkError> {
+        // short circuit if we are shut down
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return Err(NetworkError::ShutDown);
+        }
+
         let network_msg = Self::parse_post_message(message);
         match network_msg {
             Ok(network_msg) => self.post_message_to_web_server(network_msg).await,
@@ -686,7 +738,16 @@ impl<
 
     /// Sends a direct message to a specific node
     /// blocking
-    async fn direct_message(&self, message: M, _recipient: K) -> Result<(), NetworkError> {
+    async fn direct_message(
+        &self,
+        message: Message<TYPES>,
+        _recipient: TYPES::SignatureKey,
+    ) -> Result<(), NetworkError> {
+        // short circuit if we are shut down
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return Err(NetworkError::ShutDown);
+        }
         let network_msg = Self::parse_post_message(message);
         match network_msg {
             Ok(network_msg) => {
@@ -707,7 +768,7 @@ impl<
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -737,14 +798,13 @@ impl<
         boxed_sync(closure)
     }
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, _pk: K) -> Result<(), NetworkError> {
-        Ok(())
-    }
-
     #[allow(clippy::too_many_lines)]
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent) {
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return;
+        }
+
         debug!(
             "Injecting event: {:?} is da {}",
             event.clone(),
@@ -772,7 +832,7 @@ impl<
                                 .poll_web_server(receiver, MessagePurpose::Proposal, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -795,6 +855,46 @@ impl<
                         .await;
                 }
             }
+            ConsensusIntentEvent::PollForVIDDisperse(view_number) => {
+                // Check if we already have a task for this (we shouldn't)
+
+                // Going to do a write lock since mostly likely we will need it - can change to upgradable read in the future
+                let mut task_map = self.inner.vid_disperse_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidDisperse, view_number)
+                                .await
+                            {
+                                warn!(
+                                    "Background receive VID disperse polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                if let Some((_, sender)) = task_map.remove_entry(&view_number.wrapping_sub(2)) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
             ConsensusIntentEvent::PollForCurrentProposal => {
                 // create new task
                 let (_, receiver) = unbounded();
@@ -806,7 +906,7 @@ impl<
                             .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
                             .await
                         {
-                            error!(
+                            warn!(
                                 "Background receive proposal polling encountered an error: {:?}",
                                 e
                             );
@@ -827,7 +927,7 @@ impl<
                                 .poll_web_server(receiver, MessagePurpose::Vote, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -851,6 +951,44 @@ impl<
                         .await;
                 }
             }
+            ConsensusIntentEvent::PollForVIDVotes(view_number) => {
+                let mut task_map = self.inner.vid_vote_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidVote, view_number)
+                                .await
+                            {
+                                warn!(
+                                    "Background receive proposal polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                // TODO ED This won't work for vote collection, last task is more than 2 view ago depending on size of network, will need to rely on cancel task from consensus
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDVotes(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
+
             ConsensusIntentEvent::PollForDAC(view_number) => {
                 let mut task_map = self.inner.dac_task_map.write().await;
                 if let Entry::Vacant(e) = task_map.entry(view_number) {
@@ -864,7 +1002,7 @@ impl<
                                 .poll_web_server(receiver, MessagePurpose::DAC, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -887,6 +1025,43 @@ impl<
                         .await;
                 }
             }
+
+            ConsensusIntentEvent::PollForVIDCertificate(view_number) => {
+                let mut task_map = self.inner.vid_cert_task_map.write().await;
+                if let Entry::Vacant(e) = task_map.entry(view_number) {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    e.insert(sender);
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::VidCert, view_number)
+                                .await
+                            {
+                                warn!(
+                                    "Background receive proposal polling encountered an error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    error!("Somehow task already existed!");
+                }
+
+                // GC proposal collection if we are two views in the future
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number.wrapping_sub(2))) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDCertificate(
+                            view_number.wrapping_sub(2),
+                        ))
+                        .await;
+                }
+            }
             ConsensusIntentEvent::CancelPollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;
 
@@ -896,6 +1071,19 @@ impl<
                     // If task already exited we expect an error
                     let _res = sender
                         .send(ConsensusIntentEvent::CancelPollForVotes(view_number))
+                        .await;
+                }
+            }
+
+            ConsensusIntentEvent::CancelPollForVIDVotes(view_number) => {
+                let mut task_map = self.inner.vid_vote_task_map.write().await;
+
+                if let Some((_, sender)) = task_map.remove_entry(&(view_number)) {
+                    // Send task cancel message to old task
+
+                    // If task already exited we expect an error
+                    let _res = sender
+                        .send(ConsensusIntentEvent::CancelPollForVIDVotes(view_number))
                         .await;
                 }
             }
@@ -917,7 +1105,7 @@ impl<
                                 )
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -947,7 +1135,7 @@ impl<
                                 )
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -1000,7 +1188,7 @@ impl<
                                 .poll_web_server(receiver, MessagePurpose::Data, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                                                "Background receive transaction polling encountered an error: {:?}",
                                                                  e
                                                                );
@@ -1028,15 +1216,12 @@ impl<
                 };
             }
 
-            _ => error!("Unexpected event!"),
+            _ => {}
         }
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>
-{
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwork<TYPES> {
     fn generator(
         expected_node_count: usize,
         _num_bootstrap: usize,
@@ -1055,6 +1240,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
             port,
         ));
 
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let known_nodes = (0..expected_node_count as u64)
             .map(|id| {
                 TYPES::SignatureKey::from_private(
@@ -1083,15 +1269,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebCommChannel<TYPES> {
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -1099,18 +1277,14 @@ impl<
         da_committee_size: usize,
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
-        let generator = <WebServerNetwork<
-            Message<TYPES, I>,
-            TYPES::SignatureKey,
-            TYPES,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        let generator = <WebServerNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
             da_committee_size,
             is_da,
         );
-        Box::new(move |node_id| Self(generator(node_id).into(), PhantomData))
+        Box::new(move |node_id| Self(generator(node_id).into()))
     }
 
     fn in_flight_message_count(&self) -> Option<usize> {
@@ -1118,26 +1292,8 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
-        MEMBERSHIP,
-        WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>,
-    > for WebCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
-    fn generate_network() -> Box<
-        dyn Fn(Arc<WebServerNetwork<Message<TYPES, I>, TYPES::SignatureKey, TYPES>>) -> Self
-            + 'static,
-    > {
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for WebCommChannel<TYPES> {
+    fn generate_network() -> Box<dyn Fn(Arc<WebServerNetwork<TYPES>>) -> Self + 'static> {
         Box::new(move |network| WebCommChannel::new(network))
     }
 }

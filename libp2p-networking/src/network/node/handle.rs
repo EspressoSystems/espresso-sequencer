@@ -112,7 +112,6 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
 
         let kill_switch = Mutex::new(Some(kill_switch));
         let recv_kill = Mutex::new(Some(recv_kill));
-
         Ok(NetworkNodeHandle {
             network_config: config,
             state: std::sync::Arc::default(),
@@ -137,7 +136,10 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     ///
     /// Will panic if a handler is already spawned
     #[allow(clippy::unused_async)]
-    pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future<Output = ()>
+    // // Tokio and async_std disagree how this function should be linted
+    // #[allow(clippy::ignored_unit_patterns)]
+
+    pub async fn spawn_handler<F, RET>(self: &Arc<Self>, cb: F) -> impl Future
     where
         F: Fn(NetworkEvent, Arc<NetworkNodeHandle<S>>) -> RET + Sync + Send + 'static,
         RET: Future<Output = Result<(), NetworkNodeHandleError>> + Send + 'static,
@@ -151,12 +153,12 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
         let handle = Arc::clone(self);
         async_spawn(async move {
             let receiver = handle.receiver.receiver.lock().await;
-             let Some(kill_switch) = handle.receiver.recv_kill.lock().await.take() else {
-                     tracing::error!(
-                         "`spawn_handle` was called on a network handle that was already closed"
-                     );
-                     return;
-                 };
+            let Some(kill_switch) = handle.receiver.recv_kill.lock().await.take() else {
+                tracing::error!(
+                    "`spawn_handle` was called on a network handle that was already closed"
+                );
+                return;
+            };
             let mut next_msg = receiver.recv().boxed();
             let mut kill_switch = kill_switch.recv().boxed();
             loop {
@@ -189,7 +191,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
                     }
                 }
             }
-        }).map(|_| ())
+        })
     }
 
     /// Wait until at least `num_peers` have connected, or until `timeout` time has passed.
@@ -281,6 +283,23 @@ impl<S> NetworkNodeHandle<S> {
         let req = ClientRequest::LookupPeer(peer_id, s);
         self.send_request(req).await?;
         r.await.map_err(|_| NetworkNodeHandleError::RecvError)
+    }
+
+    /// Looks up a node's `PeerId` and attempts to validate routing
+    /// # Errors
+    /// if the peer was unable to be looked up (did not provide a response, DNE)
+    pub async fn lookup_node<V: for<'a> Deserialize<'a> + Serialize>(
+        &self,
+        key: V,
+        dht_timeout: Duration,
+    ) -> Result<PeerId, NetworkNodeHandleError> {
+        // get record (from DHT)
+        let pid = self.get_record_timeout::<PeerId>(&key, dht_timeout).await?;
+
+        // pid lookup for routing
+        self.lookup_pid(pid).await?;
+
+        Ok(pid)
     }
 
     /// Insert a record into the kademlia DHT

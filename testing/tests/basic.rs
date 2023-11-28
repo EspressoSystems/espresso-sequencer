@@ -6,15 +6,25 @@
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_success() {
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
+        node_types::{MemoryImpl, TestTypes},
         test_builder::TestMetadata,
     };
+    use std::time::Duration;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestMetadata::default();
+    let metadata = TestMetadata {
+        // allow more time to pass in CI
+        completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+            TimeBasedCompletionTaskDescription {
+                duration: Duration::from_secs(60),
+            },
+        ),
+        ..TestMetadata::default()
+    };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -31,7 +41,7 @@ async fn test_with_failures_one() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -54,7 +64,7 @@ async fn test_with_failures_one() {
     };
     metadata.overall_safety_properties.num_failed_views = 2;
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -71,7 +81,7 @@ async fn test_with_failures_half_f() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -104,7 +114,7 @@ async fn test_with_failures_half_f() {
     };
     metadata.overall_safety_properties.num_failed_views = 6;
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;
@@ -121,7 +131,7 @@ async fn test_with_failures_f() {
     use std::time::Duration;
 
     use hotshot_testing::{
-        node_types::{SequencingMemoryImpl, SequencingTestTypes},
+        node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -168,7 +178,7 @@ async fn test_with_failures_f() {
         node_changes: vec![(Duration::new(1, 0), dead_nodes)],
     };
     metadata
-        .gen_launcher::<SequencingTestTypes, SequencingMemoryImpl>()
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test()
         .await;

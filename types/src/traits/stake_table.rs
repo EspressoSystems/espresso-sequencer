@@ -3,6 +3,7 @@
 use ark_std::{rand::SeedableRng, string::ToString, vec::Vec};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use displaydoc::Display;
+use jf_plonk::errors::PlonkError;
 use jf_primitives::errors::PrimitivesError;
 
 /// Snapshots of the stake table
@@ -29,15 +30,21 @@ pub trait StakeTableScheme {
     /// type for the proof associated with the lookup result (if any)
     type LookupProof;
     /// type for the iterator over (key, value) entries
-    type IntoIter: Iterator<Item = (Self::Key, Self::Amount)>;
+    type IntoIter: Iterator<Item = (Self::Key, Self::Amount, Self::Aux)>;
+    /// Auxiliary information associated with the key
+    type Aux: Clone;
 
     /// Register a new key into the stake table.
     ///
     /// # Errors
     ///
     /// Return err if key is already registered.
-    fn register(&mut self, new_key: Self::Key, amount: Self::Amount)
-        -> Result<(), StakeTableError>;
+    fn register(
+        &mut self,
+        new_key: Self::Key,
+        amount: Self::Amount,
+        aux: Self::Aux,
+    ) -> Result<(), StakeTableError>;
 
     /// Batch register a list of new keys. A default implementation is provided
     /// w/o batch optimization.
@@ -45,15 +52,22 @@ pub trait StakeTableScheme {
     /// # Errors
     ///
     /// Return err if any of `new_keys` fails to register.
-    fn batch_register<I, J>(&mut self, new_keys: I, amounts: J) -> Result<(), StakeTableError>
+    fn batch_register<I, J, K>(
+        &mut self,
+        new_keys: I,
+        amounts: J,
+        auxs: K,
+    ) -> Result<(), StakeTableError>
     where
         I: IntoIterator<Item = Self::Key>,
         J: IntoIterator<Item = Self::Amount>,
+        K: IntoIterator<Item = Self::Aux>,
     {
         let _ = new_keys
             .into_iter()
             .zip(amounts)
-            .try_for_each(|(key, amount)| Self::register(self, key, amount));
+            .zip(auxs)
+            .try_for_each(|((key, amount), aux)| Self::register(self, key, amount, aux));
         Ok(())
     }
 
@@ -102,8 +116,7 @@ pub trait StakeTableScheme {
     /// Returns true if `key` is currently registered, else returns false.
     fn contains_key(&self, key: &Self::Key) -> bool;
 
-    /// Lookup the stake under a key against a specific historical `version`,
-    /// returns error if keys unregistered.
+    /// Returns the stakes withhelded by a public key.
     ///
     /// # Errors
     /// Return err if the `version` is not supported or `key` doesn't exist.
@@ -111,18 +124,29 @@ pub trait StakeTableScheme {
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError>;
+    ) -> Result<Self::Amount, StakeTableError>;
 
-    /// Returns the stakes withhelded by a public key, None if the key is not registered.
-    /// If you need a lookup proof, use [`Self::lookup()`] instead (which is usually more expensive).
+    /// Returns the stakes withhelded by a public key along with a membership proof.
     ///
     /// # Errors
     /// Return err if the `version` is not supported or `key` doesn't exist.
-    fn simple_lookup(
+    fn lookup_with_proof(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<Self::Amount, StakeTableError>;
+    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError>;
+
+    /// Return the associated stake amount and auxiliary information of a public key,
+    /// along with a membership proof.
+    ///
+    /// # Errors
+    /// Return err if the `version` is not supported or `key` doesn't exist.
+    #[allow(clippy::type_complexity)]
+    fn lookup_with_aux_and_proof(
+        &self,
+        version: SnapshotVersion,
+        key: &Self::Key,
+    ) -> Result<(Self::Amount, Self::Aux, Self::LookupProof), StakeTableError>;
 
     /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
     /// Return the updated stake or error.
@@ -201,5 +225,11 @@ impl From<StakeTableError> for PrimitivesError {
     fn from(value: StakeTableError) -> Self {
         // FIXME: (alex) should we define a PrimitivesError::General()?
         Self::ParameterError(value.to_string())
+    }
+}
+
+impl From<StakeTableError> for PlonkError {
+    fn from(value: StakeTableError) -> Self {
+        Self::PrimitiveError(PrimitivesError::ParameterError(value.to_string()))
     }
 }

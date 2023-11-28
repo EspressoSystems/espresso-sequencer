@@ -52,7 +52,7 @@ where
         read.data.get(hash).cloned()
     }
 
-    /// Insert a new key-value entry into the store. This won't be committed untill `commit` is called.
+    /// Insert a new key-value entry into the store. This won't be committed until `commit` is called.
     pub async fn insert(&self, key: K, val: V) -> atomic_store::Result<()> {
         let mut lock = self.inner.write().await;
         // Make sure to commit the store first before updating the internal value

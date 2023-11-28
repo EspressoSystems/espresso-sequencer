@@ -3,7 +3,8 @@
 //! This module provides the [`State`] trait, which serves as an compatibility over the current
 //! network state, which is modified by the transactions contained within blocks.
 
-use crate::traits::Block;
+use crate::traits::BlockPayload;
+use ark_ff::PrimeField;
 use commit::Committable;
 use espresso_systems_common::hotshot::tag;
 use serde::{de::DeserializeOwned, Serialize};
@@ -15,13 +16,13 @@ use std::{
     ops::{Deref, Sub},
 };
 
+use super::block_contents::BlockHeader;
+
 /// Abstraction over the state that blocks modify
 ///
 /// This trait represents the behaviors that the 'global' ledger state must have:
 ///   * A defined error type ([`Error`](State::Error))
-///   * The type of block that modifies this type of state ([`Block`](State::BlockType))
-///   * A method to get a template (empty) next block from the current state
-///     ([`next_block`](State::next_block))
+///   * The type of block that modifies this type of state ([`BlockPayload`](State::BlockPayload))
 ///   * The ability to validate that a block is actually a valid extension of this state
 ///     ([`validate_block`](State::validate_block))
 ///   * The ability to produce a new state, with the modifications from the block applied
@@ -41,25 +42,27 @@ pub trait State:
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;
-    /// The type of block this state is associated with
-    type BlockType: Block;
+    /// The type of block header this state is associated with
+    type BlockHeader: BlockHeader;
+    /// The type of block payload this state is associated with
+    type BlockPayload: BlockPayload;
     /// Time compatibility needed for reward collection
     type Time: ConsensusTime;
 
-    /// Returns an empty, template next block given this current state
-    fn next_block(prev_commitment: Option<Self>) -> Self::BlockType;
+    /// Returns true if and only if the provided block header is valid and can extend this state
+    fn validate_block(&self, block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool;
 
-    /// Returns true if and only if the provided block is valid and can extend this state
-    fn validate_block(&self, block: &Self::BlockType, view_number: &Self::Time) -> bool;
+    /// Initialize the state.
+    fn initialize() -> Self;
 
-    /// Appends the given block to this state, returning an new state
+    /// Appends the given block header to this state, returning an new state
     ///
     /// # Errors
     ///
-    /// Should produce and error if appending this block would lead to an invalid state
+    /// Should produce and error if appending this block header would lead to an invalid state
     fn append(
         &self,
-        block: &Self::BlockType,
+        block_header: &Self::BlockHeader,
         view_number: &Self::Time,
     ) -> Result<Self, Self::Error>;
 
@@ -95,12 +98,14 @@ pub trait ConsensusTime:
     }
     /// Create a new instance of this time unit
     fn new(val: u64) -> Self;
+    /// Get the u64 format of time
+    fn get_u64(&self) -> u64;
 }
 
 /// extra functions required on state to be usable by hotshot-testing
 pub trait TestableState: State
 where
-    <Self as State>::BlockType: TestableBlock,
+    <Self as State>::BlockPayload: TestableBlock,
 {
     /// Creates random transaction if possible
     /// otherwise panics
@@ -109,11 +114,11 @@ where
         state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <Self::BlockType as Block>::Transaction;
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction;
 }
 
 /// extra functions required on block to be usable by hotshot-testing
-pub trait TestableBlock: Block + Debug {
+pub trait TestableBlock: BlockPayload + Debug {
     /// generate a genesis block
     fn genesis() -> Self;
 
@@ -125,11 +130,23 @@ pub trait TestableBlock: Block + Debug {
 pub mod dummy {
     use super::{tag, Committable, Debug, Hash, Serialize, State, TestableState};
     use crate::{
+        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
         data::ViewNumber,
-        traits::block_contents::dummy::{DummyBlock, DummyError, DummyTransaction},
     };
     use rand::Rng;
     use serde::Deserialize;
+
+    /// Dummy error
+    #[derive(Debug)]
+    pub struct DummyError;
+
+    impl std::error::Error for DummyError {}
+
+    impl std::fmt::Display for DummyError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("A bad thing happened")
+        }
+    }
 
     /// The dummy state
     #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,24 +178,27 @@ pub mod dummy {
 
     impl State for DummyState {
         type Error = DummyError;
-
-        type BlockType = DummyBlock;
+        type BlockHeader = VIDBlockHeader;
+        type BlockPayload = VIDBlockPayload;
         type Time = ViewNumber;
 
-        fn next_block(state: Option<Self>) -> Self::BlockType {
-            match state {
-                Some(state) => DummyBlock { nonce: state.nonce },
-                None => unimplemented!(),
-            }
+        fn validate_block(
+            &self,
+            _block_header: &Self::BlockHeader,
+            _view_number: &Self::Time,
+        ) -> bool {
+            false
         }
 
-        fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-            false
+        fn initialize() -> Self {
+            let mut state = Self::default();
+            state.nonce += 1;
+            state
         }
 
         fn append(
             &self,
-            _block: &Self::BlockType,
+            _block_header: &Self::BlockHeader,
             _view_number: &Self::Time,
         ) -> Result<Self, Self::Error> {
             Ok(Self {
@@ -194,8 +214,50 @@ pub mod dummy {
             _state: Option<&Self>,
             _: &mut dyn rand::RngCore,
             _: u64,
-        ) -> DummyTransaction {
-            DummyTransaction::Dummy
+        ) -> VIDTransaction {
+            VIDTransaction(vec![0u8])
         }
+    }
+}
+
+/// A serialized light client state for proof generation
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct LightClientState<F: PrimeField> {
+    /// Current view number
+    pub view_number: usize,
+    /// Current block height
+    pub block_height: usize,
+    /// Root of the block commitment tree
+    pub block_comm_root: F,
+    /// Commitment for fee ledger
+    pub fee_ledger_comm: F,
+    /// Commitment for the stake table
+    pub stake_table_comm: (F, F, F),
+}
+
+impl<F: PrimeField> From<LightClientState<F>> for [F; 7] {
+    fn from(state: LightClientState<F>) -> Self {
+        [
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm_root,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
+        ]
+    }
+}
+impl<F: PrimeField> From<&LightClientState<F>> for [F; 7] {
+    fn from(state: &LightClientState<F>) -> Self {
+        [
+            F::from(state.view_number as u64),
+            F::from(state.block_height as u64),
+            state.block_comm_root,
+            state.fee_ledger_comm,
+            state.stake_table_comm.0,
+            state.stake_table_comm.1,
+            state.stake_table_comm.2,
+        ]
     }
 }

@@ -2,17 +2,26 @@
 //!
 //! Contains types and traits used by `HotShot` to abstract over network access
 
+use async_compatibility_layer::art::async_sleep;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::future::TimeoutError;
-use hotshot_task::BoxSyncFuture;
+use hotshot_task::{boxed_sync, BoxSyncFuture};
 use libp2p_networking::network::NetworkNodeHandleError;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::time::error::Elapsed as TimeoutError;
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
-use super::{election::Membership, node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{data::ProposalType, message::MessagePurpose, vote::VoteType};
+use super::{node_implementation::NodeType, signature_key::SignatureKey};
+use crate::{
+    data::ViewNumber,
+    message::{Message, MessagePurpose},
+};
+use async_compatibility_layer::channel::UnboundedSendError;
 use async_trait::async_trait;
+use rand::{
+    distributions::{Bernoulli, Uniform},
+    prelude::Distribution,
+};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc, time::Duration};
@@ -130,36 +139,50 @@ pub enum NetworkError {
 #[derive(Clone, Debug)]
 // Storing view number as a u64 to avoid the need TYPES generic
 /// Events to poll or cancel consensus processes.
-pub enum ConsensusIntentEvent {
+pub enum ConsensusIntentEvent<K: SignatureKey> {
     /// Poll for votes for a particular view
     PollForVotes(u64),
+    /// Poll for VID votes for a particular view
+    PollForVIDVotes(u64),
     /// Poll for a proposal for a particular view
     PollForProposal(u64),
+    /// Poll for VID disperse data for a particular view
+    PollForVIDDisperse(u64),
     /// Poll for the most recent proposal the webserver has
     PollForCurrentProposal,
     /// Poll for a DAC for a particular view
     PollForDAC(u64),
+    /// Poll for a VID certificate for a certain view
+    PollForVIDCertificate(u64),
     /// Poll for view sync votes starting at a particular view
     PollForViewSyncVotes(u64),
     /// Poll for view sync proposals (certificates) for a particular view
     PollForViewSyncCertificate(u64),
     /// Poll for new transactions
     PollForTransactions(u64),
+    /// Poll for future leader
+    PollFutureLeader(u64, K),
     /// Cancel polling for votes
     CancelPollForVotes(u64),
+    /// Cancel polling for VID votes for a particular view
+    CancelPollForVIDVotes(u64),
     /// Cancel polling for view sync votes.
     CancelPollForViewSyncVotes(u64),
     /// Cancel polling for proposals.
     CancelPollForProposal(u64),
     /// Cancal polling for DAC.
     CancelPollForDAC(u64),
+    /// Cancel polling for VID certificate
+    CancelPollForVIDCertificate(u64),
     /// Cancel polling for view sync certificate.
     CancelPollForViewSyncCertificate(u64),
+    /// Cancel polling for VID disperse data
+    CancelPollForVIDDisperse(u64),
     /// Cancel polling for transactions
     CancelPollForTransactions(u64),
 }
 
-impl ConsensusIntentEvent {
+impl<K: SignatureKey> ConsensusIntentEvent<K> {
     /// Get the view number of the event.
     #[must_use]
     pub fn view_number(&self) -> u64 {
@@ -171,11 +194,18 @@ impl ConsensusIntentEvent {
             | ConsensusIntentEvent::CancelPollForViewSyncVotes(view_number)
             | ConsensusIntentEvent::CancelPollForVotes(view_number)
             | ConsensusIntentEvent::CancelPollForProposal(view_number)
+            | ConsensusIntentEvent::PollForVIDCertificate(view_number)
+            | ConsensusIntentEvent::PollForVIDVotes(view_number)
+            | ConsensusIntentEvent::PollForVIDDisperse(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDDisperse(view_number)
             | ConsensusIntentEvent::CancelPollForDAC(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDCertificate(view_number)
+            | ConsensusIntentEvent::CancelPollForVIDVotes(view_number)
             | ConsensusIntentEvent::CancelPollForViewSyncCertificate(view_number)
             | ConsensusIntentEvent::PollForViewSyncCertificate(view_number)
             | ConsensusIntentEvent::PollForTransactions(view_number)
-            | ConsensusIntentEvent::CancelPollForTransactions(view_number) => *view_number,
+            | ConsensusIntentEvent::CancelPollForTransactions(view_number)
+            | ConsensusIntentEvent::PollFutureLeader(view_number, _) => *view_number,
             ConsensusIntentEvent::PollForCurrentProposal => 1,
         }
     }
@@ -199,19 +229,18 @@ pub trait ViewMessage<TYPES: NodeType> {
 /// API for interacting directly with a consensus committee
 /// intended to be implemented for both DA and for validating consensus committees
 #[async_trait]
-pub trait CommunicationChannel<
-    TYPES: NodeType,
-    M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->: Clone + Debug + Send + Sync + 'static
-{
+pub trait CommunicationChannel<TYPES: NodeType>: Clone + Debug + Send + Sync + 'static {
     /// Underlying Network implementation's type
     type NETWORK;
     /// Blocks until node is successfully initialized
     /// into the network
     async fn wait_for_ready(&self);
+
+    /// Pauses the underlying network
+    fn pause(&self);
+
+    /// Resumes the underlying network
+    fn resume(&self);
 
     /// checks if the network is ready
     /// nonblocking
@@ -229,15 +258,15 @@ pub trait CommunicationChannel<
     /// blocking
     async fn broadcast_message(
         &self,
-        message: M,
-        election: &MEMBERSHIP,
+        message: Message<TYPES>,
+        election: &TYPES::Membership,
     ) -> Result<(), NetworkError>;
 
     /// Sends a direct message to a specific node
     /// blocking
     async fn direct_message(
         &self,
-        message: M,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError>;
 
@@ -248,18 +277,23 @@ pub trait CommunicationChannel<
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<M>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b;
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, pk: TYPES::SignatureKey) -> Result<(), NetworkError>;
+    /// queues looking up a node
+    async fn queue_node_lookup(
+        &self,
+        _view_number: ViewNumber,
+        _pk: TYPES::SignatureKey,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        Ok(())
+    }
 
     /// Injects consensus data such as view number into the networking implementation
     /// blocking
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent);
+    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<TYPES::SignatureKey>) {}
 }
 
 /// represents a networking implmentration
@@ -308,18 +342,23 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
         'a: 'b,
         Self: 'b;
 
-    /// look up a node
-    /// blocking
-    async fn lookup_node(&self, pk: K) -> Result<(), NetworkError>;
+    /// queues lookup of a node
+    async fn queue_node_lookup(
+        &self,
+        _view_number: ViewNumber,
+        _pk: K,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, K)>>> {
+        Ok(())
+    }
 
     /// Injects consensus data such as view number into the networking implementation
     /// blocking
     /// Ideally we would pass in the `Time` type, but that requires making the entire trait generic over NodeType
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent);
+    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<K>) {}
 }
 
 /// Describes additional functionality needed by the test network implementation
-pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
+pub trait TestableNetworkingImplementation<TYPES: NodeType> {
     /// generates a network given an expected node count
     fn generator(
         expected_node_count: usize,
@@ -335,17 +374,11 @@ pub trait TestableNetworkingImplementation<TYPES: NodeType, M: NetworkMsg> {
     fn in_flight_message_count(&self) -> Option<usize>;
 }
 /// Describes additional functionality needed by the test communication channel
-pub trait TestableChannelImplementation<
-    TYPES: NodeType,
-    M: NetworkMsg,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
-    NETWORK,
->: CommunicationChannel<TYPES, M, PROPOSAL, VOTE, MEMBERSHIP>
-{
+pub trait TestableChannelImplementation<TYPES: NodeType>: CommunicationChannel<TYPES> {
     /// generates the `CommunicationChannel` given it's associated network type
-    fn generate_network() -> Box<dyn Fn(Arc<NETWORK>) -> Self + 'static>;
+    #[allow(clippy::type_complexity)]
+    fn generate_network(
+    ) -> Box<dyn Fn(Arc<<Self as CommunicationChannel<TYPES>>::NETWORK>) -> Self + 'static>;
 }
 
 /// Changes that can occur in the network
@@ -359,6 +392,7 @@ pub enum NetworkChange<P: SignatureKey> {
 }
 
 /// interface describing how reliable the network is
+#[async_trait]
 pub trait NetworkReliability: Debug + Sync + std::marker::Send {
     /// Sample from bernoulli distribution to decide whether
     /// or not to keep a packet
@@ -366,8 +400,225 @@ pub trait NetworkReliability: Debug + Sync + std::marker::Send {
     ///
     /// Panics if `self.keep_numerator > self.keep_denominator`
     ///
-    fn sample_keep(&self) -> bool;
+    fn sample_keep(&self) -> bool {
+        true
+    }
+
     /// sample from uniform distribution to decide whether
     /// or not to keep a packet
-    fn sample_delay(&self) -> Duration;
+    fn sample_delay(&self) -> Duration {
+        std::time::Duration::ZERO
+    }
+
+    /// scramble the packet
+    fn scramble(&self, msg: Vec<u8>) -> Vec<u8> {
+        msg
+    }
+
+    /// number of times to repeat the packet
+    fn sample_repeat(&self) -> usize {
+        1
+    }
+
+    /// given a message and a way to send the message,
+    /// decide whether or not to send the message
+    /// how long to delay the message
+    /// whether or not to send duplicates
+    /// and whether or not to include noise with the message
+    /// then send the message
+    fn chaos_send_msg(
+        &self,
+        msg: Vec<u8>,
+        send_fn: Arc<dyn Send + Sync + 'static + Fn(Vec<u8>) -> BoxSyncFuture<'static, ()>>,
+    ) -> BoxSyncFuture<'static, ()> {
+        let sample_keep = self.sample_keep();
+        let delay = self.sample_delay();
+        let repeats = self.sample_repeat();
+        let mut msgs = Vec::new();
+        for _idx in 0..repeats {
+            let scrambled = self.scramble(msg.clone());
+            msgs.push(scrambled);
+        }
+        let closure = async move {
+            if sample_keep {
+                async_sleep(delay).await;
+                for msg in msgs {
+                    send_fn(msg).await;
+                }
+            }
+        };
+        boxed_sync(closure)
+    }
+}
+
+/// ideal network
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PerfectNetwork {}
+
+impl NetworkReliability for PerfectNetwork {}
+
+/// A synchronous network. Packets may be delayed, but are guaranteed
+/// to arrive within `timeout` ns
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SynchronousNetwork {
+    /// Max delay of packet before arrival
+    timeout_ms: u64,
+    /// Lowest value in milliseconds that a packet may be delayed
+    delay_low_ms: u64,
+}
+
+impl NetworkReliability for SynchronousNetwork {
+    /// never drop a packet
+    fn sample_keep(&self) -> bool {
+        true
+    }
+    fn sample_delay(&self) -> Duration {
+        Duration::from_millis(
+            Uniform::new_inclusive(self.delay_low_ms, self.timeout_ms)
+                .sample(&mut rand::thread_rng()),
+        )
+    }
+}
+
+/// An asynchronous network. Packets may be dropped entirely
+/// or delayed for arbitrarily long periods
+/// probability that packet is kept = `keep_numerator` / `keep_denominator`
+/// packet delay is obtained by sampling from a uniform distribution
+/// between `delay_low_ms` and `delay_high_ms`, inclusive
+#[derive(Debug, Clone, Copy)]
+pub struct AsynchronousNetwork {
+    /// numerator for probability of keeping packets
+    keep_numerator: u32,
+    /// denominator for probability of keeping packets
+    keep_denominator: u32,
+    /// lowest value in milliseconds that a packet may be delayed
+    delay_low_ms: u64,
+    /// highest value in milliseconds that a packet may be delayed
+    delay_high_ms: u64,
+}
+
+impl NetworkReliability for AsynchronousNetwork {
+    fn sample_keep(&self) -> bool {
+        Bernoulli::from_ratio(self.keep_numerator, self.keep_denominator)
+            .unwrap()
+            .sample(&mut rand::thread_rng())
+    }
+    fn sample_delay(&self) -> Duration {
+        Duration::from_millis(
+            Uniform::new_inclusive(self.delay_low_ms, self.delay_high_ms)
+                .sample(&mut rand::thread_rng()),
+        )
+    }
+}
+
+/// An partially synchronous network. Behaves asynchronously
+/// until some arbitrary time bound, GST,
+/// then synchronously after GST
+#[allow(clippy::similar_names)]
+#[derive(Debug, Clone, Copy)]
+pub struct PartiallySynchronousNetwork {
+    /// asynchronous portion of network
+    asynchronous: AsynchronousNetwork,
+    /// synchronous portion of network
+    synchronous: SynchronousNetwork,
+    /// time when GST occurs
+    gst: std::time::Duration,
+    /// when the network was started
+    start: std::time::Instant,
+}
+
+impl NetworkReliability for PartiallySynchronousNetwork {
+    /// never drop a packet
+    fn sample_keep(&self) -> bool {
+        true
+    }
+    fn sample_delay(&self) -> Duration {
+        // act asyncronous before gst
+        if self.start.elapsed() < self.gst {
+            if self.asynchronous.sample_keep() {
+                self.asynchronous.sample_delay()
+            } else {
+                // assume packet was "dropped" and will arrive after gst
+                self.synchronous.sample_delay() + self.gst
+            }
+        } else {
+            // act syncronous after gst
+            self.synchronous.sample_delay()
+        }
+    }
+}
+
+impl Default for AsynchronousNetwork {
+    // disable all chance of failure
+    fn default() -> Self {
+        AsynchronousNetwork {
+            keep_numerator: 1,
+            keep_denominator: 1,
+            delay_low_ms: 0,
+            delay_high_ms: 0,
+        }
+    }
+}
+
+impl Default for PartiallySynchronousNetwork {
+    fn default() -> Self {
+        PartiallySynchronousNetwork {
+            synchronous: SynchronousNetwork::default(),
+            asynchronous: AsynchronousNetwork::default(),
+            gst: std::time::Duration::new(0, 0),
+            start: std::time::Instant::now(),
+        }
+    }
+}
+
+impl SynchronousNetwork {
+    /// create new `SynchronousNetwork`
+    #[must_use]
+    pub fn new(timeout: u64, delay_low_ms: u64) -> Self {
+        SynchronousNetwork {
+            timeout_ms: timeout,
+            delay_low_ms,
+        }
+    }
+}
+
+impl AsynchronousNetwork {
+    /// create new `AsynchronousNetwork`
+    #[must_use]
+    pub fn new(
+        keep_numerator: u32,
+        keep_denominator: u32,
+        delay_low_ms: u64,
+        delay_high_ms: u64,
+    ) -> Self {
+        AsynchronousNetwork {
+            keep_numerator,
+            keep_denominator,
+            delay_low_ms,
+            delay_high_ms,
+        }
+    }
+}
+
+impl PartiallySynchronousNetwork {
+    /// create new `PartiallySynchronousNetwork`
+    #[allow(clippy::similar_names)]
+    #[must_use]
+    pub fn new(
+        asynchronous: AsynchronousNetwork,
+        synchronous: SynchronousNetwork,
+        gst: std::time::Duration,
+    ) -> Self {
+        PartiallySynchronousNetwork {
+            asynchronous,
+            synchronous,
+            gst,
+            start: std::time::Instant::now(),
+        }
+    }
+}
+
+/// A chaotic network using all the networking calls
+pub struct ChaosNetwork {
+    // TODO
 }

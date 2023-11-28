@@ -1,32 +1,27 @@
-use commit::Commitment;
-use either::Either;
-use hotshot_task::{event_stream::EventStream, Merge};
-use hotshot_task_impls::events::SequencingHotShotEvent;
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::Arc,
-};
-
 use async_compatibility_layer::channel::UnboundedStream;
+use either::Either;
 use futures::FutureExt;
-use hotshot::{
-    traits::{NodeImplementation, TestableNodeImplementation},
-    HotShotError,
-};
+use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_task::{
     event_stream::ChannelStream,
     task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEventAndMessage, TaskBuilder},
     MergeN,
 };
+use hotshot_task::{event_stream::EventStream, Merge};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    certificate::QuorumCertificate,
-    data::{DeltasType, LeafBlock, LeafType},
+    data::{Leaf, VidCommitment},
     error::RoundTimedoutState,
     event::{Event, EventType},
+    simple_certificate::QuorumCertificate,
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{test_launcher::TaskGenerator, test_runner::Node};
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
@@ -78,7 +73,7 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
     /// handles
     pub handles: Vec<Node<TYPES, I>>,
     /// ctx
-    pub ctx: RoundCtx<TYPES, I>,
+    pub ctx: RoundCtx<TYPES>,
     /// event stream for publishing safety violations
     pub test_event_stream: ChannelStream<GlobalTestEvent>,
 }
@@ -87,12 +82,16 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for OverallSafety
 
 /// Result of running a round of consensus
 #[derive(Debug)]
-pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
+pub struct RoundResult<TYPES: NodeType> {
     /// Transactions that were submitted
     // pub txns: Vec<TYPES::Transaction>,
+
     /// Nodes that committed this round
     /// id -> (leaf, qc)
-    pub success_nodes: HashMap<u64, (Vec<LEAF>, QuorumCertificate<TYPES, LEAF>)>,
+    // TODO GG: isn't it infeasible to store a Vec<Leaf<TYPES>>?
+    #[allow(clippy::type_complexity)]
+    success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>)>,
+
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
 
@@ -102,18 +101,18 @@ pub struct RoundResult<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> {
     /// NOTE: technically a map is not needed
     /// left one anyway for ease of viewing
     /// leaf -> # entries decided on that leaf
-    pub leaf_map: HashMap<LEAF, usize>,
+    pub leaf_map: HashMap<Leaf<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<Commitment<LeafBlock<LEAF>>, usize>,
+    pub block_map: HashMap<VidCommitment, usize>,
 
     /// state -> # entries decided on that state
-    pub state_map: HashMap<<LEAF as LeafType>::MaybeState, usize>,
+    pub state_map: HashMap<(), usize>,
 
     pub num_txns_map: HashMap<u64, usize>,
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Default for RoundResult<TYPES, LEAF> {
+impl<TYPES: NodeType> Default for RoundResult<TYPES> {
     fn default() -> Self {
         Self {
             success_nodes: Default::default(),
@@ -129,7 +128,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> Default for RoundResult<
 
 /// smh my head I shouldn't need to implement this
 /// Rust doesn't realize I doesn't need to implement default
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> Default for RoundCtx<TYPES, I> {
+impl<TYPES: NodeType> Default for RoundCtx<TYPES> {
     fn default() -> Self {
         Self {
             round_results: Default::default(),
@@ -144,18 +143,17 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> Default for RoundCtx
 /// that we poll when things are event driven
 /// this context will be passed around
 #[derive(Debug)]
-pub struct RoundCtx<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub struct RoundCtx<TYPES: NodeType> {
     /// results from previous rounds
     /// view number -> round result
-    pub round_results:
-        HashMap<TYPES::Time, RoundResult<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
+    pub round_results: HashMap<TYPES::Time, RoundResult<TYPES>>,
     /// during the run view refactor
     pub failed_views: HashSet<TYPES::Time>,
     /// successful views
     pub successful_views: HashSet<TYPES::Time>,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> RoundCtx<TYPES, I> {
+impl<TYPES: NodeType> RoundCtx<TYPES> {
     /// inserts an error into the context
     pub fn insert_error_to_context(
         &mut self,
@@ -180,17 +178,18 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> RoundCtx<TYPES, I> {
     }
 }
 
-impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF> {
+impl<TYPES: NodeType> RoundResult<TYPES> {
     /// insert into round result
+    #[allow(clippy::unit_arg)]
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (Vec<LEAF>, QuorumCertificate<TYPES, LEAF>),
+        result: (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>),
         maybe_block_size: Option<u64>,
-    ) -> Option<LEAF> {
+    ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
 
-        let maybe_leaf: Option<LEAF> = result.0.into_iter().last();
+        let maybe_leaf: Option<Leaf<TYPES>> = result.0.into_iter().last();
         if let Some(leaf) = maybe_leaf.clone() {
             match self.leaf_map.entry(leaf.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -201,9 +200,9 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                 }
             }
 
-            let (state, block) = (leaf.get_state(), leaf.get_deltas());
+            let (state, payload_commitment) = (leaf.get_state(), leaf.get_payload_commitment());
 
-            match self.state_map.entry(state.clone()) {
+            match self.state_map.entry(state) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
@@ -211,7 +210,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
                     v.insert(1);
                 }
             }
-            match self.block_map.entry(block.clone().block_commitment()) {
+            match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
                 }
@@ -236,12 +235,12 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
 
     /// determines whether or not the round passes
     /// also do a safety check
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::let_unit_value)]
     pub fn update_status(
         &mut self,
         threshold: usize,
         total_num_nodes: usize,
-        key: LEAF,
+        key: Leaf<TYPES>,
         check_leaf: bool,
         check_state: bool,
         check_block: bool,
@@ -287,7 +286,7 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
             // if neither, continue through
 
             let state_key = key.get_state();
-            let block_key = key.get_deltas().block_commitment();
+            let block_key = key.get_payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
                 && *self.state_map.get(&state_key).unwrap() == threshold
@@ -305,8 +304,8 @@ impl<TYPES: NodeType, LEAF: LeafType<NodeType = TYPES>> RoundResult<TYPES, LEAF>
     }
 
     /// generate leaves
-    pub fn gen_leaves(&self) -> HashMap<LEAF, usize> {
-        let mut leaves = HashMap::<LEAF, usize>::new();
+    pub fn gen_leaves(&self) -> HashMap<Leaf<TYPES>, usize> {
+        let mut leaves = HashMap::<Leaf<TYPES>, usize>::new();
 
         for (leaf_vec, _) in self.success_nodes.values() {
             let most_recent_leaf = leaf_vec.iter().last();
@@ -594,18 +593,7 @@ pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
     OverallSafetyTaskErr,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
-    (
-        usize,
-        Either<
-            Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>,
-            SequencingHotShotEvent<TYPES, I>,
-        >,
-    ),
-    MergeN<
-        Merge<
-            UnboundedStream<Event<TYPES, <I as NodeImplementation<TYPES>>::Leaf>>,
-            UnboundedStream<SequencingHotShotEvent<TYPES, I>>,
-        >,
-    >,
+    (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
+    MergeN<Merge<UnboundedStream<Event<TYPES>>, UnboundedStream<HotShotEvent<TYPES>>>>,
     OverallSafetyTask<TYPES, I>,
 >;

@@ -1,4 +1,4 @@
-use super::{BN254Priv, EncodedPublicKey, EncodedSignature, SignatureKey};
+use super::{BLSPrivKey, EncodedPublicKey, EncodedSignature, SignatureKey};
 use bincode::Options;
 use bitvec::prelude::*;
 use blake3::traits::digest::generic_array::GenericArray;
@@ -19,23 +19,21 @@ use typenum::U32;
 
 /// Public key type for an bn254 [`SignatureKey`] pair
 ///
-/// This type makes use of noise for non-determinisitc signatures.
+/// This type makes use of noise for non-deterministic signatures.
 #[derive(Clone, PartialEq, Eq, Hash, Copy, Serialize, Deserialize, Debug)]
 
-pub struct BN254Pub {
+pub struct BLSPubKey {
     /// The public key for this keypair
     pub_key: VerKey,
 }
 
-impl PartialOrd for BN254Pub {
+impl PartialOrd for BLSPubKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let self_bytes = &self.pub_key.to_string();
-        let other_bytes = &other.pub_key.to_string();
-        self_bytes.partial_cmp(other_bytes)
+        Some(self.cmp(other))
     }
 }
 
-impl Ord for BN254Pub {
+impl Ord for BLSPubKey {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_bytes = &self.pub_key.to_string();
         let other_bytes = &other.pub_key.to_string();
@@ -43,18 +41,16 @@ impl Ord for BN254Pub {
     }
 }
 
-impl SignatureKey for BN254Pub {
-    type PrivateKey = BN254Priv;
+impl SignatureKey for BLSPubKey {
+    type PrivateKey = BLSPrivKey;
     type StakeTableEntry = JFStakeTableEntry<VerKey>;
     type QCParams = JFQCParams<
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::VerificationKey,
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::PublicParameter,
     >;
-    type QCType = (
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature,
-        BitVec,
-    );
-    // <BitVectorQC<BLSOverBN254CurveSignatureScheme> as AssembledQuorumCertificate<BLSOverBN254CurveSignatureScheme>>::QC;
+    type PureAssembledSignatureType =
+        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
+    type QCType = (Self::PureAssembledSignatureType, BitVec);
 
     #[instrument(skip(self))]
     fn validate(&self, signature: &EncodedSignature, data: &[u8]) -> bool {
@@ -114,7 +110,7 @@ impl SignatureKey for BN254Pub {
     fn from_bytes(bytes: &EncodedPublicKey) -> Option<Self> {
         let x: Result<VerKey, _> = bincode_opts().deserialize(&bytes.0);
         match x {
-            Ok(pub_key) => Some(BN254Pub { pub_key }),
+            Ok(pub_key) => Some(BLSPubKey { pub_key }),
             Err(e) => {
                 debug!(?e, "Failed to deserialize public key");
                 None
@@ -134,6 +130,12 @@ impl SignatureKey for BN254Pub {
         }
     }
 
+    fn get_public_key(entry: &Self::StakeTableEntry) -> Self {
+        Self {
+            pub_key: entry.stake_key,
+        }
+    }
+
     fn get_public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
@@ -150,19 +152,14 @@ impl SignatureKey for BN254Pub {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::check(real_qc_pp, msg, qc).is_ok()
     }
 
-    fn get_sig_proof(
-        signature: &Self::QCType,
-    ) -> (
-        <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature,
-        BitVec,
-    ) {
+    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec) {
         signature.clone()
     }
 
     fn assemble(
         real_qc_pp: &Self::QCParams,
         signers: &BitSlice,
-        sigs: &[<BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature],
+        sigs: &[Self::PureAssembledSignatureType],
     ) -> Self::QCType {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::assemble(real_qc_pp, signers, sigs)
             .expect("this assembling shouldn't fail")

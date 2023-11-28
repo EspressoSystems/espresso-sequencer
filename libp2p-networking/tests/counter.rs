@@ -12,7 +12,7 @@ use libp2p_networking::network::{
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{fmt::Debug, sync::Arc, time::Duration};
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;
@@ -142,12 +142,18 @@ async fn run_request_response_increment<'a>(
 
         let requestee_pid = requestee_handle.peer_id();
 
-        stream.next().await.unwrap().unwrap();
+        match stream.next().await.unwrap() {
+            Ok(()) => {}
+            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+        }
         requester_handle
             .direct_request(requestee_pid, &CounterMessage::AskForCounter)
             .await
             .context(HandleSnafu)?;
-        stream.next().await.unwrap().unwrap();
+        match stream.next().await.unwrap() {
+            Ok(()) => {}
+            Err(e) => panic!("timeout : {e:?} waiting handle {requestee_pid:?} to update state"),
+        }
 
         let s1 = requester_handle.state().await;
 
@@ -304,7 +310,7 @@ async fn run_dht_rounds(
 ) {
     let mut rng = rand::thread_rng();
     for i in 0..num_rounds {
-        error!("round: {:?}", i);
+        debug!("begin round {}", i);
         let msg_handle = get_random_handle(handles, &mut rng);
         let mut key = vec![0; DHT_KV_PADDING];
         key.push((starting_val + i) as u8);
@@ -324,7 +330,6 @@ async fn run_dht_rounds(
                 }
                 Ok(v) => {
                     assert_eq!(v, value);
-                    break;
                 }
             }
         }

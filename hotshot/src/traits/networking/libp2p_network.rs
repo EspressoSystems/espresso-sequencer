@@ -1,24 +1,22 @@
 //! Libp2p based/production networking implementation
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
-
-use super::NetworkingMetrics;
-use crate::NodeImplementation;
+use super::NetworkingMetricsValue;
 use async_compatibility_layer::{
     art::{async_block_on, async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
+    channel::{unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
 use bimap::BiHashMap;
 use bincode::Options;
+use hotshot_constants::LOOK_AHEAD;
 use hotshot_task::{boxed_sync, BoxSyncFuture};
 use hotshot_types::{
-    data::ProposalType,
+    data::ViewNumber,
     message::{Message, MessageKind},
     traits::{
         election::Membership,
-        metrics::{Metrics, NoMetrics},
         network::{
             CommunicationChannel, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu,
             NetworkError, NetworkMsg, TestableChannelImplementation,
@@ -26,8 +24,8 @@ use hotshot_types::{
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
+        state::ConsensusTime,
     },
-    vote::VoteType,
 };
 use hotshot_utils::bincode::bincode_opts;
 use libp2p_identity::PeerId;
@@ -49,10 +47,13 @@ use std::{
     marker::PhantomData,
     num::NonZeroUsize,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// hardcoded topic of QC used
 pub const QC_TOPIC: &str = "global";
@@ -74,14 +75,12 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Debug for Libp2pNetwork<M, K> {
 pub type PeerInfoVec = Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>;
 
 /// The underlying state of the libp2p network
+#[derive(Debug)]
 struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// this node's public key
     pk: K,
     /// handle to control the network
     handle: Arc<NetworkNodeHandle<()>>,
-    /// Bidirectional map from public key provided by espresso
-    /// to public key provided by libp2p
-    pubkey_pid_map: RwLock<BiHashMap<K, PeerId>>,
     /// map of known replica peer ids to public keys
     broadcast_recv: UnboundedReceiver<M>,
     /// Sender for broadcast messages
@@ -90,6 +89,8 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     direct_send: UnboundedSender<M>,
     /// Receiver for direct messages
     direct_recv: UnboundedReceiver<M>,
+    /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
+    node_lookup_send: UnboundedSender<Option<(ViewNumber, K)>>,
     /// this is really cheating to enable local tests
     /// hashset of (bootstrap_addr, peer_id)
     bootstrap_addrs: PeerInfoVec,
@@ -102,11 +103,17 @@ struct Libp2pNetworkInner<M: NetworkMsg, K: SignatureKey + 'static> {
     /// whether or not we've bootstrapped into the DHT yet
     is_bootstrapped: Arc<AtomicBool>,
     /// The networking metrics we're keeping track of
-    metrics: NetworkingMetrics,
+    metrics: NetworkingMetricsValue,
     /// topic map
     /// hash(hashset) -> topic
     /// btreemap ordered so is hashable
     topic_map: RwLock<BiHashMap<BTreeSet<K>, String>>,
+    /// the latest view number (for node lookup purposes)
+    /// NOTE: supposed to represent a ViewNumber but we
+    /// haven't made that atomic yet and we prefer lock-free
+    latest_seen_view: Arc<AtomicU64>,
+    /// if we're a member of the DA committee or not
+    is_da: bool,
 }
 
 /// Networking implementation that uses libp2p
@@ -117,11 +124,10 @@ pub struct Libp2pNetwork<M: NetworkMsg, K: SignatureKey + 'static> {
     inner: Arc<Libp2pNetworkInner<M, K>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>>
-    TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
+    for Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
     /// with the purpose of generating libp2p networks.
@@ -132,6 +138,7 @@ where
     /// - An invalid configuration
     ///   (probably an issue with the defaults of this function)
     /// - An inability to spin up the replica's network
+    #[allow(clippy::panic)]
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -144,6 +151,7 @@ where
             "DA committee size must be less than or equal to total # nodes"
         );
         let bootstrap_addrs: PeerInfoVec = Arc::default();
+        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
 
@@ -168,6 +176,7 @@ where
                 let addr =
                     // Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/0/quic-v1")).unwrap();
                     Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{}{}/quic-v1", 5000 + node_id, network_id)).unwrap();
+                // We assign node's public key and stake value rather than read from config file since it's a test
                 let privkey =
                     TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
                 let pubkey = TYPES::SignatureKey::from_private(&privkey);
@@ -218,18 +227,24 @@ where
                 let keys = all_keys.clone();
                 let da = da_keys.clone();
                 async_block_on(async move {
-                    Libp2pNetwork::new(
-                        NoMetrics::boxed(),
+                    match Libp2pNetwork::new(
+                        NetworkingMetricsValue::new(),
                         config,
-                        pubkey,
+                        pubkey.clone(),
                         bootstrap_addrs_ref,
                         num_bootstrap,
                         node_id as usize,
                         keys,
-                        da,
+                        da.clone(),
+                        da.contains(&pubkey),
                     )
                     .await
-                    .unwrap()
+                    {
+                        Ok(network) => network,
+                        Err(err) => {
+                            panic!("Failed to create network: {err}");
+                        }
+                    }
                 })
             }
         })
@@ -244,11 +259,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     /// Returns when network is ready
     pub async fn wait_for_ready(&self) {
         loop {
-            if self
-                .inner
-                .is_ready
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
+            if self.inner.is_ready.load(Ordering::Relaxed) {
                 break;
             }
             async_sleep(Duration::from_secs(1)).await;
@@ -270,7 +281,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
     /// This will panic if there are less than 5 bootstrap nodes
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        metrics: Box<dyn Metrics>,
+        metrics: NetworkingMetricsValue,
         config: NetworkNodeConfig,
         pk: K,
         bootstrap_addrs: Arc<RwLock<Vec<(Option<PeerId>, Multiaddr)>>>,
@@ -279,10 +290,11 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         // HACK
         committee_pks: BTreeSet<K>,
         da_pks: BTreeSet<K>,
+        is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         assert!(bootstrap_addrs_len > 4, "Need at least 5 bootstrap nodes");
         let network_handle = Arc::new(
-            NetworkNodeHandle::<()>::new(config, id)
+            Box::pin(NetworkNodeHandle::<()>::new(config, id))
                 .await
                 .map_err(Into::<NetworkError>::into)?,
         );
@@ -300,7 +312,6 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         }
 
         let mut pubkey_pid_map = BiHashMap::new();
-
         pubkey_pid_map.insert(pk.clone(), network_handle.peer_id());
 
         let mut topic_map = BiHashMap::new();
@@ -313,11 +324,11 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
         // if bounded figure out a way to log dropped msgs
         let (direct_send, direct_recv) = unbounded();
         let (broadcast_send, broadcast_recv) = unbounded();
+        let (node_lookup_send, node_lookup_recv) = unbounded();
 
-        let result = Libp2pNetwork {
+        let mut result = Libp2pNetwork {
             inner: Arc::new(Libp2pNetworkInner {
                 handle: network_handle,
-                pubkey_pid_map: RwLock::new(pubkey_pid_map),
                 broadcast_recv,
                 direct_send: direct_send.clone(),
                 direct_recv,
@@ -326,28 +337,65 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 bootstrap_addrs_len,
                 bootstrap_addrs,
                 is_ready: Arc::new(AtomicBool::new(false)),
-                dht_timeout: Duration::from_secs(30),
+                // This is optimal for 10-30 nodes. TODO: parameterize this for both tests and examples
+                // https://github.com/EspressoSystems/HotShot/issues/2088
+                dht_timeout: Duration::from_secs(8),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
-                metrics: NetworkingMetrics::new(&*metrics),
+                metrics,
                 topic_map,
+                node_lookup_send,
+                // Start the latest view from 0. "Latest" refers to "most recent view we are polling for
+                // proposals on". We need this because to have consensus info injected we need a working
+                // network already. In the worst case, we send a few lookups we don't need.
+                latest_seen_view: Arc::new(AtomicU64::new(0)),
+                is_da,
             }),
         };
 
         result.spawn_event_generator(direct_send, broadcast_send);
-
+        result.spawn_node_lookup(node_lookup_recv);
         result.spawn_connect(id);
 
         Ok(result)
     }
 
+    /// Spawns task for looking up nodes pre-emptively
+    #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    fn spawn_node_lookup(&self, node_lookup_recv: UnboundedReceiver<Option<(ViewNumber, K)>>) {
+        let handle = self.inner.handle.clone();
+        let dht_timeout = self.inner.dht_timeout;
+        let latest_seen_view = self.inner.latest_seen_view.clone();
+
+        // deals with handling lookup queue. should be infallible
+        async_spawn(async move {
+            // cancels on shutdown
+            while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
+                /// defines lookahead threshold based on the constant
+                const THRESHOLD: u64 = (LOOK_AHEAD as f64 * 0.8) as u64;
+
+                info!("Performing lookup for peer {:?}", pk);
+
+                // only run if we are not too close to the next view number
+                if latest_seen_view.load(Ordering::Relaxed) + THRESHOLD <= *view_number {
+                    // look up
+                    if let Err(err) = handle.lookup_node::<K>(pk.clone(), dht_timeout).await {
+                        error!("Failed to perform lookup for key {:?}: {}", pk, err);
+                    };
+                }
+            }
+        });
+    }
+
     /// Initiates connection to the outside world
-    fn spawn_connect(&self, id: usize) {
+    fn spawn_connect(&mut self, id: usize) {
         let pk = self.inner.pk.clone();
         let bootstrap_ref = self.inner.bootstrap_addrs.clone();
         let num_bootstrap = self.inner.bootstrap_addrs_len;
         let handle = self.inner.handle.clone();
         let is_bootstrapped = self.inner.is_bootstrapped.clone();
         let node_type = self.inner.handle.config().node_type;
+        let metrics_connected_peers = self.inner.clone();
+        let is_da = self.inner.is_da;
         async_spawn({
             let is_ready = self.inner.is_ready.clone();
             async move {
@@ -376,12 +424,23 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     .await
                     .unwrap();
 
-                while !is_bootstrapped.load(std::sync::atomic::Ordering::Relaxed) {
+                let connected_num = handle.num_connected().await?;
+                metrics_connected_peers
+                    .metrics
+                    .connected_peers
+                    .set(connected_num);
+
+                while !is_bootstrapped.load(Ordering::Relaxed) {
                     async_sleep(Duration::from_secs(1)).await;
                 }
 
                 handle.subscribe(QC_TOPIC.to_string()).await.unwrap();
-                handle.subscribe("DA".to_string()).await.unwrap();
+
+                // only subscribe to DA events if we are DA
+                if is_da {
+                    handle.subscribe("DA".to_string()).await.unwrap();
+                }
+
                 // TODO figure out some way of passing in ALL keypairs. That way we can add the
                 // global topic to the topic map
                 // NOTE this wont' work without this change
@@ -414,7 +473,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                     node_type
                 );
 
-                is_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                is_ready.store(true, Ordering::Relaxed);
                 info!("STARTING CONSENSUS ON {:?}", handle.peer_id());
                 Ok::<(), NetworkError>(())
             }
@@ -480,11 +539,11 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                             .context(FailedToSerializeSnafu);
                     }
                     NetworkEvent::IsBootstrapped => {
-                        is_bootstrapped.store(true, std::sync::atomic::Ordering::Relaxed);
+                        is_bootstrapped.store(true, Ordering::Relaxed);
                     }
                 }
             }
-            error!("Network receiever shut down!");
+            warn!("Network receiever shut down!");
             Ok::<(), NetworkError>(())
         });
     }
@@ -499,9 +558,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
     #[instrument(name = "Libp2pNetwork::ready_nonblocking", skip_all)]
     async fn is_ready(&self) -> bool {
-        self.inner
-            .is_ready
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.inner.is_ready.load(Ordering::Relaxed)
     }
 
     #[instrument(name = "Libp2pNetwork::shut_down", skip_all)]
@@ -514,7 +571,8 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
             if self.inner.handle.is_killed() {
                 error!("Called shut down when already shut down! Noop.");
             } else {
-                self.inner.handle.shutdown().await.unwrap();
+                let _ = self.inner.node_lookup_send.send(None).await;
+                let _ = self.inner.handle.shutdown().await;
             }
         };
         boxed_sync(closure)
@@ -544,7 +602,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                 source: NetworkNodeHandleError::NoSuchTopic,
             })?
             .clone();
-        error!("Broadcasting to topic {}", topic);
+        info!("broadcasting to topic: {}", topic);
 
         // gossip doesn't broadcast from itself, so special case
         if recipients.contains(&self.inner.pk) {
@@ -558,7 +616,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
 
         match self.inner.handle.gossip(topic, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_broadcast_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -586,40 +644,27 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         }
 
         self.wait_for_ready().await;
-        // check local cache. if that fails, initiate search
-        // if search fails, just error out
-        // NOTE: relay may be a good way to fix this in the future .
-        let pid: PeerId = if let Some(pid) = self
+
+        let pid = match self
             .inner
-            .pubkey_pid_map
-            .read()
+            .handle
+            .lookup_node::<K>(recipient.clone(), self.inner.dht_timeout)
             .await
-            .get_by_left(&recipient)
         {
-            *pid
-        } else {
-            match self
-                .inner
-                .handle
-                .get_record_timeout(&recipient, self.inner.dht_timeout)
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    self.inner.metrics.message_failed_to_send.add(1);
-                    error!("Failed to message {:?} because could not find recipient peer id for pk {:?}", message, recipient);
-                    return Err(NetworkError::Libp2p { source: e });
-                }
+            Ok(pid) => pid,
+            Err(err) => {
+                self.inner.metrics.message_failed_to_send.add(1);
+                error!(
+                    "Failed to message {:?} because could not find recipient peer id for pk {:?}",
+                    message, recipient
+                );
+                return Err(NetworkError::Libp2p { source: err });
             }
         };
 
-        if let Err(e) = self.inner.handle.lookup_pid(pid).await {
-            self.inner.metrics.message_failed_to_send.add(1);
-            return Err(e.into());
-        }
         match self.inner.handle.direct_request(pid, &message).await {
             Ok(()) => {
-                self.inner.metrics.outgoing_message_count.add(1);
+                self.inner.metrics.outgoing_direct_message_count.add(1);
                 Ok(())
             }
             Err(e) => {
@@ -650,7 +695,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                     TransmitType::Broadcast => {
@@ -660,7 +708,10 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
                             .drain_at_least_one()
                             .await
                             .map_err(|_x| NetworkError::ShutDown)?;
-                        self.inner.metrics.incoming_message_count.add(result.len());
+                        self.inner
+                            .metrics
+                            .incoming_direct_message_count
+                            .add(result.len());
                         Ok(result)
                     }
                 }
@@ -669,85 +720,58 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         boxed_sync(closure)
     }
 
-    #[instrument(name = "Libp2pNetwork::lookup_node", skip_all)]
-    async fn lookup_node(&self, pk: K) -> Result<(), NetworkError> {
-        self.wait_for_ready().await;
-
-        if self.inner.handle.is_killed() {
-            return Err(NetworkError::ShutDown);
-        }
-
-        let maybe_pid = self
-            .inner
-            .handle
-            .get_record_timeout(&pk, self.inner.dht_timeout)
+    #[instrument(name = "Libp2pNetwork::queue_node_lookup", skip_all)]
+    async fn queue_node_lookup(
+        &self,
+        view_number: ViewNumber,
+        pk: K,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, K)>>> {
+        self.inner
+            .node_lookup_send
+            .send(Some((view_number, pk)))
             .await
-            .map_err(Into::<NetworkError>::into);
-
-        if let Ok(pid) = maybe_pid {
-            if self.inner.handle.lookup_pid(pid).await.is_err() {
-                error!("Failed to look up pid");
-                return Err(NetworkError::Libp2p {
-                    source: NetworkNodeHandleError::DHTError {
-                        source: libp2p_networking::network::error::DHTError::NotFound,
-                    },
-                });
-            };
-        } else {
-            error!("Unable to look up pubkey {:?}", pk);
-            return Err(NetworkError::Libp2p {
-                source: NetworkNodeHandleError::DHTError {
-                    source: libp2p_networking::network::error::DHTError::NotFound,
-                },
-            });
-        }
-
-        Ok(())
     }
 
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
+        match event {
+            ConsensusIntentEvent::PollFutureLeader(future_view, future_leader) => {
+                let _ = self
+                    .queue_node_lookup(ViewNumber::new(future_view), future_leader)
+                    .await
+                    .map_err(|err| warn!("failed to process node lookup request: {}", err));
+            }
+
+            ConsensusIntentEvent::PollForProposal(new_view) => {
+                if new_view > self.inner.latest_seen_view.load(Ordering::Relaxed) {
+                    self.inner
+                        .latest_seen_view
+                        .store(new_view, Ordering::Relaxed);
+                }
+            }
+
+            _ => {}
+        }
     }
 }
 
 /// libp2p identity communication channel
 #[derive(Clone, Debug)]
-pub struct Libp2pCommChannel<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    PROPOSAL: ProposalType<NodeType = TYPES>,
-    VOTE: VoteType<TYPES>,
-    MEMBERSHIP: Membership<TYPES>,
->(
-    Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>,
-    PhantomData<(TYPES, I, PROPOSAL, VOTE, MEMBERSHIP)>,
+pub struct Libp2pCommChannel<TYPES: NodeType>(
+    Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>,
+    PhantomData<TYPES>,
 );
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
+impl<TYPES: NodeType> Libp2pCommChannel<TYPES> {
     /// create a new libp2p communication channel
     #[must_use]
-    pub fn new(network: Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self {
+    pub fn new(network: Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self {
         Self(network, PhantomData)
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > TestableNetworkingImplementation<TYPES, Message<TYPES, I>>
-    for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for Libp2pCommChannel<TYPES>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
     /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
     /// with the purpose of generating libp2p networks.
@@ -766,9 +790,9 @@ where
         is_da: bool,
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let generator = <Libp2pNetwork<
-            Message<TYPES, I>,
+            Message<TYPES>,
             TYPES::SignatureKey,
-        > as TestableNetworkingImplementation<_, _>>::generator(
+        > as TestableNetworkingImplementation<_>>::generator(
             expected_node_count,
             num_bootstrap,
             network_id,
@@ -787,18 +811,19 @@ where
 // top
 // we don't really want to make this the default implementation because that forces it to require ConnectedNetwork to be implemented. The struct we implement over might use multiple ConnectedNetworks
 #[async_trait]
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    > CommunicationChannel<TYPES, Message<TYPES, I>, PROPOSAL, VOTE, MEMBERSHIP>
-    for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
+impl<TYPES: NodeType> CommunicationChannel<TYPES> for Libp2pCommChannel<TYPES>
 where
-    MessageKind<TYPES, I>: ViewMessage<TYPES>,
+    MessageKind<TYPES>: ViewMessage<TYPES>,
 {
-    type NETWORK = Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>;
+    type NETWORK = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
+
+    fn pause(&self) {
+        unimplemented!("Pausing not implemented for the Libp2p network");
+    }
+
+    fn resume(&self) {
+        unimplemented!("Resuming not implemented for the Libp2p network");
+    }
 
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
@@ -821,10 +846,10 @@ where
 
     async fn broadcast_message(
         &self,
-        message: Message<TYPES, I>,
-        membership: &MEMBERSHIP,
+        message: Message<TYPES>,
+        membership: &TYPES::Membership,
     ) -> Result<(), NetworkError> {
-        let recipients = <MEMBERSHIP as Membership<TYPES>>::get_committee(
+        let recipients = <TYPES as NodeType>::Membership::get_committee(
             membership,
             message.kind.get_view_number(),
         );
@@ -833,7 +858,7 @@ where
 
     async fn direct_message(
         &self,
-        message: Message<TYPES, I>,
+        message: Message<TYPES>,
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         self.0.direct_message(message, recipient).await
@@ -842,7 +867,7 @@ where
     fn recv_msgs<'a, 'b>(
         &'a self,
         transmit_type: TransmitType,
-    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES, I>>, NetworkError>>
+    ) -> BoxSyncFuture<'b, Result<Vec<Message<TYPES>>, NetworkError>>
     where
         'a: 'b,
         Self: 'b,
@@ -851,33 +876,26 @@ where
         boxed_sync(closure)
     }
 
-    async fn lookup_node(&self, pk: TYPES::SignatureKey) -> Result<(), NetworkError> {
-        self.0.lookup_node(pk).await
+    async fn queue_node_lookup(
+        &self,
+        view_number: ViewNumber,
+        pk: TYPES::SignatureKey,
+    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        self.0.queue_node_lookup(view_number, pk).await
     }
 
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent) {
-        // Not required
+    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
+        <Libp2pNetwork<_, _> as ConnectedNetwork<
+            Message<TYPES>,
+            TYPES::SignatureKey,
+        >>::inject_consensus_info(&self.0, event)
+        .await;
     }
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        PROPOSAL: ProposalType<NodeType = TYPES>,
-        VOTE: VoteType<TYPES>,
-        MEMBERSHIP: Membership<TYPES>,
-    >
-    TestableChannelImplementation<
-        TYPES,
-        Message<TYPES, I>,
-        PROPOSAL,
-        VOTE,
-        MEMBERSHIP,
-        Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>,
-    > for Libp2pCommChannel<TYPES, I, PROPOSAL, VOTE, MEMBERSHIP>
-{
+impl<TYPES: NodeType> TestableChannelImplementation<TYPES> for Libp2pCommChannel<TYPES> {
     fn generate_network(
-    ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES, I>, TYPES::SignatureKey>>) -> Self + 'static>
+    ) -> Box<dyn Fn(Arc<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>) -> Self + 'static>
     {
         Box::new(move |network| Libp2pCommChannel::new(network))
     }

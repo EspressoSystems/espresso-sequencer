@@ -38,9 +38,9 @@ use std::{collections::HashSet, fmt::Debug, str::FromStr, sync::Arc, time::Durat
 use tracing::{info, instrument};
 
 #[cfg(async_executor_impl = "async-std")]
-use libp2p::dns::DnsConfig;
+use libp2p::dns::async_std::Transport as DnsTransport;
 #[cfg(async_executor_impl = "tokio")]
-use libp2p::dns::TokioDnsConfig as DnsConfig;
+use libp2p::dns::tokio::Transport as DnsTransport;
 #[cfg(async_executor_impl = "async-std")]
 use quic::async_std::Transport as QuicTransport;
 #[cfg(async_executor_impl = "tokio")]
@@ -211,12 +211,12 @@ pub async fn gen_transport(
     let dns_quic = {
         #[cfg(async_executor_impl = "async-std")]
         {
-            DnsConfig::system(quic_transport).await
+            DnsTransport::system(quic_transport).await
         }
 
         #[cfg(async_executor_impl = "tokio")]
         {
-            DnsConfig::system(quic_transport)
+            DnsTransport::system(quic_transport)
         }
     }
     .map_err(|e| NetworkError::TransportLaunch { source: e })?;
