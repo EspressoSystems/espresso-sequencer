@@ -1,4 +1,3 @@
-use commit::Committable;
 use hotshot::{tasks::add_vid_task, types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
@@ -22,7 +21,7 @@ use std::marker::PhantomData;
 async fn test_vid_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{block_impl::VIDBlockPayload, message::Proposal};
+    use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -36,18 +35,15 @@ async fn test_vid_task() {
 
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
     let proposal: DAProposal<TestTypes> = DAProposal {
-        block_payload: block.clone(),
+        encoded_transactions: encoded_transactions.clone(),
+        metadata: (),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -58,7 +54,7 @@ async fn test_vid_task() {
     let vid_proposal = Proposal {
         data: VidDisperse {
             view_number: message.data.view_number,
-            payload_commitment: block.commit(),
+            payload_commitment,
             shares: vid_disperse.shares,
             common: vid_disperse.common,
         },
@@ -74,7 +70,7 @@ async fn test_vid_task() {
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::BlockReady(
-        block.clone(),
+        encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
@@ -84,13 +80,13 @@ async fn test_vid_task() {
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
 
     let vid_vote = VIDVote::create_signed_vote(
         hotshot_types::simple_vote::VIDData {
-            payload_commit: block.commit(),
+            payload_commit: payload_commitment,
         },
         ViewNumber::new(2),
         api.public_key(),

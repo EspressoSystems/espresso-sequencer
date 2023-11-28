@@ -7,13 +7,12 @@ pub use crate::{
 use displaydoc::Display;
 
 use crate::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     error::HotShotError,
     simple_certificate::QuorumCertificate,
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics},
         node_implementation::NodeType,
-        BlockPayload,
     },
     utils::Terminator,
 };
@@ -48,10 +47,11 @@ pub struct Consensus<TYPES: NodeType> {
     /// - includes the MOST RECENT decided leaf
     pub saved_leaves: CommitmentMap<Leaf<TYPES>>,
 
-    /// Saved block payloads
+    /// Saved payloads.
     ///
-    /// Contains the block payload for every leaf in `saved_leaves` if that payload is available.
-    pub saved_block_payloads: BlockPayloadStore<TYPES::BlockPayload>,
+    /// Contains the block payload commitment and encoded transactions for every leaf in
+    /// `saved_leaves` if that payload is available.
+    pub saved_payloads: PayloadStore,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,
@@ -296,9 +296,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Err(HotShotError::LeafNotFound {})
     }
 
-    /// garbage collects based on state change
-    /// right now, this removes from both the `saved_block_payloads`
-    /// and `state_map` fields of `Consensus`
+    /// Garbage collects based on state change right now, this removes from both the
+    /// `saved_payloads` and `state_map` fields of `Consensus`.
     /// # Panics
     /// On inconsistent stored entries
     #[allow(clippy::unused_async)] // async for API compatibility reasons
@@ -322,16 +321,15 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_payload_commitment())
-            .for_each(|block| {
-                self.saved_block_payloads.remove(block);
+            .for_each(|payload_commitment| {
+                self.saved_payloads.remove(payload_commitment);
             });
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 if let Some(removed) = self.saved_leaves.remove(&leaf) {
-                    self.saved_block_payloads
-                        .remove(removed.get_payload_commitment());
+                    self.saved_payloads.remove(removed.get_payload_commitment());
                 }
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
@@ -352,7 +350,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 }
 
-/// Mapping from block payload commitments to the payloads.
+/// Mapping from block payload commitments to the encoded transactions.
 ///
 /// Entries in this mapping are reference-counted, so multiple consensus objects can refer to the
 /// same block, and the block will only be deleted after _all_ such objects are garbage collected.
@@ -360,46 +358,46 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 /// before all but one branch are ultimately garbage collected.
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct BlockPayloadStore<PAYLOAD: BlockPayload>(HashMap<Commitment<PAYLOAD>, (PAYLOAD, u64)>);
+pub struct PayloadStore(HashMap<VidCommitment, (Vec<u8>, u64)>);
 
-impl<PAYLOAD: BlockPayload> BlockPayloadStore<PAYLOAD> {
-    /// Save payload commitment for later retrieval.
+impl PayloadStore {
+    /// Save the encoded transactions for later retrieval.
     ///
     /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
-    /// `self.get(payload_commitment)` will return `Some(payload)`.
+    /// `self.get(payload_commitment)` will return `Some(encoded_transactions)`.
     ///
     /// This function will increment a reference count on the saved payload commitment, so that
     /// multiple calls to [`insert`](Self::insert) for the same payload commitment result in
     /// multiple owning references to the payload commitment. [`remove`](Self::remove) must be
     /// called once for each reference before the payload commitment will be deallocated.
-    pub fn insert(&mut self, payload: PAYLOAD) {
+    pub fn insert(&mut self, payload_commitment: VidCommitment, encoded_transactions: Vec<u8>) {
         self.0
-            .entry(payload.commit())
+            .entry(payload_commitment)
             .and_modify(|(_, refcount)| *refcount += 1)
-            .or_insert((payload, 1));
+            .or_insert((encoded_transactions, 1));
     }
 
-    /// Get a saved set of transaction commitments, if available.
+    /// Get the saved encoded transactions, if available.
     ///
-    /// If a set of transaction commitments has been saved with [`insert`](Self::insert), this
-    /// function will retrieve it. It may return [`None`] if a block with the given commitment has
-    /// not been saved or if the block has been dropped with [`remove`](Self::remove).
+    /// If the encoded transactions has been saved with [`insert`](Self::insert), this function
+    /// will retrieve it. It may return [`None`] if a block with the given commitment has not been
+    /// saved or if the block has been dropped with [`remove`](Self::remove).
     #[must_use]
-    pub fn get(&self, payload_commitment: Commitment<PAYLOAD>) -> Option<&PAYLOAD> {
-        self.0.get(&payload_commitment).map(|(payload, _)| payload)
+    pub fn get(&self, payload_commitment: VidCommitment) -> Option<&Vec<u8>> {
+        self.0.get(&payload_commitment).map(|(encoded, _)| encoded)
     }
 
-    /// Drop a reference to a saved set of transaction commitments.
+    /// Drop a reference to the saved encoded transactions.
     ///
     /// If the set exists and this call drops the last reference to it, the set will be returned,
     /// Otherwise, the return value is [`None`].
-    pub fn remove(&mut self, payload_commitment: Commitment<PAYLOAD>) -> Option<PAYLOAD> {
+    pub fn remove(&mut self, payload_commitment: VidCommitment) -> Option<Vec<u8>> {
         if let Entry::Occupied(mut e) = self.0.entry(payload_commitment) {
             let (_, refcount) = e.get_mut();
             *refcount -= 1;
             if *refcount == 0 {
-                let (payload, _) = e.remove();
-                return Some(payload);
+                let (encoded, _) = e.remove();
+                return Some(encoded);
             }
         }
         None

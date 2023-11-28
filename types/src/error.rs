@@ -3,7 +3,9 @@
 //! This module provides [`HotShotError`], which is an enum representing possible faults that can
 //! occur while interacting with this crate.
 
-use crate::traits::{node_implementation::NodeType, storage::StorageError};
+use crate::traits::{
+    block_contents::BlockPayload, node_implementation::NodeType, storage::StorageError,
+};
 use snafu::Snafu;
 use std::num::NonZeroU64;
 
@@ -31,12 +33,12 @@ pub enum HotShotError<TYPES: NodeType> {
         /// The underlying network fault
         source: crate::traits::network::NetworkError,
     },
-    /// A block failed verification
-    #[snafu(display("Failed verification of block"))]
-    BadBlock {},
-    /// A block was not consistent with the existing state
-    #[snafu(display("Inconsistent block"))]
-    InconsistentBlock {},
+    /// Failure in the block.
+    #[snafu(display("Failed to build or verify a block: {source}"))]
+    BlockError {
+        /// The underlying block error.
+        source: <TYPES::BlockPayload as BlockPayload>::Error,
+    },
     /// Failure in networking layer
     #[snafu(display("Failure in networking layer: {source}"))]
     NetworkFault {

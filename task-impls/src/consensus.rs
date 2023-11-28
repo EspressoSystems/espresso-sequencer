@@ -4,7 +4,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use bitvec::prelude::*;
-use commit::{Commitment, Committable};
+use commit::Committable;
 use core::time::Duration;
 use either::Either;
 use futures::FutureExt;
@@ -17,7 +17,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal},
+    data::{Leaf, QuorumProposal, VidCommitment},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
     simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
@@ -52,7 +52,7 @@ use tracing::{debug, error, info, instrument};
 pub struct ConsensusTaskError {}
 
 /// Alias for the block payload commitment and the associated metadata.
-type CommitmentAndMetadata<PAYLOAD> = (Commitment<PAYLOAD>, <PAYLOAD as BlockPayload>::Metadata);
+type CommitmentAndMetadata<PAYLOAD> = (VidCommitment, <PAYLOAD as BlockPayload>::Metadata);
 
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
@@ -735,11 +735,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
-                                if let Some(payload) = consensus
-                                    .saved_block_payloads
-                                    .get(leaf.get_payload_commitment())
+                                if let Some(encoded_txns) =
+                                    consensus.saved_payloads.get(leaf.get_payload_commitment())
                                 {
-                                    if let Err(e) = leaf.fill_block_payload(payload.clone()) {
+                                    let payload = BlockPayload::from_bytes(
+                                        encoded_txns.clone().into_iter(),
+                                        leaf.get_block_header().metadata(),
+                                    );
+                                    if let Err(e) = leaf.fill_block_payload(payload) {
                                         error!(
                                             "Saved block payload and commitment don't match: {:?}",
                                             e

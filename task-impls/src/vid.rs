@@ -322,14 +322,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // there is already a view there: the replica task may have inserted a `Leaf` view which
                 // contains strictly more information.
                 consensus.state_map.entry(view).or_insert(View {
-                    view_inner: ViewInner::DA {
-                        block: payload_commitment,
-                    },
+                    view_inner: ViewInner::DA { payload_commitment },
                 });
 
                 // Record the block we have promised to make available.
                 // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                // consensus.saved_block_payloads.insert(proposal.data.block_payload);
+                // consensus.saved_payloads.insert(proposal.data.block_payload);
             }
             HotShotEvent::VidCertRecv(cert) => {
                 self.network
