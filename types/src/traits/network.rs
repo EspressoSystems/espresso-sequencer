@@ -236,6 +236,12 @@ pub trait CommunicationChannel<TYPES: NodeType>: Clone + Debug + Send + Sync + '
     /// into the network
     async fn wait_for_ready(&self);
 
+    /// Pauses the underlying network
+    fn pause(&self);
+
+    /// Resumes the underlying network
+    fn resume(&self);
+
     /// checks if the network is ready
     /// nonblocking
     async fn is_ready(&self) -> bool;

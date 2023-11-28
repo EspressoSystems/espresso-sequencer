@@ -38,7 +38,7 @@ use std::{
     time::Duration,
 };
 use surf_disco::error::ClientError;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 /// Represents the communication channel abstraction for the web server
 #[derive(Clone, Debug)]
 pub struct WebCommChannel<TYPES: NodeType>(Arc<WebServerNetwork<TYPES>>);
@@ -78,6 +78,18 @@ impl<TYPES: NodeType> WebServerNetwork<TYPES> {
         result.map_err(|_e| NetworkError::WebServer {
             source: WebServerNetworkError::ClientError,
         })
+    }
+
+    /// Pauses the underlying network
+    pub fn pause(&self) {
+        error!("Pausing CDN network");
+        self.inner.running.store(false, Ordering::Relaxed);
+    }
+
+    /// Resumes the underlying network
+    pub fn resume(&self) {
+        error!("Resuming CDN network");
+        self.inner.running.store(true, Ordering::Relaxed);
     }
 }
 
@@ -586,6 +598,14 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for WebCommChannel<TYPES> {
         .await;
     }
 
+    fn pause(&self) {
+        self.0.pause();
+    }
+
+    fn resume(&self) {
+        self.0.resume();
+    }
+
     /// checks if the network is ready
     /// nonblocking
     async fn is_ready(&self) -> bool {
@@ -701,6 +721,12 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         message: Message<TYPES>,
         _recipients: BTreeSet<TYPES::SignatureKey>,
     ) -> Result<(), NetworkError> {
+        // short circuit if we are shut down
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return Err(NetworkError::ShutDown);
+        }
+
         let network_msg = Self::parse_post_message(message);
         match network_msg {
             Ok(network_msg) => self.post_message_to_web_server(network_msg).await,
@@ -717,6 +743,11 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
         message: Message<TYPES>,
         _recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
+        // short circuit if we are shut down
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return Err(NetworkError::ShutDown);
+        }
         let network_msg = Self::parse_post_message(message);
         match network_msg {
             Ok(network_msg) => {
@@ -769,6 +800,11 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
 
     #[allow(clippy::too_many_lines)]
     async fn inject_consensus_info(&self, event: ConsensusIntentEvent<TYPES::SignatureKey>) {
+        #[cfg(feature = "hotshot-testing")]
+        if !self.inner.running.load(Ordering::Relaxed) {
+            return;
+        }
+
         debug!(
             "Injecting event: {:?} is da {}",
             event.clone(),
@@ -796,7 +832,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::Proposal, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -836,7 +872,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::VidDisperse, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive VID disperse polling encountered an error: {:?}",
                                     e
                                 );
@@ -870,7 +906,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                             .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
                             .await
                         {
-                            error!(
+                            warn!(
                                 "Background receive proposal polling encountered an error: {:?}",
                                 e
                             );
@@ -891,7 +927,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::Vote, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -928,7 +964,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::VidVote, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -966,7 +1002,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::DAC, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -1003,7 +1039,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::VidCert, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -1069,7 +1105,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 )
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -1099,7 +1135,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 )
                                 .await
                             {
-                                error!(
+                                warn!(
                                     "Background receive proposal polling encountered an error: {:?}",
                                     e
                                 );
@@ -1152,7 +1188,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 .poll_web_server(receiver, MessagePurpose::Data, view_number)
                                 .await
                             {
-                                error!(
+                                warn!(
                                                                "Background receive transaction polling encountered an error: {:?}",
                                                                  e
                                                                );
