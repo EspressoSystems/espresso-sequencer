@@ -12,9 +12,8 @@ use derivative::Derivative;
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-    data::{fake_commitment, ViewNumber},
+    data::{fake_commitment, BlockError, ViewNumber},
     traits::{
-        block_contents::BlockError,
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableState},

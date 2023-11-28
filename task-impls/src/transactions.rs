@@ -13,11 +13,11 @@ use hotshot_task::{
     task_impls::HSTWithEvent,
 };
 use hotshot_types::{
-    block_impl::{NUM_CHUNKS, NUM_STORAGE_NODES},
     consensus::Consensus,
     data::{test_srs, Leaf, VidDisperse, VidScheme, VidSchemeTrait},
     message::Proposal,
     traits::{
+        block_contents::{NUM_CHUNKS, NUM_STORAGE_NODES},
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
@@ -220,8 +220,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             return None;
                         }
                     };
-                let encoded_txns = match payload.encode() {
-                    Ok(encoded) => encoded,
+                let encoded_transactions = match payload.encode() {
+                    Ok(encoded) => encoded.into_iter().collect::<Vec<u8>>(),
                     Err(e) => {
                         error!("Failed to encode the block payload: {:?}.", e);
                         return None;
@@ -233,15 +233,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // changes.
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
                 let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
-                let vid_disperse = vid
-                    .disperse(encoded_txns.into_iter().collect::<Vec<u8>>())
-                    .unwrap();
+                let vid_disperse = vid.disperse(encoded_transactions.clone()).unwrap();
 
                 // TODO never clone a block
                 // https://github.com/EspressoSystems/HotShot/issues/1858
                 self.event_stream
                     .publish(HotShotEvent::BlockReady(
-                        payload.clone(),
+                        encoded_transactions,
                         metadata,
                         view + 1,
                     ))
@@ -256,14 +254,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         Proposal {
                             data: VidDisperse {
                                 view_number: view + 1,
-                                payload_commitment: payload.commit(),
+                                payload_commitment: vid_disperse.commit,
                                 shares: vid_disperse.shares,
                                 common: vid_disperse.common,
                             },
-                            // TODO (Keyao) This is also signed in DA task.
                             signature: TYPES::SignatureKey::sign(
                                 &self.private_key,
-                                payload.commit().as_ref(),
+                                &vid_disperse.commit,
                             ),
                             _pd: PhantomData,
                         },

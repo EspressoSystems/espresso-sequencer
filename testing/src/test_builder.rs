@@ -64,7 +64,7 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 1000,
+            next_view_timeout: 1500,
             timeout_ratio: (11, 10),
             round_start_delay: 100,
             start_delay: 100,
@@ -144,7 +144,7 @@ impl TestMetadata {
                 ..Default::default()
             },
             timing_data: TimingData {
-                next_view_timeout: 1000,
+                next_view_timeout: 3000,
                 ..TimingData::default()
             },
             ..TestMetadata::default()
