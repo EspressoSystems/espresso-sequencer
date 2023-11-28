@@ -780,7 +780,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         id: self.id,
                         registry: self.registry.clone(),
                     };
-                    let name = "Quorum Vote Collection";
+                    let name = "Timeout Vote Collection";
                     self.vote_collector =
                         spawn_vote_accumulator(&info, vote.clone(), event, name.to_string()).await;
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
