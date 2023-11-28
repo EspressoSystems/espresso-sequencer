@@ -51,30 +51,13 @@ contract StakeTable_register_Test is Test {
         stakeTable = new S(tokenAddress,lightClientAddress);
     }
 
-    // TODO move to some utils library?
-    // https://ethereum.stackexchange.com/a/126928
-    /// @dev Convert some bytes to an hexadecimal string
-    function iToHex(bytes memory buffer) public pure returns (string memory) {
-        // Fixed buffer size for hexadecimal conversion
-        bytes memory converted = new bytes(buffer.length * 2);
-
-        bytes memory _base = "0123456789abcdef";
-
-        for (uint256 i = 0; i < buffer.length; i++) {
-            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
-            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
-        }
-
-        return string(abi.encodePacked("0x", converted));
-    }
-
     /// @dev Tests the key registering process
     function testRegister() external {
         // Generate a BLS signature and other values using rust code
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-bls-sig";
-        cmds[2] = iToHex(abi.encode(msg.sender));
+        cmds[2] = vm.toString(msg.sender);
 
         bytes memory result = vm.ffi(cmds);
         (
