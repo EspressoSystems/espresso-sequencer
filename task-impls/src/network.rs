@@ -267,7 +267,7 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => (
                 sender,
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::ViewSyncCommitCertificate(certificate.clone()),
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(certificate),
                 ))),
                 TransmitType::Broadcast,
                 None,
@@ -276,7 +276,7 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => (
                 sender,
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Left(
-                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate.clone()),
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate),
                 ))),
                 TransmitType::Broadcast,
                 None,

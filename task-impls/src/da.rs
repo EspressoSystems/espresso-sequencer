@@ -30,6 +30,7 @@ use hotshot_types::{
     vote::HasViewNumber,
     vote::VoteAccumulator,
 };
+use sha2::{Digest, Sha256};
 
 use snafu::Snafu;
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
@@ -195,7 +196,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
-                let payload_commitment = vid_commitment(proposal.data.encoded_transactions.clone());
+                let payload_commitment = vid_commitment(&proposal.data.encoded_transactions);
+                let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
 
                 // ED Is this the right leader?
                 let view_leader_key = self.da_membership.get_leader(view);
@@ -204,7 +206,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
-                if !view_leader_key.validate(&proposal.signature, payload_commitment.as_ref()) {
+                if !view_leader_key.validate(&proposal.signature, &encoded_transactions_hash) {
                     error!("Could not verify proposal.");
                     return None;
                 }
@@ -364,14 +366,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 return None;
             }
-            HotShotEvent::BlockReady(encoded_transactions, metadata, view) => {
+            HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view) => {
                 self.da_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
                     .await;
 
-                let payload_commitment = vid_commitment(encoded_transactions.clone());
+                // quick hash the encoded txns with sha256
+                let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
+
+                // sign the encoded transactions as opposed to the VID commitment
                 let signature =
-                    TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref());
+                    TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash);
                 let data: DAProposal<TYPES> = DAProposal {
                     encoded_transactions,
                     metadata: metadata.clone(),
@@ -386,12 +391,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     _pd: PhantomData,
                 };
 
-                self.event_stream
-                    .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
-                        payload_commitment,
-                        metadata,
-                    ))
-                    .await;
                 self.event_stream
                     .publish(HotShotEvent::DAProposalSend(
                         message.clone(),
@@ -424,7 +423,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::DAProposalRecv(_, _)
                 | HotShotEvent::DAVoteRecv(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::BlockReady(_, _, _)
+                | HotShotEvent::TransactionsSequenced(_, _, _)
                 | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewChange(_)
         )
