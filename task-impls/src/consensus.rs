@@ -295,7 +295,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
-
+    // Check if we are able to vote, like whether the proposal is valid, whether we have DAC and VID share, and if so, vote
     async fn vote_if_able(&self) -> bool {
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
@@ -367,6 +367,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
+            // Sishan NOTE TODO: Add the logic of "it does not vote until it has seen its VID share"
             if let Some(cert) = self.da_certs.get(&(proposal.get_view_number())) {
                 let view = cert.view_number;
                 // TODO: do some of this logic without the vote token check, only do that when voting.
@@ -1103,7 +1104,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let view = cert.get_view_number();
                 self.vid_certs.insert(view, cert);
-                // Sishan NOTE TODO
+                // Sishan NOTE TODO: delete it
                 // RM TODO: VOTING
             }
 

@@ -263,6 +263,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 debug!("VID disperse data is fresh.");
                 let payload_commitment = disperse.data.payload_commitment;
+                // Sishan NOTE TODO: Add to the storage that we have received the VID disperse for a specific view / block
 
                 // Check whether the sender is the right leader for this view
                 let view_leader_key = self.membership.get_leader(view);
@@ -273,14 +274,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
                     error!("Could not verify VID proposal sig.");
-                    return None;
-                }
-                // Sishan NOTE TODO: check whether this part is needed? How consensus committee functioned in vid task?
-                if !self.membership.has_stake(&self.public_key) {
-                    error!(
-                        "We were not chosen for consensus-vid committee on {:?}",
-                        self.cur_view
-                    );
                     return None;
                 }
 
