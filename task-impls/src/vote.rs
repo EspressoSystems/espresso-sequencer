@@ -191,7 +191,7 @@ where
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
     if vote.get_leader(info.membership.as_ref()) != info.public_key {
-        error!("Vote is not to the leader");
+        debug!("Vote is not to the leader");
         return None;
     }
 
@@ -325,7 +325,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, VIDVote<TYPES>, VIDCertificate<TYP
     for VIDVote<TYPES>
 {
     fn get_leader(&self, membership: &TYPES::Membership) -> TYPES::SignatureKey {
-        membership.get_leader(self.get_view_number() + 1)
+        membership.get_leader(self.get_view_number())
     }
     fn make_cert_event(
         certificate: VIDCertificate<TYPES>,
