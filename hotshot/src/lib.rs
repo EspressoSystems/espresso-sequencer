@@ -111,6 +111,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Networks<TYPES, I> {
         self.quorum_network.wait_for_ready().await;
         self.da_network.wait_for_ready().await;
     }
+
+    /// shut down all networks
+    pub async fn shut_down_networks(&self) {
+        self.quorum_network.shut_down().await;
+        self.da_network.shut_down().await;
+    }
 }
 
 /// Bundle of all the memberships a consensus instance uses

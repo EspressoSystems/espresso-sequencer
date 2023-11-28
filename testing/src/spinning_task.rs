@@ -15,7 +15,8 @@ use hotshot_task::{
     task_impls::{HSTWithEventAndMessage, TaskBuilder},
     GeneratedStream,
 };
-use hotshot_types::traits::node_implementation::NodeType;
+
+use hotshot_types::traits::{network::CommunicationChannel, node_implementation::NodeType};
 use snafu::Snafu;
 #[derive(Snafu, Debug)]
 pub struct SpinningTaskErr {}
@@ -45,6 +46,10 @@ pub enum UpDown {
     Up,
     /// spin the node down
     Down,
+    /// spin the node's network up
+    NetworkUp,
+    /// spin the node's network down
+    NetworkDown,
 }
 
 /// denotes a change in node state
@@ -52,7 +57,7 @@ pub enum UpDown {
 pub struct ChangeNode {
     /// the index of the node
     pub idx: usize,
-    /// spin the node up or down
+    /// spin the node or node's network up or down
     pub updown: UpDown,
 }
 
@@ -118,6 +123,18 @@ impl SpinningTaskDescription {
                                         UpDown::Down => {
                                             if let Some(node) = state.handles.get_mut(idx) {
                                                 node.handle.shut_down().await;
+                                            }
+                                        }
+                                        UpDown::NetworkUp => {
+                                            if let Some(handle) = state.handles.get(idx) {
+                                                handle.networks.0.resume();
+                                                handle.networks.1.resume();
+                                            }
+                                        }
+                                        UpDown::NetworkDown => {
+                                            if let Some(handle) = state.handles.get(idx) {
+                                                handle.networks.0.pause();
+                                                handle.networks.1.pause();
                                             }
                                         }
                                     }
