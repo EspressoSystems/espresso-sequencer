@@ -12,10 +12,6 @@ on:
 jobs:
   code-coverage:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/espressosystems/nix:main
-      volumes:
-        - github_nix:/nix
     timeout-minutes: 120
     steps:
       - name: Configure Git
@@ -26,10 +22,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - uses: cachix/cachix-action@v12
+      - name: Install Nix
+        uses: cachix/install-nix-action@v23
+
+      - name: Enable Cachix
+        uses: cachix/cachix-action@v12
+        # If PR is from a non-collaborator (e.g. dependabot) the secrets are missing and the login to cachix fails.
+        continue-on-error: true
         with:
           name: espresso-systems-private
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          extraPullNames: nix-community
+          skipPush: ${{ github.actor == 'dependabot[bot]' }}
 
       - name: Cache cargo
         uses: actions/cache@v3.3.1

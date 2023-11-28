@@ -47,6 +47,7 @@
             bash
 
             curl
+            docker
 
             cargo-audit
             cargo-edit
