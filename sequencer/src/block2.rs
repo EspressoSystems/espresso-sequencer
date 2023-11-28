@@ -20,7 +20,7 @@ impl BlockPayload {
     fn build(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
         // `tx_table` is a bytes representation of the following table:
         // word[0]: [number n of entries in tx table]
-        // word[i>0]: [end byte index of the ith tx in the payload]
+        // word[j>0]: [end byte index of the (j-1)th tx in the payload]
         //
         // Thus, the ith tx payload bytes range is word[i-1]..word[i].
         // Edge case: tx_table[-1] is implicitly 0.
