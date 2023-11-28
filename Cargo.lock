@@ -982,7 +982,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "itoa 1.0.9",
+ "itoa",
  "matchit",
  "memchr",
  "mime",
@@ -1536,6 +1536,23 @@ dependencies = [
  "serde",
  "sha3",
  "tagged-base64 0.2.4",
+]
+
+[[package]]
+name = "commit"
+version = "0.2.2"
+source = "git+https://github.com/EspressoSystems/commit?tag=0.2.3#fa1d0cb00bda1cc06c239aaf3a692014489d88c8"
+dependencies = [
+ "arbitrary",
+ "ark-serialize 0.4.2",
+ "bitvec",
+ "derivative",
+ "derive_more",
+ "funty",
+ "hex",
+ "serde",
+ "sha3",
+ "tagged-base64 0.3.4",
 ]
 
 [[package]]
@@ -2215,20 +2232,11 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
-dependencies = [
- "dirs-sys 0.3.7",
-]
-
-[[package]]
-name = "dirs"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
 dependencies = [
- "dirs-sys 0.4.1",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -2239,17 +2247,6 @@ checksum = "b98cf8ebf19c3d1b223e151f99a4f9f0690dca41414773390fc824184ac833e1"
 dependencies = [
  "cfg-if",
  "dirs-sys-next",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b1d1d91c932ef41c0f2663aa8b0ca0342d444d842c06914aa0a7e352d0bada6"
-dependencies = [
- "libc",
- "redox_users",
- "winapi",
 ]
 
 [[package]]
@@ -2695,7 +2692,7 @@ dependencies = [
  "rlp",
  "serde",
  "serde_json",
- "strum 0.25.0",
+ "strum",
  "syn 2.0.37",
  "tempfile",
  "thiserror",
@@ -2810,7 +2807,7 @@ checksum = "de34e484e7ae3cab99fbfd013d6c5dc7f9013676a4e0e414d8b12e1213e8b3ba"
 dependencies = [
  "cfg-if",
  "const-hex",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "ethers-core",
  "glob",
@@ -3380,7 +3377,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3389,7 +3386,7 @@ dependencies = [
  "bimap",
  "bincode",
  "bitvec",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.3)",
  "custom_debug",
  "dashmap",
  "derivative",
@@ -3413,7 +3410,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.3",
  "time 0.3.29",
  "tokio",
  "tracing",
@@ -3423,7 +3420,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3442,17 +3439,17 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "surf-disco",
- "tide-disco 0.4.1 (git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.1)",
+ "surf-disco 0.4.3",
+ "tide-disco 0.4.3",
  "tokio",
- "toml 0.5.11",
+ "toml 0.8.2",
  "tracing",
 ]
 
 [[package]]
 name = "hotshot-qc"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -3485,7 +3482,7 @@ dependencies = [
  "atomic_store",
  "bincode",
  "clap",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.2)",
  "custom_debug",
  "derive_more",
  "either",
@@ -3499,7 +3496,7 @@ dependencies = [
  "serde",
  "snafu",
  "spin_sleep",
- "tide-disco 0.4.1 (git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.2)",
+ "tide-disco 0.4.1",
  "time 0.3.29",
  "toml 0.7.8",
  "tracing",
@@ -3508,7 +3505,7 @@ dependencies = [
 [[package]]
 name = "hotshot-signature-key"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "bincode",
  "bitvec",
@@ -3529,7 +3526,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3549,7 +3546,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -3559,7 +3556,7 @@ dependencies = [
  "atomic_enum",
  "bincode",
  "bitvec",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.3)",
  "either",
  "futures",
  "hotshot-task",
@@ -3579,7 +3576,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "ark-bls12-381",
  "async-compatibility-layer",
@@ -3587,7 +3584,7 @@ dependencies = [
  "async-trait",
  "bitvec",
  "blake3",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.3)",
  "either",
  "ethereum-types",
  "futures",
@@ -3609,10 +3606,10 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "arbitrary",
- "ark-serialize 0.3.0",
+ "ark-serialize 0.4.2",
  "ark-std 0.4.0",
  "async-compatibility-layer",
  "async-lock",
@@ -3622,7 +3619,7 @@ dependencies = [
  "bit-vec",
  "bitvec",
  "blake3",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.3)",
  "custom_debug",
  "derivative",
  "digest 0.10.7",
@@ -3643,7 +3640,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "tagged-base64 0.2.4",
+ "tagged-base64 0.3.4",
  "time 0.3.29",
  "tokio",
  "tracing",
@@ -3653,7 +3650,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "bincode",
 ]
@@ -3661,7 +3658,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.1.1"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "ark-bls12-381",
  "async-compatibility-layer",
@@ -3681,11 +3678,11 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.3",
  "tide",
- "tide-disco 0.4.1 (git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.1)",
+ "tide-disco 0.4.3",
  "tokio",
- "toml 0.7.8",
+ "toml 0.8.2",
  "tracing",
 ]
 
@@ -3729,7 +3726,7 @@ checksum = "bd6effc99afb63425aff9b05836f029929e345a6148a14b7ecd5ab67af944482"
 dependencies = [
  "bytes 1.5.0",
  "fnv",
- "itoa 1.0.9",
+ "itoa",
 ]
 
 [[package]]
@@ -3812,7 +3809,7 @@ dependencies = [
  "http-body",
  "httparse",
  "httpdate",
- "itoa 1.0.9",
+ "itoa",
  "pin-project-lite 0.2.13",
  "socket2 0.4.9",
  "tokio",
@@ -4134,12 +4131,6 @@ checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]
-
-[[package]]
-name = "itoa"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "itoa"
@@ -4700,7 +4691,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#b5c6026912256bd601db5c6f9a792664c360aaff"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#72ce2037ac36fce27883919ee8646dbfc21c22ba"
 dependencies = [
  "async-compatibility-layer",
  "async-lock",
@@ -5179,36 +5170,13 @@ checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
 
 [[package]]
 name = "maud"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19aff2cd19eb4b93df29efa602652513b0f731f1d3474f6e377f763fddf61e58"
-dependencies = [
- "itoa 0.4.8",
- "maud_macros 0.24.0",
- "tide",
-]
-
-[[package]]
-name = "maud"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0bab19cef8a7fe1c18a43e881793bfc9d4ea984befec3ae5bd0415abf3ecf00"
 dependencies = [
- "itoa 1.0.9",
- "maud_macros 0.25.0",
+ "itoa",
+ "maud_macros",
  "tide",
-]
-
-[[package]]
-name = "maud_macros"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5c114f6f24b08fdd4a25d2fb87a8b140df56b577723247b382e8b04c583f2eb"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -5453,7 +5421,7 @@ dependencies = [
 [[package]]
 name = "nll"
 version = "1.0.0"
-source = "git+https://github.com/EspressoSystems/nll#c84499eb8de11beee5caa9390deff8a8ca3b9514"
+source = "git+https://github.com/EspressoSystems/nll#8e7926789f8eb464cbbbb1858ba4292a6ec6d900"
 
 [[package]]
 name = "nohash-hasher"
@@ -6070,7 +6038,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
 dependencies = [
  "once_cell",
- "toml_edit",
+ "toml_edit 0.19.15",
 ]
 
 [[package]]
@@ -6145,7 +6113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c99afa9a01501019ac3a14d71d9f94050346f55ca471ce90c799a15c58f61e2"
 dependencies = [
  "dtoa",
- "itoa 1.0.9",
+ "itoa",
  "parking_lot",
  "prometheus-client-derive-encode",
 ]
@@ -6906,7 +6874,7 @@ dependencies = [
  "bincode",
  "clap",
  "cld",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.2)",
  "contract-bindings",
  "derivative",
  "derive_more",
@@ -6932,9 +6900,9 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.1",
  "tempfile",
- "tide-disco 0.4.1 (git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.2)",
+ "tide-disco 0.4.1",
  "time 0.3.29",
  "toml 0.7.8",
  "tracing",
@@ -6949,7 +6917,7 @@ dependencies = [
  "anyhow",
  "ark-serialize 0.3.0",
  "async-std",
- "commit",
+ "commit 0.2.2 (git+https://github.com/EspressoSystems/commit?tag=0.2.2)",
  "contract-bindings",
  "ethers",
  "portpicker",
@@ -6994,7 +6962,7 @@ version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
 dependencies = [
- "itoa 1.0.9",
+ "itoa",
  "ryu",
  "serde",
 ]
@@ -7026,25 +6994,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
  "form_urlencoded",
- "itoa 1.0.9",
+ "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_with"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
-dependencies = [
- "base64 0.13.1",
- "chrono",
- "hex",
- "indexmap 1.9.3",
- "serde",
- "serde_json",
- "serde_with_macros 2.3.3",
- "time 0.3.29",
 ]
 
 [[package]]
@@ -7060,20 +7012,8 @@ dependencies = [
  "indexmap 2.0.2",
  "serde",
  "serde_json",
- "serde_with_macros 3.3.0",
+ "serde_with_macros",
  "time 0.3.29",
-]
-
-[[package]]
-name = "serde_with_macros"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
-dependencies = [
- "darling 0.20.3",
- "proc-macro2",
- "quote",
- "syn 2.0.37",
 ]
 
 [[package]]
@@ -7182,20 +7122,11 @@ dependencies = [
 
 [[package]]
 name = "shellexpand"
-version = "2.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ccc8076840c4da029af4f87e4e8daeb0fca6b87bbb02e10cb60b791450e11e4"
-dependencies = [
- "dirs 4.0.0",
-]
-
-[[package]]
-name = "shellexpand"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da03fa3b94cc19e3ebfc88c4229c49d8f08cdbd1228870a45f0ffdf84988e14b"
 dependencies = [
- "dirs 5.0.1",
+ "dirs",
 ]
 
 [[package]]
@@ -7547,30 +7478,11 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
-
-[[package]]
-name = "strum"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
 dependencies = [
- "strum_macros 0.25.2",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.24.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 1.0.109",
+ "strum_macros",
 ]
 
 [[package]]
@@ -7629,7 +7541,24 @@ dependencies = [
  "serde",
  "serde_json",
  "surf",
- "tide-disco 0.4.1 (git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.2)",
+ "tide-disco 0.4.1",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/surf-disco.git?tag=v0.4.3#44de23cb7d43893174b00e01148c7ccd100c6c26"
+dependencies = [
+ "async-std",
+ "async-tungstenite 0.15.0",
+ "bincode",
+ "derivative",
+ "futures",
+ "hex",
+ "serde",
+ "serde_json",
+ "surf",
+ "tide-disco 0.4.3",
 ]
 
 [[package]]
@@ -7663,7 +7592,7 @@ version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad53f8eb502b0a3051fea001ae2e3723044699868ebfe06ea81b45545db392c2"
 dependencies = [
- "itoa 1.0.9",
+ "itoa",
  "ryu",
  "sval",
 ]
@@ -7674,7 +7603,7 @@ version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f913253c9f6cd27645ba9a0b6788039b5d4338eae0833c64b42ef178168d2862"
 dependencies = [
- "itoa 1.0.9",
+ "itoa",
  "ryu",
  "sval",
 ]
@@ -7706,7 +7635,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "597e3a746727984cb7ea2487b6a40726cad0dbe86628e7d429aa6b8c4c153db4"
 dependencies = [
- "dirs 5.0.1",
+ "dirs",
  "fs2",
  "hex",
  "once_cell",
@@ -7913,7 +7842,7 @@ dependencies = [
 [[package]]
 name = "tide-disco"
 version = "0.4.1"
-source = "git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.1#cdd9b1ec3f8566a96dcbbcffa5e5ea5d65135ea6"
+source = "git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.2#780f37a659d64bc4311112e20ae516fadc0a35c2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -7921,7 +7850,7 @@ dependencies = [
  "clap",
  "config",
  "derive_more",
- "dirs 4.0.0",
+ "dirs",
  "edit-distance",
  "futures",
  "futures-util",
@@ -7930,24 +7859,24 @@ dependencies = [
  "lazy_static",
  "libc",
  "markdown",
- "maud 0.24.0",
+ "maud",
  "parking_lot",
  "routefinder",
  "semver 1.0.19",
  "serde",
  "serde_json",
- "serde_with 2.3.3",
- "shellexpand 2.1.2",
+ "serde_with",
+ "shellexpand",
  "signal-hook",
  "signal-hook-async-std",
  "snafu",
- "strum 0.24.1",
- "strum_macros 0.24.3",
+ "strum",
+ "strum_macros",
  "surf",
  "tagged-base64 0.2.4",
  "tide",
  "tide-websockets",
- "toml 0.5.11",
+ "toml 0.7.8",
  "tracing",
  "tracing-distributed",
  "tracing-futures",
@@ -7958,8 +7887,8 @@ dependencies = [
 
 [[package]]
 name = "tide-disco"
-version = "0.4.1"
-source = "git+https://github.com/EspressoSystems/tide-disco?tag=v0.4.2#780f37a659d64bc4311112e20ae516fadc0a35c2"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/tide-disco.git?tag=v0.4.3#0863f714a61630ee6da6812f917c684e0df1777b"
 dependencies = [
  "async-std",
  "async-trait",
@@ -7967,7 +7896,7 @@ dependencies = [
  "clap",
  "config",
  "derive_more",
- "dirs 5.0.1",
+ "dirs",
  "edit-distance",
  "futures",
  "futures-util",
@@ -7976,24 +7905,24 @@ dependencies = [
  "lazy_static",
  "libc",
  "markdown",
- "maud 0.25.0",
+ "maud",
  "parking_lot",
  "routefinder",
  "semver 1.0.19",
  "serde",
  "serde_json",
- "serde_with 3.3.0",
- "shellexpand 3.1.0",
+ "serde_with",
+ "shellexpand",
  "signal-hook",
  "signal-hook-async-std",
  "snafu",
- "strum 0.25.0",
- "strum_macros 0.25.2",
+ "strum",
+ "strum_macros",
  "surf",
- "tagged-base64 0.2.4",
+ "tagged-base64 0.3.4",
  "tide",
  "tide-websockets",
- "toml 0.7.8",
+ "toml 0.8.2",
  "tracing",
  "tracing-distributed",
  "tracing-futures",
@@ -8042,7 +7971,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "426f806f4089c493dcac0d24c29c01e2c38baf8e30f1b716ee37e83d200b18fe"
 dependencies = [
  "deranged",
- "itoa 1.0.9",
+ "itoa",
  "serde",
  "time-core",
  "time-macros 0.2.15",
@@ -8219,7 +8148,19 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.19.15",
+]
+
+[[package]]
+name = "toml"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "185d8ab0dfbb35cf1399a6344d8484209c088f75f8f68230da55d48d95d43e3d"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit 0.20.2",
 ]
 
 [[package]]
@@ -8236,6 +8177,19 @@ name = "toml_edit"
 version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+dependencies = [
+ "indexmap 2.0.2",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "396e4d48bbb2b7554c944bde63101b5ae446cff6ec4a24227428f15eb72ef338"
 dependencies = [
  "indexmap 2.0.2",
  "serde",
