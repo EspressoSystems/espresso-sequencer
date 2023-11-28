@@ -1,18 +1,16 @@
-use crate::events::HotShotEvent;
-use async_compatibility_layer::art::async_spawn;
+use crate::{
+    events::HotShotEvent,
+    vote::{spawn_vote_accumulator, AccumulatorInfo},
+};
 use async_lock::RwLock;
 
-use bitvec::prelude::*;
 use commit::Committable;
-use either::{Either, Left, Right};
-use futures::FutureExt;
 use hotshot_task::{
     event_stream::{ChannelStream, EventStream},
     global_registry::GlobalRegistry,
-    task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
-    task_impls::{HSTWithEvent, TaskBuilder},
+    task::{HotShotTaskCompleted, TS},
+    task_impls::HSTWithEvent,
 };
-use hotshot_types::simple_certificate::DACertificate;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DAProposal,
@@ -29,11 +27,10 @@ use hotshot_types::{
     },
     utils::ViewInner,
     vote::HasViewNumber,
-    vote::VoteAccumulator,
 };
 
 use snafu::Snafu;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
@@ -77,86 +74,6 @@ pub struct DATaskState<
 
     /// This state's ID
     pub id: u64,
-}
-
-/// Struct to maintain DA Vote Collection task state
-pub struct DAVoteCollectionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Membership for the DA committee
-    pub da_membership: Arc<TYPES::Membership>,
-
-    /// Network for DA
-    pub da_network: Arc<I::CommitteeNetwork>,
-    // #[allow(clippy::type_complexity)]
-    /// Accumulates DA votes
-    pub accumulator:
-        Either<VoteAccumulator<TYPES, DAVote<TYPES>, DACertificate<TYPES>>, DACertificate<TYPES>>,
-    /// the current view
-    pub cur_view: TYPES::Time,
-    /// event stream for channel events
-    pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
-    /// This Nodes public key
-    pub public_key: TYPES::SignatureKey,
-
-    /// This Nodes private key
-    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    /// the id of this task state
-    pub id: u64,
-}
-
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TS for DAVoteCollectionTaskState<TYPES, I> {}
-
-#[instrument(skip_all, fields(id = state.id, view = *state.cur_view), name = "DA Vote Collection Task", level = "error")]
-async fn vote_handle<TYPES: NodeType, I: NodeImplementation<TYPES>>(
-    mut state: DAVoteCollectionTaskState<TYPES, I>,
-    event: HotShotEvent<TYPES>,
-) -> (
-    std::option::Option<HotShotTaskCompleted>,
-    DAVoteCollectionTaskState<TYPES, I>,
-) {
-    match event {
-        HotShotEvent::DAVoteRecv(vote) => {
-            debug!("DA vote recv, collection task {:?}", vote.get_view_number());
-            // panic!("Vote handle received DA vote for view {}", *vote.get_view_number());
-
-            // For the case where we receive votes after we've made a certificate
-            if state.accumulator.is_right() {
-                debug!("DA accumulator finished view: {:?}", state.cur_view);
-                return (None, state);
-            }
-
-            let accumulator = state.accumulator.left().unwrap();
-
-            match accumulator.accumulate(&vote, state.da_membership.as_ref()) {
-                Left(new_accumulator) => {
-                    state.accumulator = either::Left(new_accumulator);
-                }
-
-                Right(dac) => {
-                    debug!("Sending DAC! {:?}", dac.view_number);
-                    state
-                        .event_stream
-                        .publish(HotShotEvent::DACSend(dac.clone(), state.public_key.clone()))
-                        .await;
-
-                    state.accumulator = Right(dac.clone());
-                    state
-                        .da_network
-                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
-                            *dac.view_number,
-                        ))
-                        .await;
-
-                    // Return completed at this point
-                    return (Some(HotShotTaskCompleted::ShutDown), state);
-                }
-            }
-        }
-        HotShotEvent::Shutdown => return (Some(HotShotTaskCompleted::ShutDown), state),
-        _ => {
-            error!("unexpected event {:?}", event);
-        }
-    }
-    (None, state)
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
@@ -254,23 +171,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .saved_block_payloads
                     .insert(proposal.data.block_payload);
             }
-            HotShotEvent::DAVoteRecv(vote) => {
-                debug!("DA vote recv, Main Task {:?}", vote.get_view_number(),);
+            HotShotEvent::DAVoteRecv(ref vote) => {
+                debug!("DA vote recv, Main Task {:?}", vote.get_view_number());
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.get_view_number();
                 if self.da_membership.get_leader(view) != self.public_key {
                     error!("We are not the committee leader for view {} are we leader for next view? {}", *view, self.da_membership.get_leader(view + 1) == self.public_key);
                     return None;
                 }
-
-                let handle_event = HandleEvent(Arc::new(move |event, state| {
-                    async move { vote_handle(state, event).await }.boxed()
-                }));
                 let collection_view =
                     if let Some((collection_view, collection_id, _)) = &self.vote_collector {
                         // TODO: Is this correct for consecutive leaders?
                         if view > *collection_view {
-                            // warn!("shutting down for view {:?}", collection_view);
                             self.registry.shutdown_task(*collection_id).await;
                         }
                         *collection_view
@@ -279,48 +191,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     };
 
                 if view > collection_view {
-                    let new_accumulator = VoteAccumulator {
-                        vote_outcomes: HashMap::new(),
-                        sig_lists: Vec::new(),
-                        signers: bitvec![0; self.da_membership.total_nodes()],
-                        phantom: PhantomData,
-                    };
-
-                    let accumulator =
-                        new_accumulator.accumulate(&vote, self.da_membership.as_ref());
-
-                    let state = DAVoteCollectionTaskState {
-                        accumulator,
-                        cur_view: view,
+                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
+                    let info = AccumulatorInfo {
+                        public_key: self.public_key.clone(),
+                        membership: self.da_membership.clone(),
+                        view: vote.get_view_number(),
                         event_stream: self.event_stream.clone(),
                         id: self.id,
-                        da_membership: self.da_membership.clone(),
-                        da_network: self.da_network.clone(),
-                        public_key: self.public_key.clone(),
-                        private_key: self.private_key.clone(),
+                        registry: self.registry.clone(),
                     };
-                    let name = "DA Vote Collection";
-                    let filter = FilterEvent(Arc::new(|event| {
-                        matches!(event, HotShotEvent::DAVoteRecv(_))
-                    }));
-                    let builder =
-                        TaskBuilder::<DAVoteCollectionTypes<TYPES, I>>::new(name.to_string())
-                            .register_event_stream(self.event_stream.clone(), filter)
-                            .await
-                            .register_registry(&mut self.registry.clone())
-                            .await
-                            .register_state(state)
-                            .register_event_handler(handle_event);
-                    let id = builder.get_task_id().unwrap();
-                    let stream_id = builder.get_stream_id().unwrap();
-                    let _task =
-                        async_spawn(
-                            async move { DAVoteCollectionTypes::build(builder).launch().await },
-                        );
-                    self.vote_collector = Some((view, id, stream_id));
+                    let name = "Quorum Vote Collection";
+                    self.vote_collector =
+                        spawn_vote_accumulator(&info, vote.clone(), event, name.to_string()).await;
                 } else if let Some((_, _, stream_id)) = self.vote_collector {
                     self.event_stream
-                        .direct_message(stream_id, HotShotEvent::DAVoteRecv(vote))
+                        .direct_message(stream_id, HotShotEvent::DAVoteRecv(vote.clone()))
                         .await;
                 };
             }
@@ -444,14 +329,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     for DATaskState<TYPES, I, A>
 {
 }
-
-/// Type alias for DA Vote Collection Types
-pub type DAVoteCollectionTypes<TYPES, I> = HSTWithEvent<
-    ConsensusTaskError,
-    HotShotEvent<TYPES>,
-    ChannelStream<HotShotEvent<TYPES>>,
-    DAVoteCollectionTaskState<TYPES, I>,
->;
 
 /// Type alias for DA Task Types
 pub type DATaskTypes<TYPES, I, A> = HSTWithEvent<

@@ -278,7 +278,6 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let votes = self.view_sync_votes.get(&view_number);
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
-            // error!("Passed in index is: {} self index is: {}", index, *self.vote_index.get(&view_number).unwrap());
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
             }
@@ -433,7 +432,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
     /// Stores a received proposal in the `WebServerState`
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
-        error!("Received proposal for view {}", view_number);
+        debug!("Received proposal for view {}", view_number);
 
         if view_number > self.recent_proposal {
             self.recent_proposal = view_number;
@@ -454,7 +453,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
 
     fn post_vid_disperse(&mut self, view_number: u64, mut disperse: Vec<u8>) -> Result<(), Error> {
-        error!("Received VID disperse for view {}", view_number);
+        debug!("Received VID disperse for view {}", view_number);
         if view_number > self.recent_vid_disperse {
             self.recent_vid_disperse = view_number;
         }
@@ -526,7 +525,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         view_number: u64,
         mut certificate: Vec<u8>,
     ) -> Result<(), Error> {
-        error!("Received VID Certificate for view {}", view_number);
+        debug!("Received VID Certificate for view {}", view_number);
 
         // Only keep proposal history for MAX_VIEWS number of view
         if self.vid_certificates.len() >= MAX_VIEWS {

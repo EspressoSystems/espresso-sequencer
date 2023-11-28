@@ -101,9 +101,8 @@ pub struct ConsensusTaskState<
     /// Current Vote collection task, with it's view.
     pub vote_collector: Option<(TYPES::Time, usize, usize)>,
 
-    /// Have we already sent a proposal for a particular view
-    /// since proposal can be sent either on QCFormed event or ViewChange event
-    // pub proposal_sent: HashMap<TYPES::Time, bool>,
+    /// Current timeout vote collection task with its view
+    pub timeout_vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// timeout task handle
     pub timeout_task: JoinHandle<()>,
