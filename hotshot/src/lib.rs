@@ -52,9 +52,7 @@ use hotshot_task::{
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkTaskKind};
 
 use hotshot_types::{
-    consensus::{
-        Consensus, ConsensusMetricsValue, PayloadCommitmentStore, View, ViewInner, ViewQueue,
-    },
+    consensus::{Consensus, ConsensusMetricsValue, PayloadStore, View, ViewInner, ViewQueue},
     data::Leaf,
     error::StorageSnafu,
     message::{
@@ -221,7 +219,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let mut saved_leaves = HashMap::new();
-        let mut saved_payload_commitments = PayloadCommitmentStore::default();
+        let mut saved_payloads = PayloadStore::default();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
         let payload_commitment = anchored_leaf.get_payload_commitment();
         if let Some(payload) = anchored_leaf.get_block_payload() {
@@ -233,7 +231,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                     return Err(HotShotError::BlockError { source: e });
                 }
             };
-            saved_payload_commitments.insert(payload_commitment, encoded_txns);
+            saved_payloads.insert(payload_commitment, encoded_txns);
         }
 
         let start_view = anchored_leaf.get_view_number();
@@ -243,7 +241,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             cur_view: start_view,
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
-            saved_payload_commitments,
+            saved_payloads,
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),

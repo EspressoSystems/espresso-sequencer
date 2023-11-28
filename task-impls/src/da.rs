@@ -242,9 +242,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view_inner: ViewInner::DA { payload_commitment },
                 });
 
-                // Record the block payload commitment we have promised to make available.
+                // Record the payload we have promised to make available.
                 consensus
-                    .saved_payload_commitments
+                    .saved_payloads
                     .insert(payload_commitment, proposal.data.encoded_transactions);
             }
             HotShotEvent::DAVoteRecv(vote) => {

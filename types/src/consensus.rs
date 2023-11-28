@@ -47,11 +47,11 @@ pub struct Consensus<TYPES: NodeType> {
     /// - includes the MOST RECENT decided leaf
     pub saved_leaves: CommitmentMap<Leaf<TYPES>>,
 
-    /// Saved block payload commitments.
+    /// Saved payloads.
     ///
     /// Contains the block payload commitment and encoded transactions for every leaf in
     /// `saved_leaves` if that payload is available.
-    pub saved_payload_commitments: PayloadCommitmentStore,
+    pub saved_payloads: PayloadStore,
 
     /// The `locked_qc` view number
     pub locked_view: TYPES::Time,
@@ -296,9 +296,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Err(HotShotError::LeafNotFound {})
     }
 
-    /// garbage collects based on state change
-    /// right now, this removes from both the `saved_payload_commitments`
-    /// and `state_map` fields of `Consensus`
+    /// Garbage collects based on state change right now, this removes from both the
+    /// `saved_payloads` and `state_map` fields of `Consensus`.
     /// # Panics
     /// On inconsistent stored entries
     #[allow(clippy::unused_async)] // async for API compatibility reasons
@@ -323,15 +322,14 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_payload_commitment())
             .for_each(|payload_commitment| {
-                self.saved_payload_commitments.remove(payload_commitment);
+                self.saved_payloads.remove(payload_commitment);
             });
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_leaf_commitment())
             .for_each(|leaf| {
                 if let Some(removed) = self.saved_leaves.remove(&leaf) {
-                    self.saved_payload_commitments
-                        .remove(removed.get_payload_commitment());
+                    self.saved_payloads.remove(removed.get_payload_commitment());
                 }
             });
         self.state_map = self.state_map.split_off(&new_anchor_view);
@@ -360,10 +358,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 /// before all but one branch are ultimately garbage collected.
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct PayloadCommitmentStore(HashMap<VidCommitment, (Vec<u8>, u64)>);
+pub struct PayloadStore(HashMap<VidCommitment, (Vec<u8>, u64)>);
 
-impl PayloadCommitmentStore {
-    /// Save the payload commitment for later retrieval.
+impl PayloadStore {
+    /// Save the encoded transactions for later retrieval.
     ///
     /// After calling this function, and before the corresponding call to [`remove`](Self::remove),
     /// `self.get(payload_commitment)` will return `Some(encoded_transactions)`.
