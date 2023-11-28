@@ -157,9 +157,9 @@ impl QueryableBlock for Block {
     fn transaction_with_proof(
         &self,
         index: &Self::TransactionIndex,
-    ) -> Option<(&Self::Transaction, Self::InclusionProof)> {
+    ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         match self.transaction_nmt.lookup(index) {
-            LookupResult::Ok(txn, proof) => Some((txn, proof)),
+            LookupResult::Ok(txn, proof) => Some((txn.clone(), proof)),
             _ => None,
         }
     }
