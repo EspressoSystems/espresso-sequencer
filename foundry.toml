@@ -12,6 +12,7 @@ cache_path = "contracts/cache"
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
 solc = "0.8.21"
+bytecode_hash = "none" # TODO: remove this, we want the hash
 ffi = true
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
