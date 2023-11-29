@@ -33,7 +33,7 @@ contract StakeTable is IStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
-    function currentEpoch() private view returns (uint64) {
+    function currentEpoch() public view returns (uint64) {
         return lightClient.currentEpoch();
     }
 

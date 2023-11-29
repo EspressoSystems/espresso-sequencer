@@ -110,8 +110,15 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function test_RevertWhen_InvalidNextRegistrationEpoch() external {
+    function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 validUntilEpoch) external {
+        uint64 blockNumber = 20000;
+        vm.roll(blockNumber);
+
+        uint64 currentEpoch = stakeTable.currentEpoch();
+        validUntilEpoch = uint64(bound(validUntilEpoch, 0, type(uint64).max));
         uint64 depositAmount = 10;
+        vm.prank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
 
         (
             BN254.G2Point memory blsVK,
@@ -120,9 +127,17 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator);
 
         // Invalid next registration epoch
-        vm.prank(exampleTokenCreator);
-        vm.expectRevert(abi.encodeWithSelector(S.InvalidNextRegistrationEpoch.selector, 1, 0));
-        stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
+        if (validUntilEpoch < currentEpoch) {
+            vm.prank(exampleTokenCreator);
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    S.InvalidNextRegistrationEpoch.selector, currentEpoch, validUntilEpoch
+                )
+            );
+            stakeTable.register(
+                blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            );
+        }
     }
 
     function test_RevertWhen_NodeAlreadyRegistered() external {
