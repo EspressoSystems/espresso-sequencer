@@ -1,7 +1,6 @@
 pragma solidity ^0.8.0;
 
-import "solmate/utils/SafeTransferLib.sol";
-
+import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import { IStakeTable } from "./interfaces/IStakeTable.sol";
