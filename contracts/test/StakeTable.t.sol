@@ -25,17 +25,12 @@ contract StakeTable_register_Test is Test {
     ExampleToken public token;
     LightClient public lightClientContract;
     uint256 constant INITIAL_BALANCE = 1_000;
-    uint64 depositAmount;
-    uint64 validUntilEpoch;
     address exampleTokenCreator;
 
     function computeGroupElements(address sender)
         private
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
-        depositAmount = 10;
-        validUntilEpoch = 5;
-
         // Generate a BLS signature and other values using rust code
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -92,6 +87,9 @@ contract StakeTable_register_Test is Test {
             BN254.G1Point memory sig
         ) = computeGroupElements(exampleTokenCreator);
 
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
+
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
@@ -140,6 +138,9 @@ contract StakeTable_register_Test is Test {
     }
 
     function testInvalidBLSSig() external {
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
+
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
             computeGroupElements(msg.sender);
 
@@ -152,6 +153,9 @@ contract StakeTable_register_Test is Test {
     }
 
     function testRestakingNotImplemented() external {
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
@@ -166,6 +170,8 @@ contract StakeTable_register_Test is Test {
     }
 
     function testInvalidNextRegistrationEpoch() external {
+        uint64 depositAmount = 10;
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
@@ -179,6 +185,9 @@ contract StakeTable_register_Test is Test {
     }
 
     function testNodeAlreadyRegistered() external {
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
@@ -204,6 +213,9 @@ contract StakeTable_register_Test is Test {
     }
 
     function testTransferFailed() external {
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 5;
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
