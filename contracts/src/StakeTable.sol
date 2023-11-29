@@ -4,9 +4,10 @@ import "solmate/utils/SafeTransferLib.sol";
 
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
-import "./interfaces/IStakeTable.sol";
+import { IStakeTable } from "./interfaces/IStakeTable.sol";
 import { ExampleToken } from "../src/ExampleToken.sol";
 import { LightClient } from "../src/LightClient.sol";
+import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 
 contract StakeTable is IStakeTable {
     error RestakingNotImplemented();

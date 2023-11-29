@@ -9,7 +9,7 @@ import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
-import "../src/interfaces/IStakeTable.sol";
+import { IStakeTable } from "../src/interfaces/IStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 
 // Token contract
