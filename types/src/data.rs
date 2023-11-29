@@ -17,7 +17,7 @@ use crate::{
     vote::{Certificate, HasViewNumber},
 };
 use ark_bls12_381::Bls12_381;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;

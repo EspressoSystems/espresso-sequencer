@@ -17,14 +17,13 @@ hotshot-types = { version = "0.1.0", path = "../types", default-features = false
 hotshot-utils = { path = "../utils" }
 hotshot-signature-key = { path = "../hotshot-signature-key" }
 libp2p-networking = { workspace = true }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.1" }
+tide-disco = { workspace = true }
 surf-disco = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0.96"
 snafu = { workspace = true }
-# TODO upgrade to toml = { workspace = true } https://github.com/EspressoSystems/HotShot/issues/1698
-toml = "0.5.9"
+toml = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
