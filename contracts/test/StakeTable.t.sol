@@ -80,7 +80,7 @@ contract StakeTable_register_Test is Test {
     }
 
     /// @dev Tests a correct key registation
-    function testRegisterHappyPath() external {
+    function test_SuccessfulRegistration() external {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
@@ -132,7 +132,7 @@ contract StakeTable_register_Test is Test {
         assertEq(restakedAmount, 0);
     }
 
-    function testInvalidBLSSig() external {
+    function test_RevertWhen_InvalidBLSSig() external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
@@ -147,7 +147,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function testRestakingNotImplemented() external {
+    function test_RevertWhen_UsingRestakeToken() external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
@@ -164,7 +164,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function testInvalidNextRegistrationEpoch() external {
+    function test_RevertWhen_InvalidNextRegistrationEpoch() external {
         uint64 depositAmount = 10;
 
         (
@@ -179,7 +179,7 @@ contract StakeTable_register_Test is Test {
         stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
     }
 
-    function testNodeAlreadyRegistered() external {
+    function test_RevertWhen_NodeAlreadyRegistered() external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
@@ -207,7 +207,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function testTransferFailed() external {
+    function test_RevertWhen_TransferFailed() external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
