@@ -86,7 +86,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(msg.sender);
+        ) = genClientWallet(exampleTokenCreator);
 
         // Throw "Restaking not implemented" error
         vm.expectRevert(S.RestakingNotImplemented.selector);
@@ -100,7 +100,7 @@ contract StakeTable_register_Test is Test {
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
-            genClientWallet(msg.sender);
+            genClientWallet(exampleTokenCreator);
 
         // Failed signature verification
         BN254.G1Point memory badSig = BN254.P1();
@@ -117,10 +117,10 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(msg.sender);
+        ) = genClientWallet(exampleTokenCreator);
 
         // Invalid next registration epoch
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         vm.expectRevert(abi.encodeWithSelector(S.InvalidNextRegistrationEpoch.selector, 1, 0));
         stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
     }
@@ -161,9 +161,9 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(msg.sender);
+        ) = genClientWallet(exampleTokenCreator);
 
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         vm.expectRevert("TRANSFER_FROM_FAILED");
         stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
