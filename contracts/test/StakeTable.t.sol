@@ -24,12 +24,10 @@ contract StakeTable_register_Test is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClient public lightClientContract;
-    address public lightClientAddress;
-    address public tokenAddress;
-    address exampleTokenCreator;
     uint256 constant INITIAL_BALANCE = 1_000;
     uint64 depositAmount;
     uint64 validUntilEpoch;
+    address exampleTokenCreator;
 
     function computeGroupElements(address sender)
         private
@@ -67,10 +65,9 @@ contract StakeTable_register_Test is Test {
     }
 
     function setUp() public {
-        exampleTokenCreator = msg.sender;
+        exampleTokenCreator = makeAddr("tokenCreator");
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
-        tokenAddress = address(token);
 
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
@@ -83,29 +80,26 @@ contract StakeTable_register_Test is Test {
             threshold: 0
         });
         lightClientContract = new LightClient(genesis,10);
-        lightClientAddress = address(lightClientContract);
-
-        stakeTable = new S(tokenAddress,lightClientAddress);
+        address lightClientAddress = address(lightClientContract);
+        stakeTable = new S(address(token),lightClientAddress);
     }
 
     /// @dev Tests a correct key registation
     function testRegisterHappyPath() external {
-        address msgSenderAddress = msg.sender;
-
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(msgSenderAddress);
+        ) = computeGroupElements(exampleTokenCreator);
 
         // Prepare for the token transfer
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
-        vm.prank(msgSenderAddress);
+        vm.prank(exampleTokenCreator);
 
         // Balances before registration
-        assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE);
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
         uint256 nativeAmount;
         uint256 restakedAmount;
@@ -116,7 +110,7 @@ contract StakeTable_register_Test is Test {
         // Check event is emitted
         vm.expectEmit(false, false, false, true, address(stakeTable));
         IStakeTable.Node memory node;
-        node.account = msgSenderAddress;
+        node.account = exampleTokenCreator;
         node.balance = depositAmount;
         node.stakeType = IStakeTable.StakeType.Native;
         node.schnorrVK = schnorrVK;
@@ -132,14 +126,14 @@ contract StakeTable_register_Test is Test {
         );
 
         // Successful call to register
-        vm.prank(msgSenderAddress);
+        vm.prank(exampleTokenCreator);
         bool res = stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
         assertTrue(res);
 
         // Balance after registration
-        assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE - depositAmount);
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
         (nativeAmount, restakedAmount) = stakeTable.totalStake();
         assertEq(nativeAmount, depositAmount);
         assertEq(restakedAmount, 0);
@@ -189,20 +183,20 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(msg.sender);
+        ) = computeGroupElements(exampleTokenCreator);
 
         // Prepare for the token transfer
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
         // Successful call to register
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
 
         // The node is already registered
-        vm.prank(msg.sender);
+        vm.prank(exampleTokenCreator);
         vm.expectRevert(S.NodeAlreadyRegistered.selector);
         stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
