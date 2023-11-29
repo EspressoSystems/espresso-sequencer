@@ -16,10 +16,10 @@ tempfile = "3.7.1"
 
 [dependencies]
 anyhow = "1.0"
-ark-bls12-381 = "0.3.0"
+ark-bls12-381 = "0.4.0"
 ark-serialize = { version = "0.4.0", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
-	"logging-utils",
+    "logging-utils",
 ] }
 async-std = "1.12.0"
 async-trait = "0.1.71"
@@ -35,6 +35,7 @@ ethers = { version = "2.0", features = ["ws"] }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"
 lazy_static = "1.4"
+sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
@@ -44,11 +45,10 @@ hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch =
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "fa6638821573c61320fcd281685a338a795d174f" } # TODO remove `rev` and upgrade to latest main
 
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
-    "std",
-] }
+jf-primitives = { workspace = true }
+jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 nll = { git = "https://github.com/EspressoSystems/nll" }
 rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
