@@ -27,7 +27,7 @@ contract StakeTable_register_Test is Test {
     uint256 constant INITIAL_BALANCE = 1_000;
     address exampleTokenCreator;
 
-    function computeGroupElements(address sender)
+    function genClientWallet(address sender)
         private
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
@@ -85,7 +85,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator);
 
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
@@ -142,7 +142,7 @@ contract StakeTable_register_Test is Test {
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
-            computeGroupElements(msg.sender);
+            genClientWallet(msg.sender);
 
         // Failed signature verification
         BN254.G1Point memory badSig = BN254.P1();
@@ -160,7 +160,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(msg.sender);
+        ) = genClientWallet(msg.sender);
 
         // Throw "Restaking not implemented" error
         vm.expectRevert(S.RestakingNotImplemented.selector);
@@ -176,7 +176,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(msg.sender);
+        ) = genClientWallet(msg.sender);
 
         // Invalid next registration epoch
         vm.prank(msg.sender);
@@ -192,7 +192,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator);
 
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
@@ -220,7 +220,7 @@ contract StakeTable_register_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = computeGroupElements(msg.sender);
+        ) = genClientWallet(msg.sender);
 
         vm.prank(msg.sender);
         vm.expectRevert("TRANSFER_FROM_FAILED");
