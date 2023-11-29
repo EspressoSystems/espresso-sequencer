@@ -81,7 +81,8 @@ abstract contract AbstractStakeTable {
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
     /// @param stakeType The type of staking (native or restaking)
-    /// @param blsSig The BLS signature that authenticates the `blsVK` field
+    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
+    /// called from
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     ///
@@ -90,6 +91,8 @@ abstract contract AbstractStakeTable {
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
     /// the contract only treat it as auxiliary info submitted by `blsVK`.
     /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
+    /// The signature is over the caller address of the function to ensure that each message is
+    /// unique.
     function register(
         BN254.G2Point memory blsVK,
         EdOnBN254.EdOnBN254Point memory schnorrVK,

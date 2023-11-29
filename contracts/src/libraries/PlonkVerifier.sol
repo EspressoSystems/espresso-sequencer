@@ -9,7 +9,7 @@ import { Transcript } from "./Transcript.sol";
 
 /* solhint-disable no-inline-assembly */
 
-/// @dev The TurboPlonk formla is:
+/// @dev The TurboPlonk formula is:
 /// qo * wo = pub_input + q_c +
 ///           q_mul0 * w0 * w1 + q_mul1 * w2 * w3 +
 ///           q_lc0 * w0 + q_lc1 * w1 + q_lc2 * w2 + q_lc3 * w3 +
