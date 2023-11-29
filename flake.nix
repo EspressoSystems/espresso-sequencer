@@ -171,7 +171,7 @@
           nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
             exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
           '';
-          solc = pkgs.solc-bin.latest;
+          solc = pkgs.solc;
         in
         mkShell {
           buildInputs = [
