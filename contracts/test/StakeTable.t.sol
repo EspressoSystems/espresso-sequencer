@@ -79,8 +79,8 @@ contract StakeTable_register_Test is Test {
         stakeTable = new S(address(token),lightClientAddress);
     }
 
-    /// @dev Tests a correct key registation
-    function test_SuccessfulRegistration() external {
+    /// @dev Tests a correct registration
+    function test_Registration_succeeds() external {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
