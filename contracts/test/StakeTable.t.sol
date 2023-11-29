@@ -52,8 +52,7 @@ contract StakeTable_register_Test is Test {
         );
 
         return (
-            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK. Note: (x,y) coordinates for
-                // each field component must be inverted.
+            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK
             EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
             BN254.G1Point(blsSigX, blsSigY) // sig
         );
