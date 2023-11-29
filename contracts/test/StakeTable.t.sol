@@ -112,10 +112,7 @@ contract StakeTable_register_Test is Test {
         // Check event is emitted after calling successfully `register`
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit Registered(
-            keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1)),
-            node.registerEpoch,
-            node.stakeType,
-            node.balance
+            stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
         vm.prank(exampleTokenCreator);
         bool res = stakeTable.register(

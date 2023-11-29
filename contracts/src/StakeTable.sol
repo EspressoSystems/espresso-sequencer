@@ -29,7 +29,7 @@ contract StakeTable is IStakeTable {
     /// @dev Computes a hash value of some G2 point
     /// @param blsVK BLS verification key in G2
     /// @return keccak256(blsVK)
-    function _hashBlsKey(BN254.G2Point memory blsVK) private pure returns (bytes32) {
+    function _hashBlsKey(BN254.G2Point memory blsVK) public pure returns (bytes32) {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
