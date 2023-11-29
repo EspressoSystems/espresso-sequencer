@@ -299,7 +299,7 @@ pub mod test {
         tokio::test(flavor = "multi_thread", worker_threads = 2)
     )]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-    // #[allow(clippy::should_panic_without_expect)]
+    #[allow(clippy::should_panic_without_expect)]
     #[should_panic]
     async fn test_init_with_event_stream() {
         setup_logging();
