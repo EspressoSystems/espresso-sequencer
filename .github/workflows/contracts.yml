@@ -46,10 +46,8 @@ jobs:
         with:
           prefix-key: v1-rust
 
-      - name: Check forge version
-        run: |
-          nix develop --accept-flake-config -c which forge
-          nix develop --accept-flake-config -c forge --version
+      - name: Check toolchain versions
+        run: nix develop --accept-flake-config -c ./scripts/show-toolchain-versions
 
       - name: Format check
         run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files --show-diff-on-failure
