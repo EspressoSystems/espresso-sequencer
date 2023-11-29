@@ -103,8 +103,6 @@ contract StakeTable_register_Test is Test {
         assertEq(nativeAmount, 0);
         assertEq(restakedAmount, 0);
 
-        // Check event is emitted
-        vm.expectEmit(false, false, false, true, address(stakeTable));
         IStakeTable.Node memory node;
         node.account = exampleTokenCreator;
         node.balance = depositAmount;
@@ -112,20 +110,19 @@ contract StakeTable_register_Test is Test {
         node.schnorrVK = schnorrVK;
         node.registerEpoch = 1;
 
-        // The function IStakeTable._hashBlsKey is private but its code is small hence we copy it
-        // there.
+        // Check event is emitted after calling successfully `register`
+        vm.expectEmit(false, false, false, true, address(stakeTable));
         emit Registered(
             keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1)),
             node.registerEpoch,
             node.stakeType,
             node.balance
         );
-
-        // Successful call to register
         vm.prank(exampleTokenCreator);
         bool res = stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
+
         assertTrue(res);
 
         // Balance after registration
