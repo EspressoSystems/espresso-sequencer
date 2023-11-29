@@ -495,11 +495,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1684763220,
-        "narHash": "sha256-ab4ZvNmiJ7v5mS1IhBgS3E3PGmeii1Wt3gM029z9xfs=",
+        "lastModified": 1701253628,
+        "narHash": "sha256-AeSTPuOxFHJRkzRgPEeXkbo6C/iZl3jMZejjvvuTP5E=",
         "owner": "EspressoSystems",
         "repo": "nix-solc-bin",
-        "rev": "00868cfebdda3e3471386d3e5f35d1a55e57145f",
+        "rev": "bd5fcb1d247e0b1bac1fe5a3defa9df3e86b8f1e",
         "type": "github"
       },
       "original": {
