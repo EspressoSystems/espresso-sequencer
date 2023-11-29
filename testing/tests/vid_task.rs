@@ -51,13 +51,14 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
+    let vid_disperse = VidDisperse {
+        view_number: message.data.view_number,
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
     let vid_proposal = Proposal {
-        data: VidDisperse {
-            view_number: message.data.view_number,
-            payload_commitment,
-            shares: vid_disperse.shares,
-            common: vid_disperse.common,
-        },
+        data: vid_disperse.clone(),
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
@@ -69,19 +70,37 @@ async fn test_vid_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(
+    input.push(HotShotEvent::TransactionsSequenced(
         encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
-
+    input.push(HotShotEvent::BlockReady(
+        vid_disperse.clone(),
+        ViewNumber::new(2),
+    ));
+    input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         1,
+    );
+
+    output.insert(
+        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
+        2,
+    );
+
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        1,
+    );
+    output.insert(
+        HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
+        2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
 
     let vid_vote = VIDVote::create_signed_vote(

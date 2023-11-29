@@ -11,9 +11,10 @@ use hotshot_task::{
     task::{FilterEvent, HandleEvent, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEvent, TaskBuilder},
 };
-use hotshot_types::traits::network::ConsensusIntentEvent;
 use hotshot_types::{
     consensus::{Consensus, View},
+    data::VidDisperse,
+    message::Proposal,
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -22,6 +23,13 @@ use hotshot_types::{
         state::ConsensusTime,
     },
     utils::ViewInner,
+};
+use hotshot_types::{
+    data::{test_srs, VidScheme, VidSchemeTrait},
+    traits::{
+        block_contents::{NUM_CHUNKS, NUM_STORAGE_NODES},
+        network::ConsensusIntentEvent,
+    },
 };
 use hotshot_types::{
     simple_certificate::VIDCertificate,
@@ -336,6 +344,55 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     ))
                     .await;
             }
+
+            HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+                let srs = test_srs(NUM_STORAGE_NODES);
+                // TODO We are using constant numbers for now, but they will change as the quorum size
+                // changes.
+                // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
+                let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, &srs).unwrap();
+                let vid_disperse = vid.disperse(encoded_transactions.clone()).unwrap();
+
+                // send the commitment and metadata to consensus for block building
+                self.event_stream
+                    .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
+                        vid_disperse.commit,
+                        metadata,
+                    ))
+                    .await;
+
+                // send the block to the VID dispersal function
+                self.event_stream
+                    .publish(HotShotEvent::BlockReady(
+                        VidDisperse {
+                            view_number,
+                            payload_commitment: vid_disperse.commit,
+                            shares: vid_disperse.shares,
+                            common: vid_disperse.common,
+                        },
+                        view_number,
+                    ))
+                    .await;
+            }
+
+            HotShotEvent::BlockReady(vid_disperse, view_number) => {
+                debug!("publishing VID disperse for view {}", *view_number);
+                self.event_stream
+                    .publish(HotShotEvent::VidDisperseSend(
+                        Proposal {
+                            signature: TYPES::SignatureKey::sign(
+                                &self.private_key,
+                                &vid_disperse.payload_commitment,
+                            ),
+                            data: vid_disperse,
+                            _pd: PhantomData,
+                        },
+                        self.public_key.clone(),
+                    ))
+                    .await;
+            }
+
             HotShotEvent::ViewChange(view) => {
                 if *self.cur_view >= *view {
                     return None;
@@ -393,6 +450,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 | HotShotEvent::VidDisperseRecv(_, _)
                 | HotShotEvent::VidVoteRecv(_)
                 | HotShotEvent::VidCertRecv(_)
+                | HotShotEvent::TransactionsSequenced(_, _, _)
+                | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)
         )
     }

@@ -83,7 +83,7 @@ pub trait BlockPayload:
 /// # Panics
 /// If the VID computation fails.
 #[must_use]
-pub fn vid_commitment(encoded_transactions: Vec<u8>) -> <VidScheme as VidSchemeTrait>::Commit {
+pub fn vid_commitment(encoded_transactions: &Vec<u8>) -> <VidScheme as VidSchemeTrait>::Commit {
     // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
     let srs = test_srs(NUM_STORAGE_NODES);
     // TODO We are using constant numbers for now, but they will change as the quorum size

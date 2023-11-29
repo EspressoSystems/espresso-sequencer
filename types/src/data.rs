@@ -381,7 +381,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             Ok(encoded) => encoded.into_iter().collect(),
             Err(_) => return Err(BlockError::InvalidTransactionLength),
         };
-        let commitment = vid_commitment(encoded_txns);
+        let commitment = vid_commitment(&encoded_txns);
         if commitment != self.block_header.payload_commitment() {
             return Err(BlockError::InconsistentPayloadCommitment);
         }
