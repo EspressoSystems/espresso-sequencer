@@ -94,8 +94,6 @@ contract StakeTable_register_Test is Test {
         vm.prank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
-        vm.prank(exampleTokenCreator);
-
         // Balances before registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
