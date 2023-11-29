@@ -16,8 +16,6 @@ contract StakeTable is IStakeTable {
     mapping(bytes32 keyHash => Node node) public nodes;
     uint256 public totalNativeStake;
     uint256 public totalRestakedStake;
-    uint32 public totalKeysVar;
-    uint256 public totalVotingStakeVar;
     uint64 public numRegistrations;
     uint64 public numPendingExits;
     address public tokenAddress;
@@ -39,37 +37,29 @@ contract StakeTable is IStakeTable {
         return lightClient.currentEpoch();
     }
 
-    function totalStake() external view returns (uint256, uint256) {
+    function totalStake() external view override returns (uint256, uint256) {
         return (totalNativeStake, totalRestakedStake);
     }
 
-    function totalKeys() external view returns (uint32) {
-        return totalKeysVar;
-    }
-
-    function totalVotingStake() external view returns (uint256) {
-        return totalVotingStakeVar;
-    }
-
-    function lookupStake(BN254.G2Point memory blsVK) external view returns (uint64) {
+    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint64) {
         Node memory node = this.lookupNode(blsVK);
         return node.balance;
     }
 
-    function lookupNode(BN254.G2Point memory blsVK) external view returns (Node memory) {
+    function lookupNode(BN254.G2Point memory blsVK) external view override returns (Node memory) {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    function nextRegistrationEpoch() external view returns (uint64) {
+    function nextRegistrationEpoch() external view override returns (uint64) {
         // TODO implement queue logic
         return currentEpoch() + 1;
     }
 
-    function numPendingRegistrations() external view returns (uint64) {
+    function numPendingRegistrations() external view override returns (uint64) {
         return numRegistrations;
     }
 
-    function nextExitEpoch() external view returns (uint64) {
+    function nextExitEpoch() external view override returns (uint64) {
         if (numPendingExits == 0) {
             return 0;
         } else {
@@ -77,7 +67,7 @@ contract StakeTable is IStakeTable {
         }
     }
 
-    function numPendingExit() external view returns (uint64) {
+    function numPendingExit() external view override returns (uint64) {
         return numPendingExits;
     }
 
@@ -88,7 +78,7 @@ contract StakeTable is IStakeTable {
         StakeType stakeType,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external returns (bool) {
+    ) external override returns (bool) {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -133,19 +123,23 @@ contract StakeTable is IStakeTable {
         return true;
     }
 
-    function deposit(BN254.G2Point memory blsVK, uint64 amount) external returns (uint64, uint64) {
+    function deposit(BN254.G2Point memory blsVK, uint64 amount)
+        external
+        override
+        returns (uint64, uint64)
+    {
         bytes32 hash = _hashBlsKey(blsVK);
         nodes[hash].balance += amount;
         return (0, 0);
     }
 
-    function requestExit(BN254.G2Point memory blsVK) external returns (bool) {
+    function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
         bytes32 hash = _hashBlsKey(blsVK);
         nodes[hash].exitEpoch = 0;
         return true;
     }
 
-    function withdrawFunds(BN254.G2Point memory blsVK) external returns (uint64) {
+    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint64) {
         bytes32 hash = _hashBlsKey(blsVK);
         nodes[hash].balance = 0;
         return 0;
