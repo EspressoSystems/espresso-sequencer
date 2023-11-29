@@ -28,6 +28,43 @@ contract StakeTable_register_Test is Test {
     address public tokenAddress;
     address exampleTokenCreator;
     uint256 constant INITIAL_BALANCE = 1_000;
+    uint64 depositAmount;
+    uint64 validUntilEpoch;
+
+    function computeGroupElements(address sender)
+        private
+        returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
+    {
+        depositAmount = 10;
+        validUntilEpoch = 5;
+
+        // Generate a BLS signature and other values using rust code
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "gen-bls-sig";
+        cmds[2] = vm.toString(sender);
+
+        bytes memory result = vm.ffi(cmds);
+        (
+            uint256 blsSigX,
+            uint256 blsSigY,
+            uint256 blsVKx0,
+            uint256 blsVKx1,
+            uint256 blsVKy0,
+            uint256 blsVKy1,
+            uint256 schnorrVKx,
+            uint256 schnorrVKy
+        ) = abi.decode(
+            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+        );
+
+        return (
+            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK. Note: (x,y) coordinates for
+                // each field component must be inverted.
+            EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
+            BN254.G1Point(blsSigX, blsSigY) // sig
+        );
+    }
 
     function setUp() public {
         exampleTokenCreator = msg.sender;
@@ -51,62 +88,21 @@ contract StakeTable_register_Test is Test {
         stakeTable = new S(tokenAddress,lightClientAddress);
     }
 
-    /// @dev Tests the key registering process
-    function testRegister() external {
-        // Generate a BLS signature and other values using rust code
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "gen-bls-sig";
-        cmds[2] = vm.toString(msg.sender);
+    /// @dev Tests a correct key registation
+    function testRegisterHappyPath() external {
+        address msgSenderAddress = msg.sender;
 
-        bytes memory result = vm.ffi(cmds);
         (
-            uint256 blsSigX,
-            uint256 blsSigY,
-            uint256 blsVKx0,
-            uint256 blsVKx1,
-            uint256 blsVKy0,
-            uint256 blsVKy1,
-            uint256 schnorrVKx,
-            uint256 schnorrVKy,
-            address msgSenderAddress
-        ) = abi.decode(
-            result,
-            (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, address)
-        );
-
-        uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 5;
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = computeGroupElements(msgSenderAddress);
 
         // Prepare for the token transfer
-        vm.prank(msgSenderAddress);
+        vm.prank(msg.sender);
         token.approve(address(stakeTable), depositAmount);
 
-        // Note: (x,y) coordinates for each field component must be inverted.
-        BN254.G2Point memory blsVK = BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0);
-        BN254.G1Point memory sig = BN254.G1Point(blsSigX, blsSigY);
-        EdOnBN254.EdOnBN254Point memory schnorrVK = EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy);
-
-        assertEq(msg.sender, msgSenderAddress);
         vm.prank(msgSenderAddress);
-
-        // Failed signature verification
-        BN254.G1Point memory badSig = BN254.P1();
-        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
-        stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
-        );
-
-        // Throw "Restaking not implemented" error
-        vm.expectRevert(S.RestakingNotImplemented.selector);
-        stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Restake, sig, validUntilEpoch
-        );
-
-        // Invalid next registration epoch
-        vm.prank(msgSenderAddress);
-        vm.expectRevert(abi.encodeWithSelector(S.InvalidNextRegistrationEpoch.selector, 1, 0));
-        stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
 
         // Balances before registration
         assertEq(token.balanceOf(msgSenderAddress), INITIAL_BALANCE);
@@ -135,7 +131,7 @@ contract StakeTable_register_Test is Test {
             node.balance
         );
 
-        // Happy path
+        // Successful call to register
         vm.prank(msgSenderAddress);
         bool res = stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
@@ -147,10 +143,81 @@ contract StakeTable_register_Test is Test {
         (nativeAmount, restakedAmount) = stakeTable.totalStake();
         assertEq(nativeAmount, depositAmount);
         assertEq(restakedAmount, 0);
+    }
+
+    function testInvalidBLSSig() external {
+        (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
+            computeGroupElements(msg.sender);
+
+        // Failed signature verification
+        BN254.G1Point memory badSig = BN254.P1();
+        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+        stakeTable.register(
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
+        );
+    }
+
+    function testRestakingNotImplemented() external {
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = computeGroupElements(msg.sender);
+
+        // Throw "Restaking not implemented" error
+        vm.expectRevert(S.RestakingNotImplemented.selector);
+        stakeTable.register(
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Restake, sig, validUntilEpoch
+        );
+    }
+
+    function testInvalidNextRegistrationEpoch() external {
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = computeGroupElements(msg.sender);
+
+        // Invalid next registration epoch
+        vm.prank(msg.sender);
+        vm.expectRevert(abi.encodeWithSelector(S.InvalidNextRegistrationEpoch.selector, 1, 0));
+        stakeTable.register(blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, 0);
+    }
+
+    function testNodeAlreadyRegistered() external {
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = computeGroupElements(msg.sender);
+
+        // Prepare for the token transfer
+        vm.prank(msg.sender);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Successful call to register
+        vm.prank(msg.sender);
+        stakeTable.register(
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+        );
 
         // The node is already registered
-        vm.prank(msgSenderAddress);
+        vm.prank(msg.sender);
         vm.expectRevert(S.NodeAlreadyRegistered.selector);
+        stakeTable.register(
+            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+        );
+    }
+
+    function testTransferFailed() external {
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = computeGroupElements(msg.sender);
+
+        vm.prank(msg.sender);
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         stakeTable.register(
             blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
         );
