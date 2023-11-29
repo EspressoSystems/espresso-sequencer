@@ -39,7 +39,7 @@ contract StakeTable_register_Test is Test {
         // Generate a BLS signature and other values using rust code
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
-        cmds[1] = "gen-bls-sig";
+        cmds[1] = "gen-client-wallet";
         cmds[2] = vm.toString(sender);
 
         bytes memory result = vm.ffi(cmds);

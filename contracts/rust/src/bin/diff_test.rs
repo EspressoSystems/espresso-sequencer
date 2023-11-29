@@ -81,8 +81,8 @@ enum Action {
     DummyProof,
     /// Test only logic
     TestOnly,
-    /// Generate a BLS Signature
-    GenBLSSig,
+    /// Generate Client Wallet
+    GenClientWallet,
 }
 
 #[allow(clippy::type_complexity)]
@@ -394,7 +394,7 @@ fn main() {
         Action::TestOnly => {
             println!("args: {:?}", cli.args);
         }
-        Action::GenBLSSig => {
+        Action::GenClientWallet => {
             let mut rng = jf_utils::test_rng();
 
             if cli.args.len() != 1 {
