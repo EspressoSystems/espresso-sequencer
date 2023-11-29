@@ -167,7 +167,7 @@ pub mod stake_table {
                                 ],),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct IStakeTable.Node"),
+                                ::std::borrow::ToOwned::to_owned("struct AbstractStakeTable.Node",),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -256,7 +256,9 @@ pub mod stake_table {
                                 name: ::std::borrow::ToOwned::to_owned("stakeType"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("enum IStakeTable.StakeType",),
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "enum AbstractStakeTable.StakeType",
+                                    ),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -401,7 +403,9 @@ pub mod stake_table {
                                 name: ::std::borrow::ToOwned::to_owned("stakeType"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("enum IStakeTable.StakeType",),
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "enum AbstractStakeTable.StakeType",
+                                    ),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {

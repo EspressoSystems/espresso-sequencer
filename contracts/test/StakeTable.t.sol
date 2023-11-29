@@ -9,7 +9,7 @@ import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
-import { IStakeTable } from "../src/interfaces/IStakeTable.sol";
+import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 
 // Token contract
@@ -19,7 +19,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_register_Test is Test {
-    event Registered(bytes32, uint64, IStakeTable.StakeType, uint256);
+    event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
 
     S public stakeTable;
     ExampleToken public token;
@@ -91,7 +91,12 @@ contract StakeTable_register_Test is Test {
         // Throw "Restaking not implemented" error
         vm.expectRevert(S.RestakingNotImplemented.selector);
         stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Restake, sig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Restake,
+            sig,
+            validUntilEpoch
         );
     }
 
@@ -106,7 +111,12 @@ contract StakeTable_register_Test is Test {
         BN254.G1Point memory badSig = BN254.P1();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, badSig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            badSig,
+            validUntilEpoch
         );
     }
 
@@ -135,7 +145,12 @@ contract StakeTable_register_Test is Test {
                 )
             );
             stakeTable.register(
-                blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+                blsVK,
+                schnorrVK,
+                depositAmount,
+                AbstractStakeTable.StakeType.Native,
+                sig,
+                validUntilEpoch
             );
         }
     }
@@ -157,14 +172,24 @@ contract StakeTable_register_Test is Test {
         // Successful call to register
         vm.prank(exampleTokenCreator);
         stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
         );
 
         // The node is already registered
         vm.prank(exampleTokenCreator);
         vm.expectRevert(S.NodeAlreadyRegistered.selector);
         stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
         );
     }
 
@@ -181,7 +206,12 @@ contract StakeTable_register_Test is Test {
         vm.prank(exampleTokenCreator);
         vm.expectRevert("TRANSFER_FROM_FAILED");
         stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
         );
     }
 
@@ -209,10 +239,10 @@ contract StakeTable_register_Test is Test {
         assertEq(nativeAmount, 0);
         assertEq(restakedAmount, 0);
 
-        IStakeTable.Node memory node;
+        AbstractStakeTable.Node memory node;
         node.account = exampleTokenCreator;
         node.balance = depositAmount;
-        node.stakeType = IStakeTable.StakeType.Native;
+        node.stakeType = AbstractStakeTable.StakeType.Native;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = 1;
 
@@ -223,7 +253,12 @@ contract StakeTable_register_Test is Test {
         );
         vm.prank(exampleTokenCreator);
         bool res = stakeTable.register(
-            blsVK, schnorrVK, depositAmount, IStakeTable.StakeType.Native, sig, validUntilEpoch
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
         );
 
         assertTrue(res);

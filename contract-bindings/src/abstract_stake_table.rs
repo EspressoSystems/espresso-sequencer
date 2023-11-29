@@ -1,4 +1,4 @@
-pub use i_stake_table::*;
+pub use abstract_stake_table::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,7 +9,7 @@ pub use i_stake_table::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod i_stake_table {
+pub mod abstract_stake_table {
     pub use super::super::shared_types::*;
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
@@ -91,7 +91,7 @@ pub mod i_stake_table {
                                 ],),
                             ],),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct IStakeTable.Node"),
+                                ::std::borrow::ToOwned::to_owned("struct AbstractStakeTable.Node",),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -229,7 +229,9 @@ pub mod i_stake_table {
                                 name: ::std::borrow::ToOwned::to_owned("stakeType"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("enum IStakeTable.StakeType",),
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "enum AbstractStakeTable.StakeType",
+                                    ),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
@@ -408,33 +410,33 @@ pub mod i_stake_table {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static ISTAKETABLE_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static ABSTRACTSTAKETABLE_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
-    pub struct IStakeTable<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for IStakeTable<M> {
+    pub struct AbstractStakeTable<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for AbstractStakeTable<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for IStakeTable<M> {
+    impl<M> ::core::ops::Deref for AbstractStakeTable<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for IStakeTable<M> {
+    impl<M> ::core::ops::DerefMut for AbstractStakeTable<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for IStakeTable<M> {
+    impl<M> ::core::fmt::Debug for AbstractStakeTable<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(IStakeTable))
+            f.debug_tuple(::core::stringify!(AbstractStakeTable))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> IStakeTable<M> {
+    impl<M: ::ethers::providers::Middleware> AbstractStakeTable<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -443,7 +445,7 @@ pub mod i_stake_table {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                ISTAKETABLE_ABI.clone(),
+                ABSTRACTSTAKETABLE_ABI.clone(),
                 client,
             ))
         }
@@ -584,7 +586,9 @@ pub mod i_stake_table {
                 .event_with_filter(::core::default::Default::default())
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for IStakeTable<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+        for AbstractStakeTable<M>
+    {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -850,7 +854,7 @@ pub mod i_stake_table {
         Eq,
         Hash,
     )]
-    pub enum IStakeTableCalls {
+    pub enum AbstractStakeTableCalls {
         Deposit(DepositCall),
         LookupNode(LookupNodeCall),
         LookupStake(LookupStakeCall),
@@ -865,7 +869,7 @@ pub mod i_stake_table {
         TotalVotingStake(TotalVotingStakeCall),
         WithdrawFunds(WithdrawFundsCall),
     }
-    impl ::ethers::core::abi::AbiDecode for IStakeTableCalls {
+    impl ::ethers::core::abi::AbiDecode for AbstractStakeTableCalls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -922,7 +926,7 @@ pub mod i_stake_table {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for IStakeTableCalls {
+    impl ::ethers::core::abi::AbiEncode for AbstractStakeTableCalls {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::Deposit(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -945,7 +949,7 @@ pub mod i_stake_table {
             }
         }
     }
-    impl ::core::fmt::Display for IStakeTableCalls {
+    impl ::core::fmt::Display for AbstractStakeTableCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::Deposit(element) => ::core::fmt::Display::fmt(element, f),
@@ -964,67 +968,67 @@ pub mod i_stake_table {
             }
         }
     }
-    impl ::core::convert::From<DepositCall> for IStakeTableCalls {
+    impl ::core::convert::From<DepositCall> for AbstractStakeTableCalls {
         fn from(value: DepositCall) -> Self {
             Self::Deposit(value)
         }
     }
-    impl ::core::convert::From<LookupNodeCall> for IStakeTableCalls {
+    impl ::core::convert::From<LookupNodeCall> for AbstractStakeTableCalls {
         fn from(value: LookupNodeCall) -> Self {
             Self::LookupNode(value)
         }
     }
-    impl ::core::convert::From<LookupStakeCall> for IStakeTableCalls {
+    impl ::core::convert::From<LookupStakeCall> for AbstractStakeTableCalls {
         fn from(value: LookupStakeCall) -> Self {
             Self::LookupStake(value)
         }
     }
-    impl ::core::convert::From<NextExitEpochCall> for IStakeTableCalls {
+    impl ::core::convert::From<NextExitEpochCall> for AbstractStakeTableCalls {
         fn from(value: NextExitEpochCall) -> Self {
             Self::NextExitEpoch(value)
         }
     }
-    impl ::core::convert::From<NextRegistrationEpochCall> for IStakeTableCalls {
+    impl ::core::convert::From<NextRegistrationEpochCall> for AbstractStakeTableCalls {
         fn from(value: NextRegistrationEpochCall) -> Self {
             Self::NextRegistrationEpoch(value)
         }
     }
-    impl ::core::convert::From<NumPendingExitCall> for IStakeTableCalls {
+    impl ::core::convert::From<NumPendingExitCall> for AbstractStakeTableCalls {
         fn from(value: NumPendingExitCall) -> Self {
             Self::NumPendingExit(value)
         }
     }
-    impl ::core::convert::From<NumPendingRegistrationsCall> for IStakeTableCalls {
+    impl ::core::convert::From<NumPendingRegistrationsCall> for AbstractStakeTableCalls {
         fn from(value: NumPendingRegistrationsCall) -> Self {
             Self::NumPendingRegistrations(value)
         }
     }
-    impl ::core::convert::From<RegisterCall> for IStakeTableCalls {
+    impl ::core::convert::From<RegisterCall> for AbstractStakeTableCalls {
         fn from(value: RegisterCall) -> Self {
             Self::Register(value)
         }
     }
-    impl ::core::convert::From<RequestExitCall> for IStakeTableCalls {
+    impl ::core::convert::From<RequestExitCall> for AbstractStakeTableCalls {
         fn from(value: RequestExitCall) -> Self {
             Self::RequestExit(value)
         }
     }
-    impl ::core::convert::From<TotalKeysCall> for IStakeTableCalls {
+    impl ::core::convert::From<TotalKeysCall> for AbstractStakeTableCalls {
         fn from(value: TotalKeysCall) -> Self {
             Self::TotalKeys(value)
         }
     }
-    impl ::core::convert::From<TotalStakeCall> for IStakeTableCalls {
+    impl ::core::convert::From<TotalStakeCall> for AbstractStakeTableCalls {
         fn from(value: TotalStakeCall) -> Self {
             Self::TotalStake(value)
         }
     }
-    impl ::core::convert::From<TotalVotingStakeCall> for IStakeTableCalls {
+    impl ::core::convert::From<TotalVotingStakeCall> for AbstractStakeTableCalls {
         fn from(value: TotalVotingStakeCall) -> Self {
             Self::TotalVotingStake(value)
         }
     }
-    impl ::core::convert::From<WithdrawFundsCall> for IStakeTableCalls {
+    impl ::core::convert::From<WithdrawFundsCall> for AbstractStakeTableCalls {
         fn from(value: WithdrawFundsCall) -> Self {
             Self::WithdrawFunds(value)
         }

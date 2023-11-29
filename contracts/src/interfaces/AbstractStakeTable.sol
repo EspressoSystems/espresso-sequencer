@@ -10,7 +10,7 @@ import { EdOnBN254 } from "../libraries/EdOnBn254.sol";
 /// instantiation thus not part of this interface
 /// @dev Stake table contract should store a reference to the `LightClient.sol` to query
 /// "epoch-related" info
-abstract contract IStakeTable {
+abstract contract AbstractStakeTable {
     /// @notice Supported stake type, either using native token or re-staked using ETH
     enum StakeType {
         Native,
