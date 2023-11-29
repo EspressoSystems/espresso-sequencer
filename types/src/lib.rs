@@ -17,6 +17,7 @@ pub mod consensus;
 pub mod data;
 pub mod error;
 pub mod event;
+pub mod light_client;
 pub mod message;
 pub mod simple_certificate;
 pub mod simple_vote;
@@ -46,6 +47,8 @@ pub struct ValidatorConfig<KEY: SignatureKey> {
     pub private_key: KEY::PrivateKey,
     /// The validator's stake
     pub stake_value: u64,
+    /// the validator's key pairs for state signing/verification
+    pub state_key_pair: light_client::StateKeyPair,
 }
 
 impl<KEY: SignatureKey> ValidatorConfig<KEY> {
@@ -53,10 +56,12 @@ impl<KEY: SignatureKey> ValidatorConfig<KEY> {
     #[must_use]
     pub fn generated_from_seed_indexed(seed: [u8; 32], index: u64, stake_value: u64) -> Self {
         let (public_key, private_key) = KEY::generated_from_seed_indexed(seed, index);
+        let state_key_pairs = light_client::StateKeyPair::generate_from_seed_indexed(seed, index);
         Self {
             public_key,
             private_key,
             stake_value,
+            state_key_pair: state_key_pairs,
         }
     }
 }

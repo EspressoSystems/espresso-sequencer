@@ -292,13 +292,7 @@ fn default_transaction_size() -> usize {
 impl<K: SignatureKey> From<ValidatorConfigFile> for ValidatorConfig<K> {
     fn from(val: ValidatorConfigFile) -> Self {
         // here stake_value is set to 1, since we don't input stake_value from ValidatorConfigFile for now
-        let validator_config =
-            ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1);
-        ValidatorConfig {
-            public_key: validator_config.public_key,
-            private_key: validator_config.private_key,
-            stake_value: validator_config.stake_value,
-        }
+        ValidatorConfig::generated_from_seed_indexed(val.seed, val.node_id, 1)
     }
 }
 impl<KEY: SignatureKey, E: ElectionConfig> From<ValidatorConfigFile> for HotShotConfig<KEY, E> {

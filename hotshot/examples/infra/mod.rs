@@ -884,16 +884,12 @@ pub async fn main_entry_point<
 
     run_config.node_index = node_index.into();
 
-    let (public_key, private_key) =
-        <<TYPES as NodeType>::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+    run_config.config.my_own_validator_config =
+        ValidatorConfig::<<TYPES as NodeType>::SignatureKey>::generated_from_seed_indexed(
             run_config.seed,
             node_index.into(),
+            1,
         );
-    run_config.config.my_own_validator_config = ValidatorConfig {
-        public_key,
-        private_key,
-        stake_value: 1,
-    };
     //run_config.libp2p_config.as_mut().unwrap().public_ip = args.public_ip.unwrap();
 
     error!("Initializing networking");
