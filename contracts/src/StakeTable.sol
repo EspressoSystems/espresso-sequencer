@@ -79,14 +79,6 @@ contract StakeTable is IStakeTable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override returns (bool) {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
-
-        // The node must not already be registered.
-        if (node.account != address(0x0)) {
-            revert NodeAlreadyRegistered();
-        }
-
         if (stakeType != StakeType.Native) {
             revert RestakingNotImplemented();
         }
@@ -101,6 +93,14 @@ contract StakeTable is IStakeTable {
         uint64 registerEpoch = this.nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
+        }
+
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // The node must not already be registered.
+        if (node.account != address(0x0)) {
+            revert NodeAlreadyRegistered();
         }
 
         // Create an entry for the node.
