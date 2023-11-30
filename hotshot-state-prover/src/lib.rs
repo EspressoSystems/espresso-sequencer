@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_proof_generation() {
+    fn crypto_test_proof_generation() {
         let num_validators = 10;
         let mut prng = test_rng();
 
