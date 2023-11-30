@@ -78,15 +78,18 @@ contract StakeTable_register_Test is Test {
         stakeTable = new S(address(token),lightClientAddress);
     }
 
-    function test_RevertWhen_UsingRestakeToken() external {
-        uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 5;
-
+    function testFuzz_RevertWhen_UsingRestakeToken(uint64 depositAmount, uint64 validUntilEpoch)
+        external
+    {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
         ) = genClientWallet(exampleTokenCreator);
+
+        uint64 curEpoch = stakeTable.currentEpoch();
+        depositAmount = uint64(bound(depositAmount, 1, INITIAL_BALANCE));
+        validUntilEpoch = uint64(bound(validUntilEpoch, curEpoch, curEpoch + 10));
 
         // Throw "Restaking not implemented" error
         vm.expectRevert(S.RestakingNotImplemented.selector);
