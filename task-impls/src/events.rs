@@ -92,12 +92,14 @@ pub enum HotShotEvent<TYPES: NodeType> {
         VidCommitment,
         <TYPES::BlockPayload as BlockPayload>::Metadata,
     ),
-    /// Event when the transactions task has a block formed
-    BlockReady(
+    /// Event when the transactions task has sequenced transactions. Contains the encoded transactions
+    TransactionsSequenced(
         Vec<u8>,
         <TYPES::BlockPayload as BlockPayload>::Metadata,
         TYPES::Time,
     ),
+    /// Event when the transactions task has a block formed
+    BlockReady(VidDisperse<TYPES>, TYPES::Time),
     /// Event when consensus decided on a leaf
     LeafDecided(Vec<Leaf<TYPES>>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader

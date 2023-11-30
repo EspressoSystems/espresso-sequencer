@@ -10,6 +10,7 @@ use hotshot_types::{
         node_implementation::NodeType, state::ConsensusTime,
     },
 };
+use sha2::{Digest, Sha256};
 use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg_attr(
@@ -34,10 +35,11 @@ async fn test_da_task() {
     let pub_key = *api.public_key();
     let transactions = vec![VIDTransaction(vec![0])];
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = vid_commitment(encoded_transactions.clone());
+    let payload_commitment = vid_commitment(&encoded_transactions);
+    let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), &encoded_transactions_hash);
     let proposal = DAProposal {
         encoded_transactions: encoded_transactions.clone(),
         metadata: (),
@@ -59,7 +61,7 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(
+    input.push(HotShotEvent::TransactionsSequenced(
         encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
@@ -70,11 +72,7 @@ async fn test_da_task() {
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
-        1,
-    );
-    output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
