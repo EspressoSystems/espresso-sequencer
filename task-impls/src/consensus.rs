@@ -1153,7 +1153,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
-                self.vid_shares.insert(view, disperse.clone());
+                self.vid_shares.insert(view, disperse);
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
