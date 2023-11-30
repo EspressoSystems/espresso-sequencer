@@ -11,7 +11,9 @@ use tracing::error;
 
 #[derive(Parser, Debug)]
 struct MultiWebServerArgs {
-    cdn_port: u16,
+    consensus_url: String,
+    da_url: String,
+    consensus_port: u16,
     da_port: u16,
     view_sync_port: u16,
 }
@@ -28,10 +30,14 @@ async fn main() {
     let _sender = Arc::new(server_shutdown_sender_cdn);
     let _sender = Arc::new(server_shutdown_sender_da);
 
-    let cdn_server = async_spawn(async move {
+    let consensus_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_cdn), args.cdn_port)
+        >(
+            Some(server_shutdown_cdn),
+            args.consensus_url.to_string(),
+            args.consensus_port,
+        )
         .await
         {
             error!("Problem starting cdn web server: {:?}", e);
@@ -40,12 +46,16 @@ async fn main() {
     let da_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_da), args.da_port)
+        >(
+            Some(server_shutdown_da),
+            args.da_url.to_string(),
+            args.da_port,
+        )
         .await
         {
             error!("Problem starting da web server: {:?}", e);
         }
     });
 
-    let _result = futures::future::join_all(vec![cdn_server, da_server]).await;
+    let _result = futures::future::join_all(vec![consensus_server, da_server]).await;
 }

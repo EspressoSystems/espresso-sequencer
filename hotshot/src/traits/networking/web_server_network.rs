@@ -506,7 +506,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
     /// # Panics
     /// if the web server url is malformed
     pub fn create(
-        url: String,
+        url: &str,
         port: u16,
         wait_between_polls: Duration,
         key: TYPES::SignatureKey,
@@ -1238,7 +1238,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         // Start web server
         async_spawn(hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
             Some(server_shutdown),
-            url.to_owned(), 
+            url.to_owned(),
             port,
         ));
 
@@ -1255,7 +1255,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         Box::new(move |id| {
             let sender = Arc::clone(&sender);
             let mut network = WebServerNetwork::create(
-                "http://localhost".to_string(),
+                "http://localhost",
                 port,
                 Duration::from_millis(100),
                 known_nodes[id as usize].clone(),

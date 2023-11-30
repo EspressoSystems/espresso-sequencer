@@ -854,7 +854,7 @@ where
 
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    url: String, 
+    url: String,
     port: u16,
 ) -> io::Result<()> {
     let options = Options::default();

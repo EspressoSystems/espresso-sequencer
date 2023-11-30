@@ -9,7 +9,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 struct WebServerArgs {
-    url: String, 
+    url: String,
     port: u16,
 }
 

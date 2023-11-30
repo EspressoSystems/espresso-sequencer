@@ -37,7 +37,11 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_cdn), 9000)
+        >(
+            Some(server_shutdown_cdn),
+            "http://localhost".to_string(),
+            9000,
+        )
         .await
         {
             error!("Problem starting cdn web server: {:?}", e);
@@ -46,7 +50,11 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_da), 9001)
+        >(
+            Some(server_shutdown_da),
+            "http://localhost".to_string(),
+            9001,
+        )
         .await
         {
             error!("Problem starting da web server: {:?}", e);
@@ -62,7 +70,7 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        url: "http://localhost".to_string(),
         port: 4444,
         config_file: args.config_file.clone(),
     }));
@@ -84,7 +92,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                host: "127.0.0.1".to_string(),
+                url: "http://localhost".to_string(),
                 port: 4444,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             })

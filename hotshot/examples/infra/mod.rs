@@ -55,20 +55,8 @@ use std::{collections::BTreeSet, sync::Arc};
 use std::{num::NonZeroUsize, str::FromStr};
 
 use libp2p_identity::PeerId;
-// use libp2p_networking::network::{MeshParams, NetworkNodeConfigBuilder, NetworkNodeType};
 use std::fmt::Debug;
-use std::{
-    //collections::{BTreeSet, VecDeque},
-    fs,
-    net::IpAddr,
-    //num::NonZeroUsize,
-    //str::FromStr,
-    //sync::Arc,
-    //time::{Duration, Instant},
-    time::Instant,
-};
-//use surf_disco::error::ClientError;
-//use surf_disco::Client;
+use std::{fs, time::Instant};
 use tracing::{error, info, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -174,13 +162,7 @@ async fn webserver_network_from_config<TYPES: NodeType>(
         wait_between_polls,
     }: WebServerConfig = config.clone().web_server_config.unwrap();
 
-    WebServerNetwork::create(
-        url,
-        port,
-        wait_between_polls,
-        pub_key.clone(),
-        false,
-    )
+    WebServerNetwork::create(&url, port, wait_between_polls, pub_key.clone(), false)
 }
 
 async fn libp2p_network_from_config<TYPES: NodeType>(
@@ -569,19 +551,11 @@ where
             WebCommChannel::new(underlying_quorum_network.into());
 
         let da_channel: WebCommChannel<TYPES> = WebCommChannel::new(
-            WebServerNetwork::create(
-                url.clone(),
-                port,
-                wait_between_polls,
-                pub_key.clone(),
-                true,
-            )
-            .into(),
+            WebServerNetwork::create(&url, port, wait_between_polls, pub_key.clone(), true).into(),
         );
 
         let vid_channel: WebCommChannel<TYPES> = WebCommChannel::new(
-            WebServerNetwork::create(url, port, wait_between_polls, pub_key, true)
-                .into(),
+            WebServerNetwork::create(&url, port, wait_between_polls, pub_key, true).into(),
         );
 
         WebServerDARun {
@@ -774,7 +748,7 @@ where
             webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
 
         let webserver_underlying_da_network =
-            WebServerNetwork::create(url, port, wait_between_polls, pub_key, true);
+            WebServerNetwork::create(&url, port, wait_between_polls, pub_key, true);
 
         webserver_underlying_quorum_network.wait_for_ready().await;
 
