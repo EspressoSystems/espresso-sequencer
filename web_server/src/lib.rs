@@ -277,7 +277,6 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let votes = self.view_sync_votes.get(&view_number);
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
-            // error!("Passed in index is: {} self index is: {}", index, *self.vote_index.get(&view_number).unwrap());
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
             }

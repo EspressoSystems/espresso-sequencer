@@ -217,6 +217,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         api: c_api.clone(),
         _pd: PhantomData,
         vote_collector: None,
+        timeout_vote_collector: None,
         timeout_task: async_spawn(async move {}),
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
