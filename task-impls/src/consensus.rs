@@ -368,7 +368,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                info!(
+                debug!(
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );
@@ -452,13 +452,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            info!(
+            debug!(
                 "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
         }
-        info!(
+        debug!(
             "Could not vote because we don't have a proposal yet for view {}",
             *self.cur_view
         );
@@ -1127,7 +1127,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                info!("VID disperse data is s not more than one view older.");
+                info!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // Check whether the sender is the right leader for this view
