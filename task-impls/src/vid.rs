@@ -6,6 +6,7 @@ use hotshot_task::{
     task::{HotShotTaskCompleted, TS},
     task_impls::HSTWithEvent,
 };
+use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::Consensus,
     data::VidDisperse,
@@ -24,13 +25,12 @@ use hotshot_types::{
         network::ConsensusIntentEvent,
     },
 };
-use hotshot_types::{traits::network::CommunicationChannel, vote::HasViewNumber};
 
 use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, instrument};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -80,50 +80,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            HotShotEvent::VidDisperseRecv(disperse, sender) => {
-                let view = disperse.data.get_view_number();
-
-                debug!("VID disperse received for view: {:?} in VID task", view);
-
-                // stop polling for the received disperse
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
-                        *disperse.data.view_number,
-                    ))
-                    .await;
-
-                // Allow VID disperse date that is one view older, in case we have updated the
-                // view.
-                // Adding `+ 1` on the LHS rather than `- 1` on the RHS, to avoid the overflow
-                // error due to subtracting the genesis view number.
-                if view + 1 < self.cur_view {
-                    warn!("Throwing away VID disperse data that is more than one view older");
-                    return None;
-                }
-
-                debug!("VID disperse data is fresh.");
-                let payload_commitment = disperse.data.payload_commitment;
-
-                // Check whether the sender is the right leader for this view
-                let view_leader_key = self.membership.get_leader(view);
-                if view_leader_key != sender {
-                    error!(
-                        "VID dispersal/share is not from expected leader key for view {} \n",
-                        *view
-                    );
-                    return None;
-                }
-
-                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
-                    error!("Could not verify VID dispersal/share sig.");
-                    return None;
-                }
-
-                // Record the block we have promised to make available.
-                // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                // consensus.saved_payloads.insert(proposal.data.block_payload);
-            }
-
             HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
                 let srs = test_srs(NUM_STORAGE_NODES);
@@ -213,7 +169,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         matches!(
             event,
             HotShotEvent::Shutdown
-                | HotShotEvent::VidDisperseRecv(_, _)
                 | HotShotEvent::TransactionsSequenced(_, _, _)
                 | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)

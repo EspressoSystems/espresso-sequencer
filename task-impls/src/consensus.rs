@@ -368,7 +368,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                error!(
+                info!(
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );
@@ -567,7 +567,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let view_leader_key = self.quorum_membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!("Leader key does not match key in proposal");
+                    warn!("Leader key does not match key in proposal");
                     return;
                 }
 
@@ -1118,13 +1118,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     view
                 );
 
-                // stop polling for the received disperse
-                self.quorum_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
-                        *disperse.data.view_number,
-                    ))
-                    .await;
-
                 // Allow VID disperse date that is one view older, in case we have updated the
                 // view.
                 // Adding `+ 1` on the LHS rather than `- 1` on the RHS, to avoid the overflow
@@ -1134,13 +1127,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                debug!("VID disperse data is fresh.");
+                info!("VID disperse data is s not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // Check whether the sender is the right leader for this view
-                let view_leader_key = self.committee_membership.get_leader(view);
+                let view_leader_key = self.quorum_membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!(
+                    warn!(
                         "VID dispersal/share is not from expected leader key for view {} \n",
                         *view
                     );
@@ -1148,9 +1141,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
-                    error!("Could not verify VID dispersal/share sig.");
+                    warn!("Could not verify VID dispersal/share sig.");
                     return;
                 }
+
+                // stop polling for the received disperse after verifying it's valid
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
                 self.vid_shares.insert(view, disperse.clone());
