@@ -334,7 +334,7 @@ mod tests {
     };
 
     #[test]
-    fn test_vk_aggregate_sw_circuit() -> Result<(), CircuitError> {
+    fn crypto_test_vk_aggregate_sw_circuit() -> Result<(), CircuitError> {
         let a_ecc = Fq377::zero();
         test_vk_aggregate_sw_circuit_helper::<Fq377, Fr254, Param377>(a_ecc)?;
         let a_ecc = Fq254::zero();
@@ -440,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vk_aggregate_te_circuit() -> Result<(), CircuitError> {
+    fn crypto_test_vk_aggregate_te_circuit() -> Result<(), CircuitError> {
         let d_ecc : Fq377 = MontFp!("122268283598675559488486339158635529096981886914877139579534153582033676785385790730042363341236035746924960903179");
         test_vk_aggregate_te_circuit_helper::<Fq377, Fr254, Param377>(d_ecc)
     }

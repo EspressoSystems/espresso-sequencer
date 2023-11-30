@@ -378,7 +378,7 @@ mod tests {
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
 
     #[test]
-    fn test_stake_table() -> Result<(), StakeTableError> {
+    fn crypto_test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
         let mut prng = jf_utils::test_rng();
         let keys = (0..10)
