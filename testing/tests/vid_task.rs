@@ -9,7 +9,7 @@ use hotshot_types::{
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
     traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
-use hotshot_types::{simple_vote::VIDVote, traits::node_implementation::NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -83,16 +83,6 @@ async fn test_vid_task() {
         HotShotEvent::BlockReady(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
-
-    let vid_vote = VIDVote::create_signed_vote(
-        hotshot_types::simple_vote::VIDData {
-            payload_commit: payload_commitment,
-        },
-        ViewNumber::new(2),
-        api.public_key(),
-        api.private_key(),
-    );
-    output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
 
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
