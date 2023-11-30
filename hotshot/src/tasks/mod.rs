@@ -470,7 +470,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         num_timeouts_tracked: 0,
         replica_task_map: HashMap::default(),
         relay_task_map: HashMap::default(),
-        view_sync_timeout: Duration::new(30, 0),
+        view_sync_timeout: Duration::new(10, 0),
         id: handle.hotshot.inner.id,
         last_garbage_collected_view: TYPES::Time::new(0),
     };
