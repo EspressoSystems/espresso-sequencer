@@ -118,6 +118,9 @@ pub struct ConsensusTaskState<
     pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// All the VID shares we've received for current and future views.
+    /// In the future we will need a different struct similar to VidDisperse except 
+    /// it stores only one share.
+    /// TODO https://github.com/EspressoSystems/HotShot/issues/2146
     pub vid_shares: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
