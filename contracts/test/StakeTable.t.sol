@@ -103,15 +103,21 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function test_RevertWhen_InvalidBLSSig() external {
+    function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
             genClientWallet(exampleTokenCreator);
 
+        // Ensure the scalar is valid
+        // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
+        scalar = bound(scalar, 1, BN254.R_MOD - 1);
+        BN254.validateScalarField(scalar);
+        BN254.G1Point memory badSig = BN254.scalarMul(BN254.P1(), scalar);
+        BN254.validateG1Point(badSig);
+
         // Failed signature verification
-        BN254.G1Point memory badSig = BN254.P1();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         stakeTable.register(
             blsVK,
