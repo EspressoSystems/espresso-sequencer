@@ -17,7 +17,7 @@ pub struct BlockPayload {
 
 impl BlockPayload {
     #[allow(dead_code)] // TODO temporary
-    fn build(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
+    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
         // `tx_table` is a bytes representation of the following table:
         // word[0]: [number n of entries in tx table]
         // word[j>0]: [end byte index of the (j-1)th tx in the payload]
@@ -55,6 +55,16 @@ impl BlockPayload {
         payload.extend(tx_table);
         payload.extend(tx_bodies);
         Some(Self { payload })
+    }
+
+    #[allow(dead_code)] // TODO temporary
+    fn from_bytes<B>(bytes: B) -> Self
+    where
+        B: IntoIterator<Item = u8>,
+    {
+        Self {
+            payload: bytes.into_iter().collect(),
+        }
     }
 
     // Return the range `r` such that the `index`th tx bytes are at `self.payload[r]`.
@@ -337,7 +347,7 @@ mod test {
                 })
                 .collect();
 
-            let block = BlockPayload::build(txs).unwrap();
+            let block = BlockPayload::from_txs(txs).unwrap();
 
             // test tx table length
             let (tx_table_len_bytes, payload) = block.payload.split_at(TxTableEntry::byte_len());
