@@ -723,6 +723,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
             HotShotEvent::QuorumVoteRecv(ref vote) => {
                 debug!("Received quroum vote: {:?}", vote.get_view_number());
+                if self
+                    .quorum_membership
+                    .get_leader(vote.get_view_number() + 1)
+                    != self.public_key
+                {
+                    error!(
+                        "We are not the leader for view {} are we the leader for view + 1? {}",
+                        *vote.get_view_number() + 1,
+                        self.quorum_membership
+                            .get_leader(vote.get_view_number() + 2)
+                            == self.public_key
+                    );
+                    return;
+                }
 
                 let collection_view =
                     if let Some((collection_view, collection_task, _)) = &self.vote_collector {
@@ -761,6 +775,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::TimeoutVoteRecv(ref vote) => {
+                if self
+                    .timeout_membership
+                    .get_leader(vote.get_view_number() + 1)
+                    != self.public_key
+                {
+                    error!(
+                        "We are not the leader for view {} are we the leader for view + 1? {}",
+                        *vote.get_view_number() + 1,
+                        self.timeout_membership
+                            .get_leader(vote.get_view_number() + 2)
+                            == self.public_key
+                    );
+                    return;
+                }
                 let collection_view =
                     if let Some((collection_view, collection_task, _)) = &self.vote_collector {
                         if vote.get_view_number() > *collection_view {

@@ -99,10 +99,10 @@ impl<
                 self.accumulator = Some(acc);
                 (None, self)
             }
-            Either::Right(qc) => {
-                debug!("Certificate Formed! {:?}", qc);
+            Either::Right(cert) => {
+                debug!("Certificate Formed! {:?}", cert);
                 self.event_stream
-                    .publish(VOTE::make_cert_event(qc, &self.public_key))
+                    .publish(VOTE::make_cert_event(cert, &self.public_key))
                     .await;
                 self.accumulator = None;
                 (Some(HotShotTaskCompleted::ShutDown), self)
@@ -157,13 +157,18 @@ where
 }
 
 /// Info needed to create a vote accumulator task
-#[allow(missing_docs)]
 pub struct AccumulatorInfo<TYPES: NodeType> {
+    /// This nodes Pub Key
     pub public_key: TYPES::SignatureKey,
+    /// Membership we are accumulation votes for
     pub membership: Arc<TYPES::Membership>,
+    /// View of the votes we are collecting
     pub view: TYPES::Time,
+    /// Global event stream shared by all consensus tasks
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
+    /// This nodes id
     pub id: u64,
+    /// Task Registry for all tasks used by this node
     pub registry: GlobalRegistry,
 }
 
@@ -190,11 +195,6 @@ where
         + 'static,
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
-    if vote.get_leader(info.membership.as_ref()) != info.public_key {
-        debug!("Vote is not to the leader");
-        return None;
-    }
-
     if vote.get_view_number() != info.view {
         error!(
             "Vote view does not match! vote view is {} current view is {}",
