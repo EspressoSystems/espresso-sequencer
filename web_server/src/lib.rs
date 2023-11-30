@@ -687,26 +687,11 @@ where
         }
         .boxed()
     })?
-    .get("getvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            state.get_vid_certificate(view_number)
-        }
-        .boxed()
-    })?
     .get("getvotes", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
             let index: u64 = req.integer_param("index")?;
             state.get_votes(view_number, index)
-        }
-        .boxed()
-    })?
-    .get("getvidvotes", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let index: u64 = req.integer_param("index")?;
-            state.get_vid_votes(view_number, index)
         }
         .boxed()
     })?
@@ -731,15 +716,6 @@ where
             // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
             let vote = req.body_bytes();
             state.post_vote(view_number, vote)
-        }
-        .boxed()
-    })?
-    .post("postvidvote", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
-            let vote = req.body_bytes();
-            state.post_vid_vote(view_number, vote)
         }
         .boxed()
     })?
@@ -781,14 +757,6 @@ where
             let view_number: u64 = req.integer_param("view_number")?;
             let cert = req.body_bytes();
             state.post_da_certificate(view_number, cert)
-        }
-        .boxed()
-    })?
-    .post("postvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let cert = req.body_bytes();
-            state.post_vid_certificate(view_number, cert)
         }
         .boxed()
     })?

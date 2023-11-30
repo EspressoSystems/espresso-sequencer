@@ -1146,14 +1146,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Add to the storage that we have received the VID disperse for a specific view
                 self.vid_shares.insert(view, disperse.clone());
             }
-            HotShotEvent::VidCertRecv(cert) => {
-                debug!("VID cert received for view ! {}", *cert.view_number);
-
-                let _view = cert.get_view_number();
-                // Sishan NOTE TODO: delete it
-                // RM TODO: VOTING
-            }
-
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
 
