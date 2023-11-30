@@ -15,7 +15,6 @@ struct MultiWebServerArgs {
     da_url: String,
     consensus_port: u16,
     da_port: u16,
-    view_sync_port: u16,
 }
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
