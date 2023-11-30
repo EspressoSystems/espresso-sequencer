@@ -237,7 +237,7 @@ where
 /// Runs the orchestrator
 pub async fn run_orchestrator<KEY, ELECTION>(
     network_config: NetworkConfig<KEY, ELECTION>,
-    host: IpAddr,
+    url: String,
     port: u16,
 ) -> io::Result<()>
 where
@@ -252,6 +252,6 @@ where
     let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
     app.register_module("api", api.unwrap())
         .expect("Error registering api");
-    tracing::error!("lisening on {:?}:{:?}", host, port);
-    app.serve(format!("http://{host}:{port}")).await
+    tracing::error!("lisening on {:?}:{:?}", url, port);
+    app.serve(format!("{url}:{port}")).await
 }

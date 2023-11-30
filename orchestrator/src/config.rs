@@ -52,7 +52,7 @@ pub struct Libp2pConfigFile {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct WebServerConfig {
-    pub host: IpAddr,
+    pub url: String,
     pub port: u16,
     pub wait_between_polls: Duration,
 }
