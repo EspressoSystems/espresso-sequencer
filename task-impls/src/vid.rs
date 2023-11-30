@@ -24,7 +24,7 @@ use hotshot_types::{
 };
 use hotshot_types::{
     simple_certificate::VIDCertificate,
-    simple_vote::{VIDData, VIDVote},
+    simple_vote::VIDVote,
     traits::network::CommunicationChannel,
     vote::{HasViewNumber, VoteAccumulator},
 };
@@ -243,7 +243,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::VidDisperseRecv(disperse, sender) => {
                 let view = disperse.data.get_view_number();
 
-                debug!("VID disperse received for view: {:?}", view);
+                debug!("VID disperse received for view: {:?} in VID task", view);
 
                 // stop polling for the received disperse
                 self.network
@@ -263,46 +263,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 debug!("VID disperse data is fresh.");
                 let payload_commitment = disperse.data.payload_commitment;
-                // Sishan NOTE TODO: Add to the storage that we have received the VID disperse for a specific view / block
 
                 // Check whether the sender is the right leader for this view
                 let view_leader_key = self.membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
+                    error!("VID dispersal/share is not from expected leader key for view {} \n", *view);
                     return None;
                 }
 
                 if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
-                    error!("Could not verify VID proposal sig.");
+                    error!("Could not verify VID dispersal/share sig.");
                     return None;
                 }
-
-                // Generate and send vote after receive and validate disperse (VID share)
-                let vote = VIDVote::create_signed_vote(
-                    VIDData {
-                        payload_commit: payload_commitment,
-                    },
-                    view,
-                    &self.public_key,
-                    &self.private_key,
-                );
-
-                debug!(
-                    "Sending vote to the VID leader {:?}",
-                    vote.get_view_number()
-                );
-                self.event_stream
-                    .publish(HotShotEvent::VidVoteSend(vote))
-                    .await;
-
-                // Sishan NOTE TODO: what is consensus.state_map?
-                // let mut consensus = self.consensus.write().await;
-                // // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                // // there is already a view there: the replica task may have inserted a `Leaf` view which
-                // // contains strictly more information.
-                // consensus.state_map.entry(view).or_insert(View {
-                //     view_inner: ViewInner::DA { payload_commitment, },
-                // });
 
                 // Record the block we have promised to make available.
                 // TODO https://github.com/EspressoSystems/HotShot/issues/1692
