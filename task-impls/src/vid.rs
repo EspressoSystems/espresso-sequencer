@@ -16,10 +16,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
 };
-use hotshot_types::{
-    traits::network::CommunicationChannel,
-    vote::HasViewNumber,
-};
+use hotshot_types::{traits::network::CommunicationChannel, vote::HasViewNumber};
 
 use snafu::Snafu;
 use std::sync::Arc;
@@ -63,7 +60,6 @@ pub struct VIDTaskState<
     pub id: u64,
 }
 
-
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
     VIDTaskState<TYPES, I, A>
 {
@@ -101,7 +97,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Check whether the sender is the right leader for this view
                 let view_leader_key = self.membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!("VID dispersal/share is not from expected leader key for view {} \n", *view);
+                    error!(
+                        "VID dispersal/share is not from expected leader key for view {} \n",
+                        *view
+                    );
                     return None;
                 }
 

@@ -368,7 +368,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                error!("We have not seen the VID share for this view {:?} yet, so we cannot vote.", proposal.view_number);
+                error!(
+                    "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+                    proposal.view_number
+                );
                 return false;
             }
 
@@ -1110,7 +1113,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::VidDisperseRecv(disperse, sender) => {
                 let view = disperse.data.get_view_number();
 
-                debug!("VID disperse received for view: {:?} in consensus task", view);
+                debug!(
+                    "VID disperse received for view: {:?} in consensus task",
+                    view
+                );
 
                 // stop polling for the received disperse
                 self.quorum_network
@@ -1134,7 +1140,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Check whether the sender is the right leader for this view
                 let view_leader_key = self.committee_membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!("VID dispersal/share is not from expected leader key for view {} \n", *view);
+                    error!(
+                        "VID dispersal/share is not from expected leader key for view {} \n",
+                        *view
+                    );
                     return;
                 }
 
@@ -1157,7 +1166,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         *old_view_number + 1,
                     ))
                     .await;
-
 
                 // update the view in state to the one in the message
                 // Publish a view change event to the application

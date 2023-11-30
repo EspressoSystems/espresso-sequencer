@@ -4,12 +4,12 @@ use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::vid_init,
 };
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
     traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
-use hotshot_types::traits::node_implementation::NodeType;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
