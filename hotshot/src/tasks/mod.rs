@@ -206,7 +206,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     let registry = task_runner.registry.clone();
     let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
     // Impossible for `unwrap` to fail on the genesis payload.
-    let payload_commitment = vid_commitment(payload.encode().unwrap().collect());
+    let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
     // build the consensus task
     let consensus_state = ConsensusTaskState {
         registry: registry.clone(),

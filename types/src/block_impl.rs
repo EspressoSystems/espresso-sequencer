@@ -86,7 +86,7 @@ impl VIDBlockPayload {
         let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]).unwrap();
         VIDBlockPayload {
             transactions: vec![VIDTransaction(txns)],
-            payload_commitment: vid_commitment(encoded),
+            payload_commitment: vid_commitment(&encoded),
         }
     }
 }
@@ -121,7 +121,7 @@ impl BlockPayload for VIDBlockPayload {
         Ok((
             Self {
                 transactions: txns_vec,
-                payload_commitment: vid_commitment(encoded),
+                payload_commitment: vid_commitment(&encoded),
             },
             (),
         ))
@@ -151,7 +151,7 @@ impl BlockPayload for VIDBlockPayload {
 
         Self {
             transactions,
-            payload_commitment: vid_commitment(encoded_vec),
+            payload_commitment: vid_commitment(&encoded_vec),
         }
     }
 

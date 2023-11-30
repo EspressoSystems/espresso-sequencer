@@ -21,7 +21,7 @@ struct MultiValidatorArgs {
     /// Number of validators to run
     pub num_nodes: u16,
     /// The address the orchestrator runs on
-    pub host: IpAddr,
+    pub url: String,
     /// The port the orchestrator runs on
     pub port: u16,
     /// This node's public IP address, for libp2p
@@ -41,11 +41,12 @@ async fn main() {
     let args = MultiValidatorArgs::parse();
     tracing::error!(
         "connecting to orchestrator at {:?}:{:?}",
-        args.host,
+        args.url,
         args.port
     );
     let mut nodes = Vec::new();
     for _ in 0..args.num_nodes {
+        let url = args.url.clone();
         let node = async_spawn(async move {
             infra::main_entry_point::<
                 DemoTypes,
@@ -56,7 +57,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                host: args.host.to_string(),
+                url,
                 port: args.port,
                 public_ip: args.public_ip,
             })

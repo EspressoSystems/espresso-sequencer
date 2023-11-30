@@ -23,7 +23,7 @@ pub struct OrchestratorClient {
 /// Arguments passed to the validator
 pub struct ValidatorArgs {
     /// The address the orchestrator runs on
-    pub host: String,
+    pub url: String,
     /// The port the orchestrator runs on
     pub port: u16,
     /// This node's public IP address, for libp2p
@@ -34,8 +34,7 @@ pub struct ValidatorArgs {
 impl OrchestratorClient {
     /// Creates the client that connects to the orchestrator
     pub async fn connect_to_orchestrator(args: ValidatorArgs) -> Self {
-        let base_url = format!("{0}:{1}", args.host, args.port);
-        let base_url = format!("http://{base_url}").parse().unwrap();
+        let base_url = format!("{0}:{1}", args.url, args.port).parse().unwrap();
         let client = surf_disco::Client::<ClientError>::new(base_url);
         // TODO ED: Add healthcheck wait here
         OrchestratorClient { client }

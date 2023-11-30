@@ -43,7 +43,7 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        url: "http://localhost".to_string(),
         port: 4444,
         config_file: args.config_file.clone(),
     }));
@@ -65,7 +65,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                host: "127.0.0.1".to_string(),
+                url: "http://localhost".to_string(),
                 port: 4444,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             })
