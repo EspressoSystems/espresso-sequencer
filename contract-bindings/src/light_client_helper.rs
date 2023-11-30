@@ -1,4 +1,4 @@
-pub use light_client::*;
+pub use light_client_helper::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,7 +9,7 @@ pub use light_client::*;
     dead_code,
     non_camel_case_types
 )]
-pub mod light_client {
+pub mod light_client_helper {
     pub use super::super::shared_types::*;
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
@@ -326,6 +326,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("updateCurrentEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("updateCurrentEpoch"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("newEpoch"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        outputs: ::std::vec![],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("votingStakeTableCommitment"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("votingStakeTableCommitment",),
@@ -400,33 +416,33 @@ pub mod light_client {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static LIGHTCLIENT_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+    pub static LIGHTCLIENTHELPER_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
         ::ethers::contract::Lazy::new(__abi);
-    pub struct LightClient<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for LightClient<M> {
+    pub struct LightClientHelper<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for LightClientHelper<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for LightClient<M> {
+    impl<M> ::core::ops::Deref for LightClientHelper<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for LightClient<M> {
+    impl<M> ::core::ops::DerefMut for LightClientHelper<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for LightClient<M> {
+    impl<M> ::core::fmt::Debug for LightClientHelper<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(LightClient))
+            f.debug_tuple(::core::stringify!(LightClientHelper))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> LightClientHelper<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -435,7 +451,7 @@ pub mod light_client {
         ) -> Self {
             Self(::ethers::contract::Contract::new(
                 address.into(),
-                LIGHTCLIENT_ABI.clone(),
+                LIGHTCLIENTHELPER_ABI.clone(),
                 client,
             ))
         }
@@ -509,6 +525,15 @@ pub mod light_client {
                 .method_hash([64, 153, 57, 183], (new_state, proof))
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `updateCurrentEpoch` (0x691517df) function
+        pub fn update_current_epoch(
+            &self,
+            new_epoch: u64,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([105, 21, 23, 223], new_epoch)
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `votingStakeTableCommitment` (0x76b6b7cb) function
         pub fn voting_stake_table_commitment(
             &self,
@@ -531,7 +556,9 @@ pub mod light_client {
                 .event_with_filter(::core::default::Default::default())
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for LightClient<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
+        for LightClientHelper<M>
+    {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -597,7 +624,7 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub enum LightClientErrors {
+    pub enum LightClientHelperErrors {
         InvalidArgs(InvalidArgs),
         MissingLastBlockForCurrentEpoch(MissingLastBlockForCurrentEpoch),
         OutdatedState(OutdatedState),
@@ -605,7 +632,7 @@ pub mod light_client {
         /// Error(string) -- 0x08c379a0
         RevertString(::std::string::String),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientErrors {
+    impl ::ethers::core::abi::AbiDecode for LightClientHelperErrors {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -629,7 +656,7 @@ pub mod light_client {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientErrors {
+    impl ::ethers::core::abi::AbiEncode for LightClientHelperErrors {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
                 Self::InvalidArgs(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -641,7 +668,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::ethers::contract::ContractRevert for LightClientErrors {
+    impl ::ethers::contract::ContractRevert for LightClientHelperErrors {
         fn valid_selector(selector: [u8; 4]) -> bool {
             match selector {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
@@ -659,7 +686,7 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::fmt::Display for LightClientErrors {
+    impl ::core::fmt::Display for LightClientHelperErrors {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::InvalidArgs(element) => ::core::fmt::Display::fmt(element, f),
@@ -671,22 +698,22 @@ pub mod light_client {
             }
         }
     }
-    impl ::core::convert::From<::std::string::String> for LightClientErrors {
+    impl ::core::convert::From<::std::string::String> for LightClientHelperErrors {
         fn from(value: String) -> Self {
             Self::RevertString(value)
         }
     }
-    impl ::core::convert::From<InvalidArgs> for LightClientErrors {
+    impl ::core::convert::From<InvalidArgs> for LightClientHelperErrors {
         fn from(value: InvalidArgs) -> Self {
             Self::InvalidArgs(value)
         }
     }
-    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientErrors {
+    impl ::core::convert::From<MissingLastBlockForCurrentEpoch> for LightClientHelperErrors {
         fn from(value: MissingLastBlockForCurrentEpoch) -> Self {
             Self::MissingLastBlockForCurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<OutdatedState> for LightClientErrors {
+    impl ::core::convert::From<OutdatedState> for LightClientHelperErrors {
         fn from(value: OutdatedState) -> Self {
             Self::OutdatedState(value)
         }
@@ -805,6 +832,23 @@ pub mod light_client {
         pub new_state: LightClientState,
         pub proof: PlonkProof,
     }
+    ///Container type for all input parameters for the `updateCurrentEpoch` function with signature `updateCurrentEpoch(uint64)` and selector `0x691517df`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "updateCurrentEpoch", abi = "updateCurrentEpoch(uint64)")]
+    pub struct UpdateCurrentEpochCall {
+        pub new_epoch: u64,
+    }
     ///Container type for all input parameters for the `votingStakeTableCommitment` function with signature `votingStakeTableCommitment()` and selector `0x76b6b7cb`
     #[derive(
         Clone,
@@ -825,16 +869,17 @@ pub mod light_client {
     pub struct VotingStakeTableCommitmentCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
-    pub enum LightClientCalls {
+    pub enum LightClientHelperCalls {
         BlocksPerEpoch(BlocksPerEpochCall),
         CurrentEpoch(CurrentEpochCall),
         FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
         GenesisState(GenesisStateCall),
         NewFinalizedState(NewFinalizedStateCall),
+        UpdateCurrentEpoch(UpdateCurrentEpochCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
     }
-    impl ::ethers::core::abi::AbiDecode for LightClientCalls {
+    impl ::ethers::core::abi::AbiDecode for LightClientHelperCalls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -868,6 +913,11 @@ pub mod light_client {
                 return Ok(Self::NewFinalizedState(decoded));
             }
             if let Ok(decoded) =
+                <UpdateCurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::UpdateCurrentEpoch(decoded));
+            }
+            if let Ok(decoded) =
                 <VotingStakeTableCommitmentCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::VotingStakeTableCommitment(decoded));
@@ -875,7 +925,7 @@ pub mod light_client {
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for LightClientCalls {
+    impl ::ethers::core::abi::AbiEncode for LightClientHelperCalls {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -886,13 +936,16 @@ pub mod light_client {
                 }
                 Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::UpdateCurrentEpoch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::VotingStakeTableCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
             }
         }
     }
-    impl ::core::fmt::Display for LightClientCalls {
+    impl ::core::fmt::Display for LightClientHelperCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
@@ -901,41 +954,47 @@ pub mod light_client {
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::UpdateCurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
-    impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
+    impl ::core::convert::From<BlocksPerEpochCall> for LightClientHelperCalls {
         fn from(value: BlocksPerEpochCall) -> Self {
             Self::BlocksPerEpoch(value)
         }
     }
-    impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
+    impl ::core::convert::From<CurrentEpochCall> for LightClientHelperCalls {
         fn from(value: CurrentEpochCall) -> Self {
             Self::CurrentEpoch(value)
         }
     }
-    impl ::core::convert::From<FinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<FinalizedStateCall> for LightClientHelperCalls {
         fn from(value: FinalizedStateCall) -> Self {
             Self::FinalizedState(value)
         }
     }
-    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<FrozenStakeTableCommitmentCall> for LightClientHelperCalls {
         fn from(value: FrozenStakeTableCommitmentCall) -> Self {
             Self::FrozenStakeTableCommitment(value)
         }
     }
-    impl ::core::convert::From<GenesisStateCall> for LightClientCalls {
+    impl ::core::convert::From<GenesisStateCall> for LightClientHelperCalls {
         fn from(value: GenesisStateCall) -> Self {
             Self::GenesisState(value)
         }
     }
-    impl ::core::convert::From<NewFinalizedStateCall> for LightClientCalls {
+    impl ::core::convert::From<NewFinalizedStateCall> for LightClientHelperCalls {
         fn from(value: NewFinalizedStateCall) -> Self {
             Self::NewFinalizedState(value)
         }
     }
-    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientCalls {
+    impl ::core::convert::From<UpdateCurrentEpochCall> for LightClientHelperCalls {
+        fn from(value: UpdateCurrentEpochCall) -> Self {
+            Self::UpdateCurrentEpoch(value)
+        }
+    }
+    impl ::core::convert::From<VotingStakeTableCommitmentCall> for LightClientHelperCalls {
         fn from(value: VotingStakeTableCommitmentCall) -> Self {
             Self::VotingStakeTableCommitment(value)
         }

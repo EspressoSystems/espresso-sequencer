@@ -6,12 +6,16 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
+
+using stdStorage for StdStorage;
+
 import { ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
+import { LightClientHelper } from "../test/mocks/LightClientHelper.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -24,7 +28,7 @@ contract StakeTable_register_Test is Test {
 
     S public stakeTable;
     ExampleToken public token;
-    LightClient public lightClientContract;
+    LightClientHelper public lightClientContract;
     uint256 constant INITIAL_BALANCE = 1_000;
     address exampleTokenCreator;
 
@@ -74,7 +78,7 @@ contract StakeTable_register_Test is Test {
             stakeTableAmountComm: 0,
             threshold: 0
         });
-        lightClientContract = new LightClient(genesis,10);
+        lightClientContract = new LightClientHelper(genesis,10);
         address lightClientAddress = address(lightClientContract);
         stakeTable = new S(address(token),lightClientAddress);
     }
@@ -130,12 +134,10 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 validUntilEpoch) external {
-        uint64 blockNumber = 20000;
-        vm.roll(blockNumber);
-
+    function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 rand) external {
+        lightClientContract.updateCurrentEpoch(3);
         uint64 currentEpoch = stakeTable.currentEpoch();
-        validUntilEpoch = uint64(bound(validUntilEpoch, 0, type(uint64).max));
+
         uint64 depositAmount = 10;
         vm.prank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
@@ -147,22 +149,33 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator);
 
         // Invalid next registration epoch
-        if (validUntilEpoch < currentEpoch) {
-            vm.prank(exampleTokenCreator);
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    S.InvalidNextRegistrationEpoch.selector, currentEpoch, validUntilEpoch
-                )
-            );
-            stakeTable.register(
-                blsVK,
-                schnorrVK,
-                depositAmount,
-                AbstractStakeTable.StakeType.Native,
-                sig,
-                validUntilEpoch
-            );
-        }
+        uint64 validUntilEpoch = uint64(bound(rand, 0, currentEpoch - 1));
+        vm.prank(exampleTokenCreator);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                S.InvalidNextRegistrationEpoch.selector, currentEpoch + 1, validUntilEpoch
+            )
+        );
+        stakeTable.register(
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
+        );
+
+        // Valid next registration epoch
+        validUntilEpoch = uint64(bound(rand, currentEpoch + 1, type(uint64).max));
+        vm.prank(exampleTokenCreator);
+        stakeTable.register(
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
+        );
     }
 
     function test_RevertWhen_NodeAlreadyRegistered() external {
