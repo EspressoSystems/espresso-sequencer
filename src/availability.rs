@@ -129,8 +129,8 @@ where
         .get("get_leaf", |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
-                    Some(height) => ResourceId::Number(height),
-                    None => ResourceId::Hash(req.blob_param("hash")?),
+                    Some(height) => LeafId::Number(height),
+                    None => LeafId::Hash(req.blob_param("hash")?),
                 };
                 state.get_leaf(id).await.context(FetchLeafSnafu {
                     resource: id.to_string(),
@@ -152,9 +152,12 @@ where
         })?
         .get("get_header", |req, state| {
             async move {
-                let id = match req.opt_integer_param("height")? {
-                    Some(height) => ResourceId::Number(height),
-                    None => ResourceId::Hash(req.blob_param("hash")?),
+                let id = if let Some(height) = req.opt_integer_param("height")? {
+                    BlockId::Number(height)
+                } else if let Some(hash) = req.opt_blob_param("hash")? {
+                    BlockId::Hash(hash)
+                } else {
+                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
                 Ok(state
                     .get_block(id)
@@ -187,9 +190,12 @@ where
         })?
         .get("get_block", |req, state| {
             async move {
-                let id = match req.opt_integer_param("height")? {
-                    Some(height) => ResourceId::Number(height),
-                    None => ResourceId::Hash(req.blob_param("hash")?),
+                let id = if let Some(height) = req.opt_integer_param("height")? {
+                    BlockId::Number(height)
+                } else if let Some(hash) = req.opt_blob_param("hash")? {
+                    BlockId::Hash(hash)
+                } else {
+                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
                 state.get_block(id).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
@@ -209,6 +215,33 @@ where
             .try_flatten_stream()
             .boxed()
         })?
+        .get("get_payload", |req, state| {
+            async move {
+                let id = if let Some(height) = req.opt_integer_param("height")? {
+                    BlockId::Number(height)
+                } else if let Some(hash) = req.opt_blob_param("hash")? {
+                    BlockId::PayloadHash(hash)
+                } else {
+                    BlockId::Hash(req.blob_param("block-hash")?)
+                };
+                state.get_payload(id).await.context(FetchBlockSnafu {
+                    resource: id.to_string(),
+                })
+            }
+            .boxed()
+        })?
+        .stream("stream_payloads", |req, state| {
+            async move {
+                let height = req.integer_param("height")?;
+                Ok(state
+                    .read(|state| {
+                        async move { state.subscribe_payloads(height).await.map(Ok) }.boxed()
+                    })
+                    .await)
+            }
+            .try_flatten_stream()
+            .boxed()
+        })?
         .get("get_transaction", |req, state| {
             async move {
                 let (block, index) = match req.opt_blob_param("hash")? {
@@ -219,7 +252,7 @@ where
                     )?,
                     None => {
                         let height = req.integer_param("height")?;
-                        let id = ResourceId::Number(height);
+                        let id = BlockId::Number(height);
                         let block = state.get_block(id).await.context(FetchBlockSnafu {
                             resource: id.to_string(),
                         })?;
@@ -302,10 +335,13 @@ mod test {
     }
 
     async fn validate(client: &Client<Error>, height: u64) {
-        // Check the consistency of every block/leaf pair. Keep track of transactions we have seen
-        // so we can detect duplicates.
+        // Check the consistency of every block/leaf pair. Keep track of payloads and transactions
+        // we have seen so we can detect duplicates.
+        let mut seen_payloads = HashSet::new();
         let mut seen_txns = HashSet::new();
         for i in 0..height {
+            tracing::info!("validate block {i}/{height}");
+
             // Check that looking up the leaf various ways returns the correct leaf.
             let leaf: LeafQueryData<MockTypes> =
                 client.get(&format!("leaf/{}", i)).send().await.unwrap();
@@ -322,6 +358,7 @@ mod test {
             // Check that looking up the block various ways returns the correct block.
             let block: BlockQueryData<MockTypes> =
                 client.get(&format!("block/{}", i)).send().await.unwrap();
+            let expected_payload = PayloadQueryData::from(block.clone());
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i);
             assert_eq!(
@@ -344,6 +381,46 @@ mod test {
                     .await
                     .unwrap()
             );
+            assert_eq!(
+                expected_payload,
+                client.get(&format!("payload/{i}")).send().await.unwrap(),
+            );
+            assert_eq!(
+                expected_payload,
+                client
+                    .get(&format!("payload/block-hash/{}", block.hash()))
+                    .send()
+                    .await
+                    .unwrap(),
+            );
+            // We should be able to look up the block by payload hash as long as it's not a
+            // duplicate. For duplicate payloads, these endpoints only returns the first one.
+            if seen_payloads.insert(block.payload_hash()) {
+                assert_eq!(
+                    block,
+                    client
+                        .get(&format!("block/payload-hash/{}", block.payload_hash()))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+                assert_eq!(
+                    *block.header(),
+                    client
+                        .get(&format!("header/payload-hash/{}", block.payload_hash()))
+                        .send()
+                        .await
+                        .unwrap()
+                );
+                assert_eq!(
+                    expected_payload,
+                    client
+                        .get(&format!("payload/hash/{}", block.payload_hash()))
+                        .send()
+                        .await
+                        .unwrap(),
+                );
+            }
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
@@ -359,7 +436,7 @@ mod test {
                 assert_eq!(txn.transaction(), &txn_from_block);
                 // We should be able to look up the transaction by hash as long as it's not a
                 // duplicate. For duplicate transactions, this endpoint only returns the first one.
-                if !seen_txns.contains(&txn.hash()) {
+                if seen_txns.insert(txn.hash()) {
                     assert_eq!(
                         txn,
                         client
@@ -368,7 +445,6 @@ mod test {
                             .await
                             .unwrap()
                     );
-                    seen_txns.insert(txn.hash());
                 }
             }
         }

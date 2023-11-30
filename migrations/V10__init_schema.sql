@@ -2,6 +2,7 @@ CREATE TABLE header
 (
     height    BIGINT  PRIMARY KEY,
     hash      VARCHAR NOT NULL UNIQUE,
+    payload_hash VARCHAR NOT NULL,
 
     -- For convenience, we store the entire application-specific header type as JSON. Just like
     -- `leaf.leaf` and `leaf.qc`, this allows us to easily reconstruct the entire header using

@@ -12,27 +12,17 @@
 
 //! Requests for fetching resources.
 
-use crate::{
-    availability::{BlockQueryData, LeafQueryData},
-    Payload,
-};
+use crate::{availability::LeafQueryData, Payload};
 use derive_more::{From, Into};
 use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
 
+use std::fmt::Debug;
 use std::hash::Hash;
 
 /// A request for a resource.
-pub trait Request<Types>: Copy + Eq + Hash {
+pub trait Request<Types>: Copy + Debug + Eq + Hash + Send {
     /// The type of resource that will be returned as a successful response to this request.
     type Response;
-}
-
-/// A request for a block with a given height.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, From, Into)]
-pub struct BlockRequest(usize);
-
-impl<Types: NodeType> Request<Types> for BlockRequest {
-    type Response = BlockQueryData<Types>;
 }
 
 /// A request for a payload with a given commitment.

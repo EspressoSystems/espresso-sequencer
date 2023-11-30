@@ -13,7 +13,7 @@
 use crate::{Header, Metadata, Payload, SignatureKey, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::Leaf,
+    data::{Leaf, VidCommitment},
     simple_certificate::QuorumCertificate,
     traits::{
         self,
@@ -230,8 +230,12 @@ impl<Types: NodeType> LeafQueryData<Types> {
         &self.qc
     }
 
+    pub fn header(&self) -> &Header<Types> {
+        &self.leaf.block_header
+    }
+
     pub fn height(&self) -> u64 {
-        self.leaf.block_header.block_number()
+        self.header().block_number()
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
@@ -239,7 +243,11 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
-        self.leaf.block_header.commit()
+        self.header().commit()
+    }
+
+    pub fn payload_hash(&self) -> VidCommitment {
+        self.header().payload_commitment()
     }
 
     pub fn proposer(&self) -> SignatureKey<Types> {
@@ -277,6 +285,10 @@ impl<Types: NodeType> BlockQueryData<Types> {
 
     pub fn metadata(&self) -> &Metadata<Types> {
         self.header.metadata()
+    }
+
+    pub fn payload_hash(&self) -> VidCommitment {
+        self.header.payload_commitment()
     }
 
     pub fn payload(&self) -> &Payload<Types> {
@@ -330,6 +342,50 @@ where
         &self,
     ) -> impl '_ + Iterator<Item = (TransactionIndex<Types>, Transaction<Types>)> {
         self.payload.enumerate(self.metadata())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct PayloadQueryData<Types: NodeType> {
+    pub(crate) height: u64,
+    pub(crate) block_hash: BlockHash<Types>,
+    pub(crate) hash: VidCommitment,
+    pub(crate) size: u64,
+    pub(crate) data: Payload<Types>,
+}
+
+impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
+    fn from(block: BlockQueryData<Types>) -> Self {
+        Self {
+            height: block.height(),
+            block_hash: block.hash(),
+            hash: block.header.payload_commitment(),
+            size: block.size(),
+            data: block.payload,
+        }
+    }
+}
+
+impl<Types: NodeType> PayloadQueryData<Types> {
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn hash(&self) -> VidCommitment {
+        self.hash
+    }
+
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.block_hash
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    pub fn data(&self) -> &Payload<Types> {
+        &self.data
     }
 }
 

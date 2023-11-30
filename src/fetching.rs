@@ -23,6 +23,7 @@
 
 use async_std::sync::Mutex;
 use derivative::Derivative;
+use futures::future::Future;
 use std::{collections::HashSet, fmt::Debug};
 
 pub mod provider;
@@ -43,27 +44,31 @@ impl<T> Fetcher<T> {
     ///
     /// Returns the requested resource if possible. Returns [`None`] if the resource is already
     /// being fetched, or if the given provider is unable to fetch it.
-    pub async fn fetch<Types>(
+    pub async fn fetch<Types, Fut>(
         &self,
         req: T,
-        provider: &impl Provider<Types, T>,
-    ) -> Option<T::Response>
-    where
+        provider: impl Provider<Types, T>,
+        callback: impl FnOnce(T::Response) -> Fut,
+    ) where
         T: Request<Types>,
+        Fut: Future<Output = ()>,
     {
         // Check if the requested object is already being fetched. If not, take a lock on it so
         // we are the only ones to fetch this particular object.
         {
             let mut in_progress = self.in_progress.lock().await;
             if !in_progress.insert(req) {
-                return None;
+                tracing::info!("resource {req:?} is already being fetched");
+                return;
             }
         }
 
         // Now we are responsible for fetching the object, reach out to the provider.
-        let res = provider.fetch(req).await;
+        if let Some(obj) = provider.fetch(req).await {
+            callback(obj).await;
+        }
+
         // Done fetching, remove our lock on the object.
         self.in_progress.lock().await.remove(&req);
-        res
     }
 }

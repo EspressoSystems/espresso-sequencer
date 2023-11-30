@@ -13,16 +13,16 @@
 use super::{
     fetch::Fetch,
     query_data::{
-        BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
+        BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
+        TransactionHash, TransactionIndex,
     },
 };
-use crate::{Header, Leaf, Payload};
+use crate::Payload;
 use async_trait::async_trait;
-use commit::{Commitment, Committable};
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::{BoxStream, Stream, StreamExt};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
 use std::{cmp::Ordering, error::Error, fmt::Debug, ops::RangeBounds};
 
 #[derive(Derivative, From, Display)]
@@ -35,27 +35,56 @@ use std::{cmp::Ordering, error::Error, fmt::Debug, ops::RangeBounds};
     Ord(bound = ""),
     Hash(bound = "")
 )]
-pub enum ResourceId<T: Committable> {
+pub enum LeafId<Types: NodeType> {
     #[display(fmt = "{_0}")]
     Number(usize),
     #[display(fmt = "{_0}")]
-    Hash(Commitment<T>),
+    Hash(LeafHash<Types>),
 }
 
-impl<T: Committable> Clone for ResourceId<T> {
+impl<Types: NodeType> Clone for LeafId<Types> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: Committable> PartialOrd for ResourceId<T> {
+impl<Types: NodeType> PartialOrd for LeafId<Types> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-pub type BlockId<Types> = ResourceId<Header<Types>>;
-pub type LeafId<Types> = ResourceId<Leaf<Types>>;
+#[derive(Derivative, From, Display)]
+#[derivative(Ord = "feature_allow_slow_enum")]
+#[derivative(
+    Copy(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Ord(bound = ""),
+    Hash(bound = "")
+)]
+pub enum BlockId<Types: NodeType> {
+    #[display(fmt = "{_0}")]
+    Number(usize),
+    #[display(fmt = "{_0}")]
+    Hash(BlockHash<Types>),
+    #[display(fmt = "{_0}")]
+    #[from(ignore)]
+    PayloadHash(VidCommitment),
+}
+
+impl<Types: NodeType> Clone for BlockId<Types> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<Types: NodeType> PartialOrd for BlockId<Types> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 /// An interface for querying a HotShot blockchain.
 ///
@@ -95,6 +124,9 @@ where
     type BlockRange<R>: Stream<Item = Fetch<BlockQueryData<Types>>> + Unpin + Send + 'static
     where
         R: RangeBounds<usize> + Send;
+    type PayloadRange<R>: Stream<Item = Fetch<PayloadQueryData<Types>>> + Unpin + Send + 'static
+    where
+        R: RangeBounds<usize> + Send;
 
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
@@ -104,11 +136,19 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
+
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
         R: RangeBounds<usize> + Send + 'static;
 
     async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+
+    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -121,6 +161,13 @@ where
 
     async fn subscribe_blocks(&self, from: usize) -> BoxStream<'static, BlockQueryData<Types>> {
         self.get_block_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
+
+    async fn subscribe_payloads(&self, from: usize) -> BoxStream<'static, PayloadQueryData<Types>> {
+        self.get_payload_range(from..)
             .await
             .then(Fetch::resolve)
             .boxed()

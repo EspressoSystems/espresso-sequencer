@@ -15,7 +15,7 @@
 use super::AvailabilityStorage;
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload, ResourceId,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     data_source::VersionedDataSource,
@@ -452,8 +452,8 @@ where
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            ResourceId::Number(n) => ("height = $1", Box::new(n as i64)),
-            ResourceId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
+            LeafId::Number(n) => ("height = $1", Box::new(n as i64)),
+            LeafId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
         };
         let query = format!("SELECT leaf, qc FROM leaf WHERE {where_clause}");
         let row = self.query_one(&query, [param]).await?;
@@ -461,28 +461,50 @@ where
     }
 
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),
-            ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
-        };
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
         let query = format!(
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
-              WHERE {where_clause}"
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
         );
         let row = self.query_one(&query, [param]).await?;
         parse_block(row)
     }
 
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),
-            ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
-        };
-        let query = format!("SELECT {HEADER_COLUMNS} FROM header WHERE {where_clause}");
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
+               FROM header AS h
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
         let row = self.query_one(&query, [param]).await?;
         parse_header::<Types>(row)
+    }
+
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        let (where_clause, param) = header_where_clause(id);
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let query = format!(
+            "SELECT {PAYLOAD_COLUMNS}
+               FROM header AS h
+               JOIN payload AS p ON h.height = p.height
+               WHERE {where_clause}
+               ORDER BY h.height ASC
+               LIMIT 1"
+        );
+        let row = self.query_one(&query, [param]).await?;
+        parse_payload(row)
     }
 
     async fn get_leaf_range<R>(
@@ -517,6 +539,26 @@ where
         let rows = self.query(&query, params).await?;
 
         Ok(rows.map(|res| parse_block(res?)).collect().await)
+    }
+
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
+        let query = format!(
+            "SELECT {PAYLOAD_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        let rows = self.query(&query, params).await?;
+
+        Ok(rows.map(|res| parse_payload(res?)).collect().await)
     }
 
     async fn get_block_with_transaction(
@@ -570,10 +612,11 @@ where
                 message: format!("failed to serialize header: {err}"),
             })?;
         stmts.push((
-            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3)".into(),
+            "INSERT INTO header (height, hash, payload_hash, data) VALUES ($1, $2, $3, $4)".into(),
             vec![
                 Box::new(leaf.height() as i64),
                 Box::new(leaf.block_hash().to_string()),
+                Box::new(leaf.leaf().block_header.payload_commitment().to_string()),
                 Box::new(header_json),
             ],
         ));
@@ -926,6 +969,16 @@ where
     Ok(LeafQueryData { leaf, qc })
 }
 
+fn header_where_clause<Types: NodeType>(
+    id: BlockId<Types>,
+) -> (&'static str, Box<dyn ToSql + Send + Sync>) {
+    match id {
+        BlockId::Number(n) => ("h.height = $1", Box::new(n as i64)),
+        BlockId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
+        BlockId::PayloadHash(h) => ("h.payload_hash = $1", Box::new(h.to_string())),
+    }
+}
+
 const BLOCK_COLUMNS: &str =
     "h.hash AS hash, h.data AS header_data, p.size AS payload_size, p.data AS payload_data";
 
@@ -977,7 +1030,16 @@ where
     })
 }
 
-const HEADER_COLUMNS: &str = "data";
+const PAYLOAD_COLUMNS: &str = BLOCK_COLUMNS;
+
+fn parse_payload<Types>(row: Row) -> QueryResult<PayloadQueryData<Types>>
+where
+    Types: NodeType,
+{
+    parse_block(row).map(PayloadQueryData::from)
+}
+
+const HEADER_COLUMNS: &str = "h.data AS data";
 
 fn parse_header<Types>(row: Row) -> QueryResult<Header<Types>>
 where
@@ -1137,6 +1199,7 @@ impl tokio::io::AsyncWrite for TcpStream {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    use super::Config;
     use crate::testing::sleep;
     use portpicker::pick_unused_port;
     use std::{
@@ -1197,6 +1260,14 @@ pub mod testing {
 
         pub fn port(&self) -> u16 {
             self.port
+        }
+
+        pub fn config(&self) -> Config {
+            Config::default()
+                .user("postgres")
+                .password("password")
+                .port(self.port())
+                .tls()
         }
     }
 

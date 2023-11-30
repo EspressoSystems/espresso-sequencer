@@ -351,22 +351,12 @@ pub mod testing {
         }
 
         async fn connect(tmp_db: &Self::Storage) -> Self {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .port(tmp_db.port())
-                .tls()
-                .connect(Default::default())
-                .await
-                .unwrap()
+            tmp_db.config().connect(Default::default()).await.unwrap()
         }
 
         async fn reset(tmp_db: &Self::Storage) -> Self {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .port(tmp_db.port())
-                .tls()
+            tmp_db
+                .config()
                 .reset_schema()
                 .connect(Default::default())
                 .await

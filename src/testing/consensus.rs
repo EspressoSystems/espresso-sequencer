@@ -97,7 +97,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         num_bootstrap: 0,
                         execution_type: ExecutionType::Continuous,
                         election_config: None,
-                        da_committee_size: total_nodes.into(),
+                        da_committee_size: pub_keys.len(),
                     };
 
                     let pub_keys = pub_keys.clone();

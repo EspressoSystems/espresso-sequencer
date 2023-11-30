@@ -28,18 +28,22 @@
 //! This module defines an abstract interface [`Provider`], which allows data to be fetched from any
 //! data availability provider, as well as various implementations for different data sources,
 //! including:
-//! * [`QueryServiceFetcher`]
+//! * [`QueryServiceProvider`]
 //!
 //! We also provide combinators for modularly adding functionality to existing fetchers:
-//! * [`AnyFetcher`]
-//! * [`TestFetcher`](testing::TestFetcher)
+//! * [`AnyProvider`]
+//! * [`TestProvider`](testing::TestProvider)
 //!
 
 use super::Request;
+use async_std::sync::Arc;
 
 mod query_service;
+mod testing;
 
-pub use query_service::QueryServiceFetcher;
+pub use query_service::QueryServiceProvider;
+#[cfg(any(test, feature = "testing"))]
+pub use testing::TestProvider;
 
 /// A provider which is able to satisfy requests for data of type `T`.
 #[trait_variant::make(Provider: Send)]
@@ -57,5 +61,15 @@ pub struct NoFetching;
 impl<Types, T: Send + Request<Types>> Provider<Types, T> for NoFetching {
     async fn fetch(&self, _req: T) -> Option<T::Response> {
         None
+    }
+}
+
+impl<Types, T, P> Provider<Types, T> for Arc<P>
+where
+    T: Request<Types>,
+    P: Provider<Types, T> + Sync,
+{
+    async fn fetch(&self, req: T) -> Option<T::Response> {
+        (**self).fetch(req).await
     }
 }

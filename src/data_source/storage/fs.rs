@@ -18,10 +18,10 @@ use super::{
 };
 use crate::{
     availability::{
-        data_source::{BlockId, LeafId, ResourceId, UpdateAvailabilityData},
+        data_source::{BlockId, LeafId, UpdateAvailabilityData},
         query_data::{
-            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryablePayload, TransactionHash,
-            TransactionIndex,
+            BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
+            TransactionHash, TransactionIndex,
         },
     },
     data_source::VersionedDataSource,
@@ -32,7 +32,7 @@ use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
@@ -51,6 +51,7 @@ where
 {
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
+    index_by_payload_hash: HashMap<VidCommitment, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<SignatureKey<Types>, Vec<u64>>,
     #[debug(skip)]
@@ -101,6 +102,7 @@ where
         Ok(Self {
             index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
+            index_by_payload_hash: Default::default(),
             index_by_txn_hash: Default::default(),
             index_by_proposer_id: Default::default(),
             top_storage: None,
@@ -125,6 +127,7 @@ where
 
         let mut index_by_proposer_id = HashMap::new();
         let mut index_by_block_hash = HashMap::new();
+        let mut index_by_payload_hash = HashMap::new();
         let index_by_leaf_hash = leaf_storage
             .iter()
             .flatten()
@@ -134,6 +137,11 @@ where
                     .or_insert_with(Vec::new)
                     .push(leaf.height());
                 update_index_by_hash(&mut index_by_block_hash, leaf.block_hash(), leaf.height());
+                update_index_by_hash(
+                    &mut index_by_payload_hash,
+                    leaf.payload_hash(),
+                    leaf.height(),
+                );
                 (leaf.hash(), leaf.height())
             })
             .collect();
@@ -149,6 +157,7 @@ where
         Ok(Self {
             index_by_leaf_hash,
             index_by_block_hash,
+            index_by_payload_hash,
             index_by_txn_hash,
             index_by_proposer_id,
             leaf_storage,
@@ -238,10 +247,8 @@ where
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let n = match id {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => {
-                *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
-            }
+            LeafId::Number(n) => n,
+            LeafId::Hash(h) => *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize,
         };
         self.leaf_storage
             .iter()
@@ -252,9 +259,10 @@ where
 
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
         let n = match id {
-            ResourceId::Number(n) => n,
-            ResourceId::Hash(h) => {
-                *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize
+            BlockId::Number(n) => n,
+            BlockId::Hash(h) => *self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize,
+            BlockId::PayloadHash(h) => {
+                *self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize
             }
         };
         self.block_storage
@@ -266,6 +274,10 @@ where
 
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
         self.get_block(id).await.map(|block| block.header)
+    }
+
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        self.get_block(id).await.map(PayloadQueryData::from)
     }
 
     async fn get_leaf_range<R>(
@@ -286,6 +298,18 @@ where
         R: RangeBounds<usize> + Send,
     {
         Ok(range_iter(self.block_storage.iter(), range).collect())
+    }
+
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.block_storage.iter(), range)
+            .map(|res| res.map(PayloadQueryData::from))
+            .collect())
     }
 
     async fn get_block_with_transaction(
@@ -312,6 +336,11 @@ where
         update_index_by_hash(
             &mut self.index_by_block_hash,
             leaf.block_hash(),
+            leaf.height(),
+        );
+        update_index_by_hash(
+            &mut self.index_by_payload_hash,
+            leaf.payload_hash(),
             leaf.height(),
         );
         Ok(())

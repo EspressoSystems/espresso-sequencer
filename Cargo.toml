@@ -60,10 +60,10 @@ serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.6" }
 tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.6" }
-trait-variant = "0.1"
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
+trait-variant = "0.1"
 
 # Dependencies enabled by feature "file-system-data-source".
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.3", optional = true }

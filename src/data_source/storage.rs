@@ -25,9 +25,10 @@
 
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload, TransactionHash,
-        TransactionIndex, UpdateAvailabilityData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
+        TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
+    data_source::VersionedDataSource,
     Header, Payload, QueryResult,
 };
 use async_trait::async_trait;
@@ -58,7 +59,8 @@ pub use sql::SqlStorage;
 /// Rust gives us ways to abstract and deduplicate these two similar APIs, but they do not lead to a
 /// better interface.
 #[async_trait]
-pub trait AvailabilityStorage<Types>: UpdateAvailabilityData<Types> + Send + Sync
+pub trait AvailabilityStorage<Types>:
+    UpdateAvailabilityData<Types> + VersionedDataSource + Send + Sync
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
@@ -66,6 +68,7 @@ where
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>>;
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>>;
 
     async fn get_leaf_range<R>(
         &self,
@@ -77,6 +80,12 @@ where
         &self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
 

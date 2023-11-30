@@ -500,7 +500,7 @@ mod test {
     use crate::{
         availability::{
             AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-            TransactionHash, TransactionIndex,
+            PayloadQueryData, TransactionHash, TransactionIndex,
         },
         metrics::PrometheusMetrics,
         node::NodeDataSource,
@@ -544,6 +544,12 @@ mod test {
             >>::BlockRange<R>
         where
             R: RangeBounds<usize> + Send;
+        type PayloadRange<R> =
+            <MockDataSource as AvailabilityDataSource<
+                MockTypes,
+            >>::PayloadRange<R>
+        where
+            R: RangeBounds<usize> + Send;
 
         async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
@@ -557,6 +563,12 @@ mod test {
         {
             self.hotshot_qs.get_block(id).await
         }
+        async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_payload(id).await
+        }
         async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -568,6 +580,12 @@ mod test {
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_block_range(range).await
+        }
+        async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            self.hotshot_qs.get_payload_range(range).await
         }
         async fn get_block_with_transaction(
             &self,

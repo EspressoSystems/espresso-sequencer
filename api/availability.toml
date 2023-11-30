@@ -76,9 +76,10 @@ Opens a WebSockets connection and sends a stream of the same data type returned 
 """
 
 [route.get_header]
-PATH = ["header/:height", "header/hash/:hash"]
+PATH = ["header/:height", "header/hash/:hash",  "header/payload-hash/:payload-hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
+":payload-hash" = "TaggedBase64"
 DOC = """
 Get a header by its position in the ledger (0 is the genesis block) or its hash.
 
@@ -97,9 +98,10 @@ Opens a WebSocket connection and sends a stream of application-specific headers.
 """
 
 [route.get_block]
-PATH = ["block/:height", "block/hash/:hash"]
+PATH = ["block/:height", "block/hash/:hash", "block/payload-hash/:payload-hash"]
 ":height" = "Integer"
 ":hash" = "TaggedBase64"
+":payload-hash" = "TaggedBase64"
 DOC = """
 Get a block by its position in the ledger (0 is the genesis block) or its hash.
 
@@ -128,6 +130,26 @@ DOC = """
 Subscribe to a stream of blocks in the order they are sequenced, starting at `:height`.
 
 Opens a WebSockets connection and sends a stream of the same data type returned by `block/:height`.
+"""
+
+[route.get_payload]
+PATH = ["payload/:height", "payload/hash/:hash", "payload/block-hash/:block-hash"]
+":height" = "Integer"
+":hash" = "TaggedBase64"
+":block-hash" = "TaggedBase64"
+DOC = """
+Get the payload of a block by its position in the ledger (0 is the genesis block) or its hash.
+"""
+
+[route.stream_payloads]
+PATH = ["stream/payloads/:height"]
+METHOD = "SOCKET"
+":height" = "Integer"
+DOC = """
+Subscribe to a stream of block payloads in the order they are sequenced, starting at `:height`.
+
+Opens a WebSockets connection and sends a stream of the same data type returned by
+`payload/:height`.
 """
 
 [route.get_transaction]
