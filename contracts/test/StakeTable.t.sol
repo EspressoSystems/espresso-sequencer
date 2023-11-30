@@ -6,6 +6,7 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
+import { ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
@@ -204,7 +205,7 @@ contract StakeTable_register_Test is Test {
 
     function test_RevertWhen_TransferFailed() external {
         uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 5;
+        uint64 validUntilEpoch = 10;
 
         (
             BN254.G2Point memory blsVK,
@@ -212,7 +213,25 @@ contract StakeTable_register_Test is Test {
             BN254.G1Point memory sig
         ) = genClientWallet(exampleTokenCreator);
 
+        assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
+        // The call to register is expected to fail because the depositAmount has not been approved
+        // and thus the stake table contract cannot lock the stake.
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        stakeTable.register(
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
+        );
+
+        // A user with 0 balance cannot register either
+        address newUser = makeAddr("New user with zero balance");
+        (blsVK, schnorrVK, sig) = genClientWallet(newUser);
+
+        vm.prank(newUser);
         vm.expectRevert("TRANSFER_FROM_FAILED");
         stakeTable.register(
             blsVK,
