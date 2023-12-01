@@ -580,11 +580,14 @@ mod impl_testable_data_source {
 
     #[async_trait]
     impl TestableDataSource for FileSystemDataSource<MockTypes, MockNodeImpl> {
-        type TmpData = TempDir;
+        type Storage = TempDir;
 
-        async fn create(node_id: usize) -> (Self, Self::TmpData) {
-            let dir = TempDir::new(&format!("file_system_data_source_{node_id}")).unwrap();
-            (Self::create(dir.path()).unwrap(), dir)
+        async fn create(node_id: usize) -> Self::Storage {
+            TempDir::new(&format!("file_system_data_source_{node_id}")).unwrap()
+        }
+
+        async fn connect(storage: &Self::Storage) -> Self {
+            Self::open(storage.path()).unwrap()
         }
     }
 }

@@ -1401,18 +1401,20 @@ pub mod testing {
 
     #[async_trait]
     impl TestableDataSource for SqlDataSource<MockTypes, MockNodeImpl> {
-        type TmpData = TmpDb;
+        type Storage = TmpDb;
 
-        async fn create(_node_id: usize) -> (Self, Self::TmpData) {
-            let tmp_db = TmpDb::init().await;
-            let sql = Config::default()
+        async fn create(_node_id: usize) -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        async fn connect(tmp_db: &Self::Storage) -> Self {
+            Config::default()
                 .user("postgres")
                 .password("password")
                 .port(tmp_db.port())
                 .connect()
                 .await
-                .unwrap();
-            (sql, tmp_db)
+                .unwrap()
         }
     }
 }

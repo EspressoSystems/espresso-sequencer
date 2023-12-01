@@ -55,7 +55,7 @@ pub mod data_source_tests {
     use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
-    use futures::StreamExt;
+    use futures::{StreamExt, TryStreamExt};
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
@@ -208,6 +208,45 @@ pub mod data_source_tests {
 
             assert_eq!(ds.read().await.get_block(i).await.unwrap(), block);
             validate(&ds).await;
+        }
+
+        // Check that all the updates have been committed to storage, not simply held in memory: we
+        // should be able to read the same data if we connect an entirely new data source to the
+        // underlying storage.
+        {
+            // Lock the original data source to prevent concurrent updates.
+            let ds = ds.read().await;
+            let storage = D::connect(network.storage()).await;
+            assert_eq!(
+                ds.get_block_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap(),
+                storage
+                    .get_block_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                ds.get_leaf_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap(),
+                storage
+                    .get_leaf_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap()
+            );
         }
 
         network.shut_down().await;

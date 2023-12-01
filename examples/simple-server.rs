@@ -61,7 +61,7 @@ type DataSource = data_source::SqlDataSource<MockTypes, MockNodeImpl>;
 #[cfg(target_os = "windows")]
 type DataSource = data_source::FileSystemDataSource<MockTypes, MockNodeImpl>;
 
-type Db = <DataSource as TestableDataSource>::TmpData;
+type Db = <DataSource as TestableDataSource>::Storage;
 
 #[cfg(not(target_os = "windows"))]
 async fn init_db() -> Db {

@@ -247,11 +247,14 @@ mod impl_testable_data_source {
         D: TestableDataSource,
         U: Default + Send + Sync + 'static,
     {
-        type TmpData = D::TmpData;
+        type Storage = D::Storage;
 
-        async fn create(node_id: usize) -> (Self, Self::TmpData) {
-            let (data_source, tmp_data) = D::create(node_id).await;
-            (Self::new(data_source, Default::default()), tmp_data)
+        async fn create(node_id: usize) -> Self::Storage {
+            D::create(node_id).await
+        }
+
+        async fn connect(storage: &Self::Storage) -> Self {
+            Self::new(D::connect(storage).await, Default::default())
         }
     }
 }

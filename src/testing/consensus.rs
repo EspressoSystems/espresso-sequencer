@@ -40,7 +40,7 @@ use std::time::Duration;
 struct MockNode<D: TestableDataSource> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
     data_source: Arc<RwLock<D>>,
-    _tmp_data: D::TmpData,
+    storage: D::Storage,
 }
 
 pub struct MockNetwork<D: TestableDataSource> {
@@ -98,7 +98,8 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         MockMembership::default_election_config(total_nodes.get() as u64);
 
                     async move {
-                        let (data_source, tmp_data) = D::create(node_id).await;
+                        let storage = D::create(node_id).await;
+                        let data_source = D::connect(&storage).await;
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
                             data_source.populate_metrics(),
@@ -135,7 +136,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         MockNode {
                             hotshot,
                             data_source: Arc::new(RwLock::new(data_source)),
-                            _tmp_data: tmp_data,
+                            storage,
                         }
                     }
                 }),
@@ -157,6 +158,10 @@ impl<D: TestableDataSource> MockNetwork<D> {
 
     pub fn data_source(&self) -> Arc<RwLock<D>> {
         self.nodes[0].data_source.clone()
+    }
+
+    pub fn storage(&self) -> &D::Storage {
+        &self.nodes[0].storage
     }
 
     pub async fn shut_down(mut self) {
