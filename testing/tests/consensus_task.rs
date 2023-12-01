@@ -87,9 +87,13 @@ async fn build_vote(
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_consensus_task() {
+    use std::marker::PhantomData;
+    use hotshot_testing::task_helpers::vid_init;
+    use hotshot_types::data::VidSchemeTrait;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::simple_certificate::QuorumCertificate;
+    use hotshot_types::{simple_certificate::QuorumCertificate, data::VidDisperse, message::Proposal, traits::node_implementation::NodeType, block_impl::VIDTransaction};
+
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -97,6 +101,32 @@ async fn test_consensus_task() {
     let handle = build_system_handle(1).await.0;
     // We assign node's key pair rather than read from config file since it's a test
     let (private_key, public_key) = key_pair_for_id(1);
+
+
+
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let _pub_key = *api.public_key();
+    let vid = vid_init();
+    let transactions = vec![VIDTransaction(vec![0])];
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
+    let payload_commitment = vid_disperse.commit;
+
+    let signature =
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+    let vid_disperse = VidDisperse {
+        view_number:  ViewNumber::new(2),
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
+    let _vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>>  = Proposal {
+        data: vid_disperse.clone(),
+        signature: signature,
+        _pd: PhantomData,
+    };
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
