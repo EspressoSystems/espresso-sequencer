@@ -48,14 +48,21 @@ pub mod data_source_tests {
         status::MempoolQueryData,
         testing::{
             consensus::MockNetwork,
-            mocks::{MockNodeImpl, MockTransaction, MockTypes, TestableDataSource},
+            mocks::{
+                MockBlock, MockNodeImpl, MockState, MockTransaction, MockTypes, TestableDataSource,
+            },
             setup_test, sleep,
         },
+        Leaf, QueryError, QuorumCertificate,
     };
     use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
     use futures::{StreamExt, TryStreamExt};
+    use hotshot_types::{
+        data::{LeafType, ViewNumber},
+        traits::{election::SignedCertificate, state::ConsensusTime, Block, State},
+    };
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
@@ -408,5 +415,45 @@ pub mod data_source_tests {
         fn end_bound(&self) -> Bound<&usize> {
             self.0.end_bound()
         }
+    }
+
+    #[async_std::test]
+    pub async fn test_revert<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        // Mock up some consensus data.
+        let block = MockBlock::new();
+        let time = ViewNumber::genesis();
+        let state = MockState::default().append(&block, &time).unwrap();
+        let mut qc = QuorumCertificate::<MockTypes, MockNodeImpl>::genesis();
+        let mut leaf = Leaf::<MockTypes, MockNodeImpl>::new(time, qc.clone(), block.clone(), state);
+        leaf.set_height(1);
+
+        qc.leaf_commitment = leaf.commit();
+        let block = BlockQueryData::new::<MockNodeImpl>(leaf.clone(), qc.clone(), block).unwrap();
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+
+        // Insert, but do not commit, some data and check that we can read it back.
+        ds.insert_leaf(leaf.clone()).await.unwrap();
+        ds.insert_block(block.clone()).await.unwrap();
+
+        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
+        assert_eq!(block, ds.get_block(0).await.unwrap());
+
+        // Revert the changes.
+        ds.revert().await;
+        assert_eq!(ds.block_height().await.unwrap(), 0);
+        assert!(matches!(
+            ds.get_leaf(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+        assert!(matches!(
+            ds.get_block(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
     }
 }

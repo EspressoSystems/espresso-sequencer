@@ -114,6 +114,18 @@ where
 }
 
 /// A data source with an atomic transaction-based synchronization interface.
+///
+/// Any changes made to a versioned data source are initially visible when queried through that same
+/// data source object only. They are not immediately written back to storage, which means that a
+/// new data source object opened against the same persistent storage will not reflect the changes.
+/// In particular, this means that if the process restarts and reopens its storage, uncommitted
+/// changes will be lost.
+///
+/// The methods provided by this trait can be used to write such pending changes back to persistent
+/// storage ([commit](Self::commit)) so that they become visible to other clients of the same
+/// underlying storage, and are saved if the process restarts. It also allows pending changes to be
+/// rolled back ([revert](Self::revert)) so that they are never written back to storage and are no
+/// longer reflected even through the data source object which was used to make the changes.
 #[async_trait]
 pub trait VersionedDataSource {
     type Error: Error + Debug + Send + Sync + 'static;
