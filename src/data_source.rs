@@ -87,6 +87,8 @@ pub mod data_source_tests {
 
         // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
         // we've seen so we can detect duplicates.
+        // TODO eliminate duplicate blocks:
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/284
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
         let mut leaves = ds.get_leaf_range(..).await.unwrap().enumerate();

@@ -712,6 +712,8 @@ where
             ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
         };
         // ORDER BY h.height ASC ensures that if there are duplicate blocks, we return the first one.
+        // TODO this ordering should be unnecessary once we eliminate duplicate blocks:
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/284
         let query = format!(
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h

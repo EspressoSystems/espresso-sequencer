@@ -15,6 +15,7 @@ CREATE TABLE header
 -- TODO this index should be unique, but HotShot does not currently give the application a way to
 -- put the block height or parent hash in the header, so headers are not guaranteed to be distinct.
 -- This will be fixed soon with the block header refactor.
+-- https://github.com/EspressoSystems/hotshot-query-service/issues/284
 CREATE INDEX header_hash ON header (hash);
 
 CREATE TABLE payload
@@ -32,6 +33,7 @@ CREATE TABLE leaf
     -- TODO we should be able to add a `REFERENCES header (hash)` here, except that `header (hash)`
     -- is currently not unique. Upcoming changes to HotShot to allow us to include the block height
     -- and/or parent hash in the header hash will fix this.
+    -- https://github.com/EspressoSystems/hotshot-query-service/issues/284
     block_hash VARCHAR NOT NULL,
 
     -- For convenience, we store the entire leaf and justifying QC as JSON blobs. There is a bit of
