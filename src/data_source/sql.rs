@@ -738,7 +738,7 @@ where
         R: RangeBounds<usize> + Send,
     {
         let (where_clause, params) = bounds_to_where_clause(range, "height");
-        let query = format!("SELECT leaf, qc FROM leaf{where_clause} ORDER BY height ASC");
+        let query = format!("SELECT leaf, qc FROM leaf {where_clause} ORDER BY height ASC");
         let rows =
             self.client
                 .query_raw(&query, params)
