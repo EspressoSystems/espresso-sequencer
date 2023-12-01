@@ -32,6 +32,11 @@ abstract contract AbstractStakeTable {
         bytes32 blsVKhash, uint64 registerEpoch, StakeType stakeType, uint256 amountDeposited
     );
 
+    /// @notice Signals an exit request has been granted.
+    /// @param blsVKhash hash of the BLS public key owned by the user who requested to exit.
+    /// @param exitEpoch epoch when the user will be allowed to withdraw its funds.
+    event Exit(bytes32 blsVKhash, uint64 exitEpoch);
+
     /// @notice Signals a deposit to a BLS public key.
     /// @param blsVKhash hash of the BLS public key that received the deposit.
     /// @param amount amount of the deposit

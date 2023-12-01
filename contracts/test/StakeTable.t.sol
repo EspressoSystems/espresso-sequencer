@@ -26,6 +26,7 @@ import { StakeTable as S } from "../src/StakeTable.sol";
 contract StakeTable_Test is Test {
     event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
     event Deposit(bytes32, uint256);
+    event Exit(bytes32, uint64);
 
     S public stakeTable;
     ExampleToken public token;
@@ -345,7 +346,7 @@ contract StakeTable_Test is Test {
     }
 
     /// `deposit` function
-    function test_RevertWhen_CallerIsNotTheNodeOwner() external {
+    function test_RevertWhen_CallerIsNotTheNodeOwner_Deposit() external {
         BN254.G2Point memory blsVK;
         (blsVK,) = runSuccessfulRegistration();
 
@@ -366,7 +367,7 @@ contract StakeTable_Test is Test {
         stakeTable.deposit(blsVK, 5);
     }
 
-    function test_RevertWhen_DepositingWhileExiting() external {
+    function test_RevertWhen_DepositingWhileExiting_Deposit() external {
         BN254.G2Point memory blsVK;
         (blsVK,) = runSuccessfulRegistration();
 
@@ -374,6 +375,7 @@ contract StakeTable_Test is Test {
 
         // Ensure the registration is completed.
         lightClientContract.setCurrentEpoch(3);
+        vm.prank(exampleTokenCreator);
         stakeTable.requestExit(blsVK);
         vm.prank(exampleTokenCreator);
         vm.expectRevert(S.ExitRequestInProgress.selector);
@@ -424,13 +426,117 @@ contract StakeTable_Test is Test {
         assertEq(newBalance, expectedNewBalance);
         assertEq(effectiveEpoch, stakeTable.currentEpoch() + 1);
 
-        // TODO check new amount and epoch where the new balance will be effective
-
         // Balance after
         uint256 balanceUserAfter = token.balanceOf(exampleTokenCreator);
         assertEq(balanceUserAfter, balanceUserBefore - newDepositAmount);
         node = stakeTable.lookupNode(blsVK);
         uint256 newStake = node.balance;
         assertEq(newStake, expectedNewBalance);
+    }
+
+    /// `requestExit` function
+    function test_RevertWhen_CallerIsNotTheNodeOwner_RequestExit() external {
+        BN254.G2Point memory blsVK;
+        (blsVK,) = runSuccessfulRegistration();
+
+        /// Try to deposit while not being the owner of the node
+        vm.prank(makeAddr("Not node owner"));
+
+        vm.expectRevert(S.CallerIsNotTheNodeOwner.selector);
+        stakeTable.requestExit(blsVK);
+    }
+
+    function test_RevertWhen_TryingToExitTwice() external {
+        BN254.G2Point memory blsVK;
+        (blsVK,) = runSuccessfulRegistration();
+
+        lightClientContract.setCurrentEpoch(5);
+        // Request Exit once, nothing happens.
+        vm.prank(exampleTokenCreator);
+        stakeTable.requestExit(blsVK);
+
+        // Request another time, an error is raised.
+        vm.prank(exampleTokenCreator);
+        vm.expectRevert(S.ExitRequestInProgress.selector);
+        stakeTable.requestExit(blsVK);
+    }
+
+    function test_RevertTryingToExitTooEarly() external {
+        BN254.G2Point memory blsVK;
+        (blsVK,) = runSuccessfulRegistration();
+
+        lightClientContract.setCurrentEpoch(0);
+
+        // Request another time, an error is raised.
+        vm.prank(exampleTokenCreator);
+        vm.expectRevert(S.PrematureExit.selector);
+        stakeTable.requestExit(blsVK);
+    }
+
+    function test_RequestExit_Succeeds() external {
+        BN254.G2Point memory blsVK;
+        (blsVK,) = runSuccessfulRegistration();
+
+        // Check the right event is emitted
+        lightClientContract.setCurrentEpoch(5);
+
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        bytes32 key = stakeTable._hashBlsKey(blsVK);
+        uint64 exitEpoch = 6;
+        emit Exit(key, exitEpoch);
+
+        // Make the exit request
+        vm.prank(exampleTokenCreator);
+
+        // Check the outcome of the request
+        bool res = stakeTable.requestExit(blsVK);
+        assertTrue(res);
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
+        assertEq(node.exitEpoch, exitEpoch);
+    }
+
+    // `withdrawFunds` function
+    function testFuzz_RevertWhen_WithdrawingTooEarly(uint64 withdrawEpoch) external {
+        BN254.G2Point memory blsVK;
+        (blsVK,) = runSuccessfulRegistration();
+
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
+        uint64 minWithdrawEpoch = node.exitEpoch + stakeTable.exitEscrowPeriod(node);
+
+        withdrawEpoch = uint64(bound(withdrawEpoch, 0, minWithdrawEpoch - 1));
+        lightClientContract.setCurrentEpoch(withdrawEpoch);
+        vm.expectRevert(S.PrematureWithdrawal.selector);
+        stakeTable.withdrawFunds(blsVK);
+    }
+
+    function test_withdrawFunds_Succeeds() external {
+        BN254.G2Point memory blsVK;
+        uint256 depositAmount;
+        (blsVK, depositAmount) = runSuccessfulRegistration();
+
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
+        uint64 withdrawEpoch = node.exitEpoch + stakeTable.exitEscrowPeriod(node);
+        lightClientContract.setCurrentEpoch(withdrawEpoch);
+
+        // Balance before
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
+
+        uint64 balance = stakeTable.withdrawFunds(blsVK);
+        assertEq(balance, uint64(depositAmount));
+
+        // Balance after
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        // Node is deleted
+        node = stakeTable.lookupNode(blsVK);
+        assertEq(abi.encodePacked(node.account), abi.encodePacked(address(0x0)));
+        assertEq(node.balance, 0);
+        assertEq(node.registerEpoch, 0);
+        assertEq(node.exitEpoch, 0);
+        assertEq(
+            abi.encodePacked(node.stakeType), abi.encodePacked(AbstractStakeTable.StakeType.Native)
+        );
+        EdOnBN254.EdOnBN254Point memory nullSchnorrVK = EdOnBN254.EdOnBN254Point(0, 1);
+        assertEq(abi.encode(node.schnorrVK), abi.encode(nullSchnorrVK));
     }
 }

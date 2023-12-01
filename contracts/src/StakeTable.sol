@@ -28,8 +28,14 @@ contract StakeTable is AbstractStakeTable {
     /// Error raised when a user tries to deposit before the registration is complete.
     error PrematureDeposit();
 
+    /// Error raised when a user tries to exit before the registration is complete.
+    error PrematureExit();
+
     /// Error raised when a user tries to deposit while an exit request is in progress.
     error ExitRequestInProgress();
+
+    // Error raised when a user tries to withdraw funds before the exit escrow period is over.
+    error PrematureWithdrawal();
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
@@ -115,6 +121,19 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExit() external view override returns (uint64) {
         return numPendingExits;
+    }
+
+    /// @notice Defines the exit escrow period for a node.
+    /// TODO discuss Alex, Jeb for now it returns a constant. Also marked as public for easier
+    /// testing.
+    /// @param node node which is assigned an exit escrow period.
+    /// @return Number of epochs post exit after which funds can be withdrawn.
+    function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
+        if (node.balance > 100) {
+            return 10;
+        } else {
+            return 5;
+        }
     }
 
     /// @notice Register a validator in the stake table, transfer of tokens incurred!
@@ -231,8 +250,32 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key to exit
     /// @return success status
     function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].exitEpoch = this.nextExitEpoch();
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // The exit request must come from the node's withdrawal account.
+        if (node.account != msg.sender) {
+            revert CallerIsNotTheNodeOwner();
+        }
+
+        // Cannot request to exit if an exit request is already in progress.
+        if (node.exitEpoch != 0) {
+            revert ExitRequestInProgress();
+        }
+
+        // Cannot exit before becoming an active participant. Activation happens one epoch after the
+        // node's registration epoch, due to the consensus-imposed activation waiting period.
+        if (currentEpoch() < node.registerEpoch + 1) {
+            revert PrematureExit();
+        }
+
+        // Prepare the node to exit.
+        node.exitEpoch = this.nextExitEpoch();
+
+        nodes[key] = node;
+
+        emit Exit(key, node.exitEpoch);
+
         return true;
     }
 
@@ -242,8 +285,19 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint64) {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].balance = 0;
-        return 0;
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+            revert PrematureWithdrawal();
+        }
+        uint64 balance = node.balance;
+        SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
+
+        Node memory nullNode =
+            Node(address(0), StakeType.Native, 0, 0, 0, EdOnBN254.EdOnBN254Point(0, 1));
+        nodes[key] = nullNode;
+
+        return balance;
     }
 }

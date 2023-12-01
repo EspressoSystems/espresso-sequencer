@@ -396,6 +396,25 @@ pub mod abstract_stake_table {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("Exit"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("Exit"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("blsVKhash"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("exitEpoch"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("Registered"),
                     ::std::vec![::ethers::core::abi::ethabi::Event {
                         name: ::std::borrow::ToOwned::to_owned("Registered"),
@@ -599,6 +618,12 @@ pub mod abstract_stake_table {
         ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, DepositFilter> {
             self.0.event()
         }
+        ///Gets the contract's `Exit` event
+        pub fn exit_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, ExitFilter> {
+            self.0.event()
+        }
         ///Gets the contract's `Registered` event
         pub fn registered_filter(
             &self,
@@ -650,6 +675,23 @@ pub mod abstract_stake_table {
         Eq,
         Hash,
     )]
+    #[ethevent(name = "Exit", abi = "Exit(bytes32,uint64)")]
+    pub struct ExitFilter {
+        pub bls_v_khash: [u8; 32],
+        pub exit_epoch: u64,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
     #[ethevent(name = "Registered", abi = "Registered(bytes32,uint64,uint8,uint256)")]
     pub struct RegisteredFilter {
         pub bls_v_khash: [u8; 32],
@@ -670,6 +712,7 @@ pub mod abstract_stake_table {
     )]
     pub enum AbstractStakeTableEvents {
         DepositFilter(DepositFilter),
+        ExitFilter(ExitFilter),
         RegisteredFilter(RegisteredFilter),
     }
     impl ::ethers::contract::EthLogDecode for AbstractStakeTableEvents {
@@ -678,6 +721,9 @@ pub mod abstract_stake_table {
         ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
             if let Ok(decoded) = DepositFilter::decode_log(log) {
                 return Ok(AbstractStakeTableEvents::DepositFilter(decoded));
+            }
+            if let Ok(decoded) = ExitFilter::decode_log(log) {
+                return Ok(AbstractStakeTableEvents::ExitFilter(decoded));
             }
             if let Ok(decoded) = RegisteredFilter::decode_log(log) {
                 return Ok(AbstractStakeTableEvents::RegisteredFilter(decoded));
@@ -689,6 +735,7 @@ pub mod abstract_stake_table {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::DepositFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ExitFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RegisteredFilter(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
@@ -696,6 +743,11 @@ pub mod abstract_stake_table {
     impl ::core::convert::From<DepositFilter> for AbstractStakeTableEvents {
         fn from(value: DepositFilter) -> Self {
             Self::DepositFilter(value)
+        }
+    }
+    impl ::core::convert::From<ExitFilter> for AbstractStakeTableEvents {
+        fn from(value: ExitFilter) -> Self {
+            Self::ExitFilter(value)
         }
     }
     impl ::core::convert::From<RegisteredFilter> for AbstractStakeTableEvents {
