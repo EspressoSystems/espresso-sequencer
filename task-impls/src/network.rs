@@ -150,7 +150,7 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
     /// # Panics
     /// Panic sif a direct message event is received with no recipient
     #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
-    #[instrument(skip_all, fields(view = *self.view), name = "Newtork Task", level = "error")]
+    #[instrument(skip_all, fields(view = *self.view), name = "Network Task", level = "error")]
 
     pub async fn handle_event(
         &mut self,

@@ -25,7 +25,7 @@ async fn main() {
     let args = ValidatorArgs::parse();
     info!(
         "connecting to orchestrator at {:?}:{:?}",
-        args.host, args.port
+        args.url, args.port
     );
     infra::main_entry_point::<
         DemoTypes,

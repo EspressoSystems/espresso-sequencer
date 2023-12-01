@@ -599,7 +599,7 @@ mod tests {
     type Key = ark_bn254::Fq;
 
     #[test]
-    fn test_persistent_merkle_tree() {
+    fn crypto_test_persistent_merkle_tree() {
         let height = 3;
         let mut roots = vec![Arc::new(PersistentMerkleNode::<Key>::Empty)];
         let path = (0..10)
@@ -712,7 +712,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mt_iter() {
+    fn crypto_test_mt_iter() {
         let height = 3;
         let capacity = config::TREE_BRANCH.pow(height);
         let mut rng = test_rng();
