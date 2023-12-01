@@ -38,8 +38,6 @@ async fn test_success() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_with_failures_one() {
-    use std::time::Duration;
-
     use hotshot_testing::{
         node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
@@ -60,7 +58,7 @@ async fn test_with_failures_one() {
     }];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -77,8 +75,6 @@ async fn test_with_failures_one() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_with_failures_half_f() {
-    use std::time::Duration;
-
     use hotshot_testing::{
         node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
@@ -109,7 +105,7 @@ async fn test_with_failures_half_f() {
     ];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
     metadata.overall_safety_properties.num_failed_views = 6;
     metadata
@@ -127,8 +123,6 @@ async fn test_with_failures_half_f() {
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_with_failures_f() {
-    use std::time::Duration;
-
     use hotshot_testing::{
         node_types::{MemoryImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
@@ -174,7 +168,7 @@ async fn test_with_failures_f() {
     ];
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)

@@ -44,7 +44,7 @@ async fn test_timeout_web() {
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(500), dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
 
     metadata.completion_task_description =
@@ -108,7 +108,7 @@ async fn test_timeout_libp2p() {
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(2000), dead_nodes)],
+        node_changes: vec![(2, dead_nodes)],
     };
 
     metadata.completion_task_description =
