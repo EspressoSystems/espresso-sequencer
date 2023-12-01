@@ -487,9 +487,9 @@ contract StakeTable_Test is Test {
 
         // Make the exit request
         vm.prank(exampleTokenCreator);
+        bool res = stakeTable.requestExit(blsVK);
 
         // Check the outcome of the request
-        bool res = stakeTable.requestExit(blsVK);
         assertTrue(res);
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
         assertEq(node.exitEpoch, exitEpoch);
@@ -521,6 +521,7 @@ contract StakeTable_Test is Test {
         // Balance before
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
 
+        // Withdraw the funds
         uint64 balance = stakeTable.withdrawFunds(blsVK);
         assertEq(balance, uint64(depositAmount));
 
@@ -529,14 +530,10 @@ contract StakeTable_Test is Test {
 
         // Node is deleted
         node = stakeTable.lookupNode(blsVK);
-        assertEq(abi.encodePacked(node.account), abi.encodePacked(address(0x0)));
-        assertEq(node.balance, 0);
-        assertEq(node.registerEpoch, 0);
-        assertEq(node.exitEpoch, 0);
-        assertEq(
-            abi.encodePacked(node.stakeType), abi.encodePacked(AbstractStakeTable.StakeType.Native)
+        AbstractStakeTable.Node memory nullNode = AbstractStakeTable.Node(
+            address(0), AbstractStakeTable.StakeType.Native, 0, 0, 0, EdOnBN254.EdOnBN254Point(0, 1)
         );
-        EdOnBN254.EdOnBN254Point memory nullSchnorrVK = EdOnBN254.EdOnBN254Point(0, 1);
-        assertEq(abi.encode(node.schnorrVK), abi.encode(nullSchnorrVK));
+
+        assertEq(abi.encode(node), abi.encode(nullNode));
     }
 }

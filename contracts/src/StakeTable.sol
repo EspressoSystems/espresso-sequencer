@@ -22,7 +22,8 @@ contract StakeTable is AbstractStakeTable {
     /// account.
     error NodeAlreadyRegistered();
 
-    /// Error raised when a user tries to make a deposit but does not control the node public key.
+    /// Error raised when a user tries to make a deposit or request an exit but does not control the
+    /// node public key.
     error CallerIsNotTheNodeOwner();
 
     /// Error raised when a user tries to deposit before the registration is complete.
@@ -124,8 +125,8 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Defines the exit escrow period for a node.
-    /// TODO discuss Alex, Jeb for now it returns a constant. Also marked as public for easier
-    /// testing.
+    /// TODO discuss Alex, Jeb. How much do we want to specify this function? Also marked as public
+    /// for easier testing.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
