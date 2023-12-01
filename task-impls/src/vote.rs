@@ -14,8 +14,8 @@ use hotshot_task::{
 };
 use hotshot_types::{
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate,
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
         DAVote, QuorumVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
