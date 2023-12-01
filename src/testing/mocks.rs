@@ -18,30 +18,22 @@ use crate::{
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
+use clap::builder::styling::Metadata;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Display, Index, IndexMut};
-use hotshot::{
-    traits::{
-        election::static_committee::{
-            GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-        },
-        implementations::{MemoryCommChannel, MemoryStorage},
-        Block, NodeImplementation,
-    },
-    types::Message,
+use hotshot::traits::{
+    election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+    implementations::{MemoryCommChannel, MemoryStorage},
+    NodeImplementation,
 };
-use hotshot_signature_key::bn254::BN254Pub;
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
-    message::SequencingMessage,
+    data::{DAProposal, QuorumProposal, ViewNumber},
     traits::{
-        block_contents::Transaction,
-        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, NodeType, SequencingExchanges},
+        block_contents::{BlockHeader, Transaction},
+        node_implementation::{ChannelMaps, NodeType},
         state::{State, TestableBlock, TestableState},
+        BlockPayload,
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -113,12 +105,9 @@ impl MockState {
 
 impl State for MockState {
     type Error = MockError;
-    type BlockType = MockBlock;
     type Time = ViewNumber;
-
-    fn next_block(_prev_commitment: Option<Self>) -> Self::BlockType {
-        MockBlock::default()
-    }
+    type BlockHeader = MockHeader;
+    type BlockPayload = MockBlock;
 
     fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
         self.validate(block).is_ok()
@@ -142,6 +131,10 @@ impl State for MockState {
     }
 
     fn on_commit(&self) {}
+
+    fn initialize() -> Self {
+        // TODO: do we need to initialize the state?
+    }
 }
 
 impl TestableState for MockState {
@@ -149,7 +142,7 @@ impl TestableState for MockState {
         state: Option<&Self>,
         rng: &mut dyn RngCore,
         _padding: u64,
-    ) -> <Self::BlockType as Block>::Transaction {
+    ) -> <Self::BlockType as BlockPayload>::Transaction {
         loop {
             let nonce = rng.next_u64();
             if let Some(state) = state {
@@ -243,21 +236,77 @@ impl IntoIterator for MockBlock {
     }
 }
 
-impl Block for MockBlock {
+struct MockHeader;
+
+impl BlockHeader for MockHeader {
+    type Payload = MockBlock;
+
+    fn new(
+        payload_commitment: hotshot_types::data::VidCommitment,
+        metadata: <Self::Payload as hotshot_types::traits::BlockPayload>::Metadata,
+        parent_header: &Self,
+    ) -> Self {
+        todo!()
+    }
+
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as hotshot_types::traits::BlockPayload>::Metadata,
+    ) {
+        todo!()
+    }
+
+    fn block_number(&self) -> u64 {
+        todo!()
+    }
+
+    fn payload_commitment(&self) -> hotshot_types::data::VidCommitment {
+        todo!()
+    }
+
+    fn metadata(&self) -> <Self::Payload as hotshot_types::traits::BlockPayload>::Metadata {
+        todo!()
+    }
+}
+
+struct MockMetadata;
+
+impl BlockPayload for MockBlock {
     type Transaction = MockTransaction;
     type Error = MockError;
+    type Metadata = MockMetadata;
+    type Encode<'a> = Vec<u8>; // TODO: does this make sense?
 
     fn add_transaction_raw(&self, tx: &Self::Transaction) -> Result<Self, Self::Error> {
         let mut block = self.clone();
         block.transactions.push(tx.clone());
         Ok(block)
     }
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-        self.transactions.iter().map(|tx| tx.commit()).collect()
+
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        todo!()
     }
 
-    fn new() -> Self {
-        Self::genesis()
+    fn from_bytes<I>(encoded_transactions: I, metadata: Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        todo!()
+    }
+
+    fn genesis() -> (Self, Self::Metadata) {
+        todo!()
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        todo!()
+    }
+
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+        todo!()
     }
 }
 
@@ -278,12 +327,13 @@ pub struct MockTypes;
 
 impl NodeType for MockTypes {
     type Time = ViewNumber;
-    type BlockType = MockBlock;
+    type BlockHeader = MockHeader;
+    type BlockPayload = MockBlock;
     type SignatureKey = BN254Pub;
-    type VoteTokenType = StaticVoteToken<BN254Pub>;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
+    type Membership = GeneralStaticCommittee<BN254Pub>;
 }
 
 pub type MockLeaf = SequencingLeaf<MockTypes>;
@@ -317,28 +367,8 @@ pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Storage = MemoryStorage<MockTypes, Self::Leaf>;
-    type Leaf = MockLeaf;
-    type ConsensusMessage = SequencingMessage<MockTypes, Self>;
-    type Exchanges = SequencingExchanges<
-        MockTypes,
-        Message<MockTypes, Self>,
-        QuorumExchange<
-            MockTypes,
-            Self::Leaf,
-            MockQuorumProposal,
-            MockMembership,
-            MockQuorumNetwork,
-            Message<MockTypes, Self>,
-        >,
-        CommitteeExchange<MockTypes, MockMembership, MockDANetwork, Message<MockTypes, Self>>,
-        ViewSyncExchange<
-            MockTypes,
-            MockViewSyncProposal,
-            MockMembership,
-            MockViewSyncNetwork,
-            Message<MockTypes, Self>,
-        >,
-    >;
+    type QuorumNetwork = MockQuorumNetwork;
+    type CommitteeNetwork = MockDANetwork;
 
     fn new_channel_maps(
         start_view: ViewNumber,

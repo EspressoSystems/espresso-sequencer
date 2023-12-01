@@ -366,12 +366,11 @@ use async_std::{
 };
 use futures::StreamExt;
 use hotshot::{certificate, types::SystemContextHandle};
-use hotshot_types::{
-    data::LeafType,
-    traits::{
-        block_contents,
-        node_implementation::{NodeImplementation, NodeType},
-    },
+use hotshot_types::data::Leaf;
+use hotshot_types::traits::{
+    block_contents,
+    node_implementation::{NodeImplementation, NodeType},
+    BlockPayload,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -384,9 +383,9 @@ pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Lea
 /// State change indicated by a [`Leaf`].
 pub type Deltas<Types, I> = <Leaf<Types, I> as LeafType>::DeltasType;
 /// Block of data appened to a chain by consensus.
-pub type Block<Types> = <Types as NodeType>::BlockType;
+pub type Block<Types> = <Types as NodeType>::BlockPayload;
 /// Item within a [`Block`].
-pub type Transaction<Types> = <Block<Types> as block_contents::Block>::Transaction;
+pub type Transaction<Types> = <Block<Types> as BlockPayload>::Transaction;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
