@@ -98,17 +98,10 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                                 HotShotEvent::DAVoteRecv(vote.clone())
                             }
                             CommitteeConsensusMessage::DACertificate(cert) => {
-                                // panic!("Recevid DA C! ");
                                 HotShotEvent::DACRecv(cert)
                             }
                             CommitteeConsensusMessage::VidDisperseMsg(proposal) => {
                                 HotShotEvent::VidDisperseRecv(proposal, sender)
-                            }
-                            CommitteeConsensusMessage::VidVote(vote) => {
-                                HotShotEvent::VidVoteRecv(vote.clone())
-                            }
-                            CommitteeConsensusMessage::VidCertificate(cert) => {
-                                HotShotEvent::VidCertRecv(cert)
                             }
                         },
                     };
@@ -199,14 +192,6 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
                 TransmitType::Broadcast,
                 None,
             ),
-            HotShotEvent::VidVoteSend(vote) => (
-                vote.get_signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::VidVote(vote.clone()),
-                ))),
-                TransmitType::Direct,
-                Some(membership.get_leader(vote.get_view_number())),
-            ),
             HotShotEvent::DAVoteSend(vote) => (
                 vote.get_signing_key(),
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
@@ -214,14 +199,6 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
                 ))),
                 TransmitType::Direct,
                 Some(membership.get_leader(vote.get_view_number())),
-            ),
-            HotShotEvent::VidCertSend(certificate, sender) => (
-                sender,
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage(Right(
-                    CommitteeConsensusMessage::VidCertificate(certificate),
-                ))),
-                TransmitType::Broadcast,
-                None,
             ),
             // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
             HotShotEvent::DACSend(certificate, sender) => (
@@ -364,8 +341,6 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             event,
             HotShotEvent::Shutdown
                 | HotShotEvent::VidDisperseSend(_, _)
-                | HotShotEvent::VidCertSend(_, _)
-                | HotShotEvent::VidVoteSend(_)
                 | HotShotEvent::ViewChange(_)
         )
     }

@@ -209,8 +209,6 @@ impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + H
 pub type QuorumVote<TYPES> = SimpleVote<TYPES, QuorumData<TYPES>>;
 /// DA vote type alias
 pub type DAVote<TYPES> = SimpleVote<TYPES, DAData>;
-/// VID vote type alias
-pub type VIDVote<TYPES> = SimpleVote<TYPES, VIDData>;
 /// Timeout Vote type alias
 pub type TimeoutVote<TYPES> = SimpleVote<TYPES, TimeoutData<TYPES>>;
 /// View Sync Commit Vote type alias

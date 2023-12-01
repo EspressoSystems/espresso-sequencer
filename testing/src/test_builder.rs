@@ -137,14 +137,14 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(200, 0),
+                    duration: Duration::new(300, 0),
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 ..Default::default()
             },
             timing_data: TimingData {
-                next_view_timeout: 3000,
+                next_view_timeout: 5000,
                 ..TimingData::default()
             },
             ..TestMetadata::default()

@@ -5,11 +5,11 @@ use hotshot_types::{
     data::{DAProposal, Leaf, QuorumProposal, VidCommitment, VidDisperse},
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate,
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DAVote, QuorumVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{node_implementation::NodeType, BlockPayload},
@@ -110,20 +110,4 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ///
     /// Like [`DAProposalRecv`].
     VidDisperseRecv(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
-    /// Send a VID vote to the VID leader; emitted by VID storage nodes in the DA task after seeing a valid VID dispersal
-    ///
-    /// Like [`DAVoteSend`]
-    VidVoteSend(VIDVote<TYPES>),
-    /// A VID vote has been received by the network; handled by the DA task
-    ///
-    /// Like [`DAVoteRecv`]
-    VidVoteRecv(VIDVote<TYPES>),
-    /// The VID leader has collected enough votes to form a VID cert; emitted by the VID leader in the DA task; sent to the entire network via the networking task
-    ///
-    /// Like [`DACSend`]
-    VidCertSend(VIDCertificate<TYPES>, TYPES::SignatureKey),
-    /// A VID cert has been recieved by the network; handled by the consensus task
-    ///
-    /// Like [`DACRecv`]
-    VidCertRecv(VIDCertificate<TYPES>),
 }

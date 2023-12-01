@@ -5,11 +5,11 @@
 
 use crate::data::QuorumProposal;
 use crate::simple_certificate::{
-    DACertificate, VIDCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+    DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
     ViewSyncPreCommitCertificate2,
 };
 use crate::simple_vote::{
-    DAVote, TimeoutVote, VIDVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
+    DAVote, TimeoutVote, ViewSyncCommitVote, ViewSyncFinalizeVote, ViewSyncPreCommitVote,
 };
 use crate::vote::HasViewNumber;
 use crate::{
@@ -76,10 +76,6 @@ pub enum MessagePurpose {
     Data,
     /// VID disperse, like [`Proposal`].
     VidDisperse,
-    /// VID vote, like [`Vote`].
-    VidVote,
-    /// VID certificate, like [`DAC`].
-    VidCert,
 }
 
 // TODO (da) make it more customized to the consensus layer, maybe separating the specific message
@@ -202,10 +198,6 @@ pub enum ProcessedCommitteeConsensusMessage<TYPES: NodeType> {
     DACertificate(DACertificate<TYPES>, TYPES::SignatureKey),
     /// VID dispersal data. Like [`DAProposal`]
     VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
-    /// Vote from VID storage node. Like [`DAVote`]
-    VidVote(VIDVote<TYPES>, TYPES::SignatureKey),
-    /// Certificate for VID. Like [`DACertificate`]
-    VidCertificate(VIDCertificate<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
@@ -224,12 +216,6 @@ impl<TYPES: NodeType> From<ProcessedCommitteeConsensusMessage<TYPES>>
             }
             ProcessedCommitteeConsensusMessage::VidDisperseMsg(disperse, _) => {
                 CommitteeConsensusMessage::VidDisperseMsg(disperse)
-            }
-            ProcessedCommitteeConsensusMessage::VidVote(v, _) => {
-                CommitteeConsensusMessage::VidVote(v)
-            }
-            ProcessedCommitteeConsensusMessage::VidCertificate(cert, _) => {
-                CommitteeConsensusMessage::VidCertificate(cert)
             }
         }
     }
@@ -250,12 +236,6 @@ impl<TYPES: NodeType> ProcessedCommitteeConsensusMessage<TYPES> {
             }
             CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
                 ProcessedCommitteeConsensusMessage::VidDisperseMsg(disperse, sender)
-            }
-            CommitteeConsensusMessage::VidVote(v) => {
-                ProcessedCommitteeConsensusMessage::VidVote(v, sender)
-            }
-            CommitteeConsensusMessage::VidCertificate(cert) => {
-                ProcessedCommitteeConsensusMessage::VidCertificate(cert, sender)
             }
         }
     }
@@ -336,15 +316,6 @@ pub enum CommitteeConsensusMessage<TYPES: NodeType> {
     /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from [`VidDisperse`].
     /// TODO this variant should not be a [`CommitteeConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
     VidDisperseMsg(Proposal<TYPES, VidDisperse<TYPES>>),
-
-    /// Vote for VID disperse data
-    ///
-    /// Like [`DAVote`].
-    VidVote(VIDVote<TYPES>),
-    /// VID certificate data is available
-    ///
-    /// Like [`DACertificate`]
-    VidCertificate(VIDCertificate<TYPES>),
 }
 
 /// Messages for sequencing consensus.
@@ -404,11 +375,9 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                         vote_message.get_view_number()
                     }
                     CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
-                    CommitteeConsensusMessage::VidCertificate(cert) => cert.view_number,
                     CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
                         disperse.data.get_view_number()
                     }
-                    CommitteeConsensusMessage::VidVote(vote) => vote.get_view_number(),
                 }
             }
         }
@@ -438,10 +407,8 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
             Right(committee_message) => match committee_message {
                 CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,
                 CommitteeConsensusMessage::DAVote(_) => MessagePurpose::Vote,
-                CommitteeConsensusMessage::VidVote(_) => MessagePurpose::VidVote,
                 CommitteeConsensusMessage::DACertificate(_) => MessagePurpose::DAC,
                 CommitteeConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
-                CommitteeConsensusMessage::VidCertificate(_) => MessagePurpose::VidCert,
             },
         }
     }

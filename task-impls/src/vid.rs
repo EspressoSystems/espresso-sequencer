@@ -1,17 +1,14 @@
-use crate::{
-    events::HotShotEvent,
-    vote::{spawn_vote_accumulator, AccumulatorInfo},
-};
+use crate::events::HotShotEvent;
 use async_lock::RwLock;
-
 use hotshot_task::{
-    event_stream::{ChannelStream, EventStream},
+    event_stream::ChannelStream,
     global_registry::GlobalRegistry,
     task::{HotShotTaskCompleted, TS},
     task_impls::HSTWithEvent,
 };
+use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
-    consensus::{Consensus, View},
+    consensus::Consensus,
     data::VidDisperse,
     message::Proposal,
     traits::{
@@ -19,9 +16,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
-        state::ConsensusTime,
     },
-    utils::ViewInner,
 };
 use hotshot_types::{
     data::{test_srs, VidScheme, VidSchemeTrait},
@@ -30,15 +25,12 @@ use hotshot_types::{
         network::ConsensusIntentEvent,
     },
 };
-use hotshot_types::{
-    simple_vote::{VIDData, VIDVote},
-    traits::network::CommunicationChannel,
-    vote::HasViewNumber,
-};
 
+use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
-use std::{marker::PhantomData, sync::Arc};
-use tracing::{debug, error, instrument, warn};
+use std::marker::PhantomData;
+use std::sync::Arc;
+use tracing::{debug, error, instrument};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -88,137 +80,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event: HotShotEvent<TYPES>,
     ) -> Option<HotShotTaskCompleted> {
         match event {
-            HotShotEvent::VidVoteRecv(ref vote) => {
-                let view = vote.get_view_number();
-                if self.membership.get_leader(view) != self.public_key {
-                    error!(
-                        "We are not the VID leader for view {} are we leader for next view? {}",
-                        *view,
-                        self.membership.get_leader(view + 1) == self.public_key
-                    );
-                    return None;
-                }
-                let collection_view =
-                    if let Some((collection_view, collection_id, _)) = &self.vote_collector {
-                        // TODO: Is this correct for consecutive leaders?
-                        if view > *collection_view {
-                            // warn!("shutting down for view {:?}", collection_view);
-                            self.registry.shutdown_task(*collection_id).await;
-                        }
-                        *collection_view
-                    } else {
-                        TYPES::Time::new(0)
-                    };
-
-                if view > collection_view {
-                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
-                    let info = AccumulatorInfo {
-                        public_key: self.public_key.clone(),
-                        membership: self.membership.clone(),
-                        view: vote.get_view_number(),
-                        event_stream: self.event_stream.clone(),
-                        id: self.id,
-                        registry: self.registry.clone(),
-                    };
-                    let name = "VID Vote Collection";
-                    self.vote_collector =
-                        spawn_vote_accumulator(&info, vote.clone(), event, name.to_string()).await;
-                } else if let Some((_, _, stream_id)) = self.vote_collector {
-                    self.event_stream
-                        .direct_message(stream_id, HotShotEvent::VidVoteRecv(vote.clone()))
-                        .await;
-                };
-            }
-            HotShotEvent::VidDisperseRecv(disperse, sender) => {
-                // TODO copy-pasted from DAProposalRecv https://github.com/EspressoSystems/HotShot/issues/1690
-                debug!(
-                    "VID disperse received for view: {:?}",
-                    disperse.data.get_view_number()
-                );
-
-                // stop polling for the received disperse
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
-                        *disperse.data.view_number,
-                    ))
-                    .await;
-
-                // ED NOTE: Assuming that the next view leader is the one who sends DA proposal for this view
-                let view = disperse.data.get_view_number();
-
-                // Allow VID disperse date that is one view older, in case we have updated the
-                // view.
-                // Adding `+ 1` on the LHS rather tahn `- 1` on the RHS, to avoid the overflow
-                // error due to subtracting the genesis view number.
-                if view + 1 < self.cur_view {
-                    warn!("Throwing away VID disperse data that is more than one view older");
-                    return None;
-                }
-
-                debug!("VID disperse data is fresh.");
-                let payload_commitment = disperse.data.payload_commitment;
-
-                // ED Is this the right leader?
-                let view_leader_key = self.membership.get_leader(view);
-                if view_leader_key != sender {
-                    error!("VID proposal doesn't have expected leader key for view {} \n DA proposal is: [N/A for VID]", *view);
-                    return None;
-                }
-
-                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
-                    error!("Could not verify VID proposal sig.");
-                    return None;
-                }
-
-                if !self.membership.has_stake(&self.public_key) {
-                    debug!(
-                        "We were not chosen for consensus committee on {:?}",
-                        self.cur_view
-                    );
-                    return None;
-                }
-
-                // Generate and send vote
-                let vote = VIDVote::create_signed_vote(
-                    VIDData {
-                        payload_commit: payload_commitment,
-                    },
-                    view,
-                    &self.public_key,
-                    &self.private_key,
-                );
-
-                // ED Don't think this is necessary?
-                // self.cur_view = view;
-
-                debug!(
-                    "Sending vote to the VID leader {:?}",
-                    vote.get_view_number()
-                );
-                self.event_stream
-                    .publish(HotShotEvent::VidVoteSend(vote))
-                    .await;
-                let mut consensus = self.consensus.write().await;
-
-                // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                // there is already a view there: the replica task may have inserted a `Leaf` view which
-                // contains strictly more information.
-                consensus.state_map.entry(view).or_insert(View {
-                    view_inner: ViewInner::DA { payload_commitment },
-                });
-
-                // Record the block we have promised to make available.
-                // TODO https://github.com/EspressoSystems/HotShot/issues/1692
-                // consensus.saved_payloads.insert(proposal.data.block_payload);
-            }
-            HotShotEvent::VidCertRecv(cert) => {
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDCertificate(
-                        *cert.view_number,
-                    ))
-                    .await;
-            }
-
             HotShotEvent::TransactionsSequenced(encoded_transactions, metadata, view_number) => {
                 // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
                 let srs = test_srs(NUM_STORAGE_NODES);
@@ -284,24 +145,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     ))
                     .await;
 
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDCertificate(
-                        *self.cur_view + 1,
-                    ))
-                    .await;
-
                 // If we are not the next leader, we should exit
                 if self.membership.get_leader(self.cur_view + 1) != self.public_key {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }
-
-                // Start polling for VID votes for the "next view"
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDVotes(
-                        *self.cur_view + 1,
-                    ))
-                    .await;
 
                 return None;
             }
@@ -321,9 +169,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         matches!(
             event,
             HotShotEvent::Shutdown
-                | HotShotEvent::VidDisperseRecv(_, _)
-                | HotShotEvent::VidVoteRecv(_)
-                | HotShotEvent::VidCertRecv(_)
                 | HotShotEvent::TransactionsSequenced(_, _, _)
                 | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)

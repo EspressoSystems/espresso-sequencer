@@ -17,10 +17,10 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::{Leaf, QuorumProposal, VidCommitment},
+    data::{Leaf, QuorumProposal, VidCommitment, VidDisperse},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
-    simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate, VIDCertificate},
+    simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate},
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
@@ -116,8 +116,12 @@ pub struct ConsensusTaskState<
     /// All the DA certs we've received for current and future views.
     pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
-    /// All the VID certs we've received for current and future views.
-    pub vid_certs: HashMap<TYPES::Time, VIDCertificate<TYPES>>,
+    /// All the VID shares we've received for current and future views.
+    /// In the future we will need a different struct similar to VidDisperse except
+    /// it stores only one share.
+    /// TODO https://github.com/EspressoSystems/HotShot/issues/2146
+    /// TODO https://github.com/EspressoSystems/HotShot/issues/1732
+    pub vid_shares: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
 
     /// The most recent proposal we have, will correspond to the current view if Some()
     /// Will be none if the view advanced through timeout/view_sync
@@ -155,7 +159,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
-
+    // Check if we are able to vote, like whether the proposal is valid,
+    // whether we have DAC and VID share, and if so, vote.
     async fn vote_if_able(&self) -> bool {
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
@@ -166,8 +171,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
+            // No need to check vid share nor da cert for genesis
             if proposal.justify_qc.is_genesis && proposal.view_number == TYPES::Time::new(1) {
-                // warn!("Proposal is genesis!");
+                info!("Proposal is genesis!");
 
                 let view = TYPES::Time::new(*proposal.view_number);
                 let justify_qc = proposal.justify_qc.clone();
@@ -223,6 +229,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .await;
                     return true;
                 }
+            }
+
+            // Only vote if you has seen the VID share for this view
+            if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
+            } else {
+                debug!(
+                    "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+                    proposal.view_number
+                );
+                return false;
             }
 
             // Only vote if you have the DA cert
@@ -302,13 +318,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            info!(
+            debug!(
                 "Couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
             return false;
         }
-        info!(
+        debug!(
             "Could not vote because we don't have a proposal yet for view {}",
             *self.cur_view
         );
@@ -417,7 +433,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let view_leader_key = self.quorum_membership.get_leader(view);
                 if view_leader_key != sender {
-                    error!("Leader key does not match key in proposal");
+                    warn!("Leader key does not match key in proposal");
                     return;
                 }
 
@@ -872,19 +888,62 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.current_proposal = None;
                 }
             }
-            HotShotEvent::VidCertRecv(cert) => {
-                debug!("VID cert received for view ! {}", *cert.view_number);
+            HotShotEvent::VidDisperseRecv(disperse, sender) => {
+                let view = disperse.data.get_view_number();
 
-                let view = cert.get_view_number();
-                self.vid_certs.insert(view, cert);
+                debug!(
+                    "VID disperse received for view: {:?} in consensus task",
+                    view
+                );
 
-                // RM TODO: VOTING
+                // Allow VID disperse date that is one view older, in case we have updated the
+                // view.
+                // Adding `+ 1` on the LHS rather than `- 1` on the RHS, to avoid the overflow
+                // error due to subtracting the genesis view number.
+                if view + 1 < self.cur_view {
+                    warn!("Throwing away VID disperse data that is more than one view older");
+                    return;
+                }
+
+                info!("VID disperse data is not more than one view older.");
+                let payload_commitment = disperse.data.payload_commitment;
+
+                // Check whether the sender is the right leader for this view
+                let view_leader_key = self.quorum_membership.get_leader(view);
+                if view_leader_key != sender {
+                    warn!(
+                        "VID dispersal/share is not from expected leader key for view {} \n",
+                        *view
+                    );
+                    return;
+                }
+
+                if !view_leader_key.validate(&disperse.signature, payload_commitment.as_ref()) {
+                    warn!("Could not verify VID dispersal/share sig.");
+                    return;
+                }
+
+                // stop polling for the received disperse after verifying it's valid
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVIDDisperse(
+                        *disperse.data.view_number,
+                    ))
+                    .await;
+
+                // Add to the storage that we have received the VID disperse for a specific view
+                self.vid_shares.insert(view, disperse);
             }
-
             HotShotEvent::ViewChange(new_view) => {
-                debug!("View Change event for view {}", *new_view);
+                debug!("View Change event for view {} in consensus task", *new_view);
 
                 let old_view_number = self.cur_view;
+
+                // Start polling for VID disperse for the new view
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDDisperse(
+                        *old_view_number + 1,
+                    ))
+                    .await;
 
                 // update the view in state to the one in the message
                 // Publish a view change event to the application
@@ -1103,6 +1162,7 @@ pub fn consensus_event_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> b
             | HotShotEvent::SendPayloadCommitmentAndMetadata(_, _)
             | HotShotEvent::Timeout(_)
             | HotShotEvent::TimeoutVoteRecv(_)
+            | HotShotEvent::VidDisperseRecv(_, _)
             | HotShotEvent::Shutdown,
     )
 }
