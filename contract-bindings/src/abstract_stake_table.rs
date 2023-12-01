@@ -375,35 +375,56 @@ pub mod abstract_stake_table {
                     },],
                 ),
             ]),
-            events: ::core::convert::From::from([(
-                ::std::borrow::ToOwned::to_owned("Registered"),
-                ::std::vec![::ethers::core::abi::ethabi::Event {
-                    name: ::std::borrow::ToOwned::to_owned("Registered"),
-                    inputs: ::std::vec![
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
-                            indexed: false,
-                        },
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            indexed: false,
-                        },
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
-                            indexed: false,
-                        },
-                        ::ethers::core::abi::ethabi::EventParam {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                            indexed: false,
-                        },
-                    ],
-                    anonymous: false,
-                },],
-            )]),
+            events: ::core::convert::From::from([
+                (
+                    ::std::borrow::ToOwned::to_owned("Deposit"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("Deposit"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("blsVKhash"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("amount"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("Registered"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("Registered"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("blsVKhash"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("registerEpoch"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("stakeType"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
+                                indexed: false,
+                            },
+                            ::ethers::core::abi::ethabi::EventParam {
+                                name: ::std::borrow::ToOwned::to_owned("amountDeposited"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                indexed: false,
+                            },
+                        ],
+                        anonymous: false,
+                    },],
+                ),
+            ]),
             errors: ::std::collections::BTreeMap::new(),
             receive: false,
             fallback: false,
@@ -572,6 +593,12 @@ pub mod abstract_stake_table {
                 .method_hash([12, 36, 175, 24], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
+        ///Gets the contract's `Deposit` event
+        pub fn deposit_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, DepositFilter> {
+            self.0.event()
+        }
         ///Gets the contract's `Registered` event
         pub fn registered_filter(
             &self,
@@ -581,7 +608,8 @@ pub mod abstract_stake_table {
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, RegisteredFilter> {
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, AbstractStakeTableEvents>
+        {
             self.0
                 .event_with_filter(::core::default::Default::default())
         }
@@ -605,13 +633,76 @@ pub mod abstract_stake_table {
         Eq,
         Hash,
     )]
+    #[ethevent(name = "Deposit", abi = "Deposit(bytes32,uint256)")]
+    pub struct DepositFilter {
+        pub bls_v_khash: [u8; 32],
+        pub amount: ::ethers::core::types::U256,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
     #[ethevent(name = "Registered", abi = "Registered(bytes32,uint64,uint8,uint256)")]
-    pub struct RegisteredFilter(
-        pub [u8; 32],
-        pub u64,
-        pub u8,
-        pub ::ethers::core::types::U256,
-    );
+    pub struct RegisteredFilter {
+        pub bls_v_khash: [u8; 32],
+        pub register_epoch: u64,
+        pub stake_type: u8,
+        pub amount_deposited: ::ethers::core::types::U256,
+    }
+    ///Container type for all of the contract's events
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        serde::Serialize,
+        serde::Deserialize,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub enum AbstractStakeTableEvents {
+        DepositFilter(DepositFilter),
+        RegisteredFilter(RegisteredFilter),
+    }
+    impl ::ethers::contract::EthLogDecode for AbstractStakeTableEvents {
+        fn decode_log(
+            log: &::ethers::core::abi::RawLog,
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
+            if let Ok(decoded) = DepositFilter::decode_log(log) {
+                return Ok(AbstractStakeTableEvents::DepositFilter(decoded));
+            }
+            if let Ok(decoded) = RegisteredFilter::decode_log(log) {
+                return Ok(AbstractStakeTableEvents::RegisteredFilter(decoded));
+            }
+            Err(::ethers::core::abi::Error::InvalidData)
+        }
+    }
+    impl ::core::fmt::Display for AbstractStakeTableEvents {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            match self {
+                Self::DepositFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::RegisteredFilter(element) => ::core::fmt::Display::fmt(element, f),
+            }
+        }
+    }
+    impl ::core::convert::From<DepositFilter> for AbstractStakeTableEvents {
+        fn from(value: DepositFilter) -> Self {
+            Self::DepositFilter(value)
+        }
+    }
+    impl ::core::convert::From<RegisteredFilter> for AbstractStakeTableEvents {
+        fn from(value: RegisteredFilter) -> Self {
+            Self::RegisteredFilter(value)
+        }
+    }
     ///Container type for all input parameters for the `deposit` function with signature `deposit((uint256,uint256,uint256,uint256),uint64)` and selector `0x771f6f44`
     #[derive(
         Clone,

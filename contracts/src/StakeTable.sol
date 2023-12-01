@@ -22,6 +22,15 @@ contract StakeTable is AbstractStakeTable {
     /// account.
     error NodeAlreadyRegistered();
 
+    /// Error raised when a user tries to make a deposit but does not control the node public key.
+    error CallerIsNotTheNodeOwner();
+
+    /// Error raised when a user tries to deposit before the registration is complete.
+    error PrematureDeposit();
+
+    /// Error raised when a user tries to deposit while an exit request is in progress.
+    error ExitRequestInProgress();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
 
@@ -99,11 +108,8 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the next available epoch for exit
     function nextExitEpoch() external view override returns (uint64) {
-        if (numPendingExits == 0) {
-            return 0;
-        } else {
-            return 1;
-        }
+        //TODO
+        return currentEpoch() + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
@@ -191,9 +197,33 @@ contract StakeTable is AbstractStakeTable {
         override
         returns (uint64, uint64)
     {
-        bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].balance += amount;
-        return (0, 0);
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // The deposit must come from the node's registered account.
+        if (node.account != msg.sender) {
+            revert CallerIsNotTheNodeOwner();
+        }
+
+        // A node cannot deposit more tokens while it waiting to register,
+        if (currentEpoch() <= node.registerEpoch) {
+            revert PrematureDeposit();
+        }
+
+        // A node cannot deposit more tokens if an exit request is in progress.
+        if (node.exitEpoch != 0) {
+            revert ExitRequestInProgress();
+        }
+
+        node.balance += amount;
+        nodes[key] = node;
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+
+        emit Deposit(_hashBlsKey(blsVK), uint256(amount));
+
+        uint64 effectiveEpoch = currentEpoch() + 1;
+
+        return (node.balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
@@ -202,7 +232,7 @@ contract StakeTable is AbstractStakeTable {
     /// @return success status
     function requestExit(BN254.G2Point memory blsVK) external override returns (bool) {
         bytes32 hash = _hashBlsKey(blsVK);
-        nodes[hash].exitEpoch = 0;
+        nodes[hash].exitEpoch = this.nextExitEpoch();
         return true;
     }
 
