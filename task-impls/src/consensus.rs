@@ -118,7 +118,7 @@ pub struct ConsensusTaskState<
     pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// All the VID shares we've received for current and future views.
-    /// In the future we will need a different struct similar to VidDisperse except 
+    /// In the future we will need a different struct similar to VidDisperse except
     /// it stores only one share.
     /// TODO https://github.com/EspressoSystems/HotShot/issues/2146
     pub vid_shares: HashMap<TYPES::Time, Proposal<TYPES, VidDisperse<TYPES>>>,
@@ -298,7 +298,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
-    // Check if we are able to vote, like whether the proposal is valid, whether we have DAC and VID share, and if so, vote
+    // Check if we are able to vote, like whether the proposal is valid,
+    // whether we have DAC and VID share, and if so, vote.
     async fn vote_if_able(&self) -> bool {
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
@@ -309,8 +310,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         }
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
+            // No need to check vid share nor da cert for genesis
             if proposal.justify_qc.is_genesis && proposal.view_number == TYPES::Time::new(1) {
-                // warn!("Proposal is genesis!");
+                info!("Proposal is genesis!");
 
                 let view = TYPES::Time::new(*proposal.view_number);
                 let justify_qc = proposal.justify_qc.clone();
