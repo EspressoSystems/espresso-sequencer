@@ -15,7 +15,7 @@ import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
-import { LightClientHelper } from "../test/mocks/LightClientHelper.sol";
+import { LightClientTest } from "../test/mocks/LightClientTest.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -28,7 +28,7 @@ contract StakeTable_register_Test is Test {
 
     S public stakeTable;
     ExampleToken public token;
-    LightClientHelper public lightClientContract;
+    LightClientTest public lightClientContract;
     uint256 constant INITIAL_BALANCE = 1_000;
     address exampleTokenCreator;
 
@@ -78,7 +78,7 @@ contract StakeTable_register_Test is Test {
             stakeTableAmountComm: 0,
             threshold: 0
         });
-        lightClientContract = new LightClientHelper(genesis,10);
+        lightClientContract = new LightClientTest(genesis,10);
         address lightClientAddress = address(lightClientContract);
         stakeTable = new S(address(token),lightClientAddress);
     }
@@ -135,7 +135,7 @@ contract StakeTable_register_Test is Test {
     }
 
     function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 rand) external {
-        lightClientContract.updateCurrentEpoch(3);
+        lightClientContract.setCurrentEpoch(3);
         uint64 currentEpoch = stakeTable.currentEpoch();
 
         uint64 depositAmount = 10;

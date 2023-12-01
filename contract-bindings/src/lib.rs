@@ -16,7 +16,6 @@ pub mod example_token;
 pub mod hot_shot;
 pub mod i_plonk_verifier;
 pub mod light_client;
-pub mod light_client_helper;
 pub mod plonk_verifier;
 pub mod polynomial_eval;
 pub mod safe_transfer_lib;
