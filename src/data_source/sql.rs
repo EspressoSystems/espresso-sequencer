@@ -12,7 +12,7 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::{versioned_channel::VersionedChannel, VersionedDataSource};
+use super::{buffered_channel::BufferedChannel, VersionedDataSource};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, ResourceId,
@@ -491,8 +491,8 @@ where
 {
     client: Client,
     tx_in_progress: bool,
-    leaf_stream: VersionedChannel<LeafQueryData<Types, I>>,
-    block_stream: VersionedChannel<BlockQueryData<Types>>,
+    leaf_stream: BufferedChannel<LeafQueryData<Types, I>>,
+    block_stream: BufferedChannel<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
     kill: Option<oneshot::Sender<()>>,
 }
@@ -570,8 +570,8 @@ where
             client,
             tx_in_progress: false,
             kill: Some(kill),
-            leaf_stream: VersionedChannel::init(),
-            block_stream: VersionedChannel::init(),
+            leaf_stream: BufferedChannel::init(),
+            block_stream: BufferedChannel::init(),
             metrics: Default::default(),
         })
     }
@@ -639,8 +639,8 @@ where
             self.client.batch_execute("COMMIT").await?;
             self.tx_in_progress = false;
         }
-        self.leaf_stream.commit().await;
-        self.block_stream.commit().await;
+        self.leaf_stream.flush().await;
+        self.block_stream.flush().await;
         Ok(())
     }
 
@@ -659,8 +659,8 @@ where
                 .expect("DB rollback succeeds");
             self.tx_in_progress = false;
         }
-        self.leaf_stream.revert();
-        self.block_stream.revert();
+        self.leaf_stream.clear();
+        self.block_stream.clear();
     }
 }
 
@@ -957,7 +957,7 @@ where
                 message: err.to_string(),
             })?;
 
-        self.leaf_stream.send(leaf);
+        self.leaf_stream.push(leaf);
         Ok(())
     }
 
@@ -1014,7 +1014,7 @@ where
                 message: err.to_string(),
             })?;
 
-        self.block_stream.send(block);
+        self.block_stream.push(block);
         Ok(())
     }
 }

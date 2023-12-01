@@ -25,12 +25,12 @@
 //! * [`ExtensibleDataSource`]
 //!
 
+mod buffered_channel;
 mod extension;
 mod fs;
 mod ledger_log;
 pub mod sql;
 mod update;
-mod versioned_channel;
 
 pub use extension::ExtensibleDataSource;
 #[cfg(feature = "file-system-data-source")]

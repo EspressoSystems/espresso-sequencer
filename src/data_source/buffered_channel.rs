@@ -12,26 +12,26 @@
 
 #![cfg(feature = "sql-data-source")]
 
-//! Async channel with versioning.
+//! Async channel with message buffering.
 //!
-//! A versioned channel is an async, in-memory broadcast channel with version awareness. Unlike a
-//! typical channel, sending a message only buffers the message in the sender. Receivers are not
-//! notified immediately. Only when [`commit`](VersionedChannel::commit) is called are all buffered
-//! messages delivered to receivers. [`revert`](VersionedChannel::revert) can also be used to drop
-//! all buffered messages without ever notifying receivers.
+//! A buffered channel is an async, in-memory broadcast channel which buffers messages before
+//! delivering them. Unlike a typical channel, sending a message only buffers the message in the
+//! sender. Receivers are not notified immediately. Only when [`flush`](BufferedChannel::flush) is
+//! called are all buffered messages delivered to receivers. [`clear`](BufferedChannel::clear) can
+//! also be used to drop all buffered messages without ever notifying receivers.
 
 use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
 use futures::stream::{self, Stream};
 
-/// An async channel with versioning.
+/// An async channel with message buffering.
 #[derive(Debug)]
-pub(super) struct VersionedChannel<T> {
+pub(super) struct BufferedChannel<T> {
     pending: Vec<T>,
     inner: BroadcastSender<T>,
 }
 
-impl<T: Clone> VersionedChannel<T> {
-    /// Create a versioned channel.
+impl<T: Clone> BufferedChannel<T> {
+    /// Create a buffered channel.
     pub(super) fn init() -> Self {
         Self {
             pending: vec![],
@@ -41,8 +41,8 @@ impl<T: Clone> VersionedChannel<T> {
 
     /// Subscribe to future messages sent on this channel.
     ///
-    /// Messages sent and committed via this sender will be delivered to all subscribers which exist
-    /// at the time the messages are committed.
+    /// Messages queued and flushed via this sender will be delivered to all subscribers which exist
+    /// at the time the messages are flushed.
     pub(super) async fn subscribe(&self) -> impl Stream<Item = T> {
         stream::unfold(self.inner.handle_async().await, |mut handle| async move {
             match handle.recv_async().await {
@@ -56,20 +56,19 @@ impl<T: Clone> VersionedChannel<T> {
         })
     }
 
-    /// Tentatively send a message to the channel.
+    /// Push a message into the buffered channel
     ///
     /// The message is not sent immediately, but will be delivered to receivers after
-    /// [`commit`](Self::commit) is called.
-    pub(super) fn send(&mut self, msg: T) {
+    /// [`flush`](Self::flush) is called.
+    pub(super) fn push(&mut self, msg: T) {
         self.pending.push(msg);
     }
 
-    /// Commit to pending messages.
+    /// Flush buffered messages.
     ///
-    /// Deliver pending messages to active receivers. All messages which were [sent](Self::send)
-    /// since the last [`commit`](Self::commit) or [`revert`](Self::revert) will be
-    /// delivered.
-    pub(super) async fn commit(&mut self) {
+    /// Deliver pending messages to active receivers. All messages which were [pushed](Self::push)
+    /// since the last [`flush`](Self::flush) or [`clear`](Self::clear) will be delivered.
+    pub(super) async fn flush(&mut self) {
         for msg in std::mem::take(&mut self.pending) {
             // Ignore errors on sending, it just means all listeners have dropped their handles.
             self.inner.send_async(msg).await.ok();
@@ -78,9 +77,9 @@ impl<T: Clone> VersionedChannel<T> {
 
     /// Drop pending messages.
     ///
-    /// All messages which were [sent](Self::send) since the last [`commit`](Self::commit) or
-    /// [`revert`](Self::revert) will be dropped.
-    pub(super) fn revert(&mut self) {
+    /// All messages which were [pushed](Self::push) since the last [`flush`](Self::flush) or
+    /// [`clear`](Self::clear) will be dropped.
+    pub(super) fn clear(&mut self) {
         self.pending.clear();
     }
 }
