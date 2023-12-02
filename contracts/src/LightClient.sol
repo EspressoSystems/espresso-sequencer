@@ -7,7 +7,7 @@ import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
 
 // TODO: replace these, for now WIP and test only
-import { VkTest } from "../test/stubs/Transfer1In2Out24DepthVk.sol";
+import { VkTest } from "../test/mocks/Transfer1In2Out24DepthVk.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
