@@ -7,15 +7,16 @@ pub mod circuit;
 mod utils;
 
 use ark_bn254::Bn254;
+use ark_ed_on_bn254::EdwardsConfig;
 use ark_std::{
     borrow::Borrow,
     rand::{CryptoRng, RngCore},
 };
 use circuit::PublicInput;
 use ethereum_types::U256;
-use hotshot_types::traits::{
-    stake_table::{SnapshotVersion, StakeTableScheme},
-    state::LightClientState,
+use hotshot_types::{
+    light_client::{LightClientState, StateVerKey},
+    traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use jf_plonk::{
     errors::PlonkError,
@@ -25,9 +26,7 @@ use jf_plonk::{
 use jf_primitives::signatures::schnorr::Signature;
 
 /// BLS verification key, base field and Schnorr verification key
-pub use hotshot_stake_table::vec_based::config::{
-    BLSVerKey, FieldType as BaseField, SchnorrVerKey,
-};
+pub use hotshot_stake_table::vec_based::config::{FieldType as BaseField, QCVerKey};
 /// Proving key
 pub type ProvingKey = jf_plonk::proof_system::structs::ProvingKey<Bn254>;
 /// Verifying key
@@ -36,8 +35,6 @@ pub type VerifyingKey = jf_plonk::proof_system::structs::VerifyingKey<Bn254>;
 pub type Proof = jf_plonk::proof_system::structs::Proof<Bn254>;
 /// Universal SRS
 pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
-/// Curve config for Schnorr signatures
-pub use ark_ed_on_bn254::EdwardsConfig;
 
 /// Given a SRS, returns the proving key and verifying key for state update
 pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
@@ -65,7 +62,7 @@ pub fn generate_state_update_proof<ST, R, BitIter, SigIter>(
     threshold: &U256,
 ) -> Result<(Proof, PublicInput<BaseField>), PlonkError>
 where
-    ST: StakeTableScheme<Key = BLSVerKey, Amount = U256, Aux = SchnorrVerKey>,
+    ST: StakeTableScheme<Key = QCVerKey, Amount = U256, Aux = StateVerKey>,
     ST::IntoIter: ExactSizeIterator,
     R: CryptoRng + RngCore,
     BitIter: IntoIterator,
@@ -105,9 +102,9 @@ mod tests {
         One,
     };
     use ethereum_types::U256;
-    use hotshot_types::traits::{
-        stake_table::{SnapshotVersion, StakeTableScheme},
-        state::LightClientState,
+    use hotshot_types::{
+        light_client::LightClientState,
+        traits::stake_table::{SnapshotVersion, StakeTableScheme},
     };
     use jf_plonk::{
         proof_system::{PlonkKzgSnark, UniversalSNARK},
@@ -175,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_proof_generation() {
+    fn crypto_test_proof_generation() {
         let num_validators = 10;
         let mut prng = test_rng();
 

@@ -152,7 +152,7 @@ mod test {
         let payload = VIDBlockPayload::genesis();
         let header = VIDBlockHeader {
             block_number: 0,
-            payload_commitment: payload.commit(),
+            payload_commitment: payload.payload_commitment,
         };
         let dummy_leaf_commit = fake_commitment::<Leaf<DummyTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {

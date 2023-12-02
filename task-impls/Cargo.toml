@@ -26,6 +26,7 @@ rand_chacha = { workspace = true }
 hotshot-utils = { path = "../utils" }
 bincode = { workspace = true }
 bitvec = { workspace = true }
+sha2 = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

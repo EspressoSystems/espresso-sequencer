@@ -1,16 +1,15 @@
-use commit::Committable;
 use hotshot::{tasks::add_vid_task, types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
     node_types::{MemoryImpl, TestTypes},
     task_helpers::vid_init,
 };
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     block_impl::VIDTransaction,
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
     traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
 };
-use hotshot_types::{simple_vote::VIDVote, traits::node_implementation::NodeType};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -22,7 +21,7 @@ use std::marker::PhantomData;
 async fn test_vid_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{block_impl::VIDBlockPayload, message::Proposal};
+    use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -36,19 +35,16 @@ async fn test_vid_task() {
 
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref())
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
             .expect("Failed to sign block payload!");
     let proposal: DAProposal<TestTypes> = DAProposal {
-        block_payload: block.clone(),
+        encoded_transactions: encoded_transactions.clone(),
+        metadata: (),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -56,13 +52,14 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
+    let vid_disperse = VidDisperse {
+        view_number: message.data.view_number,
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
     let vid_proposal = Proposal {
-        data: VidDisperse {
-            view_number: message.data.view_number,
-            payload_commitment: block.commit(),
-            shares: vid_disperse.shares,
-            common: vid_disperse.common,
-        },
+        data: vid_disperse.clone(),
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
@@ -74,31 +71,38 @@ async fn test_vid_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(
-        block.clone(),
+    input.push(HotShotEvent::TransactionsSequenced(
+        encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
-
+    input.push(HotShotEvent::BlockReady(
+        vid_disperse.clone(),
+        ViewNumber::new(2),
+    ));
+    input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
 
-    let vid_vote = VIDVote::create_signed_vote(
-        hotshot_types::simple_vote::VIDData {
-            payload_commit: block.commit(),
-        },
-        ViewNumber::new(2),
-        api.public_key(),
-        api.private_key(),
-    )
-    .expect("Failed to sign vid vote");
-    output.insert(HotShotEvent::VidVoteSend(vid_vote), 1);
+    output.insert(
+        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
+        2,
+    );
+
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        1,
+    );
+    output.insert(
+        HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
+        2, // 2 occurrences: 1 from `input`, 1 from the DA task
+    );
 
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);

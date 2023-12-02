@@ -7,24 +7,16 @@ use std::{
 };
 
 use crate::{
-    data::{test_srs, VidScheme, VidSchemeTrait},
+    data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{BlockError, BlockHeader, Transaction},
+        block_contents::{vid_commitment, BlockHeader, Transaction},
         state::TestableBlock,
         BlockPayload,
     },
 };
-use ark_serialize::CanonicalDeserialize;
 use commit::{Commitment, Committable};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of storage nodes for VID initiation.
-pub const NUM_STORAGE_NODES: usize = 8;
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of chunks for VID initiation.
-pub const NUM_CHUNKS: usize = 8;
 
 /// The transaction in a [`VIDBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -83,20 +75,6 @@ pub struct VIDBlockPayload {
 }
 
 impl VIDBlockPayload {
-    #[must_use]
-    /// Compute the VID payload commitment.
-    /// # Panics
-    /// If the VID computation fails.
-    pub fn vid_commitment(encoded_transactions: &[u8]) -> <VidScheme as VidSchemeTrait>::Commit {
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
-        let srs = test_srs(NUM_STORAGE_NODES);
-        // TODO We are using constant numbers for now, but they will change as the quorum size
-        // changes.
-        // TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-        let vid = VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap();
-        vid.disperse(encoded_transactions).unwrap().commit
-    }
-
     /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
     /// consensus task initiation.
     /// # Panics
@@ -108,19 +86,8 @@ impl VIDBlockPayload {
         let encoded = VIDTransaction::encode(vec![VIDTransaction(txns.clone())]).unwrap();
         VIDBlockPayload {
             transactions: vec![VIDTransaction(txns)],
-            payload_commitment: Self::vid_commitment(&encoded),
+            payload_commitment: vid_commitment(&encoded),
         }
-    }
-}
-
-impl Committable for VIDBlockPayload {
-    fn commit(&self) -> Commitment<Self> {
-        <Commitment<Self> as CanonicalDeserialize>::deserialize(&*self.payload_commitment)
-            .expect("conversion from VidScheme::Commit to Commitment should succeed")
-    }
-
-    fn tag() -> String {
-        "VID_BLOCK_PAYLOAD".to_string()
     }
 }
 
@@ -154,7 +121,7 @@ impl BlockPayload for VIDBlockPayload {
         Ok((
             Self {
                 transactions: txns_vec,
-                payload_commitment: Self::vid_commitment(&encoded),
+                payload_commitment: vid_commitment(&encoded),
             },
             (),
         ))
@@ -184,7 +151,7 @@ impl BlockPayload for VIDBlockPayload {
 
         Self {
             transactions,
-            payload_commitment: Self::vid_commitment(&encoded_vec),
+            payload_commitment: vid_commitment(&encoded_vec),
         }
     }
 
@@ -210,14 +177,14 @@ pub struct VIDBlockHeader {
     /// Block number.
     pub block_number: u64,
     /// VID commitment to the payload.
-    pub payload_commitment: Commitment<VIDBlockPayload>,
+    pub payload_commitment: VidCommitment,
 }
 
 impl BlockHeader for VIDBlockHeader {
     type Payload = VIDBlockPayload;
 
     fn new(
-        payload_commitment: Commitment<Self::Payload>,
+        payload_commitment: VidCommitment,
         _metadata: <Self::Payload as BlockPayload>::Metadata,
         parent_header: &Self,
     ) -> Self {
@@ -236,7 +203,7 @@ impl BlockHeader for VIDBlockHeader {
         (
             Self {
                 block_number: 0,
-                payload_commitment: payload.commit(),
+                payload_commitment: payload.payload_commitment,
             },
             payload,
             metadata,
@@ -247,7 +214,9 @@ impl BlockHeader for VIDBlockHeader {
         self.block_number
     }
 
-    fn payload_commitment(&self) -> Commitment<Self::Payload> {
+    fn payload_commitment(&self) -> VidCommitment {
         self.payload_commitment
     }
+
+    fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata {}
 }

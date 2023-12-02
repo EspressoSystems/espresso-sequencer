@@ -1,4 +1,3 @@
-use commit::Committable;
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::node_types::{MemoryImpl, TestTypes};
@@ -7,9 +6,11 @@ use hotshot_types::{
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        consensus_api::ConsensusSharedApi, node_implementation::NodeType, state::ConsensusTime,
+        block_contents::vid_commitment, consensus_api::ConsensusSharedApi,
+        node_implementation::NodeType, state::ConsensusTime,
     },
 };
+use sha2::{Digest, Sha256};
 use std::{collections::HashMap, marker::PhantomData};
 
 #[cfg_attr(
@@ -21,7 +22,7 @@ async fn test_da_task() {
     use hotshot::tasks::add_da_task;
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{block_impl::VIDBlockPayload, message::Proposal};
+    use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -33,18 +34,16 @@ async fn test_da_task() {
     };
     let pub_key = *api.public_key();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = VIDBlockPayload::vid_commitment(&encoded_txns);
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let payload_commitment = vid_commitment(&encoded_transactions);
+    let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
     let signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), block.commit().as_ref())
-            .expect("Faild to sign block payload!");
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), &encoded_transactions_hash)
+            .expect("Failed to sign block payload");
     let proposal = DAProposal {
-        block_payload: block.clone(),
+        encoded_transactions: encoded_transactions.clone(),
+        metadata: (),
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -63,8 +62,8 @@ async fn test_da_task() {
     // In view 1, node 2 is the next leader.
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockReady(
-        block.clone(),
+    input.push(HotShotEvent::TransactionsSequenced(
+        encoded_transactions.clone(),
         (),
         ViewNumber::new(2),
     ));
@@ -74,17 +73,13 @@ async fn test_da_task() {
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
-        1,
-    );
-    output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         1,
     );
     output.insert(HotShotEvent::DAProposalSend(message.clone(), pub_key), 1);
     let da_vote = DAVote::create_signed_vote(
         DAData {
-            payload_commit: block.commit(),
+            payload_commit: payload_commitment,
         },
         ViewNumber::new(2),
         api.public_key(),

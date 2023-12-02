@@ -12,17 +12,19 @@ use hotshot::{
 use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, NUM_CHUNKS, NUM_STORAGE_NODES},
+    block_impl::{VIDBlockHeader, VIDBlockPayload},
     consensus::ConsensusMetricsValue,
     data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
         block_contents::BlockHeader,
+        block_contents::{vid_commitment, NUM_CHUNKS, NUM_STORAGE_NODES},
         consensus_api::ConsensusSharedApi,
         election::Membership,
         node_implementation::NodeType,
         state::{ConsensusTime, TestableBlock},
+        BlockPayload,
     },
     vote::HasViewNumber,
 };
@@ -126,7 +128,7 @@ async fn build_quorum_proposal_and_signature(
 
     // every event input is seen on the event stream in the output.
     let block = <VIDBlockPayload as TestableBlock>::genesis();
-    let payload_commitment = block.commit();
+    let payload_commitment = vid_commitment(&block.encode().unwrap().collect());
     let block_header = VIDBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
     let leaf = Leaf {
         view_number: ViewNumber::new(view),

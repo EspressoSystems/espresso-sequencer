@@ -4,17 +4,17 @@ use ark_ff::PrimeField;
 use ark_std::vec;
 use jf_utils::to_bytes;
 
-/// BLS verification key as indexing key
-pub use jf_primitives::signatures::bls_over_bn254::VerKey as BLSVerKey;
 /// Schnorr verification key as auxiliary information
-pub type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<ark_ed_on_bn254::EdwardsConfig>;
+pub use hotshot_types::light_client::StateVerKey;
+/// BLS verification key as indexing key
+pub use jf_primitives::signatures::bls_over_bn254::VerKey as QCVerKey;
 /// Type for commitment
 pub type FieldType = ark_ed_on_bn254::Fq;
 
 /// Hashable representation of a key
 /// NOTE: commitment is only used in light client contract.
 /// For this application, we needs only hash the Schnorr verfication key.
-impl ToFields<FieldType> for SchnorrVerKey {
+impl ToFields<FieldType> for StateVerKey {
     const SIZE: usize = 2;
 
     fn to_fields(&self) -> Vec<FieldType> {
@@ -23,7 +23,7 @@ impl ToFields<FieldType> for SchnorrVerKey {
     }
 }
 
-impl ToFields<FieldType> for BLSVerKey {
+impl ToFields<FieldType> for QCVerKey {
     const SIZE: usize = 2;
 
     fn to_fields(&self) -> Vec<FieldType> {

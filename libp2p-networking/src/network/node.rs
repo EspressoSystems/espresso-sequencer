@@ -15,6 +15,7 @@ use super::{
     error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
     gen_transport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal, NetworkNodeType,
 };
+
 use crate::network::{
     behaviours::{
         dht::{DHTBehaviour, DHTEvent, DHTProgress, KadPutQuery},
@@ -32,6 +33,7 @@ use async_compatibility_layer::{
 use either::Either;
 use futures::{select, FutureExt, StreamExt};
 use hotshot_constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
+use libp2p::core::transport::ListenerId;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::Boxed},
     gossipsub::{
@@ -80,6 +82,8 @@ pub struct NetworkNode {
     swarm: Swarm<NetworkDef>,
     /// the configuration parameters of the netework
     config: NetworkNodeConfig,
+    /// the listener id we are listening on, if it exists
+    listener_id: Option<ListenerId>,
 }
 
 impl NetworkNode {
@@ -101,7 +105,7 @@ impl NetworkNode {
         &mut self,
         listen_addr: Multiaddr,
     ) -> Result<Multiaddr, NetworkError> {
-        self.swarm.listen_on(listen_addr).context(TransportSnafu)?;
+        self.listener_id = Some(self.swarm.listen_on(listen_addr).context(TransportSnafu)?);
         let addr = loop {
             if let Some(SwarmEvent::NewListenAddr { address, .. }) = self.swarm.next().await {
                 break address;
@@ -303,6 +307,7 @@ impl NetworkNode {
             peer_id,
             swarm,
             config,
+            listener_id: None,
         })
     }
 
@@ -371,7 +376,10 @@ impl NetworkNode {
                         // NOTE used by test with conductor only
                     }
                     ClientRequest::Shutdown => {
-                        warn!("Libp2p listener shutting down");
+                        if let Some(listener_id) = self.listener_id {
+                            self.swarm.remove_listener(listener_id);
+                        }
+
                         return Ok(true);
                     }
                     ClientRequest::GossipMsg(topic, contents) => {

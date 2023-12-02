@@ -1,4 +1,3 @@
-use commit::Committable;
 use hotshot::{types::SignatureKey, HotShotConsensusApi};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_testing::{
@@ -22,9 +21,7 @@ async fn test_network_task() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::{
-        block_impl::{VIDBlockPayload, VIDTransaction},
-        data::VidDisperse,
-        message::Proposal,
+        block_impl::VIDTransaction, data::VidDisperse, message::Proposal,
         traits::node_implementation::NodeType,
     };
 
@@ -40,39 +37,36 @@ async fn test_network_task() {
     let priv_key = api.private_key();
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_txns = VIDTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_txns).unwrap();
+    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
-    let block = VIDBlockPayload {
-        transactions,
-        payload_commitment,
-    };
     let signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
-            block.commit().as_ref(),
+            payload_commitment.as_ref(),
         )
         .expect("Failed to sign block commitment");
     let da_proposal = Proposal {
         data: DAProposal {
-            block_payload: block.clone(),
+            encoded_transactions: encoded_transactions.clone(),
+            metadata: (),
             view_number: ViewNumber::new(2),
         },
         signature,
         _pd: PhantomData,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
-    let quorum_signature : &<<TestTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType = &da_proposal.signature;
+    let da_vid_disperse_inner = VidDisperse {
+        view_number: da_proposal.data.view_number,
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
     // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
-        data: VidDisperse {
-            view_number: da_proposal.data.view_number,
-            payload_commitment: block.commit(),
-            shares: vid_disperse.shares,
-            common: vid_disperse.common,
-        },
-        signature: quorum_signature.clone(),
+        data: da_vid_disperse_inner.clone(),
+        signature: da_proposal.signature.clone(),
         _pd: PhantomData,
     };
 
@@ -81,9 +75,13 @@ async fn test_network_task() {
     let mut output = HashMap::new();
 
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::BlockReady(
-        block.clone(),
+    input.push(HotShotEvent::TransactionsSequenced(
+        encoded_transactions.clone(),
         (),
+        ViewNumber::new(2),
+    ));
+    input.push(HotShotEvent::BlockReady(
+        da_vid_disperse_inner.clone(),
         ViewNumber::new(2),
     ));
     input.push(HotShotEvent::DAProposalSend(da_proposal.clone(), pub_key));
@@ -104,7 +102,7 @@ async fn test_network_task() {
         2, // 2 occurrences: 1 from `input`, 1 from the DA task
     );
     output.insert(
-        HotShotEvent::BlockReady(block.clone(), (), ViewNumber::new(2)),
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         2,
     );
     output.insert(
@@ -128,8 +126,12 @@ async fn test_network_task() {
         1,
     );
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(block.commit(), ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
         1,
+    );
+    output.insert(
+        HotShotEvent::BlockReady(da_vid_disperse_inner, ViewNumber::new(2)),
+        2,
     );
     output.insert(HotShotEvent::DAProposalRecv(da_proposal, pub_key), 1);
     output.insert(

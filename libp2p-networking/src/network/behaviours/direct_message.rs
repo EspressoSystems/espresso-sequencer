@@ -69,17 +69,19 @@ impl DMBehaviour {
             }
             Event::OutboundFailure {
                 peer,
-                request_id,
+                request_id: _,
                 error,
             } => {
                 error!(
                     "outbound failure to send message to {:?} with error {:?}",
                     peer, error
                 );
-                if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
-                    req.backoff.start_next(false);
-                    self.failed_rr.push_back(req);
-                }
+                // RM TODO: make direct messages have n (and not infinite) retries
+                // issue: https://github.com/EspressoSystems/HotShot/issues/2003
+                // if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
+                //     req.backoff.start_next(false);
+                //     self.failed_rr.push_back(req);
+                // }
             }
             Event::Message { message, peer, .. } => match message {
                 Message::Request {
