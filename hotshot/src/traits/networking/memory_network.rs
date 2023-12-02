@@ -502,6 +502,14 @@ where
 {
     type NETWORK = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
+    fn pause(&self) {
+        unimplemented!("Pausing not implemented for the memory network");
+    }
+
+    fn resume(&self) {
+        unimplemented!("Resuming not implemented for the memory network");
+    }
+
     async fn wait_for_ready(&self) {
         self.0.wait_for_ready().await;
     }

@@ -9,6 +9,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 struct WebServerArgs {
+    url: String,
     port: u16,
 }
 
@@ -22,6 +23,6 @@ async fn main() {
     let _sender = Arc::new(server_shutdown_sender);
     let _result = hotshot_web_server::run_web_server::<
         <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-    >(Some(server_shutdown), args.port)
+    >(Some(server_shutdown), args.url, args.port)
     .await;
 }

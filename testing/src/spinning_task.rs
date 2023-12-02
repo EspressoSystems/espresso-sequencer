@@ -1,39 +1,32 @@
-use std::{
-    collections::HashMap,
-    sync::{atomic::AtomicUsize, Arc},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{test_launcher::TaskGenerator, test_runner::Node, GlobalTestEvent};
-use async_compatibility_layer::art::async_sleep;
+use async_compatibility_layer::channel::UnboundedStream;
 use futures::FutureExt;
 use hotshot::{traits::TestableNodeImplementation, HotShotType, SystemContext};
 use hotshot_task::{
-    boxed_sync,
     event_stream::ChannelStream,
     task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},
     task_impls::{HSTWithEventAndMessage, TaskBuilder},
-    GeneratedStream,
+    MergeN,
 };
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::network::CommunicationChannel;
+use hotshot_types::{event::Event, traits::node_implementation::NodeType};
 use snafu::Snafu;
+
+use crate::{test_launcher::TaskGenerator, test_runner::Node};
+pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
+
+use super::GlobalTestEvent;
+
 #[derive(Snafu, Debug)]
 pub struct SpinningTaskErr {}
 
-/// Completion task types
-pub type SpinningTaskTypes<TYPES, I> = HSTWithEventAndMessage<
-    SpinningTaskErr,
-    GlobalTestEvent,
-    ChannelStream<GlobalTestEvent>,
-    (),
-    GeneratedStream<()>,
-    SpinningTask<TYPES, I>,
->;
-
+/// Spinning task state
 pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) handles: Vec<Node<TYPES, I>>,
     pub(crate) late_start: HashMap<u64, SystemContext<TYPES, I>>,
-    pub(crate) changes: Vec<Vec<ChangeNode>>,
+    pub(crate) changes: HashMap<TYPES::Time, Vec<ChangeNode>>,
+    pub(crate) latest_view: Option<TYPES::Time>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TS for SpinningTask<TYPES, I> {}
@@ -45,6 +38,10 @@ pub enum UpDown {
     Up,
     /// spin the node down
     Down,
+    /// spin the node's network up
+    NetworkUp,
+    /// spin the node's network down
+    NetworkDown,
 }
 
 /// denotes a change in node state
@@ -52,23 +49,21 @@ pub enum UpDown {
 pub struct ChangeNode {
     /// the index of the node
     pub idx: usize,
-    /// spin the node up or down
+    /// spin the node or node's network up or down
     pub updown: UpDown,
 }
 
 #[derive(Clone, Debug)]
 pub struct SpinningTaskDescription {
-    pub node_changes: Vec<(Duration, Vec<ChangeNode>)>,
+    pub node_changes: Vec<(u64, Vec<ChangeNode>)>,
 }
 
 impl SpinningTaskDescription {
+    /// build a task
     pub fn build<TYPES: NodeType, I: TestableNodeImplementation<TYPES>>(
         self,
-    ) -> TaskGenerator<SpinningTask<TYPES, I>>
-    where
-        SystemContext<TYPES, I>: HotShotType<TYPES, I>,
-    {
-        Box::new(move |state, mut registry, test_event_stream| {
+    ) -> TaskGenerator<SpinningTask<TYPES, I>> {
+        Box::new(move |mut state, mut registry, test_event_stream| {
             async move {
                 let event_handler =
                     HandleEvent::<SpinningTaskTypes<TYPES, I>>(Arc::new(move |event, state| {
@@ -81,53 +76,85 @@ impl SpinningTaskDescription {
                         }
                         .boxed()
                     }));
-                let atomic_idx = Arc::new(AtomicUsize::new(0));
-                let sleep_durations = Arc::new(
-                    self.node_changes
-                        .clone()
-                        .into_iter()
-                        .map(|(d, _)| d)
-                        .collect::<Vec<_>>(),
-                );
-                let stream_generator = GeneratedStream::new(Arc::new(move || {
-                    let atomic_idx = atomic_idx.clone();
-                    let sleep_durations = sleep_durations.clone();
-                    let atomic_idx = atomic_idx.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    sleep_durations.get(atomic_idx).copied().map(|duration| {
-                        let fut = async move {
-                            async_sleep(duration).await;
-                        };
-                        boxed_sync(fut)
-                    })
-                }));
+
                 let message_handler = HandleMessage::<SpinningTaskTypes<TYPES, I>>(Arc::new(
-                    move |_msg, mut state| {
+                    move |msg, mut state| {
                         async move {
-                            if let Some(nodes_to_change) = state.changes.pop() {
-                                for ChangeNode { idx, updown } in nodes_to_change {
-                                    match updown {
-                                        UpDown::Up => {
-                                            if let Some(node) =
-                                                state.late_start.remove(&idx.try_into().unwrap())
-                                            {
-                                                tracing::error!("Spinning up node late");
-                                                let handle = node.run_tasks().await;
-                                                handle.hotshot.start_consensus().await;
+                            let Event {
+                                view_number,
+                                event: _,
+                            } = msg.1;
+
+                            // if we have not seen this view before
+                            if state.latest_view.is_none()
+                                || view_number > state.latest_view.unwrap()
+                            {
+                                // perform operations on the nodes
+                                if let Some(operations) = state.changes.remove(&view_number) {
+                                    for ChangeNode { idx, updown } in operations {
+                                        match updown {
+                                            UpDown::Up => {
+                                                if let Some(node) = state
+                                                    .late_start
+                                                    .remove(&idx.try_into().unwrap())
+                                                {
+                                                    tracing::error!(
+                                                        "Node {} spinning up late",
+                                                        idx
+                                                    );
+                                                    let handle = node.run_tasks().await;
+                                                    handle.hotshot.start_consensus().await;
+                                                }
                                             }
-                                        }
-                                        UpDown::Down => {
-                                            if let Some(node) = state.handles.get_mut(idx) {
-                                                node.handle.shut_down().await;
+                                            UpDown::Down => {
+                                                if let Some(node) = state.handles.get_mut(idx) {
+                                                    tracing::error!("Node {} shutting down", idx);
+                                                    node.handle.shut_down().await;
+                                                }
+                                            }
+                                            UpDown::NetworkUp => {
+                                                if let Some(handle) = state.handles.get(idx) {
+                                                    tracing::error!(
+                                                        "Node {} networks resuming",
+                                                        idx
+                                                    );
+                                                    handle.networks.0.resume();
+                                                    handle.networks.1.resume();
+                                                }
+                                            }
+                                            UpDown::NetworkDown => {
+                                                if let Some(handle) = state.handles.get(idx) {
+                                                    tracing::error!(
+                                                        "Node {} networks pausing",
+                                                        idx
+                                                    );
+                                                    handle.networks.0.pause();
+                                                    handle.networks.1.pause();
+                                                }
                                             }
                                         }
                                     }
                                 }
+
+                                // update our latest view
+                                state.latest_view = Some(view_number);
                             }
+
                             (None, state)
                         }
                         .boxed()
                     },
                 ));
+
+                let mut streams = vec![];
+                for handle in &mut state.handles {
+                    let s1 = handle
+                        .handle
+                        .get_event_stream_known_impl(FilterEvent::default())
+                        .await
+                        .0;
+                    streams.push(s1);
+                }
                 let builder = TaskBuilder::<SpinningTaskTypes<TYPES, I>>::new(
                     "Test Spinning Task".to_string(),
                 )
@@ -135,10 +162,10 @@ impl SpinningTaskDescription {
                 .await
                 .register_registry(&mut registry)
                 .await
-                .register_state(state)
-                .register_event_handler(event_handler)
                 .register_message_handler(message_handler)
-                .register_message_stream(stream_generator);
+                .register_message_stream(MergeN::new(streams))
+                .register_event_handler(event_handler)
+                .register_state(state);
                 let task_id = builder.get_task_id().unwrap();
                 (task_id, SpinningTaskTypes::build(builder).launch())
             }
@@ -146,3 +173,13 @@ impl SpinningTaskDescription {
         })
     }
 }
+
+/// types for safety task
+pub type SpinningTaskTypes<TYPES, I> = HSTWithEventAndMessage<
+    SpinningTaskErr,
+    GlobalTestEvent,
+    ChannelStream<GlobalTestEvent>,
+    (usize, Event<TYPES>),
+    MergeN<UnboundedStream<Event<TYPES>>>,
+    SpinningTask<TYPES, I>,
+>;

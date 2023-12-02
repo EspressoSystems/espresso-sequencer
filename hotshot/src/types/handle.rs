@@ -190,7 +190,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         'a: 'b,
         Self: 'b,
     {
-        boxed_sync(async move { self.registry.shutdown_all().await })
+        boxed_sync(async move {
+            self.hotshot.inner.networks.shut_down_networks().await;
+            self.registry.shutdown_all().await;
+        })
     }
 
     /// return the timeout for a view of the underlying `SystemContext`

@@ -78,6 +78,9 @@ impl TimeBasedCompletionTaskDescription {
                         async move {
                             match event {
                                 GlobalTestEvent::ShutDown => {
+                                    for node in &state.handles {
+                                        node.handle.clone().shut_down().await;
+                                    }
                                     (Some(HotShotTaskCompleted::ShutDown), state)
                                 }
                             }

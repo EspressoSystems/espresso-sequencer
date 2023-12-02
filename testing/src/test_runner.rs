@@ -4,7 +4,7 @@ use super::{
     txn_task::TxnTask,
 };
 use crate::{
-    spinning_task::UpDown,
+    spinning_task::{ChangeNode, UpDown},
     test_launcher::{Networks, TestLauncher},
 };
 use hotshot::{types::SystemContextHandle, Memberships};
@@ -13,9 +13,10 @@ use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotTyp
 use hotshot_task::{
     event_stream::ChannelStream, global_registry::GlobalRegistry, task_launcher::TaskRunner,
 };
+use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    traits::{election::Membership, node_implementation::NodeType},
+    traits::{election::Membership, node_implementation::NodeType, state::ConsensusTime},
     HotShotConfig, ValidatorConfig,
 };
 use std::{
@@ -29,6 +30,7 @@ use tracing::info;
 #[derive(Clone)]
 pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub node_id: u64,
+    pub networks: Networks<TYPES, I>,
     pub handle: SystemContextHandle<TYPES, I>,
 }
 
@@ -112,10 +114,20 @@ where
         task_runner = task_runner.add_task(id, "Test Completion Task".to_string(), task);
 
         // add spinning task
+        // map spinning to view
+        let mut changes: HashMap<TYPES::Time, Vec<ChangeNode>> = HashMap::new();
+        for (view, mut change) in spinning_changes {
+            changes
+                .entry(TYPES::Time::new(view))
+                .or_insert_with(Vec::new)
+                .append(&mut change);
+        }
+
         let spinning_task_state = crate::spinning_task::SpinningTask {
             handles: nodes.clone(),
             late_start,
-            changes: spinning_changes.into_iter().map(|(_, b)| b).collect(),
+            latest_view: None,
+            changes,
         };
 
         let (id, task) = (launcher.spinning_task_generator)(
@@ -139,6 +151,11 @@ where
         )
         .await;
         task_runner = task_runner.add_task(id, "Test Overall Safety Task".to_string(), task);
+
+        // wait for networks to be ready
+        for node in &nodes {
+            node.networks.0.wait_for_ready().await;
+        }
 
         // Start hotshot
         for node in nodes {
@@ -180,13 +197,20 @@ where
             let validator_config =
                 ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1);
             let hotshot = self
-                .add_node_with_config(networks, storage, initializer, config, validator_config)
+                .add_node_with_config(
+                    networks.clone(),
+                    storage,
+                    initializer,
+                    config,
+                    validator_config,
+                )
                 .await;
             if late_start.contains(&node_id) {
                 self.late_start.insert(node_id, hotshot);
             } else {
                 self.nodes.push(Node {
                     node_id,
+                    networks,
                     handle: hotshot.run_tasks().await,
                 });
             }

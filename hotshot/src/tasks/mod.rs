@@ -2,7 +2,6 @@
 
 use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
-use commit::Committable;
 use futures::FutureExt;
 use hotshot_task::{
     boxed_sync,
@@ -28,6 +27,7 @@ use hotshot_types::{
     event::Event,
     message::Messages,
     traits::{
+        block_contents::vid_commitment,
         consensus_api::ConsensusSharedApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{NodeImplementation, NodeType},
@@ -205,21 +205,24 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     };
     let registry = task_runner.registry.clone();
     let (payload, metadata) = <TYPES::BlockPayload as BlockPayload>::genesis();
+    // Impossible for `unwrap` to fail on the genesis payload.
+    let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
     // build the consensus task
     let consensus_state = ConsensusTaskState {
         registry: registry.clone(),
         consensus,
         timeout: handle.hotshot.inner.config.next_view_timeout,
         cur_view: TYPES::Time::new(0),
-        payload_commitment_and_metadata: Some((payload.commit(), metadata)),
+        payload_commitment_and_metadata: Some((payload_commitment, metadata)),
         api: c_api.clone(),
         _pd: PhantomData,
         vote_collector: None,
+        timeout_vote_collector: None,
         timeout_task: async_spawn(async move {}),
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
         da_certs: HashMap::new(),
-        vid_certs: HashMap::new(),
+        vid_shares: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,
         public_key: c_api.public_key().clone(),

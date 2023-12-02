@@ -452,7 +452,6 @@ impl DHTBehaviour {
                 result: QueryResult::Bootstrap(Err(e)),
                 ..
             } => {
-                warn!("DHT: Bootstrap attempt failed. Retrying shortly.");
                 let BootstrapError::Timeout { num_remaining, .. } = e;
                 if num_remaining.is_none() {
                     error!(
@@ -562,7 +561,6 @@ impl NetworkBehaviour for DHTBehaviour {
         {
             match self.kadem.bootstrap() {
                 Ok(_) => {
-                    info!("started bootstrap for peer {:?}", self.peer_id);
                     self.bootstrap_state.state = State::Started;
                 }
                 Err(e) => {

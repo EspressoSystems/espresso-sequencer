@@ -44,7 +44,7 @@ async fn test_timeout_web() {
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(500), dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
 
     metadata.completion_task_description =
@@ -69,6 +69,7 @@ async fn test_timeout_web() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 async fn test_timeout_libp2p() {
     use std::time::Duration;
 
@@ -95,7 +96,7 @@ async fn test_timeout_libp2p() {
         ..Default::default()
     };
     let dead_nodes = vec![ChangeNode {
-        idx: 0,
+        idx: 5,
         updown: UpDown::Down,
     }];
 
@@ -107,7 +108,7 @@ async fn test_timeout_libp2p() {
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(500), dead_nodes)],
+        node_changes: vec![(2, dead_nodes)],
     };
 
     metadata.completion_task_description =

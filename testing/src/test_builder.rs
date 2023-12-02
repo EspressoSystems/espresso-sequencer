@@ -66,7 +66,7 @@ pub struct TestMetadata {
 impl Default for TimingData {
     fn default() -> Self {
         Self {
-            next_view_timeout: 1000,
+            next_view_timeout: 1500,
             timeout_ratio: (11, 10),
             round_start_delay: 100,
             start_delay: 100,
@@ -139,14 +139,14 @@ impl TestMetadata {
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
                     // Increase the duration to get the expected number of successful views.
-                    duration: Duration::new(200, 0),
+                    duration: Duration::new(300, 0),
                 },
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 ..Default::default()
             },
             timing_data: TimingData {
-                next_view_timeout: 1000,
+                next_view_timeout: 5000,
                 ..TimingData::default()
             },
             ..TestMetadata::default()
@@ -206,9 +206,9 @@ impl TestMetadata {
 
         // We assign known_nodes' public key and stake value here rather than read from config file since it's a test.
         let known_nodes_with_stake = (0..total_nodes)
-            .map(|node_id| {
+            .map(|node_id_| {
                 let cur_validator_config: ValidatorConfig<TYPES::SignatureKey> =
-                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id as u64, 1);
+                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id_ as u64, 1);
 
                 cur_validator_config
                     .public_key

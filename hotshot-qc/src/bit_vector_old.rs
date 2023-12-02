@@ -319,7 +319,7 @@ mod tests {
         };
     }
     #[test]
-    fn test_quorum_certificate() {
+    fn crypto_test_quorum_certificate() {
         test_quorum_certificate!(BLSOverBN254CurveSignatureScheme);
     }
 }

@@ -66,11 +66,11 @@ online_time = 10
 base_port = 9000
 
 [web_server_config]
-host = "127.0.0.1"
+url = "http://localhost"
 port = 9000
 
 [da_web_server_config]
-host = "127.0.0.1"
+url = "http://localhost"
 port = 9001
 
 [web_server_config.wait_between_polls]

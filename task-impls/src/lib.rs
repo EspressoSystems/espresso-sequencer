@@ -34,3 +34,6 @@ pub mod view_sync;
 
 /// The task which implements verifiable information dispersal
 pub mod vid;
+
+/// Generic task for collecting votes
+pub mod vote;

@@ -369,7 +369,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::config::{BLSVerKey, FieldType as F, SchnorrVerKey};
+    use super::config::{FieldType as F, QCVerKey, StateVerKey};
     use super::StakeTable;
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
@@ -378,8 +378,8 @@ mod tests {
     use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
 
     #[test]
-    fn test_stake_table() -> Result<(), StakeTableError> {
-        let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
+    fn crypto_test_stake_table() -> Result<(), StakeTableError> {
+        let mut st = StakeTable::<QCVerKey, StateVerKey, F>::new();
         let mut prng = jf_utils::test_rng();
         let keys = (0..10)
             .map(|_| {

@@ -52,13 +52,6 @@ DOC = """
 Return the DA certificate for a given view number
 """
 
-# GET the VID certificate for a view, where the view is passed as an argument
-[route.getvidcertificate]
-PATH = ["vid_certificate/:view_number"]
-":view_number" = "Integer"
-DOC = """
-Return the VID certificate for a given view number
-"""
 
 # POST a DA certificate, where the view is passed as an argument
 [route.postcertificate]
@@ -69,14 +62,6 @@ DOC = """
 Post the DA certificate for a given view_number
 """
 
-# POST a VID certificate, where the view is passed as an argument
-[route.postvidcertificate]
-PATH = ["vid_certificate/:view_number"]
-METHOD = "POST"
-":view_number" = "Integer"
-DOC = """
-Post the VID certificate for a given view_number
-"""
 
 # GET all the votes from a given index for a given view number
 [route.getvotes]
@@ -88,15 +73,6 @@ DOC = """
 Get all votes for a view number
 """
 
-# GET all the VID votes from a given index for a given view number
-[route.getvidvotes]
-PATH = ["vid_votes/:view_number/:index"]
-":view_number" = "Integer"
-":index" = "Integer"
-METHOD = "GET"
-DOC = """
-Get all VID votes for a view number
-"""
 
 # POST a vote, where the view number is passed as an argument
 [route.postvote]
@@ -107,14 +83,6 @@ DOC = """
 Send a vote
 """
 
-# POST a VID vote, where the view number is passed as an argument
-[route.postvidvote]
-PATH = ["vid_votes/:view_number"]
-":view_number" = "Integer"
-METHOD = "POST"
-DOC = """
-Send a VID vote
-"""
 
 # GET all transactions starting at :index
 [route.gettransactions]

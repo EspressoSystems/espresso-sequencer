@@ -5,7 +5,6 @@ use async_compatibility_layer::channel::OneShotReceiver;
 use async_lock::RwLock;
 use clap::Args;
 use futures::FutureExt;
-use tracing::error;
 
 use hotshot_types::traits::signature_key::{EncodedPublicKey, SignatureKey};
 use rand::{distributions::Alphanumeric, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -278,7 +277,6 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let votes = self.view_sync_votes.get(&view_number);
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
-            // error!("Passed in index is: {} self index is: {}", index, *self.vote_index.get(&view_number).unwrap());
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
             }
@@ -433,7 +431,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
     /// Stores a received proposal in the `WebServerState`
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
-        error!("Received proposal for view {}", view_number);
+        info!("Received proposal for view {}", view_number);
 
         if view_number > self.recent_proposal {
             self.recent_proposal = view_number;
@@ -454,7 +452,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     }
 
     fn post_vid_disperse(&mut self, view_number: u64, mut disperse: Vec<u8>) -> Result<(), Error> {
-        error!("Received VID disperse for view {}", view_number);
+        info!("Received VID disperse for view {}", view_number);
         if view_number > self.recent_vid_disperse {
             self.recent_vid_disperse = view_number;
         }
@@ -526,7 +524,7 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         view_number: u64,
         mut certificate: Vec<u8>,
     ) -> Result<(), Error> {
-        error!("Received VID Certificate for view {}", view_number);
+        info!("Received VID Certificate for view {}", view_number);
 
         // Only keep proposal history for MAX_VIEWS number of view
         if self.vid_certificates.len() >= MAX_VIEWS {
@@ -688,26 +686,11 @@ where
         }
         .boxed()
     })?
-    .get("getvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            state.get_vid_certificate(view_number)
-        }
-        .boxed()
-    })?
     .get("getvotes", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
             let index: u64 = req.integer_param("index")?;
             state.get_votes(view_number, index)
-        }
-        .boxed()
-    })?
-    .get("getvidvotes", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let index: u64 = req.integer_param("index")?;
-            state.get_vid_votes(view_number, index)
         }
         .boxed()
     })?
@@ -732,15 +715,6 @@ where
             // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
             let vote = req.body_bytes();
             state.post_vote(view_number, vote)
-        }
-        .boxed()
-    })?
-    .post("postvidvote", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
-            let vote = req.body_bytes();
-            state.post_vid_vote(view_number, vote)
         }
         .boxed()
     })?
@@ -782,14 +756,6 @@ where
             let view_number: u64 = req.integer_param("view_number")?;
             let cert = req.body_bytes();
             state.post_da_certificate(view_number, cert)
-        }
-        .boxed()
-    })?
-    .post("postvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let cert = req.body_bytes();
-            state.post_vid_certificate(view_number, cert)
         }
         .boxed()
     })?
@@ -855,6 +821,7 @@ where
 
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
+    url: String,
     port: u16,
 ) -> io::Result<()> {
     let options = Options::default();
@@ -865,7 +832,7 @@ pub async fn run_web_server<KEY: SignatureKey + 'static>(
 
     app.register_module("api", api).unwrap();
 
-    let app_future = app.serve(format!("http://0.0.0.0:{port}"));
+    let app_future = app.serve(format!("{url}:{port}"));
 
     info!("Web server started on port {port}");
 

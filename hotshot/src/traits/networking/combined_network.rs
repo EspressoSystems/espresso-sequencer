@@ -12,7 +12,7 @@ use std::{
     hash::Hasher,
     sync::atomic::{AtomicU64, Ordering},
 };
-use tracing::error;
+use tracing::warn;
 
 use async_trait::async_trait;
 
@@ -223,6 +223,14 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedCommCh
 impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES> {
     type NETWORK = CombinedNetworks<TYPES>;
 
+    fn pause(&self) {
+        self.networks.0.pause();
+    }
+
+    fn resume(&self) {
+        self.networks.0.resume();
+    }
+
     async fn wait_for_ready(&self) {
         join!(
             self.primary().wait_for_ready(),
@@ -254,9 +262,9 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
             <TYPES as NodeType>::Membership::get_committee(election, message.get_view_number());
 
         // broadcast optimistically on both networks, but if the primary network is down, skip it
-        if self.primary_down.load(Ordering::Relaxed) < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
-            || self.primary_down.load(Ordering::Relaxed) % COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL
-                == 0
+        let primary_down = self.primary_down.load(Ordering::Relaxed);
+        if primary_down < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
+            || primary_down % COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL == 0
         {
             // broadcast on the primary network as it is not down, or we are checking if it is back up
             match self
@@ -268,7 +276,7 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
                     self.primary_down.store(0, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    error!("Error on primary network: {}", e);
+                    warn!("Error on primary network: {}", e);
                     self.primary_down.fetch_add(1, Ordering::Relaxed);
                 }
             };
@@ -285,9 +293,9 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
         recipient: TYPES::SignatureKey,
     ) -> Result<(), NetworkError> {
         // DM optimistically on both networks, but if the primary network is down, skip it
-        if self.primary_down.load(Ordering::Relaxed) < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
-            || self.primary_down.load(Ordering::Relaxed) % COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL
-                == 0
+        let primary_down = self.primary_down.load(Ordering::Relaxed);
+        if primary_down < COMBINED_NETWORK_MIN_PRIMARY_FAILURES
+            || primary_down % COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL == 0
         {
             // message on the primary network as it is not down, or we are checking if it is back up
             match self
@@ -299,7 +307,7 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
                     self.primary_down.store(0, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    error!("Error on primary network: {}", e);
+                    warn!("Error on primary network: {}", e);
                     self.primary_down.fetch_add(1, Ordering::Relaxed);
                 }
             };
@@ -317,6 +325,7 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
         Self: 'b,
     {
         // recv on both networks because nodes may be accessible only on either. discard duplicates
+        // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
         let closure = async move {
             let mut primary_msgs = self.primary().recv_msgs(transmit_type).await?;
             let mut secondary_msgs = self.secondary().recv_msgs(transmit_type).await?;
@@ -325,6 +334,7 @@ impl<TYPES: NodeType> CommunicationChannel<TYPES> for CombinedCommChannel<TYPES>
 
             let mut filtered_msgs = Vec::with_capacity(primary_msgs.len());
             for msg in primary_msgs {
+                // see if we've already seen this message
                 if !self
                     .message_cache
                     .read()
