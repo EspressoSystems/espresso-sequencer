@@ -300,6 +300,7 @@ pub mod test {
     )]
     #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
     #[allow(clippy::should_panic_without_expect)]
+    #[should_panic]
     async fn test_init_with_event_stream() {
         setup_logging();
         let task = TaskBuilder::<AppliedHSTWithEvent>::new("Test Task".to_string());
