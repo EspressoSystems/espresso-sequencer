@@ -68,7 +68,7 @@ pub struct Consensus<TYPES: NodeType> {
 pub struct ConsensusMetricsValue {
     /// The values that are being tracked
     pub values: Arc<Mutex<InnerConsensusMetrics>>,
-    /// The number of last synced synced block height
+    /// The number of last synced block height
     pub last_synced_block_height: Box<dyn Gauge>,
     /// The number of last decided view
     pub last_decided_view: Box<dyn Gauge>,
