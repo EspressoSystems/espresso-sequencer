@@ -41,12 +41,9 @@ async fn test_network_task() {
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
     let signature =
-        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
-            api.private_key(),
-            payload_commitment.as_ref(),
-        )
-        .expect("Failed to sign block commitment");
-    let da_proposal = Proposal {
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref())
+            .expect("Failed to sign block commitment");
+    let da_proposal = Proposal::<TestTypes, _> {
         data: DAProposal {
             encoded_transactions: encoded_transactions.clone(),
             metadata: (),

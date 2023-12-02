@@ -148,8 +148,12 @@ impl SignatureKey for BLSPubKey {
     }
 
     fn genesis_proposer_pk() -> Self {
+        use jf_primitives::signatures::bls_over_bn254::KeyPair;
+        use rand::rngs::mock::StepRng;
+        let mut my_rng = StepRng::new(42, 1337);
+        let kp = KeyPair::generate(&mut my_rng);
         BLSPubKey {
-            pub_key: unimplemented!(),
+            pub_key: kp.ver_key(),
         }
     }
 }
