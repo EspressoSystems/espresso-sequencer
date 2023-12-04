@@ -33,11 +33,7 @@ async fn test_vid_task() {
     };
     let pub_key = *api.public_key();
 
-    // quorum membership for VID share distribution
-    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
-
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(0));
-
+    let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
@@ -55,13 +51,12 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
-
-    let vid_disperse = VidDisperse::from_membership(
-        message.data.view_number,
-        vid_disperse,
-        &quorum_membership.into(),
-    );
-
+    let vid_disperse = VidDisperse {
+        view_number: message.data.view_number,
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),
         signature: message.signature.clone(),

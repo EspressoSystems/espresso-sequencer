@@ -32,12 +32,7 @@ async fn test_network_task() {
     };
     let pub_key = *api.public_key();
     let priv_key = api.private_key();
-
-    // quorum membership for VID share distribution
-    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
-
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(0));
-
+    let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
@@ -58,12 +53,12 @@ async fn test_network_task() {
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
 
-    let da_vid_disperse_inner = VidDisperse::from_membership(
-        da_proposal.data.view_number,
-        vid_disperse,
-        &quorum_membership.into(),
-    );
-
+    let da_vid_disperse_inner = VidDisperse {
+        view_number: da_proposal.data.view_number,
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
     // TODO for now reuse the same block payload commitment and signature as DA committee
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let da_vid_disperse = Proposal {
