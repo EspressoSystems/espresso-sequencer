@@ -119,21 +119,23 @@ mod generic_tests {
         setup_logging();
         setup_backtrace();
 
-        // Start sequencer.
+        // Create sequencer network.
         let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
-        let init_handle =
-            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
+        let handle = handles[0].clone();
+        let init_handle = Box::new(|_: Box<dyn Metrics>| async move { (handle, 0) }.boxed());
         D::options(&storage, options::Http { port }.into())
             .serve(init_handle)
             .await
             .unwrap();
+
+        // Start consensus.
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
 
         // Connect client.
         let client: Client<ServerError> =
@@ -147,13 +149,16 @@ mod generic_tests {
             let num_blocks = test_blocks.iter().flatten().count();
 
             // Wait for the next block to be sequenced.
-            while client
-                .get::<usize>("status/latest_block_height")
-                .send()
-                .await
-                .unwrap()
-                < num_blocks + 1
-            {
+            loop {
+                let block_height = client
+                    .get::<usize>("status/latest_block_height")
+                    .send()
+                    .await
+                    .unwrap();
+                if block_height > num_blocks {
+                    break;
+                }
+                tracing::info!("waiting for block {num_blocks}, current height {block_height}");
                 sleep(Duration::from_secs(1)).await;
             }
 

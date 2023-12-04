@@ -23,9 +23,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, X64]
-    container:
-      image: ghcr.io/espressosystems/devops-rust:stable
+    runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
         run: |

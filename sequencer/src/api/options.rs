@@ -129,7 +129,7 @@ pub struct Http {
 pub struct Submit;
 
 /// Options for the query API module backed by a Postgres database.
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Debug, Default)]
 pub struct Sql {
     /// Hostname for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]

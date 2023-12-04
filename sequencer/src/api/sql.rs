@@ -61,11 +61,11 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
         let query = "
             SELECT height
               FROM header
-             WHERE data->'timestamp' >= $1
+             WHERE (data->'timestamp')::bigint >= $1
              ORDER BY data->'timestamp', height
              LIMIT 1";
         let mut rows = self
-            .query(query, &[&(start as i64)])
+            .query(query, [&(start as i64)])
             .await
             .map_err(|err| QueryError::Error {
                 message: err.to_string(),
@@ -124,4 +124,45 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
 
         Ok(res)
     }
+}
+
+#[cfg(test)]
+mod impl_testable_data_source {
+    use super::*;
+    use crate::{
+        api::{self, data_source::testing::TestableSequencerDataSource},
+        network::Memory,
+    };
+    use hotshot_query_service::data_source::sql::testing::TmpDb;
+
+    #[async_trait]
+    impl TestableSequencerDataSource for DataSource<Memory> {
+        type Storage = TmpDb;
+
+        async fn create_storage() -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            opt.query_sql(Options {
+                port: Some(storage.port()),
+                user: Some("postgres".into()),
+                password: Some("password".into()),
+                ..Default::default()
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod generic_tests {
+    use super::super::generic_tests;
+    use super::DataSource;
+    use crate::network::Memory;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_generic_tests!(DataSource<Memory>);
 }
