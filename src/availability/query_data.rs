@@ -15,6 +15,7 @@ use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot_types::{
     data::LeafType,
+    simple_certificate::QuorumCertificate,
     traits::{
         self,
         election::SignedCertificate,
@@ -27,7 +28,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::fmt::Debug;
 
-pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
+pub type LeafHash<Types> = Commitment<Leaf<Types>>;
 pub type BlockHash<Types> = Commitment<Block<Types>>;
 pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
 pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::TransactionIndex;
@@ -43,7 +44,7 @@ pub type Timestamp = time::OffsetDateTime;
 /// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
 /// unnecessary inclusion proof). It is good practice to override these default implementations if
 /// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
-pub trait QueryableBlock: traits::Block {
+pub trait QueryableBlock: traits::BlockPayload {
     /// An index which can be used to efficiently retrieve a transaction for the block.
     ///
     /// This is left abstract so that different block implementations can index transactions
@@ -163,15 +164,15 @@ pub trait QueryableBlock: traits::Block {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
-    pub(crate) leaf: Leaf<Types, I>,
-    pub(crate) qc: QuorumCertificate<Types, I>,
+    pub(crate) leaf: Leaf<Types>,
+    pub(crate) qc: QuorumCertificate<Types>,
 }
 
 #[derive(Clone, Debug, Snafu)]
 #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
-pub struct InconsistentLeafError<Types: NodeType, I: NodeImplementation<Types>> {
-    pub leaf: Leaf<Types, I>,
-    pub qc: QuorumCertificate<Types, I>,
+pub struct InconsistentLeafError<Types: NodeType> {
+    pub leaf: Leaf<Types>,
+    pub qc: QuorumCertificate<Types>,
 }
 
 impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
@@ -183,9 +184,9 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
     ///
     /// Fails with an [`InconsistentLeafError`] if `qc` does not reference `leaf`.
     pub fn new(
-        leaf: Leaf<Types, I>,
-        qc: QuorumCertificate<Types, I>,
-    ) -> Result<Self, InconsistentLeafError<Types, I>> {
+        leaf: Leaf<Types>,
+        qc: QuorumCertificate<Types>,
+    ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
             qc.leaf_commitment() == leaf.commit(),
             InconsistentLeafSnafu { leaf, qc }
@@ -193,11 +194,11 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         Ok(Self { leaf, qc })
     }
 
-    pub fn leaf(&self) -> &Leaf<Types, I> {
+    pub fn leaf(&self) -> &Leaf<Types> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> &QuorumCertificate<Types, I> {
+    pub fn qc(&self) -> &QuorumCertificate<Types> {
         &self.qc
     }
 
@@ -209,7 +210,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         parse_timestamp(self.leaf.get_timestamp())
     }
 
-    pub fn hash(&self) -> LeafHash<Types, I> {
+    pub fn hash(&self) -> LeafHash<Types> {
         self.leaf.commit()
     }
 

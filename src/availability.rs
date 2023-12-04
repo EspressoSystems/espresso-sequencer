@@ -307,7 +307,7 @@ mod test {
     use commit::Committable;
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BN254Pub;
+    use hotshot_signature_key::bn254::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::collections::HashSet;
     use std::time::Duration;
@@ -598,7 +598,7 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        let (key, _) = BN254Pub::generated_from_seed_indexed([0; 32], 0);
+        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
                 .get::<u64>(&format!("proposals/{}/count", key.to_bytes()))

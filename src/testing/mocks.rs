@@ -18,7 +18,6 @@ use crate::{
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use clap::builder::styling::Metadata;
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::{Display, Index, IndexMut};
 use hotshot::traits::{
@@ -26,8 +25,9 @@ use hotshot::traits::{
     implementations::{MemoryCommChannel, MemoryStorage},
     NodeImplementation,
 };
+use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
-    data::{DAProposal, QuorumProposal, ViewNumber},
+    data::{QuorumProposal, ViewNumber},
     traits::{
         block_contents::{BlockHeader, Transaction},
         node_implementation::{ChannelMaps, NodeType},
@@ -38,7 +38,7 @@ use hotshot_types::{
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::ops::Range;
 
 #[derive(Clone, Debug, Snafu)]
@@ -273,16 +273,10 @@ impl BlockHeader for MockHeader {
 struct MockMetadata;
 
 impl BlockPayload for MockBlock {
-    type Transaction = MockTransaction;
     type Error = MockError;
+    type Transaction = MockTransaction;
     type Metadata = MockMetadata;
     type Encode<'a> = Vec<u8>; // TODO: does this make sense?
-
-    fn add_transaction_raw(&self, tx: &Self::Transaction) -> Result<Self, Self::Error> {
-        let mut block = self.clone();
-        block.transactions.push(tx.clone());
-        Ok(block)
-    }
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
@@ -329,36 +323,18 @@ impl NodeType for MockTypes {
     type Time = ViewNumber;
     type BlockHeader = MockHeader;
     type BlockPayload = MockBlock;
-    type SignatureKey = BN254Pub;
+    type SignatureKey = BLSPubKey;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
-    type Membership = GeneralStaticCommittee<BN254Pub>;
+    type Membership = GeneralStaticCommittee<BLSPubKey>;
 }
 
-pub type MockLeaf = SequencingLeaf<MockTypes>;
-pub type MockMembership =
-    GeneralStaticCommittee<MockTypes, MockLeaf, <MockTypes as NodeType>::SignatureKey>;
+pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 
-pub type MockQuorumProposal = QuorumProposal<MockTypes, MockLeaf>;
-pub type MockQuorumVote = QuorumVote<MockTypes, MockLeaf>;
-pub type MockQuorumNetwork =
-    MemoryCommChannel<MockTypes, MockNodeImpl, MockQuorumProposal, MockQuorumVote, MockMembership>;
-
-pub type MockViewSyncProposal = ViewSyncCertificate<MockTypes>;
-pub type MockViewSyncVote = ViewSyncVote<MockTypes>;
-pub type MockViewSyncNetwork = MemoryCommChannel<
-    MockTypes,
-    MockNodeImpl,
-    MockViewSyncProposal,
-    MockViewSyncVote,
-    MockMembership,
->;
-
-pub type MockDAProposal = DAProposal<MockTypes>;
-pub type MockDAVote = DAVote<MockTypes>;
-pub type MockDANetwork =
-    MemoryCommChannel<MockTypes, MockNodeImpl, MockDAProposal, MockDAVote, MockMembership>;
+pub type MockQuorumProposal = QuorumProposal<MockTypes>;
+pub type MockQuorumNetwork = MemoryCommChannel<MockTypes>;
+pub type MockDANetwork = MemoryCommChannel<MockTypes>;
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -366,7 +342,7 @@ pub type MockDANetwork =
 pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
-    type Storage = MemoryStorage<MockTypes, Self::Leaf>;
+    type Storage = MemoryStorage<MockTypes>;
     type QuorumNetwork = MockQuorumNetwork;
     type CommitteeNetwork = MockDANetwork;
 

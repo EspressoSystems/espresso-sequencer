@@ -60,8 +60,8 @@ pub mod data_source_tests {
     use commit::Committable;
     use futures::{StreamExt, TryStreamExt};
     use hotshot_types::{
-        data::{LeafType, ViewNumber},
-        traits::{election::SignedCertificate, state::ConsensusTime, Block, State},
+        data::ViewNumber,
+        traits::state::{ConsensusTime, State},
     };
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};

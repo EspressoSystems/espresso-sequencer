@@ -18,7 +18,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, Deltas, QueryResult, Resolvable,
+    Block, QueryResult, Resolvable,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::{

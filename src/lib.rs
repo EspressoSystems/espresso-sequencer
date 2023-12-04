@@ -365,23 +365,24 @@ use async_std::{
     task::spawn,
 };
 use futures::StreamExt;
-use hotshot::{certificate, types::SystemContextHandle};
-use hotshot_types::data::Leaf;
-use hotshot_types::traits::{
-    block_contents,
-    node_implementation::{NodeImplementation, NodeType},
-    BlockPayload,
+use hotshot::types::SystemContextHandle;
+use hotshot_types::{
+    data::Leaf,
+    traits::{
+        node_implementation::{NodeImplementation, NodeType},
+        BlockPayload,
+    },
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{App, StatusCode};
 
 /// Leaf type appended to a chain by consensus.
-pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
+// pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
 /// Certificate justifying a [`Leaf`].
-pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
+// pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
 /// State change indicated by a [`Leaf`].
-pub type Deltas<Types, I> = <Leaf<Types, I> as LeafType>::DeltasType;
+// pub type Deltas<Types, I> = <Leaf<Types> as LeafType>::DeltasType;
 /// Block of data appened to a chain by consensus.
 pub type Block<Types> = <Types as NodeType>::BlockPayload;
 /// Item within a [`Block`].
@@ -429,7 +430,6 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
     mut hotshot: SystemContextHandle<Types, I>,
 ) -> Result<(), Error>
 where
-    Deltas<Types, I>: Resolvable<Block<Types>>,
     Block<Types>: QueryableBlock,
     D: availability::AvailabilityDataSource<Types, I>
         + status::StatusDataSource
@@ -493,7 +493,7 @@ mod test {
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BN254Pub;
+    use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
@@ -666,7 +666,7 @@ mod test {
                 .unwrap(),
             0
         );
-        let (key, _) = BN254Pub::generated_from_seed_indexed([0; 32], 0);
+        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
                 .get::<u64>(&format!("availability/proposals/{}/count", key.to_bytes()))
