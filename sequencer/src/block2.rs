@@ -73,7 +73,6 @@ impl BlockPayload {
         index: TxIndex,
         vid: &boilerplate::VidScheme,
     ) -> Option<(Range<usize>, TxTableRangeProof)> {
-        // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
         let tx_bodies_offset = self
             .get_tx_table_len()?
             .checked_add(1)?
@@ -132,20 +131,7 @@ impl BlockPayload {
             .try_into()
             .ok()
     }
-
-    // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
-    fn tx_bodies_offset(&self) -> Option<usize> {
-        self.get_tx_table_len()?
-            .checked_add(1)?
-            .checked_mul(TxTableEntry::byte_len())
-    }
 }
-
-type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
-
-// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-type RangeProof =
-    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
 
 impl QueryableBlock for BlockPayload {
     type TransactionIndex = u32;
@@ -184,9 +170,14 @@ impl QueryableBlock for BlockPayload {
     }
 }
 
+type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
+
+// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+type RangeProof =
+    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
-    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
     tx_table_len_proof: RangeProof,
     tx_table_range_proof: TxTableRangeProof,
     tx_payload_proof: RangeProof,
@@ -196,7 +187,7 @@ pub struct TxInclusionProof {
 enum TxTableRangeProof {
     First(RangeProof), // don't need proof for `start` = 0
     Other(RangeProof, RangeProof),
-    // TODO new variant `Final` with implicit `end`
+    // TODO new variant `Final` with implicit `end`?
 }
 
 mod tx_table_entry {
@@ -337,7 +328,6 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use jf_primitives::vid::{payload_prover::Statement, VidScheme};
-    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
@@ -450,6 +440,9 @@ mod test {
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
+                // TODO: there is no production code to verify a tx proof.
+                // The only such code is in this test.
+
                 // test proof verification: tx payload
                 vid.payload_verify(
                     Statement {
@@ -527,93 +520,5 @@ mod test {
                 }
             }
         }
-    }
-
-    #[test]
-    fn malformed_payloads() {
-        // play with this
-        let test_cases = vec![
-            // 1 negative-length tx
-            vec![10, 9, 20],
-            // 2 negative-length txs
-            vec![10, 9, 5],
-        ];
-
-        // TODO more test cases:
-        // - overflow u32
-        // - txs off the end of the payload
-        // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
-
-        setup_logging();
-        setup_backtrace();
-
-        let mut rng = jf_utils::test_rng();
-        let vid = test_vid_factory();
-        let num_test_cases = test_cases.len();
-        for (t, entries) in test_cases.into_iter().enumerate() {
-            tracing::info!(
-                "test payload {} of {} with {} txs",
-                t + 1,
-                num_test_cases,
-                entries.len()
-            );
-            let block = BlockPayload {
-                payload: random_payload(&entries, &mut rng),
-            };
-            let disperse_data = vid.disperse(&block.payload).unwrap();
-
-            for i in 0..entries.len() {
-                let index = TxIndex::try_from(i).unwrap();
-                let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
-
-                tracing::info!(
-                    "index {} tx range start {} end {}",
-                    index,
-                    tx_range.start,
-                    tx_range.end
-                );
-
-                let (tx, proof) = block.transaction_with_proof(&index).unwrap();
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: tx.payload(),
-                        range: tx_range,
-                        commit: &disperse_data.commit,
-                        common: &disperse_data.common,
-                    },
-                    &proof.tx_payload_proof,
-                )
-                .unwrap()
-                .unwrap();
-            }
-        }
-    }
-
-    fn tx_table(entries: &[usize]) -> Vec<u8> {
-        let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
-        tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
-        for entry in entries {
-            tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
-        }
-        tx_table
-    }
-
-    fn random_tx_bodies<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        // lergest entry dictates size of tx bodies
-        let mut result = vec![0; *entries.iter().max().expect("entries should be nonempty")];
-        rng.fill_bytes(&mut result);
-        result
-    }
-
-    fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        let mut result = tx_table(entries);
-        result.extend(random_tx_bodies(entries, rng));
-        result
     }
 }
