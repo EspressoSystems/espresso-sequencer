@@ -46,16 +46,14 @@ jobs:
         with:
           prefix-key: v1-rust
 
-      - name: Check forge version
-        run: |
-          nix develop --accept-flake-config -c which forge
-          nix develop --accept-flake-config -c forge --version
+      - name: Check toolchain versions
+        run: nix develop --accept-flake-config -c ./scripts/show-toolchain-versions
 
       - name: Format check
-        run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files
+        run: nix develop --accept-flake-config -c pre-commit run forge-fmt --all-files --show-diff-on-failure
 
       - name: Solhint solidity linter
-        run: nix develop --accept-flake-config -c pre-commit run solhint --all-files
+        run: nix develop --accept-flake-config -c pre-commit run solhint --all-files --show-diff-on-failure
 
       - name: Build non-test contracts without warnings
         run: nix develop --accept-flake-config -c forge build --skip test --deny-warnings
@@ -64,7 +62,7 @@ jobs:
         run: nix develop --accept-flake-config -c forge build
 
       - name: Check if bindings up to date
-        run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files
+        run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files --show-diff-on-failure
 
       - name: Print changes to bindings
         if: ${{ failure() }}

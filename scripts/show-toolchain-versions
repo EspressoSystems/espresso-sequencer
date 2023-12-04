@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+which cargo
+which rustc
+which rustfmt
+which forge
+which solc
+which clippy-driver
+
+echo
+echo 'cargo --version:        ' $(cargo --version)
+echo 'rustc --version:        ' $(rustc --version)
+echo 'rustfmt --version:      ' $(rustfmt --version)
+echo 'cargo fmt --version:    ' $(cargo fmt --version)
+echo 'cargo clippy --version: ' $(cargo clippy --version)
+echo
+
+forge --version
+solc --version

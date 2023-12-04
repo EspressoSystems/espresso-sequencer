@@ -4,6 +4,7 @@ use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
@@ -13,7 +14,7 @@ use ark_std::{
 };
 use clap::{Parser, ValueEnum};
 use ethers::{
-    abi::{AbiDecode, AbiEncode},
+    abi::{AbiDecode, AbiEncode, Address},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
@@ -26,7 +27,11 @@ use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
+use jf_primitives::constants::CS_ID_BLS_BN254;
 use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
+use jf_primitives::signatures::bls_over_bn254::KeyPair as BLSKeyPair;
+use jf_primitives::signatures::bls_over_bn254::Signature;
+use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -76,6 +81,8 @@ enum Action {
     DummyProof,
     /// Test only logic
     TestOnly,
+    /// Generate Client Wallet
+    GenClientWallet,
 }
 
 #[allow(clippy::type_complexity)]
@@ -386,6 +393,55 @@ fn main() {
         }
         Action::TestOnly => {
             println!("args: {:?}", cli.args);
+        }
+        Action::GenClientWallet => {
+            let mut rng = jf_utils::test_rng();
+
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=senderAddress");
+            }
+
+            let sender_address = cli.args[0].parse::<Address>().unwrap();
+            let sender_address_bytes = AbiEncode::encode(sender_address);
+
+            // Generate the Schnorr key
+            let schnorr_key_pair: SchnorrKeyPair<EdOnBn254Config> =
+                SchnorrKeyPair::generate(&mut rng);
+            let schnorr_ver_key = schnorr_key_pair.ver_key();
+            let schnorr_ver_key_affine = schnorr_ver_key.to_affine();
+            let schnorr_pk_x = field_to_u256::<FqEd254>(schnorr_ver_key_affine.x);
+            let schnorr_pk_y = field_to_u256::<FqEd254>(schnorr_ver_key_affine.y);
+
+            // Generate the BLS ver key
+            let key_pair = BLSKeyPair::generate(&mut rng);
+            let vk = key_pair.ver_key();
+            let vk_g2_affine: G2Affine = vk.to_affine();
+
+            let pk_x_c0 = field_to_u256::<Fq>(vk_g2_affine.x.c0);
+            let pk_x_c1 = field_to_u256::<Fq>(vk_g2_affine.x.c1);
+            let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
+            let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
+
+            // Sign the ethereum address with the BLS key
+            let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
+            let sig_affine_point = sig.sigma.into_affine();
+            let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
+            let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
+
+            // TODO (Alex) Return ParsedG1Point and ParsedG2Point
+            // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
+            let res = (
+                sig_x,
+                sig_y,
+                pk_x_c0,
+                pk_x_c1,
+                pk_y_c0,
+                pk_y_c1,
+                schnorr_pk_x,
+                schnorr_pk_y,
+                sender_address,
+            );
+            println!("{}", res.encode_hex());
         }
     };
 }
