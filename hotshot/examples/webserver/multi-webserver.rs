@@ -7,14 +7,13 @@ use async_compatibility_layer::{
 };
 use clap::Parser;
 use hotshot::demo::DemoTypes;
+use surf_disco::Url;
 use tracing::error;
 
 #[derive(Parser, Debug)]
 struct MultiWebServerArgs {
-    consensus_url: String,
-    da_url: String,
-    consensus_port: u16,
-    da_port: u16,
+    consensus_url: Url,
+    da_url: Url,
 }
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
@@ -32,11 +31,7 @@ async fn main() {
     let consensus_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(
-            Some(server_shutdown_cdn),
-            args.consensus_url.to_string(),
-            args.consensus_port,
-        )
+        >(Some(server_shutdown_cdn), args.consensus_url)
         .await
         {
             error!("Problem starting cdn web server: {:?}", e);
@@ -45,11 +40,7 @@ async fn main() {
     let da_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(
-            Some(server_shutdown_da),
-            args.da_url.to_string(),
-            args.da_port,
-        )
+        >(Some(server_shutdown_da), args.da_url)
         .await
         {
             error!("Problem starting da web server: {:?}", e);
