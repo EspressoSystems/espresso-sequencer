@@ -40,6 +40,9 @@ async fn main() {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
+            if let Some(query_sql) = modules.query_sql {
+                opt = opt.query_sql(query_sql);
+            }
             if let Some(query_fs) = modules.query_fs {
                 opt = opt.query_fs(query_fs);
             }

@@ -8,6 +8,7 @@ mod data_source;
 mod endpoints;
 pub mod fs;
 pub mod options;
+pub mod sql;
 mod update;
 
 pub use options::Options;

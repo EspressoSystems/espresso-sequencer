@@ -6955,6 +6955,7 @@ dependencies = [
  "hotshot-testing",
  "hotshot-types",
  "hotshot-web-server",
+ "include_dir",
  "jf-primitives",
  "jf-utils",
  "lazy_static",
