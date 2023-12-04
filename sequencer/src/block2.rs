@@ -1,4 +1,4 @@
-use self::tx_table::TxTableEntry;
+use self::tx_table_entry::TxTableEntry;
 use crate::Transaction;
 use ark_bls12_381::Bls12_381;
 use hotshot_query_service::QueryableBlock;
@@ -68,30 +68,43 @@ impl BlockPayload {
     }
 
     // Return the range `r` such that the `index`th tx bytes are at `self.payload[r]`.
-    fn get_tx_range(&self, index: TxIndex) -> Option<Range<usize>> {
-        let tx_bodies_offset = self.tx_bodies_offset()?;
+    fn get_tx_range_with_proof(
+        &self,
+        index: TxIndex,
+        vid: &boilerplate::VidScheme,
+    ) -> Option<(Range<usize>, TxTableRangeProof)> {
+        // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
+        let tx_bodies_offset = self
+            .get_tx_table_len()?
+            .checked_add(1)?
+            .checked_mul(TxTableEntry::byte_len())?;
+
+        let (end, end_proof) = self.get_tx_table_entry_with_proof(index, vid)?;
 
         // See `from_txs()` comment.
         // Recall: tx table entry i is the *end* byte index for tx i.
         // Thus, the *start* byte index for tx i is at the (i-1)th tx table entry.
         // Edge case i=0: start index is implicitly 0.
-        let start = if index == 0 {
-            0
+        let (start, tx_table_range_proof) = if index == 0 {
+            (0, TxTableRangeProof::First(end_proof))
         } else {
-            self.get_tx_table_entry(index - 1)?
-        }
-        .checked_add(tx_bodies_offset)?;
+            let (start, start_proof) = self.get_tx_table_entry_with_proof(index - 1, vid)?;
+            (start, TxTableRangeProof::Other(start_proof, end_proof))
+        };
 
-        let end = self
-            .get_tx_table_entry(index)?
-            .checked_add(tx_bodies_offset)?;
-
-        Some(start..end)
+        Some((
+            start.checked_add(tx_bodies_offset)?..end.checked_add(tx_bodies_offset)?,
+            tx_table_range_proof,
+        ))
     }
 
     // Return the `index`th entry from the tx table as `usize`
     // Return `None` if `index` exceeds the tx table length.
-    fn get_tx_table_entry(&self, index: TxIndex) -> Option<usize> {
+    fn get_tx_table_entry_with_proof(
+        &self,
+        index: TxIndex,
+        vid: &boilerplate::VidScheme,
+    ) -> Option<(usize, RangeProof)> {
         // check args
         if index >= self.get_tx_table_len()?.try_into().ok()? {
             return None;
@@ -103,9 +116,12 @@ impl BlockPayload {
             .checked_mul(TxTableEntry::byte_len())?;
 
         let end = start.checked_add(TxTableEntry::byte_len())?;
-        TxTableEntry::from_bytes(self.payload.get(start..end)?)?
-            .try_into()
-            .ok()
+        Some((
+            TxTableEntry::from_bytes(self.payload.get(start..end)?)?
+                .try_into()
+                .ok()?,
+            vid.payload_proof(&self.payload, start..end).ok()?,
+        ))
     }
 
     // Return length of the tx table
@@ -128,7 +144,7 @@ impl BlockPayload {
 type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
 
 // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-type TxInclusionProof =
+type RangeProof =
     SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
 
 impl QueryableBlock for BlockPayload {
@@ -150,20 +166,40 @@ impl QueryableBlock for BlockPayload {
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
 
-        // TODO need to prove that tx_range is correct,
-        // don't call `payload_proof` if tx_range indicates a zero-length tx.
-        let tx_range = self.get_tx_range(*index)?;
+        let (tx_range, tx_table_range_proof) = self.get_tx_range_with_proof(*index, &vid)?;
 
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(crate::VmId(0), self.payload.get(tx_range.clone())?.to_vec()),
-            vid.payload_proof(&self.payload, tx_range).ok()?,
+            TxInclusionProof {
+                tx_table_len_proof: vid
+                    .payload_proof(&self.payload, 0..TxTableEntry::byte_len())
+                    .ok()?,
+                tx_table_range_proof,
+                // TOD don't call `payload_proof` if tx_range indicates a zero-length tx.
+                tx_payload_proof: vid.payload_proof(&self.payload, tx_range).ok()?,
+            },
         ))
     }
 }
 
-mod tx_table {
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TxInclusionProof {
+    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+    tx_table_len_proof: RangeProof,
+    tx_table_range_proof: TxTableRangeProof,
+    tx_payload_proof: RangeProof,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+enum TxTableRangeProof {
+    First(RangeProof), // don't need proof for `start` = 0
+    Other(RangeProof, RangeProof),
+    // TODO new variant `Final` with implicit `end`
+}
+
+mod tx_table_entry {
     use std::mem::size_of;
 
     // Use newtype pattern so that tx table entires cannot be confused with other types.
@@ -287,6 +323,8 @@ mod boilerplate {
         .unwrap();
         Advz::<_, _>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
     }
+
+    pub(super) type VidScheme = Advz<Bls12_381, sha2::Sha256>;
 }
 
 #[cfg(test)]
@@ -390,7 +428,7 @@ mod test {
                 let index = TxIndex::try_from(index).unwrap();
 
                 // test get_tx_range()
-                let tx_range = block.get_tx_range(index).unwrap();
+                let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
                 let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
                 assert_eq!(tx_body, block_tx_body);
 
@@ -418,7 +456,7 @@ mod test {
                         commit: &disperse_data.commit,
                         common: &disperse_data.common,
                     },
-                    &proof,
+                    &proof.tx_payload_proof,
                 )
                 .unwrap()
                 .unwrap();
@@ -461,7 +499,7 @@ mod test {
 
             for i in 0..entries.len() {
                 let index = TxIndex::try_from(i).unwrap();
-                let tx_range = block.get_tx_range(index).unwrap();
+                let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
 
                 tracing::info!(
                     "index {} tx range start {} end {}",
@@ -478,7 +516,7 @@ mod test {
                         commit: &disperse_data.commit,
                         common: &disperse_data.common,
                     },
-                    &proof,
+                    &proof.tx_payload_proof,
                 )
                 .unwrap()
                 .unwrap();
