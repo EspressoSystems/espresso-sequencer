@@ -13,7 +13,7 @@ use tide_disco::{
     api::ApiError,
     error::ServerError,
     method::{ReadState, WriteState},
-    Api, App, StatusCode,
+    Api, App, StatusCode, Url,
 };
 use tracing::{debug, info};
 
@@ -821,8 +821,7 @@ where
 
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    url: String,
-    port: u16,
+    url: Url,
 ) -> io::Result<()> {
     let options = Options::default();
 
@@ -832,9 +831,7 @@ pub async fn run_web_server<KEY: SignatureKey + 'static>(
 
     app.register_module("api", api).unwrap();
 
-    let app_future = app.serve(format!("{url}:{port}"));
-
-    info!("Web server started on port {port}");
+    let app_future = app.serve(url);
 
     app_future.await
 }

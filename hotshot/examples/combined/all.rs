@@ -12,6 +12,7 @@ use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use surf_disco::Url;
 use tracing::{error, instrument};
 
 use crate::{
@@ -47,8 +48,7 @@ async fn main() {
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(
             Some(server_shutdown_cdn),
-            "http://localhost".to_string(),
-            9000,
+            Url::parse("http://localhost:9000").unwrap(),
         )
         .await
         {
@@ -60,8 +60,7 @@ async fn main() {
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(
             Some(server_shutdown_da),
-            "http://localhost".to_string(),
-            9001,
+            Url::parse("http://localhost:9001").unwrap(),
         )
         .await
         {
@@ -78,8 +77,8 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        url: "http://localhost".to_string(),
-        port: 4444,
+        url: Url::parse("http://localhost:4444").unwrap(),
+
         config_file: args.config_file.clone(),
     }));
 

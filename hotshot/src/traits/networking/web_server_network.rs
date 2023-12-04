@@ -27,6 +27,7 @@ use hotshot_types::{
 use hotshot_web_server::{self, config};
 use rand::random;
 use serde::{Deserialize, Serialize};
+use surf_disco::Url;
 
 use hotshot_types::traits::network::ViewMessage;
 use std::{
@@ -472,22 +473,15 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
     /// # Panics
     /// if the web server url is malformed
     pub fn create(
-        url: &str,
-        port: u16,
+        url: Url,
         wait_between_polls: Duration,
         key: TYPES::SignatureKey,
         is_da_server: bool,
     ) -> Self {
-        let base_url_string = format!("{url}:{port}");
-        info!("Connecting to web server at {base_url_string:?} is da: {is_da_server}");
-
-        let base_url = base_url_string.parse();
-        if base_url.is_err() {
-            error!("Web server url {:?} is malformed", base_url_string);
-        }
+        info!("Connecting to web server at {url:?} is da: {is_da_server}");
 
         // TODO ED Wait for healthcheck
-        let client = surf_disco::Client::<ClientError>::new(base_url.unwrap());
+        let client = surf_disco::Client::<ClientError>::new(url);
 
         let inner = Arc::new(Inner {
             broadcast_poll_queue: Arc::default(),
@@ -802,7 +796,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // GC proposal collection if we are two views in the future
@@ -842,7 +836,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // GC proposal collection if we are two views in the future
@@ -897,7 +891,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // GC proposal collection if we are two views in the future
@@ -935,7 +929,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // GC proposal collection if we are two views in the future
@@ -989,7 +983,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // TODO ED Do we need to GC before returning?  Or will view sync task handle that?
@@ -1019,7 +1013,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
             }
 
@@ -1072,7 +1066,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         }
                     });
                 } else {
-                    error!("Somehow task already existed!");
+                    debug!("Somehow task already existed!");
                 }
 
                 // TODO ED Do we need to GC before returning?  Or will view sync task handle that?
@@ -1107,15 +1101,13 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
-        let url = "http://localhost";
-        // TODO ED Restrict this to be an open port using portpicker
         let port = random::<u16>();
+        let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
         info!("Launching web server on port {port}");
         // Start web server
         async_spawn(hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
             Some(server_shutdown),
-            url.to_owned(),
-            port,
+            url,
         ));
 
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
@@ -1130,9 +1122,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         // Start each node's web server client
         Box::new(move |id| {
             let sender = Arc::clone(&sender);
+            let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
             let mut network = WebServerNetwork::create(
-                "http://localhost",
-                port,
+                url,
                 Duration::from_millis(100),
                 known_nodes[id as usize].clone(),
                 is_da,
