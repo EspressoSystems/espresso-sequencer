@@ -68,6 +68,7 @@ async fn test_timeout_web() {
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
+#[ignore]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_timeout_libp2p() {
