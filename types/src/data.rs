@@ -8,6 +8,7 @@ use crate::{
     traits::{
         block_contents::vid_commitment,
         block_contents::BlockHeader,
+        election::Membership,
         node_implementation::NodeType,
         signature_key::{EncodedPublicKey, SignatureKey},
         state::{ConsensusTime, TestableBlock, TestableState},
@@ -23,14 +24,18 @@ use commit::{Commitment, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
 use hotshot_constants::GENESIS_PROPOSER_ID;
 use hotshot_utils::bincode::bincode_opts;
-// use jf_primitives::pcs::prelude::Commitment;
-use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+use jf_primitives::{
+    pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    vid::VidDisperse as JfVidDisperse,
+};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{
+    collections::BTreeMap,
     fmt::{Debug, Display},
     hash::Hash,
+    sync::Arc,
 };
 
 /// Type-safe wrapper around `u64` so we know the thing we're talking about is a view number.
@@ -138,10 +143,34 @@ pub struct VidDisperse<TYPES: NodeType> {
     pub view_number: TYPES::Time,
     /// Block payload commitment
     pub payload_commitment: VidCommitment,
-    /// VID shares dispersed among storage nodes
-    pub shares: Vec<<VidScheme as VidSchemeTrait>::Share>,
+    /// A storage node's key and its corresponding VID share
+    pub shares: BTreeMap<TYPES::SignatureKey, <VidScheme as VidSchemeTrait>::Share>,
     /// VID common data sent to all storage nodes
     pub common: <VidScheme as VidSchemeTrait>::Common,
+}
+
+impl<TYPES: NodeType> VidDisperse<TYPES> {
+    /// Create VID dispersal from a specified membership
+    /// Uses the specified function to calculate share dispersal
+    /// Allows for more complex stake table functionality
+    pub fn from_membership(
+        view_number: TYPES::Time,
+        mut vid_disperse: JfVidDisperse<VidScheme>,
+        membership: &Arc<TYPES::Membership>,
+    ) -> Self {
+        let shares = membership
+            .get_committee(view_number)
+            .iter()
+            .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
+            .collect();
+
+        Self {
+            view_number,
+            shares,
+            common: vid_disperse.common,
+            payload_commitment: vid_disperse.commit,
+        }
+    }
 }
 
 /// Trusted KZG setup for VID.

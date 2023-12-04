@@ -18,8 +18,8 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
+        block_contents::vid_commitment,
         block_contents::BlockHeader,
-        block_contents::{vid_commitment, NUM_CHUNKS, NUM_STORAGE_NODES},
         consensus_api::ConsensusSharedApi,
         election::Membership,
         node_implementation::NodeType,
@@ -171,7 +171,19 @@ pub fn key_pair_for_id(node_id: u64) -> (<BLSPubKey as SignatureKey>::PrivateKey
     (private_key, public_key)
 }
 
-pub fn vid_init() -> VidScheme {
-    let srs = hotshot_types::data::test_srs(NUM_STORAGE_NODES);
-    VidScheme::new(NUM_CHUNKS, NUM_STORAGE_NODES, srs).unwrap()
+pub fn vid_init<TYPES: NodeType>(
+    membership: TYPES::Membership,
+    view_number: TYPES::Time,
+) -> VidScheme {
+    let num_committee = membership.get_committee(view_number).len();
+
+    // calculate the last power of two
+    // TODO change after https://github.com/EspressoSystems/jellyfish/issues/339
+    // issue: https://github.com/EspressoSystems/HotShot/issues/2152
+    let chunk_size = 1 << num_committee.ilog2();
+
+    // TODO <https://github.com/EspressoSystems/HotShot/issues/1686>
+    let srs = hotshot_types::data::test_srs(num_committee);
+
+    VidScheme::new(chunk_size, num_committee, srs).unwrap()
 }
