@@ -45,7 +45,7 @@ hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch =
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "feat/sql-data-source" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
