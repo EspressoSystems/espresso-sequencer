@@ -190,7 +190,7 @@ pub struct TxInclusionProof {
 enum TxTableRangeProof {
     First(RangeProof), // don't need proof for `start` = 0
     Other(RangeProof, RangeProof),
-    // TODO new variant `Final` with implicit `end`?
+    // TODO(795) new variant `Final` with implicit `end`?
 }
 
 mod tx_table_entry {
@@ -438,7 +438,7 @@ mod test {
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
-                // TODO: there is no production code to verify a tx proof.
+                // TODO(795): there is no production code to verify a tx proof.
                 // The only such code is in this test.
 
                 // test proof verification: tx payload
