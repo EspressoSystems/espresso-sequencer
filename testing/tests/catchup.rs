@@ -38,7 +38,7 @@ async fn test_catchup() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(1400), catchup_nodes)],
+        node_changes: vec![(25, catchup_nodes)],
     };
 
     metadata.completion_task_description =
@@ -94,7 +94,7 @@ async fn test_catchup_web() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(400), catchup_nodes)],
+        node_changes: vec![(25, catchup_nodes)],
     };
 
     metadata.completion_task_description =
@@ -151,7 +151,7 @@ async fn test_catchup_one_node() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::from_millis(400), catchup_nodes)],
+        node_changes: vec![(25, catchup_nodes)],
     };
 
     metadata.completion_task_description =
@@ -217,7 +217,7 @@ async fn test_catchup_in_view_sync() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(5, 0), catchup_nodes)],
+        node_changes: vec![(25, catchup_nodes)],
     };
 
     metadata.completion_task_description =

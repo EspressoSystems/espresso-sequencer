@@ -4,7 +4,7 @@ use super::{
     txn_task::TxnTask,
 };
 use crate::{
-    spinning_task::UpDown,
+    spinning_task::{ChangeNode, UpDown},
     test_launcher::{Networks, TestLauncher},
 };
 use hotshot::{types::SystemContextHandle, Memberships};
@@ -16,7 +16,7 @@ use hotshot_task::{
 use hotshot_types::traits::network::CommunicationChannel;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    traits::{election::Membership, node_implementation::NodeType},
+    traits::{election::Membership, node_implementation::NodeType, state::ConsensusTime},
     HotShotConfig, ValidatorConfig,
 };
 use std::{
@@ -109,10 +109,20 @@ where
         task_runner = task_runner.add_task(id, "Test Completion Task".to_string(), task);
 
         // add spinning task
+        // map spinning to view
+        let mut changes: HashMap<TYPES::Time, Vec<ChangeNode>> = HashMap::new();
+        for (view, mut change) in spinning_changes {
+            changes
+                .entry(TYPES::Time::new(view))
+                .or_insert_with(Vec::new)
+                .append(&mut change);
+        }
+
         let spinning_task_state = crate::spinning_task::SpinningTask {
             handles: nodes.clone(),
             late_start,
-            changes: spinning_changes.into_iter().map(|(_, b)| b).collect(),
+            latest_view: None,
+            changes,
         };
 
         let (id, task) = (launcher.spinning_task_generator)(

@@ -19,6 +19,7 @@ use hotshot::demo::DemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::traits::node_implementation::NodeType;
+use surf_disco::Url;
 use tracing::error;
 use types::VIDNetwork;
 
@@ -37,7 +38,10 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_cdn), 9000)
+        >(
+            Some(server_shutdown_cdn),
+            Url::parse("http://localhost:9000").unwrap(),
+        )
         .await
         {
             error!("Problem starting cdn web server: {:?}", e);
@@ -46,7 +50,10 @@ async fn main() {
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
-        >(Some(server_shutdown_da), 9001)
+        >(
+            Some(server_shutdown_da),
+            Url::parse("http://localhost:9001").unwrap(),
+        )
         .await
         {
             error!("Problem starting da web server: {:?}", e);
@@ -62,8 +69,7 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        port: 4444,
+        url: Url::parse("http://localhost:4444").unwrap(),
         config_file: args.config_file.clone(),
     }));
 
@@ -84,7 +90,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                host: "127.0.0.1".to_string(),
+                url: "http://localhost".to_string(),
                 port: 4444,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             })

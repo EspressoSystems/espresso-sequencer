@@ -12,7 +12,7 @@ use ethereum_types::U256;
 use crate::{
     data::Leaf,
     simple_vote::{
-        DAData, QuorumData, TimeoutData, VIDData, ViewSyncCommitData, ViewSyncFinalizeData,
+        DAData, QuorumData, TimeoutData, ViewSyncCommitData, ViewSyncFinalizeData,
         ViewSyncPreCommitData, Voteable,
     },
     traits::{
@@ -128,8 +128,6 @@ pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
 pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData>;
 /// Type alias for a Timeout certificate over a view number
 pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
-/// type alias for a VID certificate
-pub type VIDCertificate<TYPES> = SimpleCertificate<TYPES, VIDData>;
 
 // TODO ED Update this to use the correct threshold instead of the default `success_threshold`
 /// Type alias for a `ViewSyncPreCommit` certificate over a view number

@@ -297,7 +297,7 @@ impl<S> NetworkNodeHandle<S> {
         let pid = self.get_record_timeout::<PeerId>(&key, dht_timeout).await?;
 
         // pid lookup for routing
-        self.lookup_pid(pid).await?;
+        // self.lookup_pid(pid).await?;
 
         Ok(pid)
     }

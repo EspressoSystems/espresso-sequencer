@@ -5,7 +5,7 @@ use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethereum_types::U256;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_types::traits::state::LightClientState;
+use hotshot_types::light_client::LightClientState;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
     circuit::{
@@ -27,21 +27,21 @@ pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
 /// Variable for stake table entry
 #[derive(Clone, Debug)]
 pub struct StakeTableEntryVar {
-    /// Schnorr verification keys
-    pub schnorr_ver_key: VerKeyVar,
+    /// state verification keys
+    pub state_ver_key: VerKeyVar,
     /// Stake amount
     pub stake_amount: Variable,
 }
 
 /// Light client state Variable
-/// The stake table commitment is a triple (bls_keys_comm, schnorr_keys_comm, stake_amount_comm).
+/// The stake table commitment is a triple (qc_keys_comm, state_keys_comm, stake_amount_comm).
 /// Variable for a stake table commitment
 #[derive(Clone, Debug)]
 pub struct StakeTableCommVar {
-    /// Commitment for BLS keys
-    pub bls_keys_comm: Variable,
-    /// Commitment for Schnorr keys
-    pub schnorr_keys_comm: Variable,
+    /// Commitment for QC verification keys
+    pub qc_keys_comm: Variable,
+    /// Commitment for state verification keys
+    pub state_keys_comm: Variable,
     /// Commitment for stake amount
     pub stake_amount_comm: Variable,
 }
@@ -104,13 +104,13 @@ impl<F: PrimeField> PublicInput<F> {
         (self.0[5], self.0[6], self.0[7])
     }
 
-    /// Return the bls key commitment of the light client state
-    pub fn bls_key_comm(&self) -> F {
+    /// Return the qc key commitment of the light client state
+    pub fn qc_key_comm(&self) -> F {
         self.0[5]
     }
 
-    /// Return the schnorr key commitment of the light client state
-    pub fn schnorr_key_comm(&self) -> F {
+    /// Return the state key commitment of the light client state
+    pub fn state_key_comm(&self) -> F {
         self.0[6]
     }
 
@@ -158,8 +158,8 @@ impl LightClientStateVar {
 
     pub fn stake_table_comm(&self) -> StakeTableCommVar {
         StakeTableCommVar {
-            bls_keys_comm: self.vars[4],
-            schnorr_keys_comm: self.vars[5],
+            qc_keys_comm: self.vars[4],
+            state_keys_comm: self.vars[5],
             stake_amount_comm: self.vars[6],
         }
     }
@@ -182,7 +182,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// It checks that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
-/// - all signed schnorr signatures are valid
+/// - all signed Schnorr signatures are valid
 /// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
@@ -245,10 +245,10 @@ where
     let mut stake_table_var = stake_table_entries
         .map(|item| {
             let item = item.borrow();
-            let schnorr_ver_key = circuit.create_signature_vk_variable(&item.0)?;
+            let state_ver_key = circuit.create_signature_vk_variable(&item.0)?;
             let stake_amount = circuit.create_variable(u256_to_field::<F>(&item.1))?;
             Ok(StakeTableEntryVar {
-                schnorr_ver_key,
+                state_ver_key,
                 stake_amount,
             })
         })
@@ -256,11 +256,11 @@ where
     stake_table_var.extend(
         (0..stake_table_entries_pad_len)
             .map(|_| {
-                let schnorr_ver_key =
+                let state_ver_key =
                     circuit.create_signature_vk_variable(&SchnorrVerKey::<P>::default())?;
                 let stake_amount = circuit.create_variable(F::default())?;
                 Ok(StakeTableEntryVar {
-                    schnorr_ver_key,
+                    state_ver_key,
                     stake_amount,
                 })
             })
@@ -332,20 +332,18 @@ where
     circuit.enforce_leq(threshold_pub_var, acc_amount_var)?;
 
     // checking the commitment for the list of schnorr keys
-    let schnorr_ver_key_preimage_vars = stake_table_var
+    let state_ver_key_preimage_vars = stake_table_var
         .iter()
-        .flat_map(|var| [var.schnorr_ver_key.0.get_x(), var.schnorr_ver_key.0.get_y()])
+        .flat_map(|var| [var.state_ver_key.0.get_x(), var.state_ver_key.0.get_y()])
         .collect::<Vec<_>>();
-    let schnorr_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+    let state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
         &mut circuit,
-        &schnorr_ver_key_preimage_vars,
+        &state_ver_key_preimage_vars,
         1,
     )?[0];
     circuit.enforce_equal(
-        schnorr_ver_key_comm,
-        lightclient_state_pub_var
-            .stake_table_comm()
-            .schnorr_keys_comm,
+        state_ver_key_comm,
+        lightclient_state_pub_var.stake_table_comm().state_keys_comm,
     )?;
 
     // checking the commitment for the list of stake amounts
@@ -372,7 +370,7 @@ where
         .map(|(entry, sig)| {
             SignatureGadget::<_, P>::check_signature_validity(
                 &mut circuit,
-                &entry.schnorr_ver_key,
+                &entry.state_ver_key,
                 lightclient_state_pub_var.as_ref(),
                 &sig,
             )
@@ -432,13 +430,13 @@ mod tests {
         let num_validators = 10;
         let mut prng = test_rng();
 
-        let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
-        let st = stake_table_for_testing(&bls_keys, &schnorr_keys);
+        let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut prng);
+        let st = stake_table_for_testing(&qc_keys, &state_keys);
 
         let entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
-            .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
+            .map(|(_, stake_amount, state_key)| (state_key, stake_amount))
             .collect::<Vec<_>>();
 
         let block_comm_root =
@@ -457,7 +455,7 @@ mod tests {
         };
         let state_msg: [F; 7] = lightclient_state.clone().into();
 
-        let sigs = schnorr_keys
+        let sigs = state_keys
             .iter()
             .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, state_msg, &mut prng))
             .collect::<Result<Vec<_>, PrimitivesError>>()
@@ -535,7 +533,7 @@ mod tests {
         let mut bad_lightclient_state = lightclient_state.clone();
         bad_lightclient_state.stake_table_comm.1 = F::default();
         let bad_state_msg: [F; 7] = bad_lightclient_state.clone().into();
-        let sig_for_bad_state = schnorr_keys
+        let sig_for_bad_state = state_keys
             .iter()
             .map(|(key, _)| {
                 SchnorrSignatureScheme::<Config>::sign(&(), key, bad_state_msg, &mut prng)
@@ -556,10 +554,10 @@ mod tests {
 
         // bad path: incorrect signatures
         let mut wrong_light_client_state = lightclient_state.clone();
-        // state with a different bls key commitment
+        // state with a different qc key commitment
         wrong_light_client_state.stake_table_comm.0 = F::default();
         let wrong_state_msg: [F; 7] = wrong_light_client_state.into();
-        let wrong_sigs = schnorr_keys
+        let wrong_sigs = state_keys
             .iter()
             .map(|(key, _)| {
                 SchnorrSignatureScheme::<Config>::sign(&(), key, wrong_state_msg, &mut prng)

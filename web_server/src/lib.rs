@@ -13,7 +13,7 @@ use tide_disco::{
     api::ApiError,
     error::ServerError,
     method::{ReadState, WriteState},
-    Api, App, StatusCode,
+    Api, App, StatusCode, Url,
 };
 use tracing::{debug, info};
 
@@ -277,7 +277,6 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let votes = self.view_sync_votes.get(&view_number);
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
-            // error!("Passed in index is: {} self index is: {}", index, *self.vote_index.get(&view_number).unwrap());
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
             }
@@ -691,26 +690,11 @@ where
         }
         .boxed()
     })?
-    .get("getvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            state.get_vid_certificate(view_number)
-        }
-        .boxed()
-    })?
     .get("getvotes", |req, state| {
         async move {
             let view_number: u64 = req.integer_param("view_number")?;
             let index: u64 = req.integer_param("index")?;
             state.get_votes(view_number, index)
-        }
-        .boxed()
-    })?
-    .get("getvidvotes", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let index: u64 = req.integer_param("index")?;
-            state.get_vid_votes(view_number, index)
         }
         .boxed()
     })?
@@ -735,15 +719,6 @@ where
             // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
             let vote = req.body_bytes();
             state.post_vote(view_number, vote)
-        }
-        .boxed()
-    })?
-    .post("postvidvote", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            // Using body_bytes because we don't want to deserialize; body_auto or body_json deserializes automatically
-            let vote = req.body_bytes();
-            state.post_vid_vote(view_number, vote)
         }
         .boxed()
     })?
@@ -785,14 +760,6 @@ where
             let view_number: u64 = req.integer_param("view_number")?;
             let cert = req.body_bytes();
             state.post_da_certificate(view_number, cert)
-        }
-        .boxed()
-    })?
-    .post("postvidcertificate", |req, state| {
-        async move {
-            let view_number: u64 = req.integer_param("view_number")?;
-            let cert = req.body_bytes();
-            state.post_vid_certificate(view_number, cert)
         }
         .boxed()
     })?
@@ -858,7 +825,7 @@ where
 
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    port: u16,
+    url: Url,
 ) -> io::Result<()> {
     let options = Options::default();
 
@@ -868,9 +835,7 @@ pub async fn run_web_server<KEY: SignatureKey + 'static>(
 
     app.register_module("api", api).unwrap();
 
-    let app_future = app.serve(format!("http://0.0.0.0:{port}"));
-
-    info!("Web server started on port {port}");
+    let app_future = app.serve(url);
 
     app_future.await
 }

@@ -10,7 +10,7 @@ use std::{
 };
 use tide_disco::{Api, App};
 
-use surf_disco::error::ClientError;
+use surf_disco::{error::ClientError, Url};
 use tide_disco::{
     api::ApiError,
     error::ServerError,
@@ -237,8 +237,7 @@ where
 /// Runs the orchestrator
 pub async fn run_orchestrator<KEY, ELECTION>(
     network_config: NetworkConfig<KEY, ELECTION>,
-    host: IpAddr,
-    port: u16,
+    url: Url,
 ) -> io::Result<()>
 where
     KEY: SignatureKey + 'static + serde::Serialize,
@@ -252,6 +251,6 @@ where
     let mut app = App::<RwLock<OrchestratorState<KEY, ELECTION>>, ServerError>::with_state(state);
     app.register_module("api", api.unwrap())
         .expect("Error registering api");
-    tracing::error!("lisening on {:?}:{:?}", host, port);
-    app.serve(format!("http://{host}:{port}")).await
+    tracing::error!("listening on {:?}", url);
+    app.serve(url).await
 }
