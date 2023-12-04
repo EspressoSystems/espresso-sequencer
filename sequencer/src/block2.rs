@@ -163,8 +163,11 @@ impl QueryableBlock for BlockPayload {
                     .payload_proof(&self.payload, 0..TxTableEntry::byte_len())
                     .ok()?,
                 tx_table_range_proof,
-                // TOD don't call `payload_proof` if tx_range indicates a zero-length tx.
-                tx_payload_proof: vid.payload_proof(&self.payload, tx_range).ok()?,
+                tx_payload_proof: if tx_range.is_empty() {
+                    None
+                } else {
+                    vid.payload_proof(&self.payload, tx_range).ok()
+                },
             },
         ))
     }
@@ -180,7 +183,7 @@ type RangeProof =
 pub struct TxInclusionProof {
     tx_table_len_proof: RangeProof,
     tx_table_range_proof: TxTableRangeProof,
-    tx_payload_proof: RangeProof,
+    tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -424,19 +427,14 @@ mod test {
                 let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
                 assert_eq!(tx_body, block_tx_body);
 
-                // test `transaction_with_proof()` (nonempty txs only)
-                // TODO allow empty txs
-                let log_msg = format!(
+                tracing::info!(
                     "test: index {} tx range start {} end {}",
-                    index, tx_range.start, tx_range.end
+                    index,
+                    tx_range.start,
+                    tx_range.end
                 );
-                if tx_range.is_empty() {
-                    tracing::info!("{} empty, skipping", log_msg);
-                    continue;
-                } else {
-                    tracing::info!("{}", log_msg);
-                }
 
+                // test `transaction_with_proof()`
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
@@ -444,17 +442,21 @@ mod test {
                 // The only such code is in this test.
 
                 // test proof verification: tx payload
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: tx_body,
-                        range: tx_range,
-                        commit: &disperse_data.commit,
-                        common: &disperse_data.common,
-                    },
-                    &proof.tx_payload_proof,
-                )
-                .unwrap()
-                .unwrap();
+                match &proof.tx_payload_proof {
+                    Some(tx_payload_proof) => vid
+                        .payload_verify(
+                            Statement {
+                                payload_subslice: tx_body,
+                                range: tx_range,
+                                commit: &disperse_data.commit,
+                                common: &disperse_data.common,
+                            },
+                            tx_payload_proof,
+                        )
+                        .unwrap()
+                        .unwrap(),
+                    None => assert!(tx_range.is_empty()),
+                }
 
                 // test proof verification: tx table len
                 vid.payload_verify(
