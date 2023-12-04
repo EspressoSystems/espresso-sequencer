@@ -34,7 +34,7 @@ use hotshot_query_service::{
     testing::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTypes, TestableDataSource},
     Error,
 };
-use hotshot_signature_key::bn254::{BN254Priv, BN254Pub};
+use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
     traits::{election::Membership, node_implementation::ExchangesType},
     ExecutionType, HotShotConfig,
@@ -128,14 +128,14 @@ async fn init_consensus(
     data_sources: &[DataSource],
 ) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
     let priv_keys = (0..data_sources.len())
-        .map(|_| BN254Priv::generate())
+        .map(|_| BLSPrivKey::generate())
         .collect::<Vec<_>>();
     let pub_keys = priv_keys
         .iter()
-        .map(BN254Pub::from_private)
+        .map(BLSPubKey::from_private)
         .collect::<Vec<_>>();
     let master_map = MasterMap::new();
-    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = pub_keys
+    let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = pub_keys
         .iter()
         .map(|pub_key| pub_key.get_stake_table_entry(1u64))
         .collect();

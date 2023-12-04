@@ -18,7 +18,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, QueryResult, Resolvable,
+    Block, QueryResult,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::{
@@ -130,9 +130,9 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, I> AvailabilityDataSource<Types, I> for ExtensibleDataSource<D, U>
+impl<D, U, Types, I> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
 where
-    D: AvailabilityDataSource<Types, I> + Send + Sync,
+    D: AvailabilityDataSource<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
     I: NodeImplementation<Types>,
@@ -150,9 +150,9 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
+        ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.data_source.get_leaf(id).await
     }
@@ -184,7 +184,7 @@ where
         &self,
         proposer: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         self.data_source.get_proposals(proposer, limit).await
     }
     async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
@@ -209,10 +209,7 @@ where
 {
     type Error = D::Error;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         self.data_source.insert_leaf(leaf).await
     }
 

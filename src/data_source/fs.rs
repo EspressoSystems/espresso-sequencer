@@ -28,7 +28,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::data_source::StatusDataSource,
-    Block, Deltas, MissingSnafu, NotFoundSnafu, QueryResult, Resolvable,
+    Block, MissingSnafu, NotFoundSnafu, QueryResult, Resolvable,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -172,13 +172,13 @@ pub struct FileSystemDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
+    index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
-    leaf_storage: LedgerLog<LeafQueryData<Types, I>>,
+    leaf_storage: LedgerLog<LeafQueryData<Types>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
 }
@@ -204,10 +204,7 @@ where
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn open(path: &Path) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    pub fn open(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
         let mut data_source = Self::open_with_store(&mut loader)?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
@@ -243,10 +240,7 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
         let leaf_storage =
             LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
@@ -377,15 +371,14 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> AvailabilityDataSource<Types, I>
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> AvailabilityDataSource<Types> for FileSystemDataSource<Types>
 where
     Block<Types>: QueryableBlock,
 {
-    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>;
+    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types>>>;
     type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
 
-    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types, I>>>
+    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types>>>
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
@@ -394,9 +387,9 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
+        ID: Into<LeafId<Types>> + Send + Sync,
     {
         let n = match id.into() {
             ResourceId::Number(n) => n,
@@ -506,10 +499,7 @@ where
 {
     type Error = PersistenceError;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());

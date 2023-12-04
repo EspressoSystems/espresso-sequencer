@@ -10,15 +10,13 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Block, Deltas, Leaf, QuorumCertificate, Resolvable, Transaction};
+use crate::{Block, Leaf, Resolvable, Transaction};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::LeafType,
     simple_certificate::QuorumCertificate,
     traits::{
         self,
-        election::SignedCertificate,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::EncodedPublicKey,
     },
@@ -163,7 +161,7 @@ pub trait QueryableBlock: traits::BlockPayload {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
+pub struct LeafQueryData<Types: NodeType> {
     pub(crate) leaf: Leaf<Types>,
     pub(crate) qc: QuorumCertificate<Types>,
 }
@@ -175,7 +173,7 @@ pub struct InconsistentLeafError<Types: NodeType> {
     pub qc: QuorumCertificate<Types>,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
+impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types> {
     /// Collect information about a [`Leaf`].
     ///
     /// Returns a new [`LeafQueryData`] object populated from `leaf` and `qc`.
@@ -214,10 +212,7 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         self.leaf.commit()
     }
 
-    pub fn block_hash(&self) -> BlockHash<Types>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    pub fn block_hash(&self) -> BlockHash<Types> {
         self.leaf.get_deltas().commitment()
     }
 
@@ -248,20 +243,19 @@ pub struct BlockHeaderQueryData<Types: NodeType> {
 }
 
 #[derive(Clone, Debug, Snafu)]
-pub enum InconsistentBlockError<Types: NodeType, I: NodeImplementation<Types>>
+pub enum InconsistentBlockError<Types: NodeType>
 where
-    Deltas<Types, I>: Resolvable<Block<Types>>,
     Block<Types>: Serialize,
 {
     #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
     InconsistentQc {
-        qc: QuorumCertificate<Types, I>,
-        leaf: Leaf<Types, I>,
+        qc: QuorumCertificate<Types>,
+        leaf: Leaf<Types>,
     },
     #[snafu(display("Leaf {} references block {}, but expected {}",
         leaf.commit(), block.commit(), leaf.get_deltas().commitment()))]
     InconsistentBlock {
-        leaf: Leaf<Types, I>,
+        leaf: Leaf<Types>,
         block: Block<Types>,
     },
 }
@@ -279,13 +273,10 @@ where
     /// Fails with an [`InconsistentBlockError`] if `qc`, `leaf`, and `block` do not all correspond
     /// to the same block.
     pub fn new<I: NodeImplementation<Types>>(
-        leaf: Leaf<Types, I>,
-        qc: QuorumCertificate<Types, I>,
+        leaf: Leaf<Types>,
+        qc: QuorumCertificate<Types>,
         block: Block<Types>,
-    ) -> Result<Self, InconsistentBlockError<Types, I>>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    ) -> Result<Self, InconsistentBlockError<Types>> {
         ensure!(
             qc.leaf_commitment() == leaf.commit(),
             InconsistentQcSnafu { qc, leaf }
@@ -409,7 +400,7 @@ fn round_timestamp(ns: i128) -> i128 {
     (ns / 1000) * 1000
 }
 
-fn leaf_height<L: LeafType>(leaf: &L) -> u64 {
+fn leaf_height<T: NodeType>(leaf: &Leaf<T>) -> u64 {
     // HotShot generates a genesis leaf with height 0, but we don't see it in the event stream.
     // Therefore, the first leaf we see has height 1. But to clients, the first leaf should have
     // height 0, since there is nothing before it, so we adjust the height here.

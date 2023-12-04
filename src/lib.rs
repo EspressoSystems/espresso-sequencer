@@ -88,9 +88,9 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
-//! # use hotshot_query_service::testing::mocks::{MockTypes, MockNodeImpl};
+//! # use hotshot_query_service::testing::mocks::{MockTypes};
 //! # use std::path::Path;
-//! # fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! # fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path).map_err(Error::internal)?;
@@ -380,7 +380,7 @@ use tide_disco::{App, StatusCode};
 /// Leaf type appended to a chain by consensus.
 // pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
 /// Certificate justifying a [`Leaf`].
-// pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
+// pub type QuorumCertificate<Types> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
 /// State change indicated by a [`Leaf`].
 // pub type Deltas<Types, I> = <Leaf<Types> as LeafType>::DeltasType;
 /// Block of data appened to a chain by consensus.
@@ -431,7 +431,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
 ) -> Result<(), Error>
 where
     Block<Types>: QueryableBlock,
-    D: availability::AvailabilityDataSource<Types, I>
+    D: availability::AvailabilityDataSource<Types>
         + status::StatusDataSource
         + data_source::UpdateDataSource<Types, I>
         + data_source::VersionedDataSource
@@ -510,16 +510,13 @@ mod test {
     }
 
     #[async_trait]
-    impl AvailabilityDataSource<MockTypes, MockNodeImpl> for CompositeState {
-        type LeafStream =
-            <MockDataSource as AvailabilityDataSource<MockTypes, MockNodeImpl>>::LeafStream;
-        type BlockStream =
-            <MockDataSource as AvailabilityDataSource<MockTypes, MockNodeImpl>>::BlockStream;
+    impl AvailabilityDataSource<MockTypes> for CompositeState {
+        type LeafStream = <MockDataSource as AvailabilityDataSource<MockTypes>>::LeafStream;
+        type BlockStream = <MockDataSource as AvailabilityDataSource<MockTypes>>::BlockStream;
 
         type LeafRange<'a, R> =
             <MockDataSource as AvailabilityDataSource<
                 MockTypes,
-                MockNodeImpl,
             >>::LeafRange<'a, R>
         where
             Self: 'a,
@@ -527,15 +524,14 @@ mod test {
         type BlockRange<'a, R> =
             <MockDataSource as AvailabilityDataSource<
                 MockTypes,
-                MockNodeImpl,
             >>::BlockRange<'a, R>
         where
             Self: 'a,
             R: RangeBounds<usize> + Send;
 
-        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>
+        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes>>
         where
-            ID: Into<LeafId<MockTypes, MockNodeImpl>> + Send + Sync,
+            ID: Into<LeafId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_leaf(id).await
         }
@@ -567,7 +563,7 @@ mod test {
             &self,
             proposer: &EncodedPublicKey,
             limit: Option<usize>,
-        ) -> QueryResult<Vec<LeafQueryData<MockTypes, MockNodeImpl>>> {
+        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
             self.hotshot_qs.get_proposals(proposer, limit).await
         }
         async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {

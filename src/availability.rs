@@ -139,7 +139,7 @@ pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
 ) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types, I>,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
     Block<Types>: QueryableBlock,
 {
     let mut api = load_api::<State, Error>(
@@ -321,10 +321,7 @@ mod test {
         client: &Client<Error>,
     ) -> (
         u64,
-        Vec<(
-            LeafQueryData<MockTypes, MockNodeImpl>,
-            BlockQueryData<MockTypes>,
-        )>,
+        Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
     ) {
         let mut blocks = vec![];
         for i in 0.. {

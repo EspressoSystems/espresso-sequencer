@@ -27,12 +27,10 @@ use hotshot::{
     types::SystemContextHandle,
     HotShotInitializer, SystemContext,
 };
-use hotshot_signature_key::bn254::{BN254Priv, BN254Pub};
+use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    traits::{
-        election::Membership, node_implementation::ExchangesType, signature_key::SignatureKey,
-    },
-    ExecutionType, HotShotConfig,
+    traits::{election::Membership, signature_key::SignatureKey},
+    ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -56,40 +54,47 @@ const MINIMUM_NODES: usize = 2;
 impl<D: TestableDataSource> MockNetwork<D> {
     pub async fn init() -> Self {
         let priv_keys = (0..MINIMUM_NODES)
-            .map(|_| BN254Priv::generate())
+            .map(|_| BLSPrivKey::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
-            .map(BN254Pub::from_private)
+            .map(BLSPubKey::from_private)
             .collect::<Vec<_>>();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
-        let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
+        let stake = 1u64;
+        let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = (0
             ..total_nodes.into())
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .map(|id| pub_keys[id].get_stake_table_entry(stake))
             .collect();
-        let config = HotShotConfig {
-            total_nodes,
-            known_nodes: pub_keys.clone(),
-            known_nodes_with_stake: known_nodes_with_stake.clone(),
-            start_delay: 0,
-            round_start_delay: 0,
-            next_view_timeout: 10000,
-            timeout_ratio: (11, 10),
-            propose_min_round_time: Duration::from_secs(0),
-            propose_max_round_time: Duration::from_secs(2),
-            min_transactions: 1,
-            max_transactions: NonZeroUsize::new(100).unwrap(),
-            num_bootstrap: 0,
-            execution_type: ExecutionType::Continuous,
-            election_config: None,
-            da_committee_size: total_nodes.into(),
-        };
         let nodes = join_all(
             priv_keys
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
+                    let my_own_validator_config = ValidatorConfig {
+                        public_key: pub_keys[node_id],
+                        private_key: priv_key,
+                        stake_value: stake,
+                    };
+                    let config = HotShotConfig {
+                        total_nodes,
+                        known_nodes_with_stake: known_nodes_with_stake.clone(),
+                        my_own_validator_config,
+                        start_delay: 0,
+                        round_start_delay: 0,
+                        next_view_timeout: 10000,
+                        timeout_ratio: (11, 10),
+                        propose_min_round_time: Duration::from_secs(0),
+                        propose_max_round_time: Duration::from_secs(2),
+                        min_transactions: 1,
+                        max_transactions: NonZeroUsize::new(100).unwrap(),
+                        num_bootstrap: 0,
+                        execution_type: ExecutionType::Continuous,
+                        election_config: None,
+                        da_committee_size: total_nodes.into(),
+                    };
+
                     let pub_keys = pub_keys.clone();
                     let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
@@ -106,20 +111,20 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             master_map.clone(),
                             None,
                         ));
-                        let consensus_channel = MemoryCommChannel::new(network.clone());
-                        let da_channel = MemoryCommChannel::new(network.clone());
-                        let view_sync_channel = MemoryCommChannel::new(network.clone());
+                        // let consensus_channel = MemoryCommChannel::new(network.clone());
+                        // let da_channel = MemoryCommChannel::new(network.clone());
+                        // let view_sync_channel = MemoryCommChannel::new(network.clone());
 
-                        let exchanges =
-                            <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
-                                known_nodes_with_stake.clone(),
-                                pub_keys.clone(),
-                                (election_config.clone(), election_config.clone()),
-                                (consensus_channel, view_sync_channel, da_channel),
-                                pub_keys[node_id],
-                                pub_keys[node_id].get_stake_table_entry(1u64),
-                                priv_key.clone(),
-                            );
+                        // let exchanges =
+                        //     <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
+                        //         known_nodes_with_stake.clone(),
+                        //         pub_keys.clone(),
+                        //         (election_config.clone(), election_config.clone()),
+                        //         (consensus_channel, view_sync_channel, da_channel),
+                        //         pub_keys[node_id],
+                        //         pub_keys[node_id].get_stake_table_entry(1u64),
+                        //         priv_key.clone(),
+                        //     );
 
                         let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
@@ -127,8 +132,9 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             node_id as u64,
                             config,
                             MemoryStorage::empty(),
-                            exchanges,
-                            HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
+                            election_config,
+                            network,
+                            HotShotInitializer::from_genesis().unwrap(),
                             data_source.populate_metrics(),
                         )
                         .await

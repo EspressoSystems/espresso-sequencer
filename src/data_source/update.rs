@@ -14,14 +14,11 @@
 use crate::status::UpdateStatusData;
 use crate::{
     availability::{BlockQueryData, LeafQueryData, QueryableBlock, UpdateAvailabilityData},
-    Block, Deltas, Leaf, Resolvable,
+    Block, Leaf, Resolvable,
 };
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
-use hotshot_types::{
-    data::LeafType,
-    traits::node_implementation::{NodeImplementation, NodeType},
-};
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -35,8 +32,8 @@ use std::iter::once;
 ///   [SystemContextHandle](hotshot::types::SystemContextHandle)
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
-pub trait UpdateDataSource<Types: NodeType, I: NodeImplementation<Types>>:
-    UpdateAvailabilityData<Types, I> + UpdateStatusData
+pub trait UpdateDataSource<Types: NodeType>:
+    UpdateAvailabilityData<Types> + UpdateStatusData
 where
     Block<Types>: QueryableBlock,
 {
@@ -51,9 +48,8 @@ where
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>
     where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
         Block<Types>: QueryableBlock;
 }
 
@@ -62,13 +58,12 @@ impl<
         Types: NodeType,
         I: NodeImplementation<Types>,
         T: UpdateAvailabilityData<Types, I> + UpdateStatusData + Send,
-    > UpdateDataSource<Types, I> for T
+    > UpdateDataSource<Types> for T
 where
     Block<Types>: QueryableBlock,
 {
-    async fn update(&mut self, event: &Event<Types, Leaf<Types, I>>) -> Result<(), Self::Error>
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>
     where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
         Block<Types>: QueryableBlock,
     {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {

@@ -109,13 +109,16 @@ impl State for MockState {
     type BlockHeader = MockHeader;
     type BlockPayload = MockBlock;
 
-    fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        self.validate(block).is_ok()
+    // fn validate_block(&self, block: &Self::BlockPayload, _view_number: &Self::Time) -> bool {
+    //     self.validate(block).is_ok()
+    // }
+    fn validate_block(&self, block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
+        self.validate(block_header).is_ok()
     }
 
     fn append(
         &self,
-        block: &Self::BlockType,
+        block: &Self::BlockPayload,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
         self.validate(block)?;

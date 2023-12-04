@@ -20,8 +20,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, Deltas, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock,
-    QuorumCertificate, Resolvable,
+    Block, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock, Resolvable,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
 use async_trait::async_trait;
@@ -491,7 +490,7 @@ where
 {
     client: Client,
     tx_in_progress: bool,
-    leaf_stream: BufferedChannel<LeafQueryData<Types, I>>,
+    leaf_stream: BufferedChannel<LeafQueryData<Types>>,
     block_stream: BufferedChannel<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
     kill: Option<oneshot::Sender<()>>,
@@ -899,10 +898,7 @@ where
 {
     type Error = QueryError;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
         let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
 
         // While we don't necessarily have the full block for this leaf yet, we can initialize the

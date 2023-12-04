@@ -53,7 +53,7 @@ pub mod data_source_tests {
             },
             setup_test, sleep,
         },
-        Leaf, QueryError, QuorumCertificate,
+        Leaf, QueryError,
     };
     use async_std::sync::RwLock;
     use bincode::Options;
@@ -61,6 +61,7 @@ pub mod data_source_tests {
     use futures::{StreamExt, TryStreamExt};
     use hotshot_types::{
         data::ViewNumber,
+        simple_certificate::QuorumCertificate,
         traits::state::{ConsensusTime, State},
     };
     use hotshot_utils::bincode::bincode_opts;
@@ -70,10 +71,7 @@ pub mod data_source_tests {
 
     async fn get_non_empty_blocks(
         ds: &RwLock<impl TestableDataSource>,
-    ) -> Vec<(
-        LeafQueryData<MockTypes, MockNodeImpl>,
-        BlockQueryData<MockTypes>,
-    )> {
+    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
         let ds = ds.read().await;
         ds.get_leaf_range(..)
             .await
@@ -428,7 +426,7 @@ pub mod data_source_tests {
         let block = MockBlock::new();
         let time = ViewNumber::genesis();
         let state = MockState::default().append(&block, &time).unwrap();
-        let mut qc = QuorumCertificate::<MockTypes, MockNodeImpl>::genesis();
+        let mut qc = QuorumCertificate::<MockTypes>::genesis();
         let mut leaf = Leaf::<MockTypes, MockNodeImpl>::new(time, qc.clone(), block.clone(), state);
         leaf.set_height(1);
 
