@@ -163,8 +163,8 @@ pub trait QueryableBlock: traits::Block {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
-    leaf: Leaf<Types, I>,
-    qc: QuorumCertificate<Types, I>,
+    pub(crate) leaf: Leaf<Types, I>,
+    pub(crate) qc: QuorumCertificate<Types, I>,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -197,8 +197,8 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> QuorumCertificate<Types, I> {
-        self.leaf.get_justify_qc()
+    pub fn qc(&self) -> &QuorumCertificate<Types, I> {
+        &self.qc
     }
 
     pub fn height(&self) -> u64 {
@@ -231,11 +231,11 @@ pub struct BlockQueryData<Types: NodeType>
 where
     Block<Types>: QueryableBlock,
 {
-    block: Block<Types>,
-    hash: BlockHash<Types>,
-    height: u64,
-    timestamp: i128,
-    size: u64,
+    pub(crate) block: Block<Types>,
+    pub(crate) hash: BlockHash<Types>,
+    pub(crate) height: u64,
+    pub(crate) timestamp: i128,
+    pub(crate) size: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -296,7 +296,7 @@ where
         Ok(Self {
             hash: block.commit(),
             height: leaf_height(&leaf),
-            timestamp: leaf.get_timestamp(),
+            timestamp: round_timestamp(leaf.get_timestamp()),
             size: bincode_opts().serialized_size(&block).unwrap_or_default(),
             block,
         })
@@ -400,6 +400,12 @@ where
 
 fn parse_timestamp(ns: i128) -> Timestamp {
     Timestamp::from_unix_timestamp_nanos(ns).expect("HotShot timestamp out of range")
+}
+
+fn round_timestamp(ns: i128) -> i128 {
+    // HotShot gives us the timestamp with nanosecond precision, which is far more than necessary
+    // and can't be stored accurately in Postgres. Round down to microsecond precision.
+    (ns / 1000) * 1000
 }
 
 fn leaf_height<L: LeafType>(leaf: &L) -> u64 {

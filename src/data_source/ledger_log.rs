@@ -205,6 +205,12 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
 
     pub(crate) fn revert_version(&mut self) -> Result<(), PersistenceError> {
         self.store.revert_version()?;
+
+        // Remove objects which were inserted in cache but not committed to storage.
+        for _ in 0..self.pending_inserts {
+            self.cache.pop_back();
+        }
+
         self.pending_inserts = 0;
         Ok(())
     }
@@ -266,8 +272,10 @@ impl<'a, T: Serialize + DeserializeOwned + Clone> Iterator for Iter<'a, T> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.store.len();
-        (remaining, Some(remaining))
+        // Include objects in cache that haven't necessarily been committed to storage yet. This is
+        // consistent with `nth`, which will yield such objects.
+        let len = (self.cache_start + self.cache.len()).saturating_sub(self.index);
+        (len, Some(len))
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -293,7 +301,7 @@ impl<'a, T: Serialize + DeserializeOwned + Clone> Iterator for Iter<'a, T> {
     }
 
     fn count(self) -> usize {
-        self.store.len()
+        self.size_hint().0
     }
 }
 

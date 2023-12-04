@@ -12,37 +12,47 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::VersionedDataSource;
+use super::{buffered_channel::BufferedChannel, VersionedDataSource};
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryResult,
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, ResourceId,
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
-    status::{MempoolQueryData, StatusDataSource, UpdateStatusData},
-    Block, Deltas, QueryableBlock, Resolvable,
+    metrics::PrometheusMetrics,
+    status::StatusDataSource,
+    Block, Deltas, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock,
+    QuorumCertificate, Resolvable,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
 use async_trait::async_trait;
+use commit::Committable;
 use futures::{
     channel::oneshot,
     future::{select, Either, FutureExt},
-    stream::BoxStream,
+    stream::{BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
 };
 use hotshot_types::traits::{
-    metrics::Metrics,
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
 use itertools::Itertools;
-use std::{ops::RangeBounds, pin::Pin};
-use tokio_postgres::{types::BorrowToSql, Client, NoTls, RowStream, ToStatement};
+use snafu::OptionExt;
+use std::{
+    ops::{Bound, RangeBounds},
+    pin::Pin,
+};
+use time::OffsetDateTime;
+use tokio_postgres::{
+    types::{BorrowToSql, ToSql},
+    Client, NoTls, Row, RowStream, ToStatement,
+};
 
 pub use crate::include_migrations;
 pub use anyhow::Error;
 pub use refinery::Migration;
-pub use tokio_postgres::{self as postgres};
+pub use tokio_postgres as postgres;
 
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
@@ -238,7 +248,12 @@ impl Config {
     }
 
     /// Connect to the database with this config.
-    pub async fn connect(self) -> Result<SqlDataSource, Error> {
+    pub async fn connect<Types, I>(self) -> Result<SqlDataSource<Types, I>, Error>
+    where
+        Types: NodeType,
+        I: NodeImplementation<Types>,
+        Block<Types>: QueryableBlock,
+    {
         SqlDataSource::connect(self).await
     }
 }
@@ -376,7 +391,7 @@ impl Config {
 /// # async fn doc(config: Config) -> Result<(), Error> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<SqlDataSource, AppState> =
+/// let data_source: ExtensibleDataSource<SqlDataSource<AppTypes, AppNodeImpl>, AppState> =
 ///     ExtensibleDataSource::new(SqlDataSource::connect(config).await?, "app state");
 /// # Ok(())
 /// # }
@@ -428,7 +443,7 @@ impl Config {
 /// # };
 /// # use tide_disco::App;
 /// struct AppState {
-///     hotshot_qs: SqlDataSource,
+///     hotshot_qs: SqlDataSource<AppTypes, AppNodeImpl>,
 ///     // additional state for other modules
 /// }
 ///
@@ -468,13 +483,26 @@ impl Config {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct SqlDataSource {
+pub struct SqlDataSource<Types, I>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
     client: Client,
     tx_in_progress: bool,
+    leaf_stream: BufferedChannel<LeafQueryData<Types, I>>,
+    block_stream: BufferedChannel<BlockQueryData<Types>>,
+    metrics: PrometheusMetrics,
     kill: Option<oneshot::Sender<()>>,
 }
 
-impl SqlDataSource {
+impl<Types, I> SqlDataSource<Types, I>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
     /// Connect to a remote database.
     pub async fn connect(mut config: Config) -> Result<Self, Error> {
         // Establish a TCP connection to the server.
@@ -542,6 +570,9 @@ impl SqlDataSource {
             client,
             tx_in_progress: false,
             kill: Some(kill),
+            leaf_stream: BufferedChannel::init(),
+            block_stream: BufferedChannel::init(),
+            metrics: Default::default(),
         })
     }
 
@@ -576,7 +607,12 @@ impl SqlDataSource {
     }
 }
 
-impl Drop for SqlDataSource {
+impl<Types, I> Drop for SqlDataSource<Types, I>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
     fn drop(&mut self) {
         if let Some(kill) = self.kill.take() {
             // Ignore errors, they just mean the task has already exited.
@@ -586,7 +622,12 @@ impl Drop for SqlDataSource {
 }
 
 #[async_trait]
-impl VersionedDataSource for SqlDataSource {
+impl<Types, I> VersionedDataSource for SqlDataSource<Types, I>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
     type Error = postgres::error::Error;
 
     /// Atomically commit to all outstanding modifications to the data.
@@ -594,12 +635,12 @@ impl VersionedDataSource for SqlDataSource {
     /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
     /// or to erase outstanding changes with [`revert`](Self::revert).
     async fn commit(&mut self) -> Result<(), Self::Error> {
-        if !self.tx_in_progress {
-            // Nothing to do if there is no outstanding transaction.
-            return Ok(());
+        if self.tx_in_progress {
+            self.client.batch_execute("COMMIT").await?;
+            self.tx_in_progress = false;
         }
-        self.client.batch_execute("COMMIT").await?;
-        self.tx_in_progress = false;
+        self.leaf_stream.flush().await;
+        self.block_stream.flush().await;
         Ok(())
     }
 
@@ -608,134 +649,410 @@ impl VersionedDataSource for SqlDataSource {
     /// This function must not return if it has failed to revert changes. Inability to revert
     /// changes to the database is considered a fatal error, and this function may panic.
     async fn revert(&mut self) {
-        if !self.tx_in_progress {
-            // Nothing to do if there is no outstanding transaction.
-            return;
+        if self.tx_in_progress {
+            // If we're trying to roll back a transaction, something has already gone wrong and
+            // we're trying to recover. If we're unable to revert the changes and recover, all we
+            // can do is panic.
+            self.client
+                .batch_execute("ROLLBACK")
+                .await
+                .expect("DB rollback succeeds");
+            self.tx_in_progress = false;
         }
-        // If we're trying to roll back a transaction, something has already gone wrong and we're
-        // trying to recover. If we're unable to revert the changes and recover, all we can do is
-        // panic.
-        self.client
-            .batch_execute("ROLLBACK")
-            .await
-            .expect("DB rollback succeeds");
-        self.tx_in_progress = false;
+        self.leaf_stream.clear();
+        self.block_stream.clear();
     }
 }
 
 #[async_trait]
-impl<Types, I> AvailabilityDataSource<Types, I> for SqlDataSource
+impl<Types, I> AvailabilityDataSource<Types, I> for SqlDataSource<Types, I>
 where
     Types: NodeType,
     I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
-    type LeafStream = BoxStream<'static, LeafQueryData<Types, I>>;
-    type BlockStream = BoxStream<'static, BlockQueryData<Types>>;
+    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>;
+    type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
 
-    type LeafRange<'a, R> = BoxStream<'a,  QueryResult<LeafQueryData<Types, I>>>
+    type LeafRange<'a, R> = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
-    type BlockRange<'a, R>= BoxStream<'a,  QueryResult<BlockQueryData<Types>>>
+    type BlockRange<'a, R>= BoxStream<'static, QueryResult<BlockQueryData<Types>>>
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, _id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
     where
         ID: Into<LeafId<Types, I>> + Send + Sync,
     {
-        todo!()
+        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id.into() {
+            ResourceId::Number(n) => ("height = $1", Box::new(n as i64)),
+            ResourceId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
+        };
+        let query = format!("SELECT leaf, qc FROM leaf WHERE {where_clause}");
+        let row = self
+            .client
+            .query_opt(&query, &[&*param])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?
+            .context(NotFoundSnafu)?;
+        parse_leaf(row)
     }
-    async fn get_block<ID>(&self, _id: ID) -> QueryResult<BlockQueryData<Types>>
+
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        todo!()
+        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id.into() {
+            ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),
+            ResourceId::Hash(h) => ("h.hash = $1", Box::new(h.to_string())),
+        };
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks, we return the first one.
+        // TODO this ordering should be unnecessary once we eliminate duplicate blocks:
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/284
+        let query = format!(
+            "SELECT {BLOCK_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = self
+            .client
+            .query_opt(&query, &[&*param])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?
+            .context(NotFoundSnafu)?;
+        parse_block(row)
     }
 
-    async fn get_leaf_range<R>(&self, _range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
     where
         R: RangeBounds<usize> + Send,
     {
-        todo!()
+        let (where_clause, params) = bounds_to_where_clause(range, "height");
+        let query = format!("SELECT leaf, qc FROM leaf {where_clause} ORDER BY height ASC");
+        let rows =
+            self.client
+                .query_raw(&query, params)
+                .await
+                .map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?;
+
+        Ok(rows
+            .map(|res| {
+                parse_leaf(res.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .boxed())
     }
-    async fn get_block_range<R>(&self, _range: R) -> QueryResult<Self::BlockRange<'_, R>>
+
+    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
     where
         R: RangeBounds<usize> + Send,
     {
-        todo!()
+        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
+        let query = format!(
+            "SELECT {BLOCK_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        let rows =
+            self.client
+                .query_raw(&query, params)
+                .await
+                .map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?;
+
+        Ok(rows
+            .map(|res| {
+                parse_block(res.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .boxed())
     }
 
     async fn get_block_with_transaction(
         &self,
-        _hash: TransactionHash<Types>,
+        hash: TransactionHash<Types>,
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        todo!()
+        // ORDER BY t.id ASC ensures that if there are duplicate transactions, we return the first
+        // one.
+        let query = format!(
+            "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                JOIN transaction AS t ON t.block_height = h.height
+                WHERE t.hash = $1
+                ORDER BY t.id ASC
+                LIMIT 1"
+        );
+        let row = self
+            .client
+            .query_opt(&query, &[&hash.to_string()])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?
+            .context(NotFoundSnafu)?;
+
+        // Extract the transaction index.
+        let index = row.try_get("tx_index").map_err(|err| QueryError::Error {
+            message: format!("error extracting transaction index from query results: {err}"),
+        })?;
+        let index: TransactionIndex<Types> =
+            serde_json::from_value(index).map_err(|err| QueryError::Error {
+                message: format!("malformed transaction index: {err}"),
+            })?;
+
+        // Extract the block.
+        let block = parse_block(row)?;
+
+        Ok((block, index))
     }
 
     async fn get_proposals(
         &self,
-        _proposer: &EncodedPublicKey,
-        _limit: Option<usize>,
+        proposer: &EncodedPublicKey,
+        limit: Option<usize>,
     ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
-        todo!()
-    }
-    async fn count_proposals(&self, _proposer: &EncodedPublicKey) -> QueryResult<usize> {
-        todo!()
+        let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
+        if let Some(limit) = limit {
+            // If there is a limit on the number of leaves to return, we want to return the most
+            // recent leaves, so order by descending height.
+            query = format!("{query} ORDER BY height DESC limit {limit}");
+        }
+        let rows = self
+            .client
+            .query_raw(&query, &[&proposer.to_string()])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+        let mut leaves: Vec<_> = rows
+            .map(|res| {
+                parse_leaf(res.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
+
+        if limit.is_some() {
+            // If there was a limit, we selected the leaves in descending order to get the most
+            // recent leaves. Now reverse them to put them back in chronological order.
+            leaves.reverse();
+        }
+
+        Ok(leaves)
     }
 
-    async fn subscribe_leaves(&self, _height: usize) -> QueryResult<Self::LeafStream> {
-        todo!()
+    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
+        let row = self
+            .client
+            .query_one(query, &[&proposer.to_string()])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+        let count: i64 = row.get(0);
+        Ok(count as usize)
     }
-    async fn subscribe_blocks(&self, _height: usize) -> QueryResult<Self::BlockStream> {
-        todo!()
+
+    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
+        // Fetch leaves above `height` which have already been produced.
+        let current_leaves = self.get_leaf_range(height..).await?;
+        // Subscribe to future leaves after that.
+        let future_leaves = self.leaf_stream.subscribe().await.map(Ok);
+        Ok(current_leaves.chain(future_leaves).boxed())
+    }
+
+    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
+        // Fetch blocks above `height` which have already been produced.
+        let current_blocks = self.get_block_range(height..).await?;
+        // Subscribe to future blocks after that.
+        let future_blocks = self.block_stream.subscribe().await.map(Ok);
+        Ok(current_blocks.chain(future_blocks).boxed())
     }
 }
 
 #[async_trait]
-impl<Types, I> UpdateAvailabilityData<Types, I> for SqlDataSource
+impl<Types, I> UpdateAvailabilityData<Types, I> for SqlDataSource<Types, I>
 where
     Types: NodeType,
     I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
-    type Error = postgres::error::Error;
+    type Error = QueryError;
 
-    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>,
     {
-        todo!()
+        let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
+
+        // While we don't necessarily have the full block for this leaf yet, we can initialize the
+        // header table with block metadata taken from the leaf.
+        stmts.push((
+            "INSERT INTO header (height, hash, timestamp, data) VALUES ($1, $2, $3, $4)".into(),
+            vec![
+                Box::new(leaf.height() as i64),
+                Box::new(leaf.block_hash().to_string()),
+                Box::new(leaf.timestamp()),
+                // TODO populate the application-specific header fields once HotShot supports
+                // application-specific block headers.
+                Box::new(serde_json::Value::from("dummy header")),
+            ],
+        ));
+
+        // Similarly, we can initialize the payload table with a null payload, which can help us
+        // distinguish between blocks that haven't been produced yet and blocks we haven't received
+        // yet when answering queries.
+        stmts.push((
+            "INSERT INTO payload (height) VALUES ($1)".into(),
+            vec![Box::new(leaf.height() as i64)],
+        ));
+
+        // Finally, we insert the leaf itself, which references the header row we created.
+        // Serialize the full leaf and QC to JSON for easy storage.
+        let leaf_json = serde_json::to_value(leaf.leaf()).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize leaf: {err}"),
+        })?;
+        let qc_json = serde_json::to_value(leaf.qc()).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize QC: {err}"),
+        })?;
+        stmts.push((
+            "INSERT INTO leaf (height, hash, proposer, block_hash, leaf, qc)
+             VALUES ($1, $2, $3, $4, $5, $6)"
+                .into(),
+            vec![
+                Box::new(leaf.height() as i64),
+                Box::new(leaf.hash().to_string()),
+                Box::new(leaf.proposer().to_string()),
+                Box::new(leaf.block_hash().to_string()),
+                Box::new(leaf_json),
+                Box::new(qc_json),
+            ],
+        ));
+
+        // Grab a transaction and execute all the statements.
+        let mut tx = self.transaction().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.execute_many(stmts)
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+
+        self.leaf_stream.push(leaf);
+        Ok(())
     }
 
-    async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        todo!()
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+        let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
+
+        // The header and payload tables should already have been initialized when we inserted the
+        // corresponding leaf. All we have to do is add the payload itself and its size.
+        let payload = bincode::serialize(block.block()).map_err(|err| QueryError::Error {
+            message: format!("failed to serialize block: {err}"),
+        })?;
+        stmts.push((
+            "UPDATE payload SET (data, size) = ($1, $2) WHERE height = $3".into(),
+            vec![
+                Box::new(payload),
+                Box::new(block.size() as i32),
+                Box::new(block.height() as i64),
+            ],
+        ));
+
+        // Index the transactions in the block.
+        let mut values = vec![];
+        let mut params: Vec<Box<dyn ToSql + Send + Sync>> = vec![];
+        for (txn_ix, txn) in block.block().enumerate() {
+            let txn_ix = serde_json::to_value(&txn_ix).map_err(|err| QueryError::Error {
+                message: format!("failed to serialize transaction index: {err}"),
+            })?;
+            values.push(format!(
+                "(${},${},${})",
+                params.len() + 1,
+                params.len() + 2,
+                params.len() + 3
+            ));
+            params.push(Box::new(txn.commit().to_string()));
+            params.push(Box::new(block.height() as i64));
+            params.push(Box::new(txn_ix));
+        }
+        if !values.is_empty() {
+            stmts.push((
+                format!(
+                    "INSERT INTO transaction (hash, block_height, index) VALUES {}",
+                    values.join(",")
+                ),
+                params,
+            ));
+        }
+
+        let mut tx = self.transaction().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.execute_many(stmts)
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+
+        self.block_stream.push(block);
+        Ok(())
     }
 }
 
 #[async_trait]
-impl StatusDataSource for SqlDataSource {
-    type Error = postgres::error::Error;
+impl<Types, I> StatusDataSource for SqlDataSource<Types, I>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    Block<Types>: QueryableBlock,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        let query = "SELECT max(height) FROM header";
+        let row = self
+            .client
+            .query_one(query, &[])
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+        let height: Option<i64> = row.get(0);
+        match height {
+            Some(height) => {
+                // The height of the block is the number of blocks below it, so the total number of
+                // blocks is one more than the height of the highest block.
+                Ok(height as usize + 1)
+            }
+            None => {
+                // If there are no blocks yet, the height is 0.
+                Ok(0)
+            }
+        }
+    }
 
-    async fn block_height(&self) -> Result<usize, Self::Error> {
-        todo!()
-    }
-    async fn mempool_info(&self) -> Result<MempoolQueryData, Self::Error> {
-        todo!()
-    }
-    async fn success_rate(&self) -> Result<f64, Self::Error> {
-        todo!()
-    }
-    async fn export_metrics(&self) -> Result<String, Self::Error> {
-        todo!()
-    }
-}
-
-impl UpdateStatusData for SqlDataSource {
-    fn metrics(&self) -> Box<dyn Metrics> {
-        todo!()
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
     }
 }
 
@@ -785,6 +1102,136 @@ impl<'a> Transaction<'a> {
         self.client.execute_raw(statement, params).await?;
         Ok(())
     }
+
+    pub async fn execute_many<S, T, P>(&mut self, statements: S) -> Result<(), Error>
+    where
+        S: IntoIterator<Item = (T, P)>,
+        T: ToStatement,
+        P: IntoIterator,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        for (stmt, params) in statements {
+            self.execute(&stmt, params).await?;
+        }
+        Ok(())
+    }
+}
+
+fn parse_leaf<Types, I>(row: Row) -> QueryResult<LeafQueryData<Types, I>>
+where
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+{
+    let leaf = row.try_get("leaf").map_err(|err| QueryError::Error {
+        message: format!("error extracting leaf from query results: {err}"),
+    })?;
+    let leaf: Leaf<Types, I> = serde_json::from_value(leaf).map_err(|err| QueryError::Error {
+        message: format!("malformed leaf: {err}"),
+    })?;
+
+    let qc = row.try_get("qc").map_err(|err| QueryError::Error {
+        message: format!("error extracting QC from query results: {err}"),
+    })?;
+    let qc: QuorumCertificate<Types, I> =
+        serde_json::from_value(qc).map_err(|err| QueryError::Error {
+            message: format!("malformed QC: {err}"),
+        })?;
+
+    Ok(LeafQueryData { leaf, qc })
+}
+
+const BLOCK_COLUMNS: &str = "h.hash AS hash, h.height AS height, h.timestamp AS timestamp, p.size AS payload_size, p.data AS payload_data";
+
+fn parse_block<Types>(row: Row) -> QueryResult<BlockQueryData<Types>>
+where
+    Types: NodeType,
+    Block<Types>: QueryableBlock,
+{
+    // First, check if we have the payload for this block yet.
+    let size: Option<i32> = row
+        .try_get("payload_size")
+        .map_err(|err| QueryError::Error {
+            message: format!("error extracting payload size from query results: {err}"),
+        })?;
+    let data: Option<Vec<u8>> = row
+        .try_get("payload_data")
+        .map_err(|err| QueryError::Error {
+            message: format!("error extracting payload data from query results: {err}"),
+        })?;
+    let (size, data) = size.zip(data).context(MissingSnafu)?;
+    let size = size as u64;
+
+    // Reconstruct the full block.
+    let block = bincode::deserialize(&data).map_err(|err| QueryError::Error {
+        message: format!("malformed payload data: {err}"),
+    })?;
+
+    // Reconstruct the query data by adding metadata.
+    let hash: String = row.try_get("hash").map_err(|err| QueryError::Error {
+        message: format!("error extracting block hash from query results: {err}"),
+    })?;
+    let hash = hash.parse().map_err(|err| QueryError::Error {
+        message: format!("malformed block hash: {err}"),
+    })?;
+    let height: i64 = row.try_get("height").map_err(|err| QueryError::Error {
+        message: format!("error extracting block height from query results: {err}"),
+    })?;
+    let height = height as u64;
+    let timestamp: OffsetDateTime = row.try_get("timestamp").map_err(|err| QueryError::Error {
+        message: format!("error extracting block height from query results: {err}"),
+    })?;
+    let timestamp = timestamp.unix_timestamp_nanos();
+
+    Ok(BlockQueryData {
+        block,
+        size,
+        hash,
+        height,
+        timestamp,
+    })
+}
+
+/// Convert range bounds to a SQL where clause constraining a given column.
+///
+/// Returns the where clause as a string and a list of query parameters. We assume that there are no
+/// other parameters in the query; that is, parameters in the where clause will start from $1.
+fn bounds_to_where_clause<R>(range: R, column: &str) -> (String, Vec<i64>)
+where
+    R: RangeBounds<usize>,
+{
+    let mut bounds = vec![];
+    let mut params = vec![];
+
+    match range.start_bound() {
+        Bound::Included(n) => {
+            params.push(*n as i64);
+            bounds.push(format!("{column} >= ${}", params.len()));
+        }
+        Bound::Excluded(n) => {
+            params.push(*n as i64);
+            bounds.push(format!("{column} > ${}", params.len()));
+        }
+        Bound::Unbounded => {}
+    }
+    match range.end_bound() {
+        Bound::Included(n) => {
+            params.push(*n as i64);
+            bounds.push(format!("{column} <= ${}", params.len()));
+        }
+        Bound::Excluded(n) => {
+            params.push(*n as i64);
+            bounds.push(format!("{column} < ${}", params.len()));
+        }
+        Bound::Unbounded => {}
+    }
+
+    let mut where_clause = bounds.join(" AND ");
+    if !where_clause.is_empty() {
+        where_clause = format!(" WHERE {where_clause}");
+    }
+
+    (where_clause, params)
 }
 
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
@@ -855,10 +1302,13 @@ impl tokio::io::AsyncWrite for TcpStream {
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
-#[cfg(all(test, not(target_os = "windows")))]
-mod test {
+#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+pub mod testing {
     use super::*;
-    use crate::testing::{mocks::TestableDataSource, setup_test, sleep};
+    use crate::testing::{
+        mocks::{MockNodeImpl, MockTypes, TestableDataSource},
+        sleep,
+    };
     use portpicker::pick_unused_port;
     use std::{
         process::{Command, Stdio},
@@ -873,7 +1323,7 @@ mod test {
     }
 
     impl TmpDb {
-        async fn init() -> Self {
+        pub async fn init() -> Self {
             let port = pick_unused_port().unwrap();
 
             let output = Command::new("docker")
@@ -915,6 +1365,10 @@ mod test {
 
             db
         }
+
+        pub fn port(&self) -> u16 {
+            self.port
+        }
     }
 
     impl Drop for TmpDb {
@@ -946,38 +1400,66 @@ mod test {
     }
 
     #[async_trait]
-    impl TestableDataSource for SqlDataSource {
-        type TmpData = TmpDb;
+    impl TestableDataSource for SqlDataSource<MockTypes, MockNodeImpl> {
+        type Storage = TmpDb;
 
-        async fn create(_node_id: usize) -> (Self, Self::TmpData) {
-            let tmp_db = TmpDb::init().await;
-            let sql = Config::default()
+        async fn create(_node_id: usize) -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        async fn connect(tmp_db: &Self::Storage) -> Self {
+            Config::default()
                 .user("postgres")
                 .password("password")
-                .port(tmp_db.port)
+                .port(tmp_db.port())
                 .connect()
                 .await
-                .unwrap();
-            (sql, tmp_db)
+                .unwrap()
         }
     }
+}
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod generic_test {
+    use super::super::data_source_tests;
+    use super::SqlDataSource;
+    use crate::testing::mocks::{MockNodeImpl, MockTypes};
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_data_source_tests!(SqlDataSource<MockTypes, MockNodeImpl>);
+}
+
+// These tests run the `postgres` Docker image, which doesn't work on Windows.
+#[cfg(all(test, not(target_os = "windows")))]
+mod test {
+    use super::{testing::TmpDb, *};
+    use crate::testing::{
+        mocks::{MockNodeImpl, MockTypes},
+        setup_test,
+    };
 
     #[async_std::test]
     async fn test_migrations() {
         setup_test();
 
         let db = TmpDb::init().await;
+        let port = db.port();
 
         let connect = |migrations: bool, custom_migrations| async move {
             let mut cfg = Config::default()
                 .user("postgres")
                 .password("password")
-                .port(db.port)
+                .port(port)
                 .migrations(custom_migrations);
             if !migrations {
                 cfg = cfg.no_migrations();
             }
-            cfg.connect().await
+            let client: SqlDataSource<MockTypes, MockNodeImpl> = cfg.connect().await?;
+            Ok::<_, Error>(client)
         };
 
         // Connecting with migrations disabled should fail if the database is not already up to date

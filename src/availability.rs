@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{api::load_api, Block};
+use crate::{api::load_api, Block, QueryError};
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
@@ -58,11 +58,21 @@ pub enum Error {
         source: QueryError,
         resource: String,
     },
+    #[snafu(display("error streaming leaves: {source}"))]
+    #[from(ignore)]
+    StreamLeaf {
+        source: QueryError,
+    },
     #[snafu(display("error fetching block {resource}: {source}"))]
     #[from(ignore)]
     QueryBlock {
         source: QueryError,
         resource: String,
+    },
+    #[snafu(display("error streaming blocks: {source}"))]
+    #[from(ignore)]
+    StreamBlock {
+        source: QueryError,
     },
     #[snafu(display("error fetching transaction {resource}: {source}"))]
     #[from(ignore)]
@@ -112,12 +122,11 @@ impl Error {
         match self {
             Self::Request { .. } => StatusCode::BadRequest,
             Self::QueryLeaf { source, .. }
+            | Self::StreamLeaf { source, .. }
             | Self::QueryBlock { source, .. }
+            | Self::StreamBlock { source, .. }
             | Self::QueryTransaction { source, .. }
-            | Self::QueryProposals { source, .. } => match source {
-                QueryError::NotFound | QueryError::Missing => StatusCode::NotFound,
-                QueryError::Error { .. } => StatusCode::InternalServerError,
-            },
+            | Self::QueryProposals { source, .. } => source.status(),
             Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
             Self::LeafStream { .. } | Self::BlockStream { .. } => StatusCode::InternalServerError,
             Self::Custom { status, .. } => *status,
@@ -186,7 +195,7 @@ where
                                     height: height as u64,
                                     reason: err.to_string(),
                                 })?
-                                .map(|block| Ok(block.header())))
+                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header())))
                         }
                         .boxed()
                     })
@@ -292,7 +301,7 @@ mod test {
             mocks::{MockNodeImpl, MockTransaction, MockTypes},
             setup_test,
         },
-        Error,
+        Error, QueryResult,
     };
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
@@ -485,8 +494,16 @@ mod test {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
-        let leaves = client.socket("stream/leaves/0").subscribe().await.unwrap();
-        let blocks = client.socket("stream/blocks/0").subscribe().await.unwrap();
+        let leaves = client
+            .socket("stream/leaves/0")
+            .subscribe::<QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>>()
+            .await
+            .unwrap();
+        let blocks = client
+            .socket("stream/blocks/0")
+            .subscribe::<QueryResult<BlockQueryData<MockTypes>>>()
+            .await
+            .unwrap();
         let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
             let txn = MockTransaction { nonce };
@@ -497,8 +514,8 @@ mod test {
                 tracing::info!("waiting for block with transaction {}", nonce);
                 let (i, (leaf, block)) = leaf_blocks.next().await.unwrap();
                 tracing::info!("got block {}\nLeaf: {:?}\nBlock: {:?}", i, leaf, block);
-                let leaf: LeafQueryData<MockTypes, MockNodeImpl> = leaf.unwrap();
-                let block: BlockQueryData<MockTypes> = block.unwrap();
+                let leaf = leaf.unwrap().unwrap();
+                let block = block.unwrap().unwrap();
                 assert_eq!(leaf.height() as usize, i);
                 assert_eq!(leaf.block_hash(), block.hash());
                 if !block.is_empty() {

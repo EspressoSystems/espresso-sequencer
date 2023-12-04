@@ -361,7 +361,12 @@ pub trait TestableDataSource:
     + Sized
     + 'static
 {
-    type TmpData: Send;
+    /// Backing storage for the data source.
+    ///
+    /// This can be used to connect to data sources to the same underlying data. It must be kept
+    /// alive as long as the related data sources are open.
+    type Storage: Send + Sync;
 
-    async fn create(node_id: usize) -> (Self, Self::TmpData);
+    async fn create(node_id: usize) -> Self::Storage;
+    async fn connect(storage: &Self::Storage) -> Self;
 }

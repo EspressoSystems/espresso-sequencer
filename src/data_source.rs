@@ -25,6 +25,7 @@
 //! * [`ExtensibleDataSource`]
 //!
 
+mod buffered_channel;
 mod extension;
 mod fs;
 mod ledger_log;
@@ -47,14 +48,21 @@ pub mod data_source_tests {
         status::MempoolQueryData,
         testing::{
             consensus::MockNetwork,
-            mocks::{MockNodeImpl, MockTransaction, MockTypes, TestableDataSource},
+            mocks::{
+                MockBlock, MockNodeImpl, MockState, MockTransaction, MockTypes, TestableDataSource,
+            },
             setup_test, sleep,
         },
+        Leaf, QueryError, QuorumCertificate,
     };
     use async_std::sync::RwLock;
     use bincode::Options;
     use commit::Committable;
-    use futures::StreamExt;
+    use futures::{StreamExt, TryStreamExt};
+    use hotshot_types::{
+        data::{LeafType, ViewNumber},
+        traits::{election::SignedCertificate, state::ConsensusTime, Block, State},
+    };
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
@@ -86,6 +94,8 @@ pub mod data_source_tests {
 
         // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
         // we've seen so we can detect duplicates.
+        // TODO eliminate duplicate blocks:
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/284
         let mut seen_blocks = HashMap::new();
         let mut seen_transactions = HashMap::new();
         let mut leaves = ds.get_leaf_range(..).await.unwrap().enumerate();
@@ -133,8 +143,7 @@ pub mod data_source_tests {
             }
         }
 
-        // Check that the proposer ID of every leaf indexed by a given proposer ID is that proposer
-        // ID.
+        // Validate the list of proposals for every distinct proposer ID in the chain.
         for proposer in ds
             .get_leaf_range(..)
             .await
@@ -143,8 +152,28 @@ pub mod data_source_tests {
             .collect::<HashSet<_>>()
             .await
         {
-            for leaf in ds.get_proposals(&proposer, None).await.unwrap() {
+            let proposals = ds.get_proposals(&proposer, None).await.unwrap();
+            // We found `proposer` by getting the proposer ID of a leaf, so there must be at least
+            // one proposal from this proposer.
+            assert!(!proposals.is_empty());
+            // If we select with a limit, we should get the most recent `limit` proposals in
+            // chronological order.
+            let suffix = ds
+                .get_proposals(&proposer, Some(proposals.len() / 2))
+                .await
+                .unwrap();
+            assert_eq!(suffix.len(), proposals.len() / 2);
+            assert!(proposals.ends_with(&suffix));
+
+            // Check that the proposer ID of every leaf indexed by `proposer` is `proposer`, and
+            // that the list of proposals is in chronological order.
+            let mut prev_height = None;
+            for leaf in proposals {
                 assert_eq!(proposer, leaf.proposer());
+                if let Some(prev_height) = prev_height {
+                    assert!(prev_height < leaf.height());
+                }
+                prev_height = Some(leaf.height());
             }
         }
     }
@@ -167,6 +196,7 @@ pub mod data_source_tests {
                 .subscribe_blocks(0)
                 .await
                 .unwrap()
+                .map(Result::unwrap)
                 .enumerate()
         };
         for nonce in 0..3 {
@@ -185,6 +215,45 @@ pub mod data_source_tests {
 
             assert_eq!(ds.read().await.get_block(i).await.unwrap(), block);
             validate(&ds).await;
+        }
+
+        // Check that all the updates have been committed to storage, not simply held in memory: we
+        // should be able to read the same data if we connect an entirely new data source to the
+        // underlying storage.
+        {
+            // Lock the original data source to prevent concurrent updates.
+            let ds = ds.read().await;
+            let storage = D::connect(network.storage()).await;
+            assert_eq!(
+                ds.get_block_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap(),
+                storage
+                    .get_block_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                ds.get_leaf_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap(),
+                storage
+                    .get_leaf_range(..)
+                    .await
+                    .unwrap()
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap()
+            );
         }
 
         network.shut_down().await;
@@ -250,7 +319,7 @@ pub mod data_source_tests {
         let mut blocks = { ds.read().await.subscribe_blocks(0).await.unwrap() };
         network.start().await;
         loop {
-            if !blocks.next().await.unwrap().is_empty() {
+            if !blocks.next().await.unwrap().unwrap().is_empty() {
                 break;
             }
         }
@@ -262,7 +331,11 @@ pub mod data_source_tests {
             // check that block height is at least 2, because we know that the genesis block and our
             // transaction's block have both been committed, but we can't know how many empty blocks
             // were committed.
-            assert!(ds.read().await.success_rate().await.unwrap() > 0.0);
+            let success_rate = ds.read().await.success_rate().await.unwrap();
+            // TODO re-enable this check once HotShot is populating view metrics again
+            //      https://github.com/EspressoSystems/HotShot/issues/2066
+            // assert!(success_rate.is_finite(), "{success_rate}");
+            assert!(success_rate > 0.0, "{success_rate}");
             assert!(ds.read().await.block_height().await.unwrap() >= 2);
         }
 
@@ -342,5 +415,45 @@ pub mod data_source_tests {
         fn end_bound(&self) -> Bound<&usize> {
             self.0.end_bound()
         }
+    }
+
+    #[async_std::test]
+    pub async fn test_revert<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        // Mock up some consensus data.
+        let block = MockBlock::new();
+        let time = ViewNumber::genesis();
+        let state = MockState::default().append(&block, &time).unwrap();
+        let mut qc = QuorumCertificate::<MockTypes, MockNodeImpl>::genesis();
+        let mut leaf = Leaf::<MockTypes, MockNodeImpl>::new(time, qc.clone(), block.clone(), state);
+        leaf.set_height(1);
+
+        qc.leaf_commitment = leaf.commit();
+        let block = BlockQueryData::new::<MockNodeImpl>(leaf.clone(), qc.clone(), block).unwrap();
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+
+        // Insert, but do not commit, some data and check that we can read it back.
+        ds.insert_leaf(leaf.clone()).await.unwrap();
+        ds.insert_block(block.clone()).await.unwrap();
+
+        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
+        assert_eq!(block, ds.get_block(0).await.unwrap());
+
+        // Revert the changes.
+        ds.revert().await;
+        assert_eq!(ds.block_height().await.unwrap(), 0);
+        assert!(matches!(
+            ds.get_leaf(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+        assert!(matches!(
+            ds.get_block(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
     }
 }

@@ -13,7 +13,7 @@
 use super::query_data::{
     BlockQueryData, LeafQueryData, QueryableBlock, TransactionHash, TransactionIndex,
 };
-use crate::{Block, Deltas, Leaf, Resolvable};
+use crate::{Block, Deltas, Leaf, QueryResult, Resolvable};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
@@ -23,8 +23,6 @@ use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType},
     signature_key::EncodedPublicKey,
 };
-use serde::{Deserialize, Serialize};
-use snafu::Snafu;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Debug;
@@ -62,29 +60,13 @@ impl<T: Committable> PartialOrd for ResourceId<T> {
 pub type BlockId<Types> = ResourceId<Block<Types>>;
 pub type LeafId<Types, I> = ResourceId<Leaf<Types, I>>;
 
-#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
-#[snafu(visibility(pub))]
-pub enum QueryError {
-    /// The requested resource does not exist or is not known to this query service.
-    NotFound,
-    /// The requested resource exists but is not currently available.
-    ///
-    /// In most cases a missing resource can be recovered from DA.
-    Missing,
-    /// There was an error while trying to fetch the requested resource.
-    #[snafu(display("Failed to fetch requested resource: {message}"))]
-    Error { message: String },
-}
-
-pub type QueryResult<T> = Result<T, QueryError>;
-
 #[async_trait]
 pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type LeafStream: Stream<Item = LeafQueryData<Types, I>> + Unpin + Send;
-    type BlockStream: Stream<Item = BlockQueryData<Types>> + Unpin + Send;
+    type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin + Send;
+    type BlockStream: Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin + Send;
 
     type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin
     where
@@ -132,7 +114,7 @@ pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
 where
     Block<Types>: QueryableBlock,
 {
-    type Error: Error + Debug;
+    type Error: Error + Debug + Send + Sync + 'static;
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
     where
         Deltas<Types, I>: Resolvable<Block<Types>>;
