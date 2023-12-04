@@ -329,6 +329,8 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
+    use crate::block2::TxTableRangeProof;
+
     use super::{
         boilerplate::test_vid_factory, BlockPayload, PayloadProver, QueryableBlock, Transaction,
         TxIndex, TxTableEntry,
@@ -427,7 +429,7 @@ mod test {
             for (index, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index).unwrap();
 
-                // test get_tx_range()
+                // test get_tx_range_with_proof()
                 let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
                 let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
                 assert_eq!(tx_body, block_tx_body);
@@ -448,7 +450,7 @@ mod test {
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
-                // test proof verification
+                // test proof verification: tx payload
                 vid.payload_verify(
                     Statement {
                         payload_subslice: tx_body,
@@ -460,6 +462,69 @@ mod test {
                 )
                 .unwrap()
                 .unwrap();
+
+                // test proof verification: tx table len
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: tx_table_len_bytes,
+                        range: 0..TxTableEntry::byte_len(),
+                        commit: &disperse_data.commit,
+                        common: &disperse_data.common,
+                    },
+                    &proof.tx_table_len_proof,
+                )
+                .unwrap()
+                .unwrap();
+
+                // test proof verification: tx table entry
+                match &proof.tx_table_range_proof {
+                    TxTableRangeProof::First(end_proof) => {
+                        let range = TxTableEntry::byte_len()..2 * TxTableEntry::byte_len();
+                        let payload_subslice = block.payload.get(range.clone()).unwrap();
+                        vid.payload_verify(
+                            Statement {
+                                payload_subslice,
+                                range,
+                                commit: &disperse_data.commit,
+                                common: &disperse_data.common,
+                            },
+                            end_proof,
+                        )
+                        .unwrap()
+                        .unwrap();
+                    }
+                    TxTableRangeProof::Other(start_proof, end_proof) => {
+                        let index: usize = index.try_into().unwrap();
+                        let range = index * TxTableEntry::byte_len()
+                            ..(index + 1) * TxTableEntry::byte_len();
+                        let payload_subslice = block.payload.get(range.clone()).unwrap();
+                        vid.payload_verify(
+                            Statement {
+                                payload_subslice,
+                                range,
+                                commit: &disperse_data.commit,
+                                common: &disperse_data.common,
+                            },
+                            start_proof,
+                        )
+                        .unwrap()
+                        .unwrap();
+                        let range = (index + 1) * TxTableEntry::byte_len()
+                            ..(index + 2) * TxTableEntry::byte_len();
+                        let payload_subslice = block.payload.get(range.clone()).unwrap();
+                        vid.payload_verify(
+                            Statement {
+                                payload_subslice,
+                                range,
+                                commit: &disperse_data.commit,
+                                common: &disperse_data.common,
+                            },
+                            end_proof,
+                        )
+                        .unwrap()
+                        .unwrap();
+                    }
+                }
             }
         }
     }
