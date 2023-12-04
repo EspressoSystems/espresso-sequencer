@@ -38,65 +38,20 @@ impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
 }
 
 #[cfg(test)]
-mod test {
+mod test_helpers {
     use super::*;
     use crate::{
         testing::{init_hotshot_handles, wait_for_decide_on_handle},
-        Header, Transaction, VmId,
+        Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::task::sleep;
-    use endpoints::TimeWindowQueryData;
     use futures::FutureExt;
-    use hotshot_query_service::availability::BlockQueryData;
     use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
-    use tempfile::TempDir;
-    use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+    use tide_disco::error::ServerError;
 
-    #[async_std::test]
-    async fn test_healthcheck() {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
-
-        let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-        let init_handle =
-            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
-
-        let options = Options::from(options::Http { port });
-        options.serve(init_handle).await.unwrap();
-
-        client.connect(None).await;
-        let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
-        assert_eq!(health.status, HealthStatus::Available);
-    }
-
-    #[async_std::test]
-    async fn submit_test_with_query_module() {
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
-        submit_test_helper(Some(options::Fs {
-            storage_path,
-            reset_store: true,
-        }))
-        .await
-    }
-
-    #[async_std::test]
-    async fn submit_test_without_query_module() {
-        submit_test_helper(None).await
-    }
-
-    async fn submit_test_helper(query_opt: Option<options::Fs>) {
+    pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
 
@@ -116,10 +71,7 @@ mod test {
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
-        let mut options = Options::from(options::Http { port }).submit(Default::default());
-        if let Some(query) = query_opt {
-            options = options.query_fs(query);
-        }
+        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
 
@@ -136,9 +88,34 @@ mod test {
         // Wait for a Decide event containing transaction matching the one we sent
         wait_for_decide_on_handle(&mut events, txn).await.unwrap()
     }
+}
+
+#[cfg(test)]
+#[espresso_macros::generic_tests]
+mod generic_tests {
+    use super::*;
+    use crate::{testing::init_hotshot_handles, Header};
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
+    use data_source::testing::TestableSequencerDataSource;
+    use endpoints::TimeWindowQueryData;
+    use futures::FutureExt;
+    use hotshot_query_service::availability::BlockQueryData;
+    use hotshot_types::traits::metrics::Metrics;
+    use portpicker::pick_unused_port;
+    use std::time::Duration;
+    use surf_disco::Client;
+    use test_helpers::submit_test_helper;
+    use tide_disco::error::ServerError;
 
     #[async_std::test]
-    async fn test_timestamp_window() {
+    pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        submit_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
         setup_logging();
         setup_backtrace();
 
@@ -150,15 +127,10 @@ mod test {
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
+        let storage = D::create_storage().await;
         let init_handle =
             Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
-        Options::from(options::Http { port })
-            .query_fs(options::Fs {
-                storage_path,
-                reset_store: true,
-            })
+        D::options(&storage, options::Http { port }.into())
             .serve(init_handle)
             .await
             .unwrap();
@@ -322,5 +294,47 @@ mod test {
             .send()
             .await
             .unwrap_err();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::testing::init_hotshot_handles;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use futures::FutureExt;
+    use hotshot_types::traits::metrics::Metrics;
+    use portpicker::pick_unused_port;
+    use surf_disco::Client;
+    use test_helpers::submit_test_helper;
+    use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+
+    #[async_std::test]
+    async fn test_healthcheck() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+        let init_handle =
+            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
+
+        let options = Options::from(options::Http { port });
+        options.serve(init_handle).await.unwrap();
+
+        client.connect(None).await;
+        let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
+        assert_eq!(health.status, HealthStatus::Available);
+    }
+
+    #[async_std::test]
+    async fn submit_test_without_query_module() {
+        submit_test_helper(|opt| opt).await
     }
 }

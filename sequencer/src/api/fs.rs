@@ -127,3 +127,42 @@ fn index_block_by_time(
         .or_default()
         .push(block.height());
 }
+
+#[cfg(test)]
+mod impl_testable_data_source {
+    use super::*;
+    use crate::{
+        api::{self, data_source::testing::TestableSequencerDataSource},
+        network::Memory,
+    };
+    use tempfile::TempDir;
+
+    #[async_trait]
+    impl TestableSequencerDataSource for DataSource<Memory> {
+        type Storage = TempDir;
+
+        async fn create_storage() -> Self::Storage {
+            TempDir::new().unwrap()
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            opt.query_fs(Options {
+                storage_path: storage.path().into(),
+                reset_store: true,
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod generic_tests {
+    use super::super::generic_tests;
+    use super::DataSource;
+    use crate::network::Memory;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_generic_tests!(DataSource<Memory>);
+}

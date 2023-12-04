@@ -10,7 +10,7 @@ use hotshot_query_service::{
 };
 
 #[async_trait]
-pub(super) trait SequencerDataSource<N: network::Type>:
+pub(crate) trait SequencerDataSource<N: network::Type>:
     AvailabilityDataSource<SeqTypes, Node<N>>
     + StatusDataSource
     + UpdateDataSource<SeqTypes, Node<N>>
@@ -28,6 +28,21 @@ pub(super) trait SequencerDataSource<N: network::Type>:
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
-pub(super) trait SubmitDataSource<N: network::Type> {
+pub(crate) trait SubmitDataSource<N: network::Type> {
     fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
+}
+
+#[cfg(test)]
+pub(crate) mod testing {
+    use super::super::Options;
+    use super::*;
+    use crate::network::Memory;
+
+    #[async_trait]
+    pub(crate) trait TestableSequencerDataSource: SequencerDataSource<Memory> {
+        type Storage;
+
+        async fn create_storage() -> Self::Storage;
+        fn options(storage: &Self::Storage, opt: Options) -> Options;
+    }
 }
