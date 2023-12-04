@@ -159,6 +159,8 @@ impl QueryableBlock for BlockPayload {
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(crate::VmId(0), self.payload.get(tx_range.clone())?.to_vec()),
             TxInclusionProof {
+                // TODO(795) every proof will contain a copy of the tx table len proof.
+                // Should we cache it in `BlockPayload` or something?
                 tx_table_len_proof: vid
                     .payload_proof(&self.payload, 0..TxTableEntry::byte_len())
                     .ok()?,
@@ -188,9 +190,11 @@ pub struct TxInclusionProof {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 enum TxTableRangeProof {
-    First(RangeProof), // don't need proof for `start` = 0
+    // If this is the first tx then we need only 1 proof `end` index.
+    First(RangeProof),
+    // All other cases need 2 proofs: 1 for `start`, 1 for `end`.
     Other(RangeProof, RangeProof),
-    // TODO(795) new variant `Final` with implicit `end`?
+    // TODO new variant `Final` with implicit `end` https://github.com/EspressoSystems/espresso-sequencer/issues/757
 }
 
 mod tx_table_entry {
