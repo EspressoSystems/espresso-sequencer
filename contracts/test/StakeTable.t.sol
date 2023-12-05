@@ -353,7 +353,7 @@ contract StakeTable_Test is Test {
         /// Try to deposit while not being the owner of the node
         vm.prank(makeAddr("Not node owner"));
 
-        vm.expectRevert(S.CallerIsNotTheNodeOwner.selector);
+        vm.expectRevert(S.Unauthenticated.selector);
         stakeTable.deposit(blsVK, 5);
     }
 
@@ -442,7 +442,7 @@ contract StakeTable_Test is Test {
         /// Try to deposit while not being the owner of the node
         vm.prank(makeAddr("Not node owner"));
 
-        vm.expectRevert(S.CallerIsNotTheNodeOwner.selector);
+        vm.expectRevert(S.Unauthenticated.selector);
         stakeTable.requestExit(blsVK);
     }
 

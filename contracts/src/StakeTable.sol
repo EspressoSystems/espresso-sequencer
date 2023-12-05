@@ -24,7 +24,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// Error raised when a user tries to make a deposit or request an exit but does not control the
     /// node public key.
-    error CallerIsNotTheNodeOwner();
+    error Unauthenticated();
 
     /// Error raised when a user tries to deposit before the registration is complete.
     error PrematureDeposit();
@@ -222,7 +222,7 @@ contract StakeTable is AbstractStakeTable {
 
         // The deposit must come from the node's registered account.
         if (node.account != msg.sender) {
-            revert CallerIsNotTheNodeOwner();
+            revert Unauthenticated();
         }
 
         // A node cannot deposit more tokens while it waiting to register,
@@ -256,7 +256,7 @@ contract StakeTable is AbstractStakeTable {
 
         // The exit request must come from the node's withdrawal account.
         if (node.account != msg.sender) {
-            revert CallerIsNotTheNodeOwner();
+            revert Unauthenticated();
         }
 
         // Cannot request to exit if an exit request is already in progress.
