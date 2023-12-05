@@ -19,8 +19,6 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
-#[cfg(feature = "demo")]
-pub mod demo;
 /// Contains traits consumed by [`HotShot`]
 pub mod traits;
 /// Contains types used by the crate

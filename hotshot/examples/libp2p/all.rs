@@ -5,11 +5,12 @@ use crate::types::ThisRun;
 use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demo::DemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_testing::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::net::{IpAddr, Ipv4Addr};
+use surf_disco::Url;
 use tracing::instrument;
 
 use crate::{
@@ -36,28 +37,28 @@ async fn main() {
 
     // orchestrator
     async_spawn(run_orchestrator::<
-        DemoTypes,
+        TestTypes,
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        port: 4444,
+        url: Url::parse("http://localhost:4444").unwrap(),
+
         config_file: args.config_file.clone(),
     }));
 
     // nodes
     let config: NetworkConfig<
-        <DemoTypes as NodeType>::SignatureKey,
-        <DemoTypes as NodeType>::ElectionConfigType,
-    > = load_config_from_file::<DemoTypes>(args.config_file);
+        <TestTypes as NodeType>::SignatureKey,
+        <TestTypes as NodeType>::ElectionConfigType,
+    > = load_config_from_file::<TestTypes>(args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..config.config.total_nodes.into() {
         let node = async_spawn(async move {
             infra::main_entry_point::<
-                DemoTypes,
+                TestTypes,
                 DANetwork,
                 QuorumNetwork,
                 ViewSyncNetwork,
@@ -65,7 +66,7 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                host: "127.0.0.1".to_string(),
+                url: "http://localhost".to_string(),
                 port: 4444,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             })

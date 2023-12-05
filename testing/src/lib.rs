@@ -1,3 +1,9 @@
+#![cfg_attr(
+    // hotshot_example option is set manually in justfile when running examples
+    not(any(test, debug_assertions, hotshot_example)),
+    deprecated = "suspicious usage of testing/demo implementations in non-test/non-debug build"
+)]
+
 use hotshot_task::{event_stream::ChannelStream, task_impls::HSTWithEvent};
 
 /// Helpers for initializing system context handle and building tasks.
@@ -21,11 +27,17 @@ pub mod txn_task;
 /// task that decides when things are complete
 pub mod completion_task;
 
-/// node types
-pub mod node_types;
-
 /// task to spin nodes up and down
 pub mod spinning_task;
+
+/// block types
+pub mod block_types;
+
+/// Implementations for testing/examples
+pub mod state_types;
+
+/// node types
+pub mod node_types;
 
 // TODO node changer (spin up and down)
 

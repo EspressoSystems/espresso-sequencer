@@ -13,7 +13,7 @@ use tide_disco::{
     api::ApiError,
     error::ServerError,
     method::{ReadState, WriteState},
-    Api, App, StatusCode,
+    Api, App, StatusCode, Url,
 };
 use tracing::{debug, info};
 
@@ -277,7 +277,6 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         let votes = self.view_sync_votes.get(&view_number);
         let mut ret_votes = vec![];
         if let Some(votes) = votes {
-            // error!("Passed in index is: {} self index is: {}", index, *self.vote_index.get(&view_number).unwrap());
             for i in index..*self.view_sync_vote_index.get(&view_number).unwrap() {
                 ret_votes.push(votes[i as usize].1.clone());
             }
@@ -822,7 +821,7 @@ where
 
 pub async fn run_web_server<KEY: SignatureKey + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    port: u16,
+    url: Url,
 ) -> io::Result<()> {
     let options = Options::default();
 
@@ -832,9 +831,7 @@ pub async fn run_web_server<KEY: SignatureKey + 'static>(
 
     app.register_module("api", api).unwrap();
 
-    let app_future = app.serve(format!("http://0.0.0.0:{port}"));
-
-    info!("Web server started on port {port}");
+    let app_future = app.serve(url);
 
     app_future.await
 }

@@ -230,7 +230,7 @@ mod tests {
     type Key = ark_bn254::Fq;
 
     #[test]
-    fn test_stake_table() -> Result<(), StakeTableError> {
+    fn crypto_test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::<Key>::new(3);
         let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(0));

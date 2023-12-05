@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
-use hotshot::demo::DemoState;
 use hotshot::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 use hotshot::traits::implementations::{
     MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
@@ -10,7 +9,10 @@ use hotshot::traits::implementations::{
 use hotshot::traits::NodeImplementation;
 use hotshot::types::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot::types::SignatureKey;
-use hotshot_types::block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction};
+use hotshot_testing::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestState,
+};
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::TestableNetworkingImplementation;
 use hotshot_types::traits::network::{ConnectedNetwork, TransmitType};
@@ -43,12 +45,12 @@ pub struct Test;
 
 impl NodeType for Test {
     type Time = ViewNumber;
-    type BlockHeader = VIDBlockHeader;
-    type BlockPayload = VIDBlockPayload;
+    type BlockHeader = TestBlockHeader;
+    type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
-    type Transaction = VIDTransaction;
+    type Transaction = TestTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = DemoState;
+    type StateType = TestState;
     type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
 }
 
@@ -109,7 +111,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
         let message = Message {
             sender: pk,
             kind: MessageKind::Data(DataMessage::SubmitTransaction(
-                VIDTransaction(bytes.to_vec()),
+                TestTransaction(bytes.to_vec()),
                 <ViewNumber as ConsensusTime>::new(0),
             )),
         };

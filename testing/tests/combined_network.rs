@@ -94,7 +94,7 @@ async fn test_combined_network_webserver_crash() {
     }
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), all_nodes)],
+        node_changes: vec![(5, all_nodes)],
     };
 
     metadata
@@ -154,10 +154,7 @@ async fn test_combined_network_reup() {
     }
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![
-            (Duration::from_millis(500), all_up),
-            (Duration::from_millis(500), all_down),
-        ],
+        node_changes: vec![(13, all_up), (5, all_down)],
     };
 
     metadata
@@ -211,7 +208,7 @@ async fn test_combined_network_half_dc() {
     }
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(Duration::new(1, 0), half)],
+        node_changes: vec![(5, half)],
     };
 
     metadata
@@ -225,7 +222,10 @@ async fn test_combined_network_half_dc() {
     async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
 
-fn generate_random_node_changes(total_nodes: usize) -> Vec<(Duration, Vec<ChangeNode>)> {
+fn generate_random_node_changes(
+    total_nodes: usize,
+    total_num_rounds: usize,
+) -> Vec<(u64, Vec<ChangeNode>)> {
     let mut rng = rand::thread_rng();
     let mut node_changes = vec![];
 
@@ -241,9 +241,9 @@ fn generate_random_node_changes(total_nodes: usize) -> Vec<(Duration, Vec<Change
             updown,
         };
 
-        let duration = Duration::new(rng.gen_range(1..3), 0);
+        let round = rng.gen_range(1..total_num_rounds) as u64;
 
-        node_changes.push((duration, vec![node_change]));
+        node_changes.push((round, vec![node_change]));
     }
 
     node_changes
@@ -282,7 +282,10 @@ async fn test_stress_combined_network_fuzzy() {
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: generate_random_node_changes(metadata.total_nodes),
+        node_changes: generate_random_node_changes(
+            metadata.total_nodes,
+            metadata.overall_safety_properties.num_successful_views * 2,
+        ),
     };
 
     metadata

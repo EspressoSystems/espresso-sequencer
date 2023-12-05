@@ -5,10 +5,6 @@ version = "0.1.1"
 readme = "README.md"
 edition = "2021"
 
-[features]
-default = ["demo"]
-demo = ["hotshot-types/demo"]
-
 [dependencies]
 ark-bls12-381 = { workspace = true }
 async-compatibility-layer = { workspace = true }

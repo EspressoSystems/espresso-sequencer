@@ -2,7 +2,7 @@ pub mod types;
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demo::DemoTypes;
+use hotshot_testing::state_types::TestTypes;
 use tracing::instrument;
 
 use crate::infra::run_orchestrator;
@@ -23,7 +23,7 @@ async fn main() {
     setup_backtrace();
     let args = OrchestratorArgs::parse();
 
-    run_orchestrator::<DemoTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
+    run_orchestrator::<TestTypes, DANetwork, QuorumNetwork, ViewSyncNetwork, VIDNetwork, NodeImpl>(
         args,
     )
     .await;

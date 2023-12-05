@@ -10,6 +10,7 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
+use surf_disco::Url;
 use toml;
 use tracing::error;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -52,8 +53,7 @@ pub struct Libp2pConfigFile {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct WebServerConfig {
-    pub host: IpAddr,
-    pub port: u16,
+    pub url: Url,
     pub wait_between_polls: Duration,
 }
 

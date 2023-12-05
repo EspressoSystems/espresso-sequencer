@@ -166,13 +166,14 @@ mod tests {
             powers_of_g,
             h,
             beta_h,
+            powers_of_h: vec![h, beta_h],
         };
         end_timer!(setup_time);
         Ok(pp)
     }
 
     #[test]
-    fn test_proof_generation() {
+    fn crypto_test_proof_generation() {
         let num_validators = 10;
         let mut prng = test_rng();
 
