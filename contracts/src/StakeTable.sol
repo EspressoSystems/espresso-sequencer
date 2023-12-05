@@ -295,9 +295,7 @@ contract StakeTable is AbstractStakeTable {
         uint64 balance = node.balance;
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
-        Node memory nullNode =
-            Node(address(0), StakeType.Native, 0, 0, 0, EdOnBN254.EdOnBN254Point(0, 1));
-        nodes[key] = nullNode;
+        delete nodes[key];
 
         return balance;
     }

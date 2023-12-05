@@ -531,7 +531,7 @@ contract StakeTable_Test is Test {
         // Node is deleted
         node = stakeTable.lookupNode(blsVK);
         AbstractStakeTable.Node memory nullNode = AbstractStakeTable.Node(
-            address(0), AbstractStakeTable.StakeType.Native, 0, 0, 0, EdOnBN254.EdOnBN254Point(0, 1)
+            address(0), AbstractStakeTable.StakeType.Native, 0, 0, 0, EdOnBN254.EdOnBN254Point(0, 0)
         );
 
         assertEq(abi.encode(node), abi.encode(nullNode));
