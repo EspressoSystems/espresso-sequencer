@@ -225,8 +225,9 @@ contract StakeTable is AbstractStakeTable {
             revert Unauthenticated();
         }
 
-        // A node cannot deposit more tokens while it waiting to register,
-        if (currentEpoch() <= node.registerEpoch) {
+        // A node cannot deposit more tokens while it waiting to register.
+        uint64 currentEpoch = currentEpoch();
+        if (currentEpoch <= node.registerEpoch) {
             revert PrematureDeposit();
         }
 
@@ -241,7 +242,7 @@ contract StakeTable is AbstractStakeTable {
 
         emit Deposit(_hashBlsKey(blsVK), uint256(amount));
 
-        uint64 effectiveEpoch = currentEpoch() + 1;
+        uint64 effectiveEpoch = currentEpoch + 1;
 
         return (node.balance, effectiveEpoch);
     }
