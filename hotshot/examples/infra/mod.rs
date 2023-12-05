@@ -22,12 +22,11 @@ use hotshot_orchestrator::{
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_types::block_impl::VIDBlockHeader;
+use hotshot_testing::block_types::{TestBlockHeader, TestBlockPayload, TestTransaction};
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::ValidatorConfig;
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
@@ -291,7 +290,7 @@ pub trait RunDA<
 > where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    TYPES: NodeType<Transaction = VIDTransaction>,
+    TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
     SystemContext<TYPES, NODE>: HotShotType<TYPES, NODE>,
@@ -372,7 +371,7 @@ pub trait RunDA<
     async fn run_hotshot(
         &self,
         mut context: SystemContextHandle<TYPES, NODE>,
-        transactions: &mut Vec<VIDTransaction>,
+        transactions: &mut Vec<TestTransaction>,
         transactions_to_send_per_round: u64,
     ) {
         let NetworkConfig {
@@ -493,9 +492,9 @@ pub struct WebServerDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -595,9 +594,9 @@ pub struct Libp2pDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -688,9 +687,9 @@ pub struct CombinedDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -799,9 +798,9 @@ where
 /// Main entry point for validators
 pub async fn main_entry_point<
     TYPES: NodeType<
-        Transaction = VIDTransaction,
-        BlockPayload = VIDBlockPayload,
-        BlockHeader = VIDBlockHeader,
+        Transaction = TestTransaction,
+        BlockPayload = TestBlockPayload,
+        BlockHeader = TestBlockHeader,
     >,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,

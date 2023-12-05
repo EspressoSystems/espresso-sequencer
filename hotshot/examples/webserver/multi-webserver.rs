@@ -6,7 +6,7 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use clap::Parser;
-use hotshot::demo::DemoTypes;
+use hotshot_testing::state_types::TestTypes;
 use surf_disco::Url;
 use tracing::error;
 
@@ -30,7 +30,7 @@ async fn main() {
 
     let consensus_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(Some(server_shutdown_cdn), args.consensus_url)
         .await
         {
@@ -39,7 +39,7 @@ async fn main() {
     });
     let da_server = async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(Some(server_shutdown_da), args.da_url)
         .await
         {

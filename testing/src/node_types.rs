@@ -1,7 +1,11 @@
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 
+use crate::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestState,
+};
+
 use hotshot::{
-    demo::DemoState,
     traits::{
         election::static_committee::{StaticCommittee, StaticElectionConfig},
         implementations::{
@@ -13,7 +17,6 @@ use hotshot::{
     types::bn254::BLSPubKey,
 };
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     data::ViewNumber,
     traits::node_implementation::{ChannelMaps, NodeType},
 };
@@ -35,12 +38,12 @@ use serde::{Deserialize, Serialize};
 pub struct TestTypes;
 impl NodeType for TestTypes {
     type Time = ViewNumber;
-    type BlockHeader = VIDBlockHeader;
-    type BlockPayload = VIDBlockPayload;
+    type BlockHeader = TestBlockHeader;
+    type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
-    type Transaction = VIDTransaction;
+    type Transaction = TestTransaction;
     type ElectionConfigType = StaticElectionConfig;
-    type StateType = DemoState;
+    type StateType = TestState;
     type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
 }
 
