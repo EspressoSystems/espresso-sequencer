@@ -165,6 +165,7 @@ mod test {
     }
 
     #[async_std::test]
+    #[ignore] // TODO Philippe This contract will be removed
     async fn test_validate_qc() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();

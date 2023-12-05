@@ -31,6 +31,7 @@ mod test {
     }
 
     #[async_std::test]
+    #[ignore] // TODO Philippe use forge instead
     async fn test_full_sig_scheme() {
         setup_logging();
         setup_backtrace();
