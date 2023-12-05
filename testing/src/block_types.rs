@@ -3,7 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use commit::{Commitment, Committable};
+use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
@@ -56,7 +56,7 @@ impl Committable for TestTransaction {
     }
 
     fn tag() -> String {
-        "SEQUENCING_TXN".to_string()
+        "TEST_TXN".to_string()
     }
 }
 
@@ -216,4 +216,20 @@ impl BlockHeader for TestBlockHeader {
     }
 
     fn metadata(&self) -> <Self::Payload as BlockPayload>::Metadata {}
+}
+
+impl Committable for TestBlockHeader {
+    fn commit(&self) -> Commitment<Self> {
+        let payload_commitment_bytes: [u8; 32] = self.payload_commitment().into();
+
+        RawCommitmentBuilder::new("Header Comm")
+            .u64_field("block number", self.block_number())
+            .constant_str("payload commitment")
+            .fixed_size_bytes(&payload_commitment_bytes)
+            .finalize()
+    }
+
+    fn tag() -> String {
+        "TEST_HEADER".to_string()
+    }
 }
