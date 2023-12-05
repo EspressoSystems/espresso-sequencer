@@ -11,8 +11,8 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::mocks::{
-    MockBlock, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction,
-    MockTypes, TestableDataSource,
+    MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction, MockTypes,
+    TestableDataSource,
 };
 use crate::data_source::FileSystemDataSource;
 use async_std::{

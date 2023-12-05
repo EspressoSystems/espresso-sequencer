@@ -483,10 +483,7 @@ mod test {
         },
         metrics::PrometheusMetrics,
         status::StatusDataSource,
-        testing::{
-            consensus::MockDataSource,
-            mocks::{MockNodeImpl, MockTypes},
-        },
+        testing::{consensus::MockDataSource, mocks::MockTypes},
     };
     use async_std::{sync::RwLock, task::spawn};
     use async_trait::async_trait;
