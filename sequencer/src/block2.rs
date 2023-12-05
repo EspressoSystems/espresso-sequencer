@@ -5,7 +5,10 @@ use derivative::Derivative;
 use hotshot_query_service::QueryableBlock;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{advz::payload_prover::SmallRangeProof, payload_prover::PayloadProver},
+    vid::{
+        advz::payload_prover::SmallRangeProof,
+        payload_prover::{PayloadProver, Statement},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{ops::Range, sync::OnceLock};
@@ -222,6 +225,133 @@ enum TxTableRangeProof {
     // TODO new variant `Final` with implicit `end` https://github.com/EspressoSystems/espresso-sequencer/issues/757
 }
 
+impl TxInclusionProof {
+    // TODO(795) prototype only!
+    //
+    // - Obnoxious arg list; where to store all this cruft?
+    // - Returns `None` if an error occurred.
+    // - Use of `Result<(),()>` pattern to indicate a must-use bool return type.
+    #[allow(dead_code)] // TODO temporary
+    #[allow(clippy::too_many_arguments)]
+    fn verify(
+        &self,
+        tx: &Transaction,
+        vid: &boilerplate::VidScheme,
+        vid_commit: &boilerplate::VidSchemeCommit,
+        vid_common: &boilerplate::VidSchemeCommon,
+        tx_index: TxIndex,
+        tx_payload_range: Range<usize>,
+        tx_table_len_bytes: &[u8],
+        tx_table_entry_start_bytes: &[u8],
+        tx_table_entry_end_bytes: &[u8],
+    ) -> Option<Result<(), ()>> {
+        // verify tx payload proof
+        // proof is `None` if and only if tx has zero length.
+        match &self.tx_payload_proof {
+            Some(tx_payload_proof) => {
+                if vid
+                    .payload_verify(
+                        Statement {
+                            payload_subslice: tx.payload(),
+                            range: tx_payload_range,
+                            commit: vid_commit,
+                            common: vid_common,
+                        },
+                        tx_payload_proof,
+                    )
+                    .ok()?
+                    .is_err()
+                {
+                    // TODO(795) it would be nice to use ? here...
+                    return Some(Err(()));
+                }
+            }
+            None => {
+                if !tx.payload().is_empty() {
+                    return None; // error
+                }
+            }
+        };
+
+        // verify tx table len proof
+        if vid
+            .payload_verify(
+                Statement {
+                    payload_subslice: tx_table_len_bytes,
+                    range: 0..TxTableEntry::byte_len(),
+                    commit: vid_commit,
+                    common: vid_common,
+                },
+                &self.tx_table_len_proof,
+            )
+            .ok()?
+            .is_err()
+        {
+            return Some(Err(()));
+        }
+
+        // verify tx table entry proof
+        match &self.tx_table_range_proof {
+            TxTableRangeProof::First(end_proof) => {
+                if vid
+                    .payload_verify(
+                        Statement {
+                            payload_subslice: tx_table_entry_end_bytes,
+                            range: TxTableEntry::byte_len()..2 * TxTableEntry::byte_len(),
+                            commit: vid_commit,
+                            common: vid_common,
+                        },
+                        end_proof,
+                    )
+                    .ok()?
+                    .is_err()
+                {
+                    return Some(Err(()));
+                }
+            }
+            TxTableRangeProof::Other(start_proof, end_proof) => {
+                let index: usize = tx_index.try_into().ok()?;
+                let range =
+                    index * TxTableEntry::byte_len()..(index + 1) * TxTableEntry::byte_len();
+                if vid
+                    .payload_verify(
+                        Statement {
+                            payload_subslice: tx_table_entry_start_bytes,
+                            range,
+                            commit: vid_commit,
+                            common: vid_common,
+                        },
+                        start_proof,
+                    )
+                    .ok()?
+                    .is_err()
+                {
+                    return Some(Err(()));
+                }
+                let range =
+                    (index + 1) * TxTableEntry::byte_len()..(index + 2) * TxTableEntry::byte_len();
+                let payload_subslice = tx_table_entry_end_bytes;
+                if vid
+                    .payload_verify(
+                        Statement {
+                            payload_subslice,
+                            range,
+                            commit: vid_commit,
+                            common: vid_common,
+                        },
+                        end_proof,
+                    )
+                    .ok()?
+                    .is_err()
+                {
+                    return Some(Err(()));
+                }
+            }
+        }
+        Some(Ok(()))
+    }
+}
+
 mod tx_table_entry {
     use std::mem::size_of;
 
@@ -348,18 +478,18 @@ mod boilerplate {
     }
 
     pub(super) type VidScheme = Advz<Bls12_381, sha2::Sha256>;
+    pub(super) type VidSchemeCommit = <VidScheme as jf_primitives::vid::VidScheme>::Commit;
+    pub(super) type VidSchemeCommon = <VidScheme as jf_primitives::vid::VidScheme>::Common;
 }
 
 #[cfg(test)]
 mod test {
-    use crate::block2::TxTableRangeProof;
-
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, PayloadProver, QueryableBlock, Transaction,
-        TxIndex, TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, QueryableBlock, Transaction, TxIndex,
+        TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use jf_primitives::vid::{payload_prover::Statement, VidScheme};
+    use jf_primitives::vid::VidScheme;
 
     #[test]
     fn basic_correctness() {
@@ -448,8 +578,8 @@ mod test {
 
             // tests for individual txs
             let disperse_data = vid.disperse(&block.payload).unwrap();
-            for (index, tx_body) in tx_bodies.iter().enumerate() {
-                let index = TxIndex::try_from(index).unwrap();
+            for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
+                let index = TxIndex::try_from(index_usize).unwrap();
 
                 // test get_tx_range_with_proof()
                 let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
@@ -467,88 +597,40 @@ mod test {
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
 
-                // TODO(795): there is no production code to verify a tx proof.
-                // The only such code is in this test.
+                // TODO(795): verify() is ugly. This cruft is temporary.
+                let tx_table_entry_start_bytes = if index == 0 {
+                    &[]
+                } else {
+                    block
+                        .payload
+                        .get(
+                            index_usize * TxTableEntry::byte_len()
+                                ..(index_usize + 1) * TxTableEntry::byte_len(),
+                        )
+                        .unwrap()
+                };
+                let tx_table_entry_end_bytes = block
+                    .payload
+                    .get(
+                        (index_usize + 1) * TxTableEntry::byte_len()
+                            ..(index_usize + 2) * TxTableEntry::byte_len(),
+                    )
+                    .unwrap();
 
-                // test proof verification: tx payload
-                match &proof.tx_payload_proof {
-                    Some(tx_payload_proof) => vid
-                        .payload_verify(
-                            Statement {
-                                payload_subslice: tx_body,
-                                range: tx_range,
-                                commit: &disperse_data.commit,
-                                common: &disperse_data.common,
-                            },
-                            tx_payload_proof,
-                        )
-                        .unwrap()
-                        .unwrap(),
-                    None => assert!(tx_range.is_empty()),
-                }
-
-                // test proof verification: tx table len
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: tx_table_len_bytes,
-                        range: 0..TxTableEntry::byte_len(),
-                        commit: &disperse_data.commit,
-                        common: &disperse_data.common,
-                    },
-                    &proof.tx_table_len_proof,
-                )
-                .unwrap()
-                .unwrap();
-
-                // test proof verification: tx table entry
-                match &proof.tx_table_range_proof {
-                    TxTableRangeProof::First(end_proof) => {
-                        let range = TxTableEntry::byte_len()..2 * TxTableEntry::byte_len();
-                        let payload_subslice = block.payload.get(range.clone()).unwrap();
-                        vid.payload_verify(
-                            Statement {
-                                payload_subslice,
-                                range,
-                                commit: &disperse_data.commit,
-                                common: &disperse_data.common,
-                            },
-                            end_proof,
-                        )
-                        .unwrap()
-                        .unwrap();
-                    }
-                    TxTableRangeProof::Other(start_proof, end_proof) => {
-                        let index: usize = index.try_into().unwrap();
-                        let range = index * TxTableEntry::byte_len()
-                            ..(index + 1) * TxTableEntry::byte_len();
-                        let payload_subslice = block.payload.get(range.clone()).unwrap();
-                        vid.payload_verify(
-                            Statement {
-                                payload_subslice,
-                                range,
-                                commit: &disperse_data.commit,
-                                common: &disperse_data.common,
-                            },
-                            start_proof,
-                        )
-                        .unwrap()
-                        .unwrap();
-                        let range = (index + 1) * TxTableEntry::byte_len()
-                            ..(index + 2) * TxTableEntry::byte_len();
-                        let payload_subslice = block.payload.get(range.clone()).unwrap();
-                        vid.payload_verify(
-                            Statement {
-                                payload_subslice,
-                                range,
-                                commit: &disperse_data.commit,
-                                common: &disperse_data.common,
-                            },
-                            end_proof,
-                        )
-                        .unwrap()
-                        .unwrap();
-                    }
-                }
+                proof
+                    .verify(
+                        &tx,
+                        &vid,
+                        &disperse_data.commit,
+                        &disperse_data.common,
+                        index,
+                        tx_range,
+                        tx_table_len_bytes,
+                        tx_table_entry_start_bytes,
+                        tx_table_entry_end_bytes,
+                    )
+                    .unwrap()
+                    .unwrap();
             }
         }
     }
