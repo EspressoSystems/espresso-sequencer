@@ -15,7 +15,10 @@ use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot_types::{
     simple_certificate::QuorumCertificate,
-    traits::{self, node_implementation::NodeType, signature_key::EncodedPublicKey},
+    traits::{
+        self, block_contents::BlockHeader, node_implementation::NodeType,
+        signature_key::EncodedPublicKey,
+    },
 };
 use hotshot_utils::bincode::bincode_opts;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -186,9 +189,7 @@ where
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
-            // TODO
-            // qc.leaf_commitment() == leaf.commit(),
-            false,
+            qc.data.leaf_commit == leaf.commit(),
             InconsistentLeafSnafu { leaf, qc }
         );
         Ok(Self { leaf, qc })
@@ -253,8 +254,7 @@ pub enum InconsistentBlockError<Types: NodeType>
 where
     Block<Types>: Serialize + Committable,
 {
-    // TODO
-    // #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
+    #[snafu(display("QC references leaf {}, but expected {}", qc.data.leaf_commit, leaf.commit()))]
     InconsistentQc {
         qc: QuorumCertificate<Types>,
         leaf: Leaf<Types>,
@@ -286,9 +286,7 @@ where
         block: Block<Types>,
     ) -> Result<Self, InconsistentBlockError<Types>> {
         ensure!(
-            // TODO
-            // qc.leaf_commitment() == leaf.commit(),
-            false,
+            qc.data.leaf_commit == leaf.commit(),
             InconsistentQcSnafu { qc, leaf }
         );
         ensure!(
