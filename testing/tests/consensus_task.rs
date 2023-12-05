@@ -107,7 +107,7 @@ async fn test_consensus_task() {
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
-    let _pub_key = *api.public_key();
+    let pub_key = *api.public_key();
     let vid = vid_init();
     let transactions = vec![VIDTransaction(vec![0])];
     let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
@@ -122,7 +122,7 @@ async fn test_consensus_task() {
         shares: vid_disperse.shares,
         common: vid_disperse.common,
     };
-    let _vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>>  = Proposal {
+    let vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>>  = Proposal {
         data: vid_disperse.clone(),
         signature: signature,
         _pd: PhantomData,
@@ -140,6 +140,19 @@ async fn test_consensus_task() {
         proposal.clone(),
         public_key,
     ));
+    // followings are for the test of vote logic with vid
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
+    input.push(HotShotEvent::TransactionsSequenced(
+        encoded_transactions.clone(),
+        (),
+        ViewNumber::new(1),
+    ));
+    input.push(HotShotEvent::BlockReady(
+        vid_disperse.clone(),
+        ViewNumber::new(1),
+    ));
+    input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
+    input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::QCFormed(either::Left(qc)), 1);
@@ -151,7 +164,34 @@ async fn test_consensus_task() {
         HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
         1,
     );
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
+    output.insert(
+        HotShotEvent::ViewChange(ViewNumber::new(1)), 
+        2, // 1 from `QuorumProposalRecv`, 1 from input
+    ); 
+    output.insert(
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
+        1,
+    );
+    output.insert(
+        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
+        2,
+    );
+    output.insert(
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        1,
+    );
+    output.insert(
+        HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
+        2, // 2 occurrences: 1 from `input`, 1 from the DA task
+    );
+    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
+
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal.data).await {
+        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
+        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
+        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
+    }
+
     output.insert(HotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, event_stream| {
