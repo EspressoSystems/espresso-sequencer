@@ -87,13 +87,16 @@ async fn build_vote(
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[ignore]
 async fn test_consensus_task() {
-    use std::marker::PhantomData;
+    use hotshot_task_impls::harness::run_harness;
+    use hotshot_testing::block_types::TestTransaction;
+    use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;
     use hotshot_types::data::VidSchemeTrait;
-    use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::{simple_certificate::QuorumCertificate, data::VidDisperse, message::Proposal, traits::node_implementation::NodeType, block_impl::VIDTransaction};
-
+    use hotshot_types::{
+        data::VidDisperse, message::Proposal, simple_certificate::QuorumCertificate,
+        traits::node_implementation::NodeType,
+    };
+    use std::marker::PhantomData;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -102,29 +105,27 @@ async fn test_consensus_task() {
     // We assign node's key pair rather than read from config file since it's a test
     let (private_key, public_key) = key_pair_for_id(1);
 
-
-
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
     let pub_key = *api.public_key();
     let vid = vid_init();
-    let transactions = vec![VIDTransaction(vec![0])];
-    let encoded_transactions = VIDTransaction::encode(transactions.clone()).unwrap();
+    let transactions = vec![TestTransaction(vec![0])];
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
     let signature =
         <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
     let vid_disperse = VidDisperse {
-        view_number:  ViewNumber::new(2),
+        view_number: ViewNumber::new(2),
         payload_commitment,
         shares: vid_disperse.shares,
         common: vid_disperse.common,
     };
-    let vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>>  = Proposal {
+    let vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>> = Proposal {
         data: vid_disperse.clone(),
-        signature: signature,
+        signature,
         _pd: PhantomData,
     };
 
@@ -165,9 +166,9 @@ async fn test_consensus_task() {
         1,
     );
     output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)), 
+        HotShotEvent::ViewChange(ViewNumber::new(1)),
         2, // 1 from `QuorumProposalRecv`, 1 from input
-    ); 
+    );
     output.insert(
         HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
         1,
