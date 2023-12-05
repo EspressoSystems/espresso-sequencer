@@ -22,6 +22,7 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
+import { StakeTableMock as SM } from "../test/mocks/StakeTableMock.sol";
 
 contract StakeTable_Test is Test {
     event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
@@ -535,5 +536,42 @@ contract StakeTable_Test is Test {
         );
 
         assertEq(abi.encode(node), abi.encode(nullNode));
+    }
+}
+
+contract Queue_Test is Test {
+    SM public stakeTable;
+    ExampleToken public token;
+    LightClientTest public lightClientContract;
+    uint256 constant INITIAL_BALANCE = 1_000;
+    address exampleTokenCreator;
+
+    function setUp() public {
+        exampleTokenCreator = makeAddr("tokenCreator");
+        vm.prank(exampleTokenCreator);
+        token = new ExampleToken(INITIAL_BALANCE);
+
+        LightClient.LightClientState memory genesis = LightClient.LightClientState({
+            viewNum: 0,
+            blockHeight: 0,
+            blockCommRoot: 0,
+            feeLedgerComm: 0,
+            stakeTableBlsKeyComm: 0,
+            stakeTableSchnorrKeyComm: 0,
+            stakeTableAmountComm: 0,
+            threshold: 0
+        });
+        lightClientContract = new LightClientTest(genesis,10);
+        address lightClientAddress = address(lightClientContract);
+        stakeTable = new SM(address(token),lightClientAddress);
+    }
+
+    function test_QueueIsEmpty() external {
+        AbstractStakeTable.Queue memory queue = AbstractStakeTable.Queue(0, 0);
+
+        uint64 epoch = stakeTable.nextEpoch(queue);
+        assertEq(epoch, 1);
+        assertEq(queue.firstAvailableEpoch, 1);
+        assertEq(queue.pendingRegistrations, 1);
     }
 }

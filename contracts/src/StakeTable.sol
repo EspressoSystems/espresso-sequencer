@@ -59,6 +59,12 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
+    /// Registration queue
+    Queue public registrationQueue;
+
+    /// Exit queue
+    Queue public exitQueue;
+
     constructor(address _tokenAddress, address _lightClientAddress) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
@@ -299,5 +305,12 @@ contract StakeTable is AbstractStakeTable {
         delete nodes[key];
 
         return balance;
+    }
+
+    // TODO document
+    function _nextEpoch(Queue memory queue) internal returns (uint64) {
+        queue.firstAvailableEpoch = 1;
+        queue.pendingRegistrations = 1;
+        return 1;
     }
 }
