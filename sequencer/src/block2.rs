@@ -73,11 +73,7 @@ impl BlockPayload {
         index: TxIndex,
         vid: &boilerplate::VidScheme,
     ) -> Option<(Range<usize>, TxTableRangeProof)> {
-        let tx_bodies_offset = self
-            .get_tx_table_len()?
-            .checked_add(1)?
-            .checked_mul(TxTableEntry::byte_len())?;
-
+        let tx_bodies_offset = self.tx_bodies_offset()?;
         let (end, end_proof) = self.get_tx_table_entry_with_proof(index, vid)?;
 
         // See `from_txs()` comment.
@@ -130,6 +126,13 @@ impl BlockPayload {
         TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)?
             .try_into()
             .ok()
+    }
+
+    // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
+    fn tx_bodies_offset(&self) -> Option<usize> {
+        self.get_tx_table_len()?
+            .checked_add(1)?
+            .checked_mul(TxTableEntry::byte_len())
     }
 }
 
