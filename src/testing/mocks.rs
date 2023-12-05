@@ -68,7 +68,7 @@ impl Transaction for MockTransaction {}
 #[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[display(fmt = "{:?}", self)]
 pub struct MockState {
-    pub last_block: Commitment<MockBlock>,
+    pub last_block: Commitment<MockHeader>,
     pub spent: Arc<BTreeSet<u64>>,
 }
 
@@ -95,8 +95,13 @@ impl Committable for MockState {
 }
 
 impl MockState {
-    fn validate(&self, block: &MockBlock) -> Result<(), MockError> {
-        if let Some(txn) = block.iter().find(|txn| self.spent.contains(&txn.nonce)) {
+    fn validate(&self, header: &MockHeader) -> Result<(), MockError> {
+        if let Some(txn) = header
+            .metadata()
+            .transactions
+            .iter()
+            .find(|txn| self.spent.contains(&txn.nonce))
+        {
             return Err(DoubleSpendSnafu { nonce: txn.nonce }.build());
         }
         Ok(())
@@ -109,26 +114,23 @@ impl State for MockState {
     type BlockHeader = MockHeader;
     type BlockPayload = MockBlock;
 
-    // fn validate_block(&self, block: &Self::BlockPayload, _view_number: &Self::Time) -> bool {
-    //     self.validate(block).is_ok()
-    // }
-    fn validate_block(&self, block_header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
-        self.validate(block_header).is_ok()
+    fn validate_block(&self, header: &Self::BlockHeader, view_number: &Self::Time) -> bool {
+        self.validate(header).is_ok()
     }
 
     fn append(
         &self,
-        block: &Self::BlockPayload,
+        header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
-        self.validate(block)?;
+        self.validate(header)?;
 
         let mut spent = (*self.spent).clone();
-        for txn in block.iter() {
+        for txn in header.metadata().transactions.iter() {
             spent.insert(txn.nonce);
         }
         Ok(Self {
-            last_block: block.commit(),
+            last_block: header.commit(),
             spent: Arc::new(spent),
         })
     }
@@ -136,7 +138,7 @@ impl State for MockState {
     fn on_commit(&self) {}
 
     fn initialize() -> Self {
-        // TODO: do we need to initialize the state?
+        todo!()
     }
 }
 
@@ -239,8 +241,8 @@ impl IntoIterator for MockBlock {
     }
 }
 
-#[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
-struct MockHeader;
+#[derive(Clone, Debug, Default, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct MockHeader;
 
 impl BlockHeader for MockHeader {
     type Payload = MockBlock;
@@ -274,13 +276,23 @@ impl BlockHeader for MockHeader {
     }
 }
 
-struct MockMetadata;
+impl Committable for MockHeader {
+    fn commit(&self) -> Commitment<Self> {
+        todo!()
+    }
+}
+
+/// Use the metadata to store mock transactions so we have something to validate.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
+struct MockMetadata {
+    pub transactions: Vec<MockTransaction>,
+}
 
 impl BlockPayload for MockBlock {
     type Error = MockError;
     type Transaction = MockTransaction;
     type Metadata = MockMetadata;
-    type Encode<'a> = Vec<u8>; // TODO: does this make sense?
+    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,

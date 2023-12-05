@@ -21,7 +21,9 @@ use async_std::{
 use futures::{future::join_all, stream::StreamExt};
 use hotshot::{
     traits::{
-        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
+        implementations::{
+            MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
+        },
         NodeImplementation,
     },
     types::SystemContextHandle,
@@ -77,7 +79,10 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         public_key: pub_keys[node_id],
                         private_key: priv_key,
                         stake_value: stake,
-                        state_key_pair: StateKeyPair::generate_from_seed_indexed([0; 32], node_id),
+                        state_key_pair: StateKeyPair::generate_from_seed_indexed(
+                            [0; 32],
+                            node_id as u64,
+                        ),
                     };
                     let config = HotShotConfig {
                         total_nodes,
@@ -109,7 +114,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         let data_source = D::connect(&storage).await;
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            data_source.populate_metrics(),
+                            NetworkingMetricsValue::new(),
                             master_map.clone(),
                             None,
                         ));
