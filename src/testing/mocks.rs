@@ -68,14 +68,14 @@ impl Transaction for MockTransaction {}
 #[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[display(fmt = "{:?}", self)]
 pub struct MockState {
-    pub last_block: Commitment<MockHeader>,
+    pub last_header: Commitment<MockHeader>,
     pub spent: Arc<BTreeSet<u64>>,
 }
 
 impl Default for MockState {
     fn default() -> Self {
         Self {
-            last_block: MockBlock::genesis().commit(),
+            last_header: MockHeader::default().commit(),
             spent: Default::default(),
         }
     }
@@ -84,7 +84,7 @@ impl Default for MockState {
 impl Committable for MockState {
     fn commit(&self) -> Commitment<Self> {
         RawCommitmentBuilder::new("MockState")
-            .field("last_block", self.last_block)
+            .field("last_block", self.last_header)
             .var_size_bytes(&bincode::serialize(&self.spent).unwrap())
             .finalize()
     }
@@ -130,7 +130,7 @@ impl State for MockState {
             spent.insert(txn.nonce);
         }
         Ok(Self {
-            last_block: header.commit(),
+            last_header: header.commit(),
             spent: Arc::new(spent),
         })
     }
@@ -284,7 +284,7 @@ impl Committable for MockHeader {
 
 /// Use the metadata to store mock transactions so we have something to validate.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
-struct MockMetadata {
+pub struct MockMetadata {
     pub transactions: Vec<MockTransaction>,
 }
 

@@ -11,7 +11,8 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::mocks::{
-    MockBlock, MockMembership, MockNodeImpl, MockTransaction, MockTypes, TestableDataSource,
+    MockBlock, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction,
+    MockTypes, TestableDataSource,
 };
 use crate::data_source::FileSystemDataSource;
 use async_std::{
@@ -20,17 +21,13 @@ use async_std::{
 };
 use futures::{future::join_all, stream::StreamExt};
 use hotshot::{
-    traits::{
-        implementations::{
-            MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
-        },
-        NodeImplementation,
-    },
+    traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
     types::SystemContextHandle,
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
+    consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
     traits::{election::Membership, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
@@ -77,7 +74,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                 .map(|(node_id, priv_key)| {
                     let my_own_validator_config = ValidatorConfig {
                         public_key: pub_keys[node_id],
-                        private_key: priv_key,
+                        private_key: priv_key.clone(),
                         stake_value: stake,
                         state_key_pair: StateKeyPair::generate_from_seed_indexed(
                             [0; 32],
@@ -118,20 +115,23 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             master_map.clone(),
                             None,
                         ));
-                        // let consensus_channel = MemoryCommChannel::new(network.clone());
-                        // let da_channel = MemoryCommChannel::new(network.clone());
-                        // let view_sync_channel = MemoryCommChannel::new(network.clone());
 
-                        // let exchanges =
-                        //     <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
-                        //         known_nodes_with_stake.clone(),
-                        //         pub_keys.clone(),
-                        //         (election_config.clone(), election_config.clone()),
-                        //         (consensus_channel, view_sync_channel, da_channel),
-                        //         pub_keys[node_id],
-                        //         pub_keys[node_id].get_stake_table_entry(1u64),
-                        //         priv_key.clone(),
-                        //     );
+                        let networks = Networks {
+                            quorum_network: MockQuorumNetwork::new(network.clone()),
+                            da_network: MockDANetwork::new(network),
+                            _pd: std::marker::PhantomData,
+                        };
+                        let membership = MockMembership::create_election(
+                            known_nodes_with_stake.clone(),
+                            election_config.clone(),
+                        );
+
+                        let memberships = Memberships {
+                            quorum_membership: membership.clone(),
+                            da_membership: membership.clone(),
+                            vid_membership: membership.clone(),
+                            view_sync_membership: membership.clone(),
+                        };
 
                         let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
@@ -139,10 +139,11 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             node_id as u64,
                             config,
                             MemoryStorage::empty(),
-                            election_config,
-                            network,
+                            memberships,
+                            networks,
                             HotShotInitializer::from_genesis().unwrap(),
-                            data_source.populate_metrics(),
+                            // data_source.populate_metrics(),
+                            ConsensusMetricsValue::new(),
                         )
                         .await
                         .unwrap();
