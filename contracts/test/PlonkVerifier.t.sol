@@ -28,7 +28,7 @@ contract PlonkVerifierCommonTest is Test {
     /// @dev Sanitize a single value to be valid scalar field Bn254::Fr.
     function sanitizeScalarField(uint256 a) public view returns (uint256) {
         a = bound(a, 0, BN254.R_MOD - 1);
-        BN254.validateScalarField(a);
+        BN254.validateScalarField(BN254.ScalarField.wrap(a));
         return a;
     }
 
@@ -104,8 +104,8 @@ contract PlonkVerifierCommonTest is Test {
 
     /// Thin wrapper to ensure two G1 points are the same
     function assertEqG1Point(BN254.G1Point memory a, BN254.G1Point memory b) public {
-        assertEq(a.x, b.x);
-        assertEq(a.y, b.y);
+        assertEq(BN254.BaseField.unwrap(a.x), BN254.BaseField.unwrap(b.x));
+        assertEq(BN254.BaseField.unwrap(a.y), BN254.BaseField.unwrap(b.y));
     }
 }
 
@@ -541,7 +541,12 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         assertEq(info.nextEvalPoint, nextEvalPoint);
         assertEq(info.eval, eval);
         // NOTE: since we cannot directly compare `struct ScalarsAndBases`, we compare their MSM
-        assertEqG1Point(BN254.multiScalarMul(info.commBases, info.commScalars), scalarsAndBasesProd);
+        uint256 l = info.commScalars.length;
+        BN254.ScalarField[] memory infoCommScalars = new BN254.ScalarField[](l);
+        for (uint256 i = 0; i < l; i++) {
+            infoCommScalars[i] = BN254.ScalarField.wrap(info.commScalars[i]);
+        }
+        assertEqG1Point(BN254.multiScalarMul(info.commBases, infoCommScalars), scalarsAndBasesProd);
         assertEqG1Point(info.openingProof, openingProof);
         assertEqG1Point(info.shiftedOpeningProof, shiftedOpeningProof);
     }

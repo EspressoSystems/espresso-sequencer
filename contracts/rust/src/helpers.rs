@@ -50,9 +50,9 @@ pub(crate) fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256
     assert_eq!(x_rust_big_int, x_contract_big_int);
 }
 
-pub(crate) fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: (U256, U256)) {
-    compare_field_elems(group_elem_rust.x, group_elem_contract.0);
-    compare_field_elems(group_elem_rust.y, group_elem_contract.1);
+pub(crate) fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: G1Point) {
+    compare_field_elems(group_elem_rust.x, group_elem_contract.x);
+    compare_field_elems(group_elem_rust.y, group_elem_contract.y);
 }
 
 // TODO Some of the code below are copied/adapted from https://github.com/EspressoSystems/cape/blob/77f343849db3d9e721c6e3d0f7108155c178dbee/contracts/rust/src/types.rs#L41

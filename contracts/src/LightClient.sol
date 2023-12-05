@@ -99,11 +99,11 @@ contract LightClient {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
         // format validity check
-        BN254.validateScalarField(newState.blockCommRoot);
-        BN254.validateScalarField(newState.feeLedgerComm);
-        BN254.validateScalarField(newState.stakeTableBlsKeyComm);
-        BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
-        BN254.validateScalarField(newState.stakeTableAmountComm);
+        BN254.validateScalarField(BN254.ScalarField.wrap(newState.blockCommRoot));
+        BN254.validateScalarField(BN254.ScalarField.wrap(newState.feeLedgerComm));
+        BN254.validateScalarField(BN254.ScalarField.wrap(newState.stakeTableBlsKeyComm));
+        BN254.validateScalarField(BN254.ScalarField.wrap(newState.stakeTableSchnorrKeyComm));
+        BN254.validateScalarField(BN254.ScalarField.wrap(newState.stakeTableAmountComm));
 
         // check plonk proof
         // TODO: (alex) replace the vk with the correct one

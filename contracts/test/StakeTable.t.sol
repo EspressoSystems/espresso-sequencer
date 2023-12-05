@@ -57,9 +57,14 @@ contract StakeTable_register_Test is Test {
         );
 
         return (
-            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK
+            BN254.G2Point(
+                BN254.BaseField.wrap(blsVKx0),
+                BN254.BaseField.wrap(blsVKx1),
+                BN254.BaseField.wrap(blsVKy0),
+                BN254.BaseField.wrap(blsVKy1)
+                ), // blsVK
             EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
-            BN254.G1Point(blsSigX, blsSigY) // sig
+            BN254.G1Point(BN254.BaseField.wrap(blsSigX), BN254.BaseField.wrap(blsSigY)) // sig
         );
     }
 
@@ -108,7 +113,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
+    function testFuzz_RevertWhen_InvalidBLSSig(uint256 _scalar) external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
@@ -117,7 +122,7 @@ contract StakeTable_register_Test is Test {
 
         // Ensure the scalar is valid
         // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
-        scalar = bound(scalar, 1, BN254.R_MOD - 1);
+        BN254.ScalarField scalar = BN254.ScalarField.wrap(bound(_scalar, 1, BN254.R_MOD - 1));
         BN254.validateScalarField(scalar);
         BN254.G1Point memory badSig = BN254.scalarMul(BN254.P1(), scalar);
         BN254.validateG1Point(badSig);

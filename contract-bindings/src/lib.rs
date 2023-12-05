@@ -9,7 +9,6 @@ pub mod bls_sig;
 pub mod bn254;
 pub mod bn256g2;
 pub mod bytes_lib;
-pub mod deploy_hot_shot;
 pub mod ed_on_bn254;
 pub mod erc20;
 pub mod example_token;

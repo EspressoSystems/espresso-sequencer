@@ -135,18 +135,23 @@ contract HotShot {
                 BN254.G2Point memory pk = _stakingKeys[i];
 
                 // Note: (x,y) coordinates for each field component must be inverted.
-                uint256 p1xy = aggPk.x0;
-                uint256 p1xx = aggPk.x1;
-                uint256 p1yy = aggPk.y0;
-                uint256 p1yx = aggPk.y1;
-                uint256 p2xy = pk.x0;
-                uint256 p2xx = pk.x1;
-                uint256 p2yy = pk.y0;
-                uint256 p2yx = pk.y1;
+                uint256 p1xy = BN254.BaseField.unwrap(aggPk.x0);
+                uint256 p1xx = BN254.BaseField.unwrap(aggPk.x1);
+                uint256 p1yy = BN254.BaseField.unwrap(aggPk.y0);
+                uint256 p1yx = BN254.BaseField.unwrap(aggPk.y1);
+                uint256 p2xy = BN254.BaseField.unwrap(pk.x0);
+                uint256 p2xx = BN254.BaseField.unwrap(pk.x1);
+                uint256 p2yy = BN254.BaseField.unwrap(pk.y0);
+                uint256 p2yx = BN254.BaseField.unwrap(pk.y1);
 
                 (uint256 p3xx, uint256 p3xy, uint256 p3yx, uint256 p3yy) =
                     BN256G2.ECTwistAdd(p1xx, p1xy, p1yx, p1yy, p2xx, p2xy, p2yx, p2yy);
-                aggPk = BN254.G2Point(p3xy, p3xx, p3yy, p3yx);
+                aggPk = BN254.G2Point(
+                    BN254.BaseField.wrap(p3xy),
+                    BN254.BaseField.wrap(p3xx),
+                    BN254.BaseField.wrap(p3yy),
+                    BN254.BaseField.wrap(p3yx)
+                );
             }
         }
 

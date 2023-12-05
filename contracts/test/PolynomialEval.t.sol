@@ -78,17 +78,17 @@ contract PolynomialEval_evalDataGen_Test is Test {
     ) external {
         logSize = bound(logSize, 14, 17);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
-        BN254.validateScalarField(zeta);
+        BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
         // Since these user-provided `publicInputs` were checked outside before passing in via
         // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
-            BN254.validateScalarField(publicInput[i]);
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
 
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
         // NOTE: since zeta comes from CRH via `computeChallenges`, we can assume it's hard to
-        // be specifically preimage attacked, or accidentially collide with these values.
+        // be specifically preimage attacked, or accidentally collide with these values.
         vm.assume(zeta != 1); // otherwise divisor of lagrange_1_poly would be zero
         vm.assume(zeta != domain.groupGenInv); // otherwise divisor of lagrange_n_poly would be zero
 

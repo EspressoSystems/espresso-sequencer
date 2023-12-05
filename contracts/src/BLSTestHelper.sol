@@ -11,7 +11,7 @@ contract BLSHelper {
         return BLSSig.hashToField(message);
     }
 
-    function hashToCurve(bytes memory input) public view returns (uint256, uint256) {
+    function hashToCurve(bytes memory input) public view returns (BN254.G1Point memory) {
         return BLSSig.hashToCurve(input);
     }
 
