@@ -22,12 +22,13 @@ async-trait = "0.1.74"
 clap = { version = "^4.4", features = ["derive"] }
 contract-bindings = { path = "../../contract-bindings" }
 crs = { git = "https://github.com/alxiong/crs", rev = "4f320d819514a50138dd114440b3b3e30e83a081" }
+diff-test = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
-hotshot-state-prover = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "0dde152df0af0c799f906ea14a2b59ade98b6d18" }
+hotshot-state-prover = { workspace = true }
 itertools = "0.10.3"
 jf-plonk = { workspace = true }
 jf-primitives = { workspace = true }

@@ -2258,6 +2258,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 
 [[package]]
+name = "diff-test"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/solidity-bn254.git#4f2e93be209b06fdf38584e6bf1d1e8f4c371198"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-std 0.4.0",
+ "clap",
+ "ethers",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3969,6 +3982,7 @@ dependencies = [
  "clap",
  "contract-bindings",
  "crs",
+ "diff-test",
  "digest 0.10.7",
  "ethers",
  "ethers-providers",
