@@ -47,7 +47,7 @@ pub struct MockNetwork<D: TestableDataSource> {
 
 // MockNetwork can be used with any TestableDataSource, but it's nice to have a default with a
 // convenient type alias.
-pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl>;
+pub type MockDataSource = FileSystemDataSource<MockTypes>;
 
 const MINIMUM_NODES: usize = 2;
 

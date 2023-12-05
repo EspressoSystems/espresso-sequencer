@@ -173,7 +173,7 @@ pub struct InconsistentLeafError<Types: NodeType> {
     pub qc: QuorumCertificate<Types>,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types> {
+impl<Types: NodeType> LeafQueryData<Types> {
     /// Collect information about a [`Leaf`].
     ///
     /// Returns a new [`LeafQueryData`] object populated from `leaf` and `qc`.
@@ -294,7 +294,7 @@ where
         })
     }
 
-    pub fn block(&self) -> &Types::BlockType {
+    pub fn block(&self) -> &Types::BlockPayload {
         &self.block
     }
 

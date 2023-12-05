@@ -28,16 +28,13 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::data_source::StatusDataSource,
-    Block, MissingSnafu, NotFoundSnafu, QueryResult, Resolvable,
+    Block, MissingSnafu, NotFoundSnafu, QueryResult,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, BoxStream, Stream, StreamExt, TryStreamExt};
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
@@ -168,7 +165,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// }
 /// ```
 #[derive(custom_debug::Debug)]
-pub struct FileSystemDataSource<Types: NodeType, I: NodeImplementation<Types>>
+pub struct FileSystemDataSource<Types: NodeType>
 where
     Block<Types>: QueryableBlock,
 {
@@ -183,7 +180,7 @@ where
     metrics: PrometheusMetrics,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> FileSystemDataSource<Types, I>
+impl<Types: NodeType> FileSystemDataSource<Types>
 where
     Block<Types>: QueryableBlock,
 {
@@ -242,7 +239,7 @@ where
     /// synchronization of the store.
     pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
         let leaf_storage =
-            LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
+            LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
             LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
 
@@ -300,8 +297,7 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> VersionedDataSource
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> VersionedDataSource for FileSystemDataSource<Types>
 where
     Block<Types>: QueryableBlock,
 {
@@ -448,7 +444,7 @@ where
         &self,
         id: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let all_ids = self
             .index_by_proposer_id
             .get(id)
@@ -492,14 +488,13 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> UpdateAvailabilityData<Types, I>
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemDataSource<Types>
 where
     Block<Types>: QueryableBlock,
 {
     type Error = PersistenceError;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
@@ -548,8 +543,7 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> StatusDataSource
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> StatusDataSource for FileSystemDataSource<Types>
 where
     Block<Types>: QueryableBlock,
 {
@@ -565,11 +559,11 @@ where
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes, TestableDataSource};
+    use crate::testing::mocks::{MockTypes, TestableDataSource};
     use tempdir::TempDir;
 
     #[async_trait]
-    impl TestableDataSource for FileSystemDataSource<MockTypes, MockNodeImpl> {
+    impl TestableDataSource for FileSystemDataSource<MockTypes> {
         type Storage = TempDir;
 
         async fn create(node_id: usize) -> Self::Storage {

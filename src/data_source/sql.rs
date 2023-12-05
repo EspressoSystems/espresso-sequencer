@@ -20,7 +20,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock, Resolvable,
+    Block, Leaf, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, QueryableBlock,
 };
 use async_std::{net::ToSocketAddrs, task::spawn};
 use async_trait::async_trait;
@@ -32,9 +32,9 @@ use futures::{
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
 };
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
+use hotshot_types::{
+    simple_certificate::QuorumCertificate,
+    traits::{node_implementation::NodeType, signature_key::EncodedPublicKey},
 };
 use itertools::Itertools;
 use snafu::OptionExt;
@@ -247,10 +247,9 @@ impl Config {
     }
 
     /// Connect to the database with this config.
-    pub async fn connect<Types, I>(self) -> Result<SqlDataSource<Types, I>, Error>
+    pub async fn connect<Types>(self) -> Result<SqlDataSource<Types>, Error>
     where
         Types: NodeType,
-        I: NodeImplementation<Types>,
         Block<Types>: QueryableBlock,
     {
         SqlDataSource::connect(self).await
@@ -482,10 +481,9 @@ impl Config {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct SqlDataSource<Types, I>
+pub struct SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     client: Client,
@@ -496,10 +494,9 @@ where
     kill: Option<oneshot::Sender<()>>,
 }
 
-impl<Types, I> SqlDataSource<Types, I>
+impl<Types> SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     /// Connect to a remote database.
@@ -606,10 +603,9 @@ where
     }
 }
 
-impl<Types, I> Drop for SqlDataSource<Types, I>
+impl<Types> Drop for SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     fn drop(&mut self) {
@@ -621,10 +617,9 @@ where
 }
 
 #[async_trait]
-impl<Types, I> VersionedDataSource for SqlDataSource<Types, I>
+impl<Types> VersionedDataSource for SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     type Error = postgres::error::Error;
@@ -664,16 +659,15 @@ where
 }
 
 #[async_trait]
-impl<Types, I> AvailabilityDataSource<Types, I> for SqlDataSource<Types, I>
+impl<Types> AvailabilityDataSource<Types> for SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
-    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>;
+    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types>>>;
     type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
 
-    type LeafRange<'a, R> = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>
+    type LeafRange<'a, R> = BoxStream<'static, QueryResult<LeafQueryData<Types>>>
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
@@ -682,9 +676,9 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
+        ID: Into<LeafId<Types>> + Send + Sync,
     {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id.into() {
             ResourceId::Number(n) => ("height = $1", Box::new(n as i64)),
@@ -827,7 +821,7 @@ where
         &self,
         proposer: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
         if let Some(limit) = limit {
             // If there is a limit on the number of leaves to return, we want to return the most
@@ -890,15 +884,14 @@ where
 }
 
 #[async_trait]
-impl<Types, I> UpdateAvailabilityData<Types, I> for SqlDataSource<Types, I>
+impl<Types> UpdateAvailabilityData<Types> for SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     type Error = QueryError;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error> {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         let mut stmts: Vec<(String, Vec<Box<dyn ToSql + Send + Sync>>)> = vec![];
 
         // While we don't necessarily have the full block for this leaf yet, we can initialize the
@@ -1018,10 +1011,9 @@ where
 }
 
 #[async_trait]
-impl<Types, I> StatusDataSource for SqlDataSource<Types, I>
+impl<Types> StatusDataSource for SqlDataSource<Types>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     async fn block_height(&self) -> QueryResult<usize> {
@@ -1114,22 +1106,21 @@ impl<'a> Transaction<'a> {
     }
 }
 
-fn parse_leaf<Types, I>(row: Row) -> QueryResult<LeafQueryData<Types, I>>
+fn parse_leaf<Types>(row: Row) -> QueryResult<LeafQueryData<Types>>
 where
     Types: NodeType,
-    I: NodeImplementation<Types>,
 {
     let leaf = row.try_get("leaf").map_err(|err| QueryError::Error {
         message: format!("error extracting leaf from query results: {err}"),
     })?;
-    let leaf: Leaf<Types, I> = serde_json::from_value(leaf).map_err(|err| QueryError::Error {
+    let leaf: Leaf<Types> = serde_json::from_value(leaf).map_err(|err| QueryError::Error {
         message: format!("malformed leaf: {err}"),
     })?;
 
     let qc = row.try_get("qc").map_err(|err| QueryError::Error {
         message: format!("error extracting QC from query results: {err}"),
     })?;
-    let qc: QuorumCertificate<Types, I> =
+    let qc: QuorumCertificate<Types> =
         serde_json::from_value(qc).map_err(|err| QueryError::Error {
             message: format!("malformed QC: {err}"),
         })?;
@@ -1302,7 +1293,7 @@ impl tokio::io::AsyncWrite for TcpStream {
 pub mod testing {
     use super::*;
     use crate::testing::{
-        mocks::{MockNodeImpl, MockTypes, TestableDataSource},
+        mocks::{MockTypes, TestableDataSource},
         sleep,
     };
     use portpicker::pick_unused_port;
@@ -1396,7 +1387,7 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl TestableDataSource for SqlDataSource<MockTypes, MockNodeImpl> {
+    impl TestableDataSource for SqlDataSource<MockTypes> {
         type Storage = TmpDb;
 
         async fn create(_node_id: usize) -> Self::Storage {

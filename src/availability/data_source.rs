@@ -110,7 +110,7 @@ where
 }
 
 #[async_trait]
-pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
+pub trait UpdateAvailabilityData<Types: NodeType>
 where
     Block<Types>: QueryableBlock,
 {

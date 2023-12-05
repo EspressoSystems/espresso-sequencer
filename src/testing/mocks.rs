@@ -145,7 +145,7 @@ impl TestableState for MockState {
         state: Option<&Self>,
         rng: &mut dyn RngCore,
         _padding: u64,
-    ) -> <Self::BlockType as BlockPayload>::Transaction {
+    ) -> <Self::BlockPayload as BlockPayload>::Transaction {
         loop {
             let nonce = rng.next_u64();
             if let Some(state) = state {
@@ -330,7 +330,7 @@ impl NodeType for MockTypes {
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
-    type Membership = GeneralStaticCommittee<BLSPubKey>;
+    type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
 }
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
@@ -351,19 +351,16 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
 
     fn new_channel_maps(
         start_view: ViewNumber,
-    ) -> (
-        ChannelMaps<MockTypes, Self>,
-        Option<ChannelMaps<MockTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<MockTypes>, Option<ChannelMaps<MockTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
 
 #[async_trait]
 pub trait TestableDataSource:
-    AvailabilityDataSource<MockTypes, MockNodeImpl>
+    AvailabilityDataSource<MockTypes>
     + StatusDataSource
-    + UpdateDataSource<MockTypes, MockNodeImpl>
+    + UpdateDataSource<MockTypes>
     + VersionedDataSource
     + Send
     + Sync

@@ -21,10 +21,7 @@ use crate::{
     Block, QueryResult,
 };
 use async_trait::async_trait;
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -130,12 +127,11 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, I> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
+impl<D, U, Types> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
 where
     D: AvailabilityDataSource<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     type LeafStream = D::LeafStream;
@@ -199,12 +195,11 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, I> UpdateAvailabilityData<Types, I> for ExtensibleDataSource<D, U>
+impl<D, U, Types> UpdateAvailabilityData<Types> for ExtensibleDataSource<D, U>
 where
-    D: UpdateAvailabilityData<Types, I> + Send + Sync,
+    D: UpdateAvailabilityData<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    I: NodeImplementation<Types>,
     Block<Types>: QueryableBlock,
 {
     type Error = D::Error;

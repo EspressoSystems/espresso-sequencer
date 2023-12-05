@@ -433,7 +433,7 @@ where
     Block<Types>: QueryableBlock,
     D: availability::AvailabilityDataSource<Types>
         + status::StatusDataSource
-        + data_source::UpdateDataSource<Types, I>
+        + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
         + Send
         + Sync

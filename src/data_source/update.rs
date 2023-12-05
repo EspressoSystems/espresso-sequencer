@@ -14,11 +14,11 @@
 use crate::status::UpdateStatusData;
 use crate::{
     availability::{BlockQueryData, LeafQueryData, QueryableBlock, UpdateAvailabilityData},
-    Block, Leaf, Resolvable,
+    Block,
 };
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
-use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
+use hotshot_types::traits::node_implementation::NodeType;
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -54,11 +54,8 @@ where
 }
 
 #[async_trait]
-impl<
-        Types: NodeType,
-        I: NodeImplementation<Types>,
-        T: UpdateAvailabilityData<Types, I> + UpdateStatusData + Send,
-    > UpdateDataSource<Types> for T
+impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
+    UpdateDataSource<Types> for T
 where
     Block<Types>: QueryableBlock,
 {
@@ -98,7 +95,7 @@ where
                 .await?;
                 // For the same reason, this will not panic either.
                 self.insert_block(
-                    BlockQueryData::new::<I>(leaf.clone(), qc.clone(), block)
+                    BlockQueryData::new(leaf.clone(), qc.clone(), block)
                         .expect("inconsistent block"),
                 )
                 .await?;
