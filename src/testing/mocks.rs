@@ -239,6 +239,7 @@ impl IntoIterator for MockBlock {
     }
 }
 
+#[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
 struct MockHeader;
 
 impl BlockHeader for MockHeader {
