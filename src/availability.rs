@@ -12,12 +12,10 @@
 
 use crate::{api::load_api, Block, QueryError};
 use clap::Args;
+use commit::Committable;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::fmt::Display;
@@ -134,13 +132,11 @@ impl Error {
     }
 }
 
-pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
-    options: &Options,
-) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Types: NodeType>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
-    Block<Types>: QueryableBlock,
+    Block<Types>: QueryableBlock + Committable,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -539,7 +535,7 @@ mod test {
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path()).unwrap(),
             0,
         );
 
@@ -556,9 +552,8 @@ mod test {
         };
 
         let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
             MockTypes,
-            MockNodeImpl,
         >(&Options {
             extensions: vec![extensions.into()],
             ..Default::default()

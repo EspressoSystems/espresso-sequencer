@@ -10,16 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Block, Leaf, Resolvable, Transaction};
+use crate::{Block, Leaf, Transaction};
 use bincode::Options;
 use commit::{Commitment, Committable};
 use hotshot_types::{
     simple_certificate::QuorumCertificate,
-    traits::{
-        self,
-        node_implementation::{NodeImplementation, NodeType},
-        signature_key::EncodedPublicKey,
-    },
+    traits::{self, node_implementation::NodeType, signature_key::EncodedPublicKey},
 };
 use hotshot_utils::bincode::bincode_opts;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -42,7 +38,7 @@ pub type Timestamp = time::OffsetDateTime;
 /// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
 /// unnecessary inclusion proof). It is good practice to override these default implementations if
 /// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
-pub trait QueryableBlock: traits::BlockPayload {
+pub trait QueryableBlock: traits::BlockPayload + Committable {
     /// An index which can be used to efficiently retrieve a transaction for the block.
     ///
     /// This is left abstract so that different block implementations can index transactions
@@ -167,13 +163,17 @@ pub struct LeafQueryData<Types: NodeType> {
 }
 
 #[derive(Clone, Debug, Snafu)]
-#[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
+// TODO
+// #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
 pub struct InconsistentLeafError<Types: NodeType> {
     pub leaf: Leaf<Types>,
     pub qc: QuorumCertificate<Types>,
 }
 
-impl<Types: NodeType> LeafQueryData<Types> {
+impl<Types: NodeType> LeafQueryData<Types>
+where
+    <Types as NodeType>::BlockPayload: Committable,
+{
     /// Collect information about a [`Leaf`].
     ///
     /// Returns a new [`LeafQueryData`] object populated from `leaf` and `qc`.
@@ -186,7 +186,9 @@ impl<Types: NodeType> LeafQueryData<Types> {
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
-            qc.leaf_commitment() == leaf.commit(),
+            // TODO
+            // qc.leaf_commitment() == leaf.commit(),
+            false,
             InconsistentLeafSnafu { leaf, qc }
         );
         Ok(Self { leaf, qc })
@@ -213,7 +215,8 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
-        self.leaf.get_deltas().commitment()
+        // self.leaf.get_deltas().commitment()
+        todo!()
     }
 
     pub fn proposer(&self) -> EncodedPublicKey {
@@ -236,7 +239,10 @@ where
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct BlockHeaderQueryData<Types: NodeType> {
+pub struct BlockHeaderQueryData<Types: NodeType>
+where
+    <Types as NodeType>::BlockPayload: Committable,
+{
     hash: BlockHash<Types>,
     height: u64,
     size: u64,
@@ -245,15 +251,17 @@ pub struct BlockHeaderQueryData<Types: NodeType> {
 #[derive(Clone, Debug, Snafu)]
 pub enum InconsistentBlockError<Types: NodeType>
 where
-    Block<Types>: Serialize,
+    Block<Types>: Serialize + Committable,
 {
-    #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
+    // TODO
+    // #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
     InconsistentQc {
         qc: QuorumCertificate<Types>,
         leaf: Leaf<Types>,
     },
-    #[snafu(display("Leaf {} references block {}, but expected {}",
-        leaf.commit(), block.commit(), leaf.get_deltas().commitment()))]
+    // TODO
+    // #[snafu(display("Leaf {} references block {}, but expected {}",
+    //     leaf.commit(), block.commit(), leaf.get_deltas().commitment()))]
     InconsistentBlock {
         leaf: Leaf<Types>,
         block: Block<Types>,
@@ -272,17 +280,21 @@ where
     ///
     /// Fails with an [`InconsistentBlockError`] if `qc`, `leaf`, and `block` do not all correspond
     /// to the same block.
-    pub fn new<I: NodeImplementation<Types>>(
+    pub fn new(
         leaf: Leaf<Types>,
         qc: QuorumCertificate<Types>,
         block: Block<Types>,
     ) -> Result<Self, InconsistentBlockError<Types>> {
         ensure!(
-            qc.leaf_commitment() == leaf.commit(),
+            // TODO
+            // qc.leaf_commitment() == leaf.commit(),
+            false,
             InconsistentQcSnafu { qc, leaf }
         );
         ensure!(
-            leaf.get_deltas().commitment() == block.commit(),
+            // TODO
+            // leaf.get_deltas().commitment() == block.commit(),
+            false,
             InconsistentBlockSnafu { leaf, block }
         );
         Ok(Self {
@@ -342,7 +354,10 @@ where
     }
 }
 
-impl<Types: NodeType> BlockHeaderQueryData<Types> {
+impl<Types: NodeType> BlockHeaderQueryData<Types>
+where
+    <Types as NodeType>::BlockPayload: Committable,
+{
     pub fn hash(&self) -> BlockHash<Types> {
         self.hash
     }

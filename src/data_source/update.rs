@@ -75,17 +75,6 @@ where
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
             for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
-                // The current version of HotShot has a guarantee that the block is available at the
-                // moment the corresponding leaf is sequenced, so for the time being, we can get the
-                // block by resolving the deltas and panicking if the block is not available. This
-                // will change in the future, at which time this will have to be rewritten to spawn
-                // a background task to resolve the block asynchronously and update the query data
-                // when the block becomes available.
-                let block = leaf
-                    .get_deltas()
-                    .try_resolve()
-                    .expect("block was not available at moment leaf was sequenced");
-
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
@@ -93,12 +82,15 @@ where
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf"),
                 )
                 .await?;
-                // For the same reason, this will not panic either.
-                self.insert_block(
-                    BlockQueryData::new(leaf.clone(), qc.clone(), block)
-                        .expect("inconsistent block"),
-                )
-                .await?;
+
+                if let Some(block) = leaf.get_block_payload() {
+                    // For the same reason, this will not panic either.
+                    self.insert_block(
+                        BlockQueryData::new(leaf.clone(), qc.clone(), block)
+                            .expect("inconsistent block"),
+                    )
+                    .await?;
+                }
             }
         }
         Ok(())

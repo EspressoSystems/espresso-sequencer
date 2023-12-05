@@ -699,6 +699,7 @@ where
     async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
+        <Types as NodeType>::BlockPayload: Committable,
     {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id.into() {
             ResourceId::Number(n) => ("h.height = $1", Box::new(n as i64)),

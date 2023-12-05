@@ -403,6 +403,7 @@ where
     async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
+        <Types as NodeType>::BlockPayload: Committable,
     {
         let n = match id.into() {
             ResourceId::Number(n) => n,

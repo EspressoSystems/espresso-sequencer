@@ -19,10 +19,7 @@ use commit::{Commitment, Committable};
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::Stream;
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Debug;
@@ -80,6 +77,7 @@ where
     async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync;
+
     async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
@@ -87,6 +85,7 @@ where
     async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
     where
         R: RangeBounds<usize> + Send;
+
     async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
     where
         R: RangeBounds<usize> + Send;

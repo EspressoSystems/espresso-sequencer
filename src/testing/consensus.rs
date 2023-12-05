@@ -29,6 +29,7 @@ use hotshot::{
 };
 use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
+    light_client::StateKeyPair,
     traits::{election::Membership, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
@@ -76,6 +77,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                         public_key: pub_keys[node_id],
                         private_key: priv_key,
                         stake_value: stake,
+                        state_key_pair: StateKeyPair::generate_from_seed_indexed([0; 32], node_id),
                     };
                     let config = HotShotConfig {
                         total_nodes,

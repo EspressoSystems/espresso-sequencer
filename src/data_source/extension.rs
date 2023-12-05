@@ -21,6 +21,7 @@ use crate::{
     Block, QueryResult,
 };
 use async_trait::async_trait;
+use commit::Committable;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::ops::RangeBounds;
 
@@ -133,6 +134,7 @@ where
     U: Send + Sync,
     Types: NodeType,
     Block<Types>: QueryableBlock,
+    <Types as NodeType>::BlockPayload: Committable,
 {
     type LeafStream = D::LeafStream;
     type BlockStream = D::BlockStream;
@@ -201,6 +203,7 @@ where
     U: Send + Sync,
     Types: NodeType,
     Block<Types>: QueryableBlock,
+    <Types as NodeType>::BlockPayload: Committable,
 {
     type Error = D::Error;
 
