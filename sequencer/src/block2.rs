@@ -1,18 +1,28 @@
 use self::tx_table_entry::TxTableEntry;
 use crate::Transaction;
 use ark_bls12_381::Bls12_381;
+use derivative::Derivative;
 use hotshot_query_service::QueryableBlock;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     vid::{advz::payload_prover::SmallRangeProof, payload_prover::PayloadProver},
 };
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
+use std::{ops::Range, sync::OnceLock};
 
 #[allow(dead_code)] // TODO temporary
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
+#[derivative(Hash, PartialEq)]
 pub struct BlockPayload {
     payload: Vec<u8>,
+
+    // cache frequently used items
+    //
+    // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[serde(skip)]
+    tx_table_len_proof: OnceLock<Option<RangeProof>>,
 }
 
 impl BlockPayload {
@@ -54,7 +64,10 @@ impl BlockPayload {
         payload.extend(tx_table_len.to_bytes());
         payload.extend(tx_table);
         payload.extend(tx_bodies);
-        Some(Self { payload })
+        Some(Self {
+            payload,
+            tx_table_len_proof: Default::default(),
+        })
     }
 
     #[allow(dead_code)] // TODO temporary
@@ -64,6 +77,7 @@ impl BlockPayload {
     {
         Self {
             payload: bytes.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
         }
     }
 
@@ -134,6 +148,18 @@ impl BlockPayload {
             .checked_add(1)?
             .checked_mul(TxTableEntry::byte_len())
     }
+
+    // Fetch the tx table length range proof from cache.
+    // Build the proof if missing from cache.
+    // Returns `None` if an error occurred.
+    fn get_tx_table_len_proof(&self, vid: &boilerplate::VidScheme) -> Option<&RangeProof> {
+        self.tx_table_len_proof
+            .get_or_init(|| {
+                vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
+                    .ok()
+            })
+            .as_ref()
+    }
 }
 
 impl QueryableBlock for BlockPayload {
@@ -162,11 +188,7 @@ impl QueryableBlock for BlockPayload {
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(crate::VmId(0), self.payload.get(tx_range.clone())?.to_vec()),
             TxInclusionProof {
-                // TODO(795) every proof will contain a copy of the tx table len proof.
-                // Should we cache it in `BlockPayload` or something?
-                tx_table_len_proof: vid
-                    .payload_proof(&self.payload, 0..TxTableEntry::byte_len())
-                    .ok()?,
+                tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
                 tx_table_range_proof,
                 tx_payload_proof: if tx_range.is_empty() {
                     None
@@ -193,7 +215,7 @@ pub struct TxInclusionProof {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 enum TxTableRangeProof {
-    // If this is the first tx then we need only 1 proof `end` index.
+    // If this is the first tx then we need only 1 proof for `end` index.
     First(RangeProof),
     // All other cases need 2 proofs: 1 for `start`, 1 for `end`.
     Other(RangeProof, RangeProof),
