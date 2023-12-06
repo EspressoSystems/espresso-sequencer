@@ -89,50 +89,48 @@ impl BlockPayload {
         &self,
         index: TxIndex,
         vid: &boilerplate::VidScheme,
-    ) -> Option<(Range<usize>, TxTableRangeProof)> {
-        let tx_bodies_offset = self.tx_bodies_offset()?;
-        let (end, end_proof) = self.get_tx_table_entry_with_proof(index, vid)?;
-
-        // See `from_txs()` comment.
-        // Recall: tx table entry i is the *end* byte index for tx i.
-        // Thus, the *start* byte index for tx i is at the (i-1)th tx table entry.
-        // Edge case i=0: start index is implicitly 0.
-        let (start, tx_table_range_proof) = if index == 0 {
-            (0, TxTableRangeProof::First(end_proof))
-        } else {
-            let (start, start_proof) = self.get_tx_table_entry_with_proof(index - 1, vid)?;
-            (start, TxTableRangeProof::Other(start_proof, end_proof))
-        };
-
-        Some((
-            start.checked_add(tx_bodies_offset)?..end.checked_add(tx_bodies_offset)?,
-            tx_table_range_proof,
-        ))
-    }
-
-    // Return the `index`th entry from the tx table as `usize`
-    // Return `None` if `index` exceeds the tx table length.
-    fn get_tx_table_entry_with_proof(
-        &self,
-        index: TxIndex,
-        vid: &boilerplate::VidScheme,
-    ) -> Option<(usize, RangeProof)> {
+    ) -> Option<(Range<usize>, RangeProof)> {
         // check args
         if index >= self.get_tx_table_len()?.try_into().ok()? {
             return None;
         }
 
+        let tx_bodies_offset = self.tx_bodies_offset()?;
+
+        // edge case index == 0
+        // TODO refactor copied code
+        if index == 0 {
+            // The first entry in the tx table is the table length, so add 1
+            let start = usize::try_from(index.checked_add(1)?)
+                .ok()?
+                .checked_mul(TxTableEntry::byte_len())?;
+            let end = start.checked_add(TxTableEntry::byte_len())?;
+            let tx_end: usize = TxTableEntry::from_bytes(self.payload.get(start..end)?)?
+                .try_into()
+                .ok()?;
+            let tx_end_proof = vid.payload_proof(&self.payload, start..end).ok()?;
+            return Some((
+                (tx_bodies_offset..tx_end.checked_add(tx_bodies_offset)?),
+                tx_end_proof,
+            ));
+        }
+
         // The first entry in the tx table is the table length, so add 1
-        let start = usize::try_from(index.checked_add(1)?)
+        let start = usize::try_from(index)
             .ok()?
             .checked_mul(TxTableEntry::byte_len())?;
-
-        let end = start.checked_add(TxTableEntry::byte_len())?;
+        let mid = start.checked_add(TxTableEntry::byte_len())?;
+        let tx_start: usize = TxTableEntry::from_bytes(self.payload.get(start..mid)?)?
+            .try_into()
+            .ok()?;
+        let end = mid.checked_add(TxTableEntry::byte_len())?;
+        let tx_end: usize = TxTableEntry::from_bytes(self.payload.get(mid..end)?)?
+            .try_into()
+            .ok()?;
+        let tx_range_proof = vid.payload_proof(&self.payload, start..end).ok()?;
         Some((
-            TxTableEntry::from_bytes(self.payload.get(start..end)?)?
-                .try_into()
-                .ok()?,
-            vid.payload_proof(&self.payload, start..end).ok()?,
+            (tx_start.checked_add(tx_bodies_offset)?..tx_end.checked_add(tx_bodies_offset)?),
+            tx_range_proof,
         ))
     }
 
@@ -212,17 +210,8 @@ type RangeProof =
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len_proof: RangeProof,
-    tx_table_range_proof: TxTableRangeProof,
+    tx_table_range_proof: RangeProof,
     tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-enum TxTableRangeProof {
-    // If this is the first tx then we need only 1 proof for `end` index.
-    First(RangeProof),
-    // All other cases need 2 proofs: 1 for `start`, 1 for `end`.
-    Other(RangeProof, RangeProof),
-    // TODO new variant `Final` with implicit `end` https://github.com/EspressoSystems/espresso-sequencer/issues/757
 }
 
 impl TxInclusionProof {
@@ -291,63 +280,42 @@ impl TxInclusionProof {
         }
 
         // verify tx table entry proof
-        match &self.tx_table_range_proof {
-            TxTableRangeProof::First(end_proof) => {
-                if vid
-                    .payload_verify(
-                        Statement {
-                            payload_subslice: tx_table_entry_end_bytes,
-                            range: TxTableEntry::byte_len()..2 * TxTableEntry::byte_len(),
-                            commit: vid_commit,
-                            common: vid_common,
-                        },
-                        end_proof,
-                    )
-                    .ok()?
-                    .is_err()
-                {
-                    return Some(Err(()));
-                }
+        let index: usize = tx_index.try_into().ok()?;
+
+        // TODO don't use bytes, it's ugly
+        let bytes = [tx_table_entry_start_bytes, tx_table_entry_end_bytes].concat();
+        let (range, bytes) = if index == 0 {
+            // start index is 0
+            if !tx_table_entry_start_bytes.is_empty() {
+                return None;
             }
-            TxTableRangeProof::Other(start_proof, end_proof) => {
-                let index: usize = tx_index.try_into().ok()?;
-                let range =
-                    index * TxTableEntry::byte_len()..(index + 1) * TxTableEntry::byte_len();
-                if vid
-                    .payload_verify(
-                        Statement {
-                            payload_subslice: tx_table_entry_start_bytes,
-                            range,
-                            commit: vid_commit,
-                            common: vid_common,
-                        },
-                        start_proof,
-                    )
-                    .ok()?
-                    .is_err()
-                {
-                    return Some(Err(()));
-                }
-                let range =
-                    (index + 1) * TxTableEntry::byte_len()..(index + 2) * TxTableEntry::byte_len();
-                let payload_subslice = tx_table_entry_end_bytes;
-                if vid
-                    .payload_verify(
-                        Statement {
-                            payload_subslice,
-                            range,
-                            commit: vid_commit,
-                            common: vid_common,
-                        },
-                        end_proof,
-                    )
-                    .ok()?
-                    .is_err()
-                {
-                    return Some(Err(()));
-                }
-            }
+            (
+                TxTableEntry::byte_len()..2 * TxTableEntry::byte_len(),
+                tx_table_entry_end_bytes,
+            )
+        } else {
+            // TODO checked...
+            (
+                index * TxTableEntry::byte_len()..(index + 2) * TxTableEntry::byte_len(),
+                bytes.as_slice(),
+            )
+        };
+        if vid
+            .payload_verify(
+                Statement {
+                    payload_subslice: bytes,
+                    range,
+                    commit: vid_commit,
+                    common: vid_common,
+                },
+                &self.tx_table_range_proof,
+            )
+            .ok()?
+            .is_err()
+        {
+            return Some(Err(()));
         }
+
         Some(Ok(()))
     }
 }
