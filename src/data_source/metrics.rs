@@ -56,13 +56,25 @@ pub struct MetricsDataSource {
 #[async_trait]
 impl StatusDataSource for MetricsDataSource {
     async fn block_height(&self) -> QueryResult<usize> {
-        Ok(self
+        let last_synced_height = self
             .consensus_metrics()?
             .get_gauge("last_synced_block_height")
             .map_err(|err| QueryError::Error {
                 message: err.to_string(),
             })?
-            .get())
+            .get();
+        if last_synced_height == 0 {
+            // The block height must always be at least one, since the genesis block is assumed to
+            // exist by default. We need to specially handle the case where we havent received any
+            // decide events yet, since in this case the height will be 0, and the genesis block
+            // itself does not trigger a decide event.
+            //
+            // This is required for consistency with the other data sources, which insert the
+            // genesis block at data source creation time, so that their block height is never 0.
+            Ok(1)
+        } else {
+            Ok(last_synced_height)
+        }
     }
 
     fn metrics(&self) -> &PrometheusMetrics {

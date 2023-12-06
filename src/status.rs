@@ -155,13 +155,14 @@ mod test {
             );
             sleep(Duration::from_secs(1)).await;
         }
+        // The block height is initially 1 (for the genesis block).
         assert_eq!(
             client
                 .get::<u64>("latest_block_height")
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
 
         // Test Prometheus export.
@@ -206,7 +207,7 @@ mod test {
             .send()
             .await
             .unwrap()
-            == 0
+            == 1
         {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
@@ -214,9 +215,7 @@ mod test {
         let success_rate = client.get::<f64>("success_rate").send().await.unwrap();
         // If metrics are populating correctly, we should get a finite number. If not, we might get
         // NaN or infinity due to division by 0.
-        // TODO re-enable this check once HotShot is populating view metrics again
-        //      https://github.com/EspressoSystems/HotShot/issues/2066
-        // assert!(success_rate.is_finite(), "{success_rate}");
+        assert!(success_rate.is_finite(), "{success_rate}");
         // We know at least some views have been successful, since we finalized a block.
         assert!(success_rate > 0.0, "{success_rate}");
 
@@ -229,7 +228,9 @@ mod test {
 
         let dir = TempDir::new("test_status_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path())
+                .await
+                .unwrap(),
             0,
         );
 
@@ -285,7 +286,7 @@ mod test {
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
     }
 }

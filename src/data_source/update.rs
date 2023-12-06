@@ -15,8 +15,6 @@ use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData}
 use crate::status::UpdateStatusData;
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
-use hotshot_types::data::Leaf;
-use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::error::Error;
 use std::fmt::Debug;
@@ -65,13 +63,6 @@ impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
             for (qc, leaf) in qcs.zip(leaf_chain.iter().rev()) {
-                // If this s the first block, insert genesis leaf and block.
-                // TODO: probably don't want to do this here.
-                if (leaf.clone().block_header as Types::BlockHeader).block_number() == 1 {
-                    self.insert_leaf(LeafQueryData::genesis()).await?;
-                    self.insert_block(BlockQueryData::genesis()).await?;
-                };
-
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.

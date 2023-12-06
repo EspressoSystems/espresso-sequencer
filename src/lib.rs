@@ -583,7 +583,9 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader).unwrap();
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader)
+            .await
+            .unwrap();
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();
         let state = CompositeState {
@@ -650,7 +652,7 @@ mod test {
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
         let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(

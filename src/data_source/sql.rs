@@ -253,6 +253,7 @@ impl Config {
     pub async fn connect<Types>(self) -> Result<SqlDataSource<Types>, Error>
     where
         Types: NodeType,
+        Payload<Types>: QueryablePayload,
     {
         SqlDataSource::connect(self).await
     }
@@ -498,6 +499,7 @@ where
 impl<Types> SqlDataSource<Types>
 where
     Types: NodeType,
+    Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
     pub async fn connect(mut config: Config) -> Result<Self, Error> {
@@ -562,16 +564,36 @@ where
             }
         }
 
-        Ok(Self {
+        let mut ds = Self {
             client,
             tx_in_progress: false,
             kill: Some(kill),
             leaf_stream: BufferedChannel::init(),
             block_stream: BufferedChannel::init(),
             metrics: Default::default(),
-        })
+        };
+
+        // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it is
+        // present.
+        ds.insert_genesis().await?;
+
+        Ok(ds)
     }
 
+    async fn insert_genesis(&mut self) -> Result<(), Error> {
+        if self.block_height().await? == 0 {
+            self.insert_leaf(LeafQueryData::genesis()).await?;
+            self.insert_block(BlockQueryData::genesis()).await?;
+            self.commit().await?;
+        }
+        Ok(())
+    }
+}
+
+impl<Types> SqlDataSource<Types>
+where
+    Types: NodeType,
+{
     /// Query the underlying SQL database.
     pub async fn query<T, P>(&self, query: &T, params: P) -> Result<RowStream, Error>
     where

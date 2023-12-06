@@ -71,7 +71,8 @@ pub mod availability_tests {
         ds: &RwLock<impl TestableDataSource>,
     ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
         let ds = ds.read().await;
-        ds.get_leaf_range(..)
+        // Ignore the genesis block (start from height 1).
+        ds.get_leaf_range(1..)
             .await
             .unwrap()
             .zip(ds.get_block_range(..).await.unwrap())
@@ -327,9 +328,12 @@ pub mod availability_tests {
 
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis();
-        let leaf = Leaf::<MockTypes>::genesis();
-
+        let mut leaf = Leaf::<MockTypes>::genesis();
+        // Increment the block number, to distinguish this block from the genesis block, which
+        // already exists.
+        leaf.block_header.block_number += 1;
         qc.data.leaf_commit = leaf.commit();
+
         let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
@@ -337,19 +341,19 @@ pub mod availability_tests {
         ds.insert_leaf(leaf.clone()).await.unwrap();
         ds.insert_block(block.clone()).await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 1);
-        assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
-        assert_eq!(block, ds.get_block(0).await.unwrap());
+        assert_eq!(ds.block_height().await.unwrap(), 2);
+        assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
+        assert_eq!(block, ds.get_block(1).await.unwrap());
 
         // Revert the changes.
         ds.revert().await;
-        assert_eq!(ds.block_height().await.unwrap(), 0);
+        assert_eq!(ds.block_height().await.unwrap(), 1);
         assert!(matches!(
-            ds.get_leaf(0).await.unwrap_err(),
+            ds.get_leaf(1).await.unwrap_err(),
             QueryError::NotFound
         ));
         assert!(matches!(
-            ds.get_block(0).await.unwrap_err(),
+            ds.get_block(1).await.unwrap_err(),
             QueryError::NotFound
         ));
     }
@@ -380,11 +384,11 @@ pub mod status_tests {
 
         {
             let ds = ds.read().await;
-            // With consensus paused, check that the success rate returns NaN (since the block
-            // height, the numerator, and view number, the denominator, are both 0).
-            assert!(ds.success_rate().await.unwrap().is_nan());
-            // Check that block height is initially zero.
-            assert_eq!(ds.block_height().await.unwrap(), 0);
+            // Check that block height is initially one (for the genesis block).
+            assert_eq!(ds.block_height().await.unwrap(), 1);
+            // With consensus paused, check that the success rate returns infinity (since the block
+            // height, the numerator, is 1, and the view number, the denominator, is 0).
+            assert_eq!(ds.success_rate().await.unwrap(), f64::INFINITY);
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.

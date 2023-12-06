@@ -323,7 +323,8 @@ mod test {
         Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
     ) {
         let mut blocks = vec![];
-        for i in 0.. {
+        // Ignore the genesis block (start from height 1).
+        for i in 1.. {
             match client
                 .get::<BlockQueryData<MockTypes>>(&format!("block/{}", i))
                 .send()
@@ -538,7 +539,9 @@ mod test {
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path())
+                .await
+                .unwrap(),
             0,
         );
 

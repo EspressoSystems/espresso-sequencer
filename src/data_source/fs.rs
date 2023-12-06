@@ -189,9 +189,9 @@ where
     /// If there is already data at `path`, it will be archived.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn create(path: &Path) -> Result<Self, PersistenceError> {
+    pub async fn create(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
-        let mut data_source = Self::create_with_store(&mut loader)?;
+        let mut data_source = Self::create_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -201,9 +201,9 @@ where
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn open(path: &Path) -> Result<Self, PersistenceError> {
+    pub async fn open(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
-        let mut data_source = Self::open_with_store(&mut loader)?;
+        let mut data_source = Self::open_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -216,8 +216,10 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn create_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
-        Ok(Self {
+    pub async fn create_with_store(
+        loader: &mut AtomicStoreLoader,
+    ) -> Result<Self, PersistenceError> {
+        let mut ds = Self {
             index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
             index_by_txn_hash: Default::default(),
@@ -226,7 +228,13 @@ where
             leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
             metrics: Default::default(),
-        })
+        };
+
+        // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it is
+        // present.
+        ds.insert_genesis().await?;
+
+        Ok(ds)
     }
 
     /// Open an existing [FileSystemDataSource] using a persistent storage loader.
@@ -237,7 +245,7 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
+    pub async fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
         let leaf_storage =
             LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
@@ -266,7 +274,7 @@ where
             }
         }
 
-        Ok(Self {
+        let mut ds = Self {
             index_by_leaf_hash,
             index_by_block_hash,
             index_by_txn_hash,
@@ -275,7 +283,13 @@ where
             block_storage,
             top_storage: None,
             metrics: Default::default(),
-        })
+        };
+
+        // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it is
+        // present.
+        ds.insert_genesis().await?;
+
+        Ok(ds)
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
@@ -291,6 +305,21 @@ where
         self.block_storage.skip_version()?;
         if let Some(store) = &mut self.top_storage {
             store.commit_version()?;
+        }
+        Ok(())
+    }
+
+    async fn insert_genesis(&mut self) -> Result<(), PersistenceError> {
+        let block_height =
+            self.block_height()
+                .await
+                .map_err(|err| PersistenceError::OtherLoad {
+                    inner: Box::new(err),
+                })?;
+        if block_height == 0 {
+            self.insert_leaf(LeafQueryData::genesis()).await?;
+            self.insert_block(BlockQueryData::genesis()).await?;
+            self.commit().await?;
         }
         Ok(())
     }
@@ -575,7 +604,7 @@ mod impl_testable_data_source {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Self::open(storage.path()).unwrap()
+            Self::open(storage.path()).await.unwrap()
         }
 
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
