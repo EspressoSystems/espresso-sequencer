@@ -127,6 +127,15 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Defines the exit escrow period for a node.
     /// TODO discuss Alex, Jeb. How much do we want to specify this function? Also marked as public
     /// for easier testing.
+    /// @dev To put this function into context let us consider the following workflow: requestExit
+    /// --> (queueing) --> Exited --> (escrow) --> Witdrawable. The first phase is about waiting in
+    /// queue due to rate-limiting on exit, the wait is dependent on the exit amount and currently
+    /// exit traffic. At the point of "Exited", the node is officially off duty, and stops
+    /// participating in consensus.
+    ///  The second phase is about slashable security, the wait is dependent only on amount, during
+    /// which period cryptographic evidence of misbehavior (e.g. double-voting) might still lead to
+    /// the forfeit of stakes. From the point of `Withdrawable` onwards, the staker can freely
+    /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
