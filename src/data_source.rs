@@ -49,8 +49,7 @@ pub mod data_source_tests {
         testing::{
             consensus::MockNetwork,
             mocks::{
-                mock_transaction, MockHeader, MockNodeImpl, MockPayload, MockState,
-                MockTransaction, MockTypes, TestableDataSource,
+                mock_transaction, MockPayload, MockTransaction, MockTypes, TestableDataSource,
             },
             setup_test, sleep,
         },
@@ -60,11 +59,7 @@ pub mod data_source_tests {
     use bincode::Options;
     use commit::Committable;
     use futures::{StreamExt, TryStreamExt};
-    use hotshot_types::{
-        data::ViewNumber,
-        simple_certificate::QuorumCertificate,
-        traits::state::{ConsensusTime, State},
-    };
+    use hotshot_types::simple_certificate::QuorumCertificate;
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
@@ -413,44 +408,39 @@ pub mod data_source_tests {
         }
     }
 
-    // #[async_std::test]
-    // pub async fn test_revert<D: TestableDataSource>() {
-    //     setup_test();
+    #[async_std::test]
+    pub async fn test_revert<D: TestableDataSource>() {
+        setup_test();
 
-    //     let storage = D::create(0).await;
-    //     let mut ds = D::connect(&storage).await;
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
 
-    //     // Mock up some consensus data.
-    //     let header = MockHeader::default();
-    //     let block = MockBlock::default();
-    //     let time = ViewNumber::genesis();
-    //     let state = MockState::default().append(&header, &time).unwrap();
-    //     let mut qc = QuorumCertificate::<MockTypes>::genesis();
-    //     let mut leaf = Leaf::<MockTypes>::new(time, qc.clone(), block.clone(), state);
-    //     leaf.set_height(1);
+        // Mock up some consensus data.
+        let mut qc = QuorumCertificate::<MockTypes>::genesis();
+        let leaf = Leaf::<MockTypes>::genesis();
 
-    //     qc.leaf_commitment = leaf.commit();
-    //     let block = BlockQueryData::new(leaf.clone(), qc.clone(), block).unwrap();
-    //     let leaf = LeafQueryData::new(leaf, qc).unwrap();
+        qc.data.leaf_commit = leaf.commit();
+        let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
-    //     // Insert, but do not commit, some data and check that we can read it back.
-    //     ds.insert_leaf(leaf.clone()).await.unwrap();
-    //     ds.insert_block(block.clone()).await.unwrap();
+        // Insert, but do not commit, some data and check that we can read it back.
+        ds.insert_leaf(leaf.clone()).await.unwrap();
+        ds.insert_block(block.clone()).await.unwrap();
 
-    //     assert_eq!(ds.block_height().await.unwrap(), 1);
-    //     assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
-    //     assert_eq!(block, ds.get_block(0).await.unwrap());
+        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
+        assert_eq!(block, ds.get_block(0).await.unwrap());
 
-    //     // Revert the changes.
-    //     ds.revert().await;
-    //     assert_eq!(ds.block_height().await.unwrap(), 0);
-    //     assert!(matches!(
-    //         ds.get_leaf(0).await.unwrap_err(),
-    //         QueryError::NotFound
-    //     ));
-    //     assert!(matches!(
-    //         ds.get_block(0).await.unwrap_err(),
-    //         QueryError::NotFound
-    //     ));
-    // }
+        // Revert the changes.
+        ds.revert().await;
+        assert_eq!(ds.block_height().await.unwrap(), 0);
+        assert!(matches!(
+            ds.get_leaf(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+        assert!(matches!(
+            ds.get_block(0).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+    }
 }

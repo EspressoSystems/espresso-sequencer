@@ -297,7 +297,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{mock_transaction, MockNodeImpl, MockTransaction, MockTypes},
+            mocks::{mock_transaction, MockTypes},
             setup_test,
         },
         Error, QueryResult,
