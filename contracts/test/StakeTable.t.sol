@@ -583,9 +583,9 @@ contract Queue_Test is Test {
         SM.QueueType queueType;
         uint256 typeOfQueueInt = bound(n, 0, 1);
         if (typeOfQueueInt == 0) {
-            queueType = S.QueueType.Registration;
+            queueType = SM.QueueType.Registration;
         } else if (typeOfQueueInt == 1) {
-            queueType = S.QueueType.Exit;
+            queueType = SM.QueueType.Exit;
         } else {
             revert("Queue type not supported");
         }

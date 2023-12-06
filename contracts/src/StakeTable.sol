@@ -53,25 +53,25 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    /// Enum to be able to distinguish between the two kind of queues
-    enum QueueType {
-        Registration,
-        Exit
-    }
-
     /// Registration queue
-    Queue public registrationQueue;
+    uint64 firstAvailableRegistrationEpoch;
+    uint64 pendingRegistrations;
 
     /// Exit queue
-    Queue public exitQueue;
+    uint64 firstAvailableExitEpoch;
+    uint64 pendingExits;
 
     uint256 public constant MAX_CHURN_RATE = 20;
 
     constructor(address _tokenAddress, address _lightClientAddress) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
-        registrationQueue = Queue(0, 0);
-        exitQueue = Queue(0, 0);
+
+        firstAvailableRegistrationEpoch = 0;
+        pendingRegistrations = 0;
+
+        firstAvailableExitEpoch = 0;
+        pendingExits = 0;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -111,48 +111,43 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    /// @dev Helper function to avoid code duplication. Contains the core logic of a queue for
-    /// finding the next epoch.
-    /// @param queueType can be Registration or Exit.
-    /// @return Number of the epoch when a user can register/exit.
-    function _nextEpoch(QueueType queueType) private returns (uint64) {
-        Queue storage queue;
-        if (queueType == QueueType.Registration) {
-            queue = registrationQueue;
-        } else {
-            queue = exitQueue;
-        }
-        if (queue.firstAvailableEpoch < currentEpoch() + 1) {
-            queue.firstAvailableEpoch = currentEpoch() + 1;
-            queue.pendingRequests = 1;
-        } else if (queue.pendingRequests >= MAX_CHURN_RATE) {
-            queue.firstAvailableEpoch += 1;
-            queue.pendingRequests = 1;
-        } else {
-            queue.pendingRequests += 1;
-        }
-        return queue.firstAvailableEpoch;
-    }
-
     /// @notice Get the next available epoch for new registration.
     /// @return Number of the epoch when the user can register.
     function nextRegistrationEpoch() internal override returns (uint64) {
-        return _nextEpoch(QueueType.Registration);
+        if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
+            firstAvailableRegistrationEpoch = currentEpoch() + 1;
+            pendingRegistrations = 1;
+        } else if (pendingRegistrations >= MAX_CHURN_RATE) {
+            firstAvailableRegistrationEpoch += 1;
+            pendingRegistrations = 1;
+        } else {
+            pendingRegistrations += 1;
+        }
+        return firstAvailableRegistrationEpoch;
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view override returns (uint64) {
-        return registrationQueue.pendingRequests;
+        return pendingRegistrations;
     }
 
     /// @notice Get the next available epoch for exit
     function nextExitEpoch() internal override returns (uint64) {
-        return _nextEpoch(QueueType.Exit);
+        if (firstAvailableExitEpoch < currentEpoch() + 1) {
+            firstAvailableExitEpoch = currentEpoch() + 1;
+            pendingExits = 1;
+        } else if (pendingExits >= MAX_CHURN_RATE) {
+            firstAvailableExitEpoch += 1;
+            pendingExits = 1;
+        } else {
+            pendingExits += 1;
+        }
+        return firstAvailableExitEpoch;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExit() external view override returns (uint64) {
-        return exitQueue.pendingRequests;
+        return pendingExits;
     }
 
     /// @notice Defines the exit escrow period for a node.

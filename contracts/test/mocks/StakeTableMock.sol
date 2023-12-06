@@ -6,6 +6,12 @@ import { StakeTable } from "../../src/StakeTable.sol";
 
 /// @dev A helper that wraps LightClient contract for testing
 contract StakeTableMock is StakeTable {
+    /// Enum to be able to distinguish between the two kind of queues
+    enum QueueType {
+        Registration,
+        Exit
+    }
+
     constructor(address _tokenAddress, address _lightClientAddress)
         StakeTable(_tokenAddress, _lightClientAddress)
     { }
@@ -19,14 +25,10 @@ contract StakeTableMock is StakeTable {
     }
 
     function getQueueParameters(QueueType queueType) public view returns (uint64, uint64) {
-        uint64 firstAvailableEpoch;
-        uint64 pendingRequests;
         if (queueType == QueueType.Registration) {
-            (firstAvailableEpoch, pendingRequests) = this.registrationQueue();
+            return (firstAvailableRegistrationEpoch, pendingRegistrations);
         } else {
-            (firstAvailableEpoch, pendingRequests) = this.exitQueue();
+            return (firstAvailableExitEpoch, pendingExits);
         }
-
-        return (firstAvailableEpoch, pendingRequests);
     }
 }
