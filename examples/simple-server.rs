@@ -30,7 +30,7 @@ use hotshot::{
 use hotshot_query_service::{
     data_source, run_standalone_service,
     status::UpdateStatusData,
-    testing::mocks::{MockMembership, MockNodeImpl, MockTypes, TestableDataSource},
+    testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
     Error,
 };
 use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
@@ -60,7 +60,7 @@ type DataSource = data_source::SqlDataSource<MockTypes>;
 #[cfg(target_os = "windows")]
 type DataSource = data_source::FileSystemDataSource<MockTypes>;
 
-type Db = <DataSource as TestableDataSource>::Storage;
+type Db = <DataSource as DataSourceLifeCycle>::Storage;
 
 #[cfg(not(target_os = "windows"))]
 async fn init_db() -> Db {

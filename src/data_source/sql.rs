@@ -1294,10 +1294,14 @@ impl tokio::io::AsyncWrite for TcpStream {
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
-    use crate::testing::{
-        mocks::{MockTypes, TestableDataSource},
-        sleep,
+    use crate::{
+        data_source::UpdateDataSource,
+        testing::{
+            mocks::{DataSourceLifeCycle, MockTypes},
+            sleep,
+        },
     };
+    use hotshot::types::Event;
     use portpicker::pick_unused_port;
     use std::{
         process::{Command, Stdio},
@@ -1389,7 +1393,7 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl TestableDataSource for SqlDataSource<MockTypes> {
+    impl DataSourceLifeCycle for SqlDataSource<MockTypes> {
         type Storage = TmpDb;
 
         async fn create(_node_id: usize) -> Self::Storage {
@@ -1405,13 +1409,18 @@ pub mod testing {
                 .await
                 .unwrap()
         }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
+        }
     }
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod generic_test {
-    use super::super::data_source_tests;
+    use super::super::{availability_tests, status_tests};
     use super::SqlDataSource;
     use crate::testing::mocks::MockTypes;
 

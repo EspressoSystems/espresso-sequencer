@@ -69,3 +69,39 @@ impl StatusDataSource for MetricsDataSource {
         &self.metrics
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+mod impl_testable_data_source {
+    use super::*;
+    use crate::testing::mocks::{DataSourceLifeCycle, MockTypes};
+    use hotshot::types::Event;
+
+    #[async_trait]
+    impl DataSourceLifeCycle for MetricsDataSource {
+        type Storage = PrometheusMetrics;
+
+        async fn create(_node_id: usize) -> Self::Storage {
+            Default::default()
+        }
+
+        async fn connect(storage: &Self::Storage) -> Self {
+            Self {
+                metrics: storage.clone(),
+            }
+        }
+
+        async fn handle_event(&mut self, _event: &Event<MockTypes>) {}
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::super::status_tests;
+    use super::MetricsDataSource;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_status_tests!(MetricsDataSource);
+}

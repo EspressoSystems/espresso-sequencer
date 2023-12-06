@@ -23,6 +23,7 @@ use hotshot::{
         implementations::{MemoryCommChannel, MemoryStorage},
         NodeImplementation,
     },
+    types::Event,
 };
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
@@ -103,16 +104,7 @@ impl NodeImplementation<MockTypes> for MockNodeImpl {
 }
 
 #[async_trait]
-pub trait TestableDataSource:
-    AvailabilityDataSource<MockTypes>
-    + StatusDataSource
-    + UpdateDataSource<MockTypes>
-    + VersionedDataSource
-    + Send
-    + Sync
-    + Sized
-    + 'static
-{
+pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
     /// Backing storage for the data source.
     ///
     /// This can be used to connect to data sources to the same underlying data. It must be kept
@@ -121,4 +113,23 @@ pub trait TestableDataSource:
 
     async fn create(node_id: usize) -> Self::Storage;
     async fn connect(storage: &Self::Storage) -> Self;
+    async fn handle_event(&mut self, event: &Event<MockTypes>);
+}
+
+pub trait TestableDataSource:
+    DataSourceLifeCycle
+    + AvailabilityDataSource<MockTypes>
+    + StatusDataSource
+    + UpdateDataSource<MockTypes>
+    + VersionedDataSource
+{
+}
+
+impl<T> TestableDataSource for T where
+    T: DataSourceLifeCycle
+        + AvailabilityDataSource<MockTypes>
+        + StatusDataSource
+        + UpdateDataSource<MockTypes>
+        + VersionedDataSource
+{
 }
