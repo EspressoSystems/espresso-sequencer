@@ -158,6 +158,15 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Defines the exit escrow period for a node.
     /// TODO discuss Alex, Jeb. How much do we want to specify this function? Also marked as public
     /// for easier testing.
+    /// @dev To put this function into context let us consider the following workflow: requestExit
+    /// --> (queueing) --> Exited --> (escrow) --> Witdrawable. The first phase is about waiting in
+    /// queue due to rate-limiting on exit, the wait is dependent on the exit amount and currently
+    /// exit traffic. At the point of "Exited", the node is officially off duty, and stops
+    /// participating in consensus.
+    ///  The second phase is about slashable security, the wait is dependent only on amount, during
+    /// which period cryptographic evidence of misbehavior (e.g. double-voting) might still lead to
+    /// the forfeit of stakes. From the point of `Withdrawable` onwards, the staker can freely
+    /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
@@ -239,7 +248,8 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Deposit more stakes to registered keys
-    ///
+    /// @dev TODO this implementation will be revisited later. See
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
@@ -267,15 +277,14 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        node.balance += amount;
-        nodes[key] = node;
+        nodes[key].balance += amount;
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
         emit Deposit(_hashBlsKey(blsVK), uint256(amount));
 
         uint64 effectiveEpoch = _currentEpoch + 1;
 
-        return (node.balance, effectiveEpoch);
+        return (nodes[key].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
@@ -303,11 +312,10 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        node.exitEpoch = nextExitEpoch();
+        uint64 nextEpoch = nextExitEpoch();
+        nodes[key].exitEpoch = nextEpoch;
 
-        nodes[key] = node;
-
-        emit Exit(key, node.exitEpoch);
+        emit Exit(key, nextEpoch);
 
         return true;
     }
