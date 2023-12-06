@@ -437,6 +437,10 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
             self.recent_proposal = view_number;
         }
 
+        if view_number > self.recent_proposal {
+            self.recent_proposal = view_number;
+        }
+
         // Only keep proposal history for MAX_VIEWS number of view
         if self.proposals.len() >= MAX_VIEWS {
             self.proposals.remove(&self.oldest_proposal);
@@ -646,7 +650,7 @@ where
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error>::from_file(path)?,
         None => {
-            let toml = toml::from_str(include_str!("../api.toml")).map_err(|err| {
+            let toml: toml::Value = toml::from_str(include_str!("../api.toml")).map_err(|err| {
                 ApiError::CannotReadToml {
                     reason: err.to_string(),
                 }

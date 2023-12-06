@@ -51,6 +51,7 @@ async fn test_catchup() {
         check_leaf: true,
         ..Default::default()
     };
+    metadata.overall_safety_properties.num_failed_views = 2;
 
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)

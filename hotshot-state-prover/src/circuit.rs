@@ -426,7 +426,6 @@ mod tests {
     type F = ark_ed_on_bn254::Fq;
 
     #[test]
-
     fn crypto_test_circuit_building() {
         let num_validators = 10;
         let mut prng = test_rng();

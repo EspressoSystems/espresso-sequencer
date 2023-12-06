@@ -60,6 +60,7 @@ async fn test_with_failures_one() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(5, dead_nodes)],
     };
+    metadata.overall_safety_properties.num_failed_views = 2;
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
