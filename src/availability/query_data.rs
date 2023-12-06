@@ -199,6 +199,13 @@ impl<Types: NodeType> LeafQueryData<Types> {
         Ok(Self { leaf, qc })
     }
 
+    pub fn genesis() -> Self {
+        Self {
+            leaf: Leaf::genesis(),
+            qc: QuorumCertificate::genesis(),
+        }
+    }
+
     pub fn leaf(&self) -> &Leaf<Types> {
         &self.leaf
     }
@@ -269,6 +276,18 @@ impl<Types: NodeType> BlockQueryData<Types> {
             size: payload_size::<Types>(&payload),
             payload,
         })
+    }
+
+    pub fn genesis() -> Self {
+        let (header, payload, _) = Types::BlockHeader::genesis();
+        let size = payload_size::<Types>(&payload);
+        let hash = header.commit();
+        Self {
+            header,
+            payload,
+            hash,
+            size,
+        }
     }
 
     pub fn header(&self) -> &Header<Types> {
