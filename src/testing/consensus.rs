@@ -11,10 +11,10 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::mocks::{
-    MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork, MockTransaction, MockTypes,
-    TestableDataSource,
+    DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
+    MockTransaction, MockTypes,
 };
-use crate::data_source::FileSystemDataSource;
+use crate::{data_source::FileSystemDataSource, status::UpdateStatusData};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -35,23 +35,23 @@ use hotshot_types::{
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-struct MockNode<D: TestableDataSource> {
+struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
     data_source: Arc<RwLock<D>>,
     storage: D::Storage,
 }
 
-pub struct MockNetwork<D: TestableDataSource> {
+pub struct MockNetwork<D: DataSourceLifeCycle> {
     nodes: Vec<MockNode<D>>,
 }
 
-// MockNetwork can be used with any TestableDataSource, but it's nice to have a default with a
+// MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
 // convenient type alias.
 pub type MockDataSource = FileSystemDataSource<MockTypes>;
 
 const MINIMUM_NODES: usize = 2;
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
         let priv_keys = (0..MINIMUM_NODES)
             .map(|_| BLSPrivKey::generate())
@@ -109,9 +109,34 @@ impl<D: TestableDataSource> MockNetwork<D> {
                     async move {
                         let storage = D::create(node_id).await;
                         let data_source = D::connect(&storage).await;
+
+                        let metrics = data_source.populate_metrics();
+                        let metrics = NetworkingMetricsValue {
+                            values: Default::default(),
+                            connected_peers: metrics
+                                .create_gauge(String::from("connected_peers"), None),
+                            incoming_direct_message_count: metrics.create_counter(
+                                String::from("incoming_direct_message_count"),
+                                None,
+                            ),
+                            incoming_broadcast_message_count: metrics.create_counter(
+                                String::from("incoming_broadcast_message_count"),
+                                None,
+                            ),
+                            outgoing_direct_message_count: metrics.create_counter(
+                                String::from("outgoing_direct_message_count"),
+                                None,
+                            ),
+                            outgoing_broadcast_message_count: metrics.create_counter(
+                                String::from("outgoing_broadcast_message_count"),
+                                None,
+                            ),
+                            message_failed_to_send: metrics
+                                .create_counter(String::from("message_failed_to_send"), None),
+                        };
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            NetworkingMetricsValue::new(),
+                            metrics,
                             master_map.clone(),
                             None,
                         ));
@@ -133,6 +158,32 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             view_sync_membership: membership.clone(),
                         };
 
+                        let metrics = data_source.populate_metrics();
+                        let metrics = ConsensusMetricsValue {
+                            values: Default::default(),
+                            last_synced_block_height: metrics
+                                .create_gauge(String::from("last_synced_block_height"), None),
+                            last_decided_view: metrics
+                                .create_gauge(String::from("last_decided_view"), None),
+                            current_view: metrics.create_gauge(String::from("current_view"), None),
+                            number_of_views_since_last_decide: metrics.create_gauge(
+                                String::from("number_of_views_since_last_decide"),
+                                None,
+                            ),
+                            number_of_views_per_decide_event: metrics.create_histogram(
+                                String::from("number_of_views_per_decide_event"),
+                                None,
+                            ),
+                            invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
+                            outstanding_transactions: metrics
+                                .create_gauge(String::from("outstanding_transactions"), None),
+                            outstanding_transactions_memory_size: metrics.create_gauge(
+                                String::from("outstanding_transactions_memory_size"),
+                                None,
+                            ),
+                            number_of_timeouts: metrics
+                                .create_counter(String::from("number_of_timeouts"), None),
+                        };
                         let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
@@ -142,8 +193,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             memberships,
                             networks,
                             HotShotInitializer::from_genesis().unwrap(),
-                            // data_source.populate_metrics(),
-                            ConsensusMetricsValue::new(),
+                            metrics,
                         )
                         .await
                         .unwrap();
@@ -161,7 +211,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle> MockNetwork<D> {
     pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
@@ -189,7 +239,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle> MockNetwork<D> {
     pub async fn start(&mut self) {
         // Spawn the update tasks.
         for node in &mut self.nodes {
@@ -199,8 +249,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut ds = ds.write().await;
-                    ds.update(&event).await.unwrap();
-                    ds.commit().await.unwrap();
+                    ds.handle_event(&event).await;
                 }
             });
         }
@@ -214,7 +263,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> Drop for MockNetwork<D> {
+impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
         async_std::task::block_on(self.shut_down_impl())
     }

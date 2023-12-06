@@ -18,8 +18,9 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 
 [features]
-default = ["file-system-data-source", "sql-data-source"]
+default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
 file-system-data-source = ["atomic_store"]
+metrics-data-source = []
 sql-data-source = ["anyhow", "include_dir", "refinery", "serde_json", "tokio", "tokio-postgres"]
 testing = ["espresso-macros", "portpicker", "rand", "spin_sleep", "tempdir"]
 

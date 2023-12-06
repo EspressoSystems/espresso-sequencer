@@ -18,6 +18,7 @@
 //! concrete persistence implementations:
 //! * [`FileSystemDataSource`]
 //! * [`SqlDataSource`]
+//! * [`MetricsDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
 //!
@@ -29,29 +30,31 @@ mod buffered_channel;
 mod extension;
 mod fs;
 mod ledger_log;
+mod metrics;
 pub mod sql;
 mod update;
 
 pub use extension::ExtensibleDataSource;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
+#[cfg(feature = "metrics-data-source")]
+pub use metrics::MetricsDataSource;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlDataSource;
 pub use update::{UpdateDataSource, VersionedDataSource};
 
-/// Generic tests we can instantiate for all the data sources.
+/// Generic tests we can instantiate for all the availability data sources.
 #[cfg(any(test, feature = "testing"))]
 #[espresso_macros::generic_tests]
-pub mod data_source_tests {
+pub mod availability_tests {
     use crate::{
         availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
-        status::MempoolQueryData,
         testing::{
             consensus::MockNetwork,
             mocks::{
                 mock_transaction, MockPayload, MockTransaction, MockTypes, TestableDataSource,
             },
-            setup_test, sleep,
+            setup_test,
         },
         Leaf, QueryError,
     };
@@ -63,7 +66,6 @@ pub mod data_source_tests {
     use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
-    use std::time::Duration;
 
     async fn get_non_empty_blocks(
         ds: &RwLock<impl TestableDataSource>,
@@ -251,98 +253,6 @@ pub mod data_source_tests {
     }
 
     #[async_std::test]
-    pub async fn test_metrics<D: TestableDataSource>() {
-        setup_test();
-
-        let mut network = MockNetwork::<D>::init().await;
-        let ds = network.data_source();
-
-        {
-            // With consensus paused, check that the success rate returns NaN (since the block
-            // height, the numerator, and view number, the denominator, are both 0).
-            assert!(ds.read().await.success_rate().await.unwrap().is_nan());
-            // Check that block height is initially zero.
-            assert_eq!(ds.read().await.block_height().await.unwrap(), 0);
-        }
-
-        // Submit a transaction, and check that it is reflected in the mempool.
-        let txn = MockTransaction::default();
-        network.submit_transaction(txn.clone()).await;
-        loop {
-            let mempool = { ds.read().await.mempool_info().await.unwrap() };
-            let expected = MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-            };
-            if mempool == expected {
-                break;
-            }
-            tracing::info!(
-                "waiting for mempool to reflect transaction (currently {:?})",
-                mempool
-            );
-            sleep(Duration::from_secs(1)).await;
-        }
-        {
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-                }
-            );
-        }
-
-        // Submitting the same transaction should not affect the mempool.
-        network.submit_transaction(txn.clone()).await;
-        sleep(Duration::from_secs(3)).await;
-        {
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-                }
-            );
-        }
-
-        // Start consensus and wait for the transaction to be finalized.
-        let mut blocks = { ds.read().await.subscribe_blocks(0).await.unwrap() };
-        network.start().await;
-        loop {
-            if !blocks.next().await.unwrap().unwrap().is_empty() {
-                break;
-            }
-        }
-
-        {
-            // Check that block height and success rate have been updated. Note that we can only
-            // check if success rate is positive. We don't know exactly what it is because we can't
-            // know how many views have elapsed without race conditions. Similarly, we can only
-            // check that block height is at least 2, because we know that the genesis block and our
-            // transaction's block have both been committed, but we can't know how many empty blocks
-            // were committed.
-            let success_rate = ds.read().await.success_rate().await.unwrap();
-            // TODO re-enable this check once HotShot is populating view metrics again
-            //      https://github.com/EspressoSystems/HotShot/issues/2066
-            // assert!(success_rate.is_finite(), "{success_rate}");
-            assert!(success_rate > 0.0, "{success_rate}");
-            assert!(ds.read().await.block_height().await.unwrap() >= 2);
-        }
-
-        {
-            // Check that the transaction is no longer reflected in the mempool.
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 0,
-                    memory_footprint: 0,
-                }
-            );
-        }
-    }
-
-    #[async_std::test]
     pub async fn test_range<D: TestableDataSource>() {
         setup_test();
 
@@ -443,4 +353,125 @@ pub mod data_source_tests {
             QueryError::NotFound
         ));
     }
+}
+
+/// Generic tests we can instantiate for all the status data sources.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod status_tests {
+    use crate::{
+        status::{MempoolQueryData, StatusDataSource},
+        testing::{
+            consensus::MockNetwork,
+            mocks::{mock_transaction, DataSourceLifeCycle, MockTransaction},
+            setup_test, sleep,
+        },
+    };
+    use bincode::Options;
+    use hotshot_utils::bincode::bincode_opts;
+    use std::time::Duration;
+
+    #[async_std::test]
+    pub async fn test_metrics<D: DataSourceLifeCycle + StatusDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        {
+            let ds = ds.read().await;
+            // With consensus paused, check that the success rate returns NaN (since the block
+            // height, the numerator, and view number, the denominator, are both 0).
+            assert!(ds.success_rate().await.unwrap().is_nan());
+            // Check that block height is initially zero.
+            assert_eq!(ds.block_height().await.unwrap(), 0);
+        }
+
+        // Submit a transaction, and check that it is reflected in the mempool.
+        let txn = mock_transaction(vec![1, 2, 3]);
+        network.submit_transaction(txn.clone()).await;
+        loop {
+            let mempool = { ds.read().await.mempool_info().await.unwrap() };
+            let expected = MempoolQueryData {
+                transaction_count: 1,
+                memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+            };
+            if mempool == expected {
+                break;
+            }
+            tracing::info!(
+                "waiting for mempool to reflect transaction (currently {:?})",
+                mempool
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
+        {
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+                }
+            );
+        }
+
+        // Submitting the same transaction should not affect the mempool.
+        network.submit_transaction(txn.clone()).await;
+        sleep(Duration::from_secs(3)).await;
+        {
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+                }
+            );
+        }
+
+        // Start consensus and wait for the transaction to be finalized.
+        network.start().await;
+        // First wait for the transaction to be taken out of the mempool.
+        let block_height = loop {
+            let ds = ds.read().await;
+            if ds.mempool_info().await.unwrap().transaction_count == 0 {
+                break ds.block_height().await.unwrap();
+            }
+            sleep(Duration::from_secs(1)).await;
+        };
+        // Now wait for at least one block to be finalized.
+        loop {
+            if ds.read().await.block_height().await.unwrap() > block_height {
+                break;
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        {
+            // Check that the success rate has been updated. Note that we can only check if success
+            // rate is positive. We don't know exactly what it is because we can't know how many
+            // views have elapsed without race conditions.
+            let success_rate = ds.read().await.success_rate().await.unwrap();
+            assert!(success_rate.is_finite(), "{success_rate}");
+            assert!(success_rate > 0.0, "{success_rate}");
+        }
+
+        {
+            // Check that the transaction is no longer reflected in the mempool.
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 0,
+                    memory_footprint: 0,
+                }
+            );
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! instantiate_data_source_tests {
+    ($t:ty) => {
+        instantiate_availability_tests!($t);
+        instantiate_status_tests!($t);
+    };
 }

@@ -230,10 +230,14 @@ where
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::TestableDataSource;
+    use crate::{
+        data_source::UpdateDataSource,
+        testing::mocks::{DataSourceLifeCycle, MockTypes, TestableDataSource},
+    };
+    use hotshot::types::Event;
 
     #[async_trait]
-    impl<D, U> TestableDataSource for ExtensibleDataSource<D, U>
+    impl<D, U> DataSourceLifeCycle for ExtensibleDataSource<D, U>
     where
         D: TestableDataSource,
         U: Default + Send + Sync + 'static,
@@ -247,12 +251,17 @@ mod impl_testable_data_source {
         async fn connect(storage: &Self::Storage) -> Self {
             Self::new(D::connect(storage).await, Default::default())
         }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::{data_source_tests, FileSystemDataSource};
+    use super::super::{availability_tests, status_tests, FileSystemDataSource};
     use super::ExtensibleDataSource;
     use crate::testing::mocks::MockTypes;
 

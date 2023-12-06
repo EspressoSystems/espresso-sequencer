@@ -559,11 +559,15 @@ where
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::{MockTypes, TestableDataSource};
+    use crate::{
+        data_source::UpdateDataSource,
+        testing::mocks::{DataSourceLifeCycle, MockTypes},
+    };
+    use hotshot::types::Event;
     use tempdir::TempDir;
 
     #[async_trait]
-    impl TestableDataSource for FileSystemDataSource<MockTypes> {
+    impl DataSourceLifeCycle for FileSystemDataSource<MockTypes> {
         type Storage = TempDir;
 
         async fn create(node_id: usize) -> Self::Storage {
@@ -573,12 +577,17 @@ mod impl_testable_data_source {
         async fn connect(storage: &Self::Storage) -> Self {
             Self::open(storage.path()).unwrap()
         }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::data_source_tests;
+    use super::super::{availability_tests, status_tests};
     use super::FileSystemDataSource;
     use crate::testing::mocks::MockTypes;
 
