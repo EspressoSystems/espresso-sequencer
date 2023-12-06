@@ -69,7 +69,9 @@ abstract contract AbstractStakeTable {
         EdOnBN254.EdOnBN254Point schnorrVK;
     }
 
-    // TODO document
+    /// @notice Struct representing a queue
+    /// @param firstAvailableEpoch epoch where the queue is located.
+    /// @param pendingRequests current size of the queue.
     struct Queue {
         uint64 firstAvailableEpoch;
         uint64 pendingRequests;

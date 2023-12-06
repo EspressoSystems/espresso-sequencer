@@ -47,12 +47,6 @@ contract StakeTable is AbstractStakeTable {
     /// Total restaked stake locked for the latest stake table (HEAD).
     uint256 public totalRestakedStake;
 
-    /// Size of the registration queue for the next available epoch.
-    uint64 public numRegistrations;
-
-    /// Size of the exit queue for the next available epoch.
-    uint64 public numPendingExits;
-
     /// Address of the native token contract.
     address public tokenAddress;
 
@@ -148,7 +142,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view override returns (uint64) {
-        return numRegistrations;
+        return registrationQueue.pendingRequests;
     }
 
     /// @notice Get the next available epoch for exit
@@ -158,7 +152,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExit() external view override returns (uint64) {
-        return numPendingExits;
+        return exitQueue.pendingRequests;
     }
 
     /// @notice Defines the exit escrow period for a node.
