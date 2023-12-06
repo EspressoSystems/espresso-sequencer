@@ -51,19 +51,15 @@ pub mod availability_tests {
         availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
         testing::{
             consensus::MockNetwork,
-            mocks::{
-                mock_transaction, MockPayload, MockTransaction, MockTypes, TestableDataSource,
-            },
+            mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
             setup_test,
         },
         Leaf, QueryError,
     };
     use async_std::sync::RwLock;
-    use bincode::Options;
     use commit::Committable;
     use futures::{StreamExt, TryStreamExt};
     use hotshot_types::simple_certificate::QuorumCertificate;
-    use hotshot_utils::bincode::bincode_opts;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
 
@@ -367,7 +363,7 @@ pub mod status_tests {
         status::{MempoolQueryData, StatusDataSource},
         testing::{
             consensus::MockNetwork,
-            mocks::{mock_transaction, DataSourceLifeCycle, MockTransaction},
+            mocks::{mock_transaction, DataSourceLifeCycle},
             setup_test, sleep,
         },
     };
