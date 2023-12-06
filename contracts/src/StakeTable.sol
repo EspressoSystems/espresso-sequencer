@@ -217,7 +217,8 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Deposit more stakes to registered keys
-    ///
+    /// @dev TODO this implementation will be revisited later. See
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
@@ -245,15 +246,14 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        node.balance += amount;
-        nodes[key] = node;
+        nodes[key].balance += amount;
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
         emit Deposit(_hashBlsKey(blsVK), uint256(amount));
 
         uint64 effectiveEpoch = _currentEpoch + 1;
 
-        return (node.balance, effectiveEpoch);
+        return (nodes[key].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
@@ -281,11 +281,10 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        node.exitEpoch = this.nextExitEpoch();
+        uint64 nextEpoch = this.nextExitEpoch();
+        nodes[key].exitEpoch = nextEpoch;
 
-        nodes[key] = node;
-
-        emit Exit(key, node.exitEpoch);
+        emit Exit(key, nextEpoch);
 
         return true;
     }
