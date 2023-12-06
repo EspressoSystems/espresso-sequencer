@@ -66,15 +66,13 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// ```
 /// # use atomic_store::PersistenceError;
 /// # use hotshot_query_service::data_source::{ExtensibleDataSource, FileSystemDataSource};
-/// # use hotshot_query_service::testing::mocks::{
-/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// # };
+/// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # use std::path::Path;
-/// # fn doc(storage_path: &Path) -> Result<(), PersistenceError> {
+/// # async fn doc(storage_path: &Path) -> Result<(), PersistenceError> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes, AppNodeImpl>, AppState> =
-///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path)?, "app state");
+/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes>, AppState> =
+///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path).await?, "app state");
 /// # Ok(())
 /// # }
 /// ```
@@ -125,17 +123,18 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// struct AppState {
 ///     // Top-level storage coordinator
 ///     store: AtomicStore,
-///     hotshot_qs: FileSystemDataSource<AppTypes, AppNodeImpl>,
+///     hotshot_qs: FileSystemDataSource<AppTypes>,
 ///     // additional state for other modules
 /// }
 ///
-/// fn init_server(
+/// async fn init_server(
 ///     storage_path: &Path,
 ///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;
 ///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader)
+///         .await
 ///         .map_err(Error::internal)?;
 ///     // Initialize storage for other modules using the same loader.
 ///

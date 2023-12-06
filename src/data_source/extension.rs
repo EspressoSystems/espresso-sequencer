@@ -41,14 +41,10 @@ use std::ops::RangeBounds;
 /// # use async_trait::async_trait;
 /// # use hotshot_query_service::availability::{AvailabilityDataSource, TransactionIndex};
 /// # use hotshot_query_service::data_source::ExtensibleDataSource;
-/// # use hotshot_query_service::testing::{
-/// #   mocks::{
-/// #       MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// #   },
-/// # };
+/// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # use std::collections::HashMap;
 /// # #[async_trait]
-/// # trait UtxoDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> {
+/// # trait UtxoDataSource: AvailabilityDataSource<AppTypes> {
 /// #   async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
 /// # }
 /// type UtxoIndex = HashMap<u64, (usize, TransactionIndex<AppTypes>, usize)>;
@@ -57,7 +53,7 @@ use std::ops::RangeBounds;
 /// impl<UnderlyingDataSource> UtxoDataSource for
 ///     ExtensibleDataSource<UnderlyingDataSource, UtxoIndex>
 /// where
-///     UnderlyingDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> + Send + Sync,
+///     UnderlyingDataSource: AvailabilityDataSource<AppTypes> + Send + Sync,
 /// {
 ///     async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)> {
 ///         self.as_ref().get(&utxo).cloned()

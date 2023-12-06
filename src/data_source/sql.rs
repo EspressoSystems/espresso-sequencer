@@ -386,13 +386,11 @@ impl Config {
 /// # use hotshot_query_service::data_source::{
 /// #   sql::{Config, Error}, ExtensibleDataSource, SqlDataSource,
 /// # };
-/// # use hotshot_query_service::testing::mocks::{
-/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// # };
+/// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # async fn doc(config: Config) -> Result<(), Error> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<SqlDataSource<AppTypes, AppNodeImpl>, AppState> =
+/// let data_source: ExtensibleDataSource<SqlDataSource<AppTypes>, AppState> =
 ///     ExtensibleDataSource::new(SqlDataSource::connect(config).await?, "app state");
 /// # Ok(())
 /// # }
@@ -444,7 +442,7 @@ impl Config {
 /// # };
 /// # use tide_disco::App;
 /// struct AppState {
-///     hotshot_qs: SqlDataSource<AppTypes, AppNodeImpl>,
+///     hotshot_qs: SqlDataSource<AppTypes>,
 ///     // additional state for other modules
 /// }
 ///
@@ -468,7 +466,7 @@ impl Config {
 ///         let mut events = hotshot.get_event_stream(Default::default()).await.0;
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
-///             UpdateDataSource::<AppTypes, AppNodeImpl>::update(&mut state.hotshot_qs, &event)
+///             UpdateDataSource::<AppTypes>::update(&mut state.hotshot_qs, &event)
 ///                 .await
 ///                 .unwrap();
 ///             // Update other modules' states based on `event`. Use `hotshot_qs` to include
