@@ -40,8 +40,8 @@ async fn main() {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
-            if let Some(query) = modules.query {
-                opt = opt.query(query);
+            if let Some(query_fs) = modules.query_fs {
+                opt = opt.query_fs(query_fs);
             }
             if let Some(submit) = modules.submit {
                 opt = opt.submit(submit);
@@ -49,7 +49,7 @@ async fn main() {
 
             // Save the port if we are running a query API. This can be used later when starting the
             // commitment task; otherwise the user must give us the URL of an external query API.
-            let query_api_port = if opt.query.is_some() {
+            let query_api_port = if opt.has_query_module() {
                 Some(opt.http.port)
             } else {
                 None
