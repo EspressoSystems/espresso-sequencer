@@ -24,6 +24,7 @@
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
+//! # use hotshot_types::consensus::ConsensusMetricsValue;
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
 //! use hotshot_query_service::{
@@ -46,7 +47,7 @@
 //! // Create hotshot, giving it a handle to the status metrics.
 //! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
-//!     data_source.populate_metrics(),
+//!     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
 //!     // Other fields omitted
 //! ).await.map_err(Error::internal)?;
 //!

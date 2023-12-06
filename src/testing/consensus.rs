@@ -110,33 +110,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         let storage = D::create(node_id).await;
                         let data_source = D::connect(&storage).await;
 
-                        let metrics = data_source.populate_metrics();
-                        let metrics = NetworkingMetricsValue {
-                            values: Default::default(),
-                            connected_peers: metrics
-                                .create_gauge(String::from("connected_peers"), None),
-                            incoming_direct_message_count: metrics.create_counter(
-                                String::from("incoming_direct_message_count"),
-                                None,
-                            ),
-                            incoming_broadcast_message_count: metrics.create_counter(
-                                String::from("incoming_broadcast_message_count"),
-                                None,
-                            ),
-                            outgoing_direct_message_count: metrics.create_counter(
-                                String::from("outgoing_direct_message_count"),
-                                None,
-                            ),
-                            outgoing_broadcast_message_count: metrics.create_counter(
-                                String::from("outgoing_broadcast_message_count"),
-                                None,
-                            ),
-                            message_failed_to_send: metrics
-                                .create_counter(String::from("message_failed_to_send"), None),
-                        };
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            metrics,
+                            NetworkingMetricsValue::new(&*data_source.populate_metrics()),
                             master_map.clone(),
                             None,
                         ));
@@ -158,32 +134,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             view_sync_membership: membership.clone(),
                         };
 
-                        let metrics = data_source.populate_metrics();
-                        let metrics = ConsensusMetricsValue {
-                            values: Default::default(),
-                            last_synced_block_height: metrics
-                                .create_gauge(String::from("last_synced_block_height"), None),
-                            last_decided_view: metrics
-                                .create_gauge(String::from("last_decided_view"), None),
-                            current_view: metrics.create_gauge(String::from("current_view"), None),
-                            number_of_views_since_last_decide: metrics.create_gauge(
-                                String::from("number_of_views_since_last_decide"),
-                                None,
-                            ),
-                            number_of_views_per_decide_event: metrics.create_histogram(
-                                String::from("number_of_views_per_decide_event"),
-                                None,
-                            ),
-                            invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
-                            outstanding_transactions: metrics
-                                .create_gauge(String::from("outstanding_transactions"), None),
-                            outstanding_transactions_memory_size: metrics.create_gauge(
-                                String::from("outstanding_transactions_memory_size"),
-                                None,
-                            ),
-                            number_of_timeouts: metrics
-                                .create_counter(String::from("number_of_timeouts"), None),
-                        };
                         let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
@@ -193,7 +143,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             memberships,
                             networks,
                             HotShotInitializer::from_genesis().unwrap(),
-                            metrics,
+                            ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                         )
                         .await
                         .unwrap();
