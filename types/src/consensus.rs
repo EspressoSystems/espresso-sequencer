@@ -11,7 +11,7 @@ use crate::{
     error::HotShotError,
     simple_certificate::QuorumCertificate,
     traits::{
-        metrics::{Counter, Gauge, Histogram, Label, Metrics},
+        metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
         node_implementation::NodeType,
     },
     utils::Terminator,
@@ -66,9 +66,7 @@ pub struct Consensus<TYPES: NodeType> {
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
 #[derive(Clone, Debug)]
 pub struct ConsensusMetricsValue {
-    /// The values that are being tracked
-    pub values: Arc<Mutex<InnerConsensusMetrics>>,
-    /// The number of last synced synced block height
+    /// The number of last synced block height
     pub last_synced_block_height: Box<dyn Gauge>,
     /// The number of last decided view
     pub last_decided_view: Box<dyn Gauge>,
@@ -205,14 +203,8 @@ impl Label for ConsensusMetrics {
 impl ConsensusMetricsValue {
     /// Create a new instance of this [`ConsensusMetricsValue`] struct, setting all the counters and gauges
     #[must_use]
-    pub fn new() -> Self {
-        let values = Arc::default();
-        let metrics: Box<dyn Metrics> = Box::new(ConsensusMetrics {
-            prefix: String::new(),
-            values: Arc::clone(&values),
-        });
+    pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
-            values,
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
             last_decided_view: metrics.create_gauge(String::from("last_decided_view"), None),
@@ -233,7 +225,7 @@ impl ConsensusMetricsValue {
 
 impl Default for ConsensusMetricsValue {
     fn default() -> Self {
-        Self::new()
+        Self::new(&*NoMetrics::boxed())
     }
 }
 

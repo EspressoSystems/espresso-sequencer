@@ -96,7 +96,7 @@ pub async fn build_system_handle(
         memberships,
         networks_bundle,
         initializer,
-        ConsensusMetricsValue::new(),
+        ConsensusMetricsValue::default(),
     )
     .await
     .expect("Could not init hotshot")

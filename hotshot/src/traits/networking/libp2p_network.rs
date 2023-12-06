@@ -228,7 +228,7 @@ where
                 let da = da_keys.clone();
                 async_block_on(async move {
                     match Libp2pNetwork::new(
-                        NetworkingMetricsValue::new(),
+                        NetworkingMetricsValue::default(),
                         config,
                         pubkey.clone(),
                         bootstrap_addrs_ref,
