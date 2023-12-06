@@ -259,7 +259,7 @@ match node_type {
     let node_config = config_builder.build().unwrap();
 
     Libp2pNetwork::new(
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         node_config,
         pub_key.clone(),
         Arc::new(RwLock::new(
@@ -367,7 +367,7 @@ pub trait RunDA<
             memberships,
             networks_bundle,
             initializer,
-            ConsensusMetricsValue::new(),
+            ConsensusMetricsValue::default(),
         )
         .await
         .expect("Could not init hotshot")
