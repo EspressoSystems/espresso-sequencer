@@ -23,6 +23,7 @@ use hotshot_types::{
 };
 
 use std::collections::HashMap;
+use tracing::error;
 
 async fn build_vote(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
@@ -85,18 +86,10 @@ async fn build_vote(
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_consensus_task() {
     use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::block_types::TestTransaction;
     use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_testing::task_helpers::vid_init;
-    use hotshot_types::data::VidSchemeTrait;
-    use hotshot_types::{
-        data::VidDisperse, message::Proposal, simple_certificate::QuorumCertificate,
-        traits::node_implementation::NodeType,
-    };
-    use std::marker::PhantomData;
+    use hotshot_types::simple_certificate::QuorumCertificate;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -105,6 +98,79 @@ async fn test_consensus_task() {
     // We assign node's key pair rather than read from config file since it's a test
     let (private_key, public_key) = key_pair_for_id(1);
 
+    let mut input = Vec::new();
+    let mut output = HashMap::new();
+
+    // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
+    let qc = QuorumCertificate::<TestTypes>::genesis();
+    let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
+
+    input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));
+    input.push(HotShotEvent::QuorumProposalRecv(
+        proposal.clone(),
+        public_key,
+    ));
+    
+    input.push(HotShotEvent::Shutdown);
+
+    output.insert(HotShotEvent::QCFormed(either::Left(qc)), 1);
+    output.insert(
+        HotShotEvent::QuorumProposalSend(proposal.clone(), public_key),
+        1,
+    );
+    output.insert(
+        HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
+        1,
+    );
+    output.insert(
+        HotShotEvent::ViewChange(ViewNumber::new(1)),
+        1,
+    );
+
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal.data).await {
+        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
+        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
+        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
+    }
+
+    output.insert(HotShotEvent::Shutdown, 1);
+
+    let build_fn = |task_runner, event_stream| {
+        add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
+    };
+
+    run_harness(input, output, None, build_fn).await;
+}
+
+#[cfg(test)]
+#[cfg_attr(
+    async_executor_impl = "tokio",
+    tokio::test(flavor = "multi_thread", worker_threads = 2)
+)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
+async fn test_consensus_with_vid_vote() {
+    use hotshot_task_impls::harness::run_harness;
+    use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::block_types::TestTransaction;
+    use hotshot_testing::task_helpers::vid_init;
+    use hotshot_types::data::VidSchemeTrait;
+    use hotshot_types::{
+        data::VidDisperse, message::Proposal,
+        traits::node_implementation::NodeType,
+    };
+    use std::marker::PhantomData;
+
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let handle = build_system_handle(2).await.0;
+    // We assign node's key pair rather than read from config file since it's a test
+    // In view 2, node 2 is the leader.
+    let (private_key_view1, public_key_view1) = key_pair_for_id(1);
+    // let (private_key_view2, public_key_view2) = key_pair_for_id(2);
+
+    // For the test of vote logic with vid
     let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
         inner: handle.hotshot.inner.clone(),
     };
@@ -132,17 +198,16 @@ async fn test_consensus_task() {
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    // Trigger a proposal to send by creating a new QC.  Then recieve that proposal and update view based on the valid QC in the proposal
-    let qc = QuorumCertificate::<TestTypes>::genesis();
-    let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
-
-    input.push(HotShotEvent::QCFormed(either::Left(qc.clone())));
-    input.push(HotShotEvent::QuorumProposalRecv(
-        proposal.clone(),
-        public_key,
-    ));
-    // followings are for the test of vote logic with vid
+    let proposal_view1 = build_quorum_proposal(&handle, &private_key_view1, 1).await;
+    // Do a view change, so that it's not the genesis view, and vid vote is needed
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
+    error!("proposal_view1 = {:?}", proposal_view1);
+    input.push(HotShotEvent::QuorumProposalRecv(
+        proposal_view1.clone(),
+        public_key_view1,
+    ));
+
+    // followings are for the test of vote logic with vid
     input.push(HotShotEvent::TransactionsSequenced(
         encoded_transactions.clone(),
         (),
@@ -154,27 +219,19 @@ async fn test_consensus_task() {
     ));
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::Shutdown);
 
-    output.insert(HotShotEvent::QCFormed(either::Left(qc)), 1);
+
     output.insert(
-        HotShotEvent::QuorumProposalSend(proposal.clone(), public_key),
+        HotShotEvent::QuorumProposalRecv(proposal_view1.clone(), public_key_view1),
+        1,
+    );
+
+    output.insert(
+        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(1)),
         1,
     );
     output.insert(
-        HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
-        1,
-    );
-    output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)),
-        2, // 1 from `QuorumProposalRecv`, 1 from input
-    );
-    output.insert(
-        HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
-        1,
-    );
-    output.insert(
-        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
+        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(1)),
         2,
     );
     output.insert(
@@ -187,12 +244,72 @@ async fn test_consensus_task() {
     );
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
-    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal.data).await {
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view1.data).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
         input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
         output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
     }
 
+
+
+    // input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    // let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
+    // error!("proposal_view2 = {:?}", proposal_view2);
+    // // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
+    // input.push(HotShotEvent::QuorumProposalRecv(
+    //     proposal_view2.clone(),
+    //     public_key_view2,
+    // ));
+    // // followings are for the test of vote logic with vid
+    // input.push(HotShotEvent::TransactionsSequenced(
+    //     encoded_transactions.clone(),
+    //     (),
+    //     ViewNumber::new(2),
+    // ));
+    // input.push(HotShotEvent::BlockReady(
+    //     vid_disperse.clone(),
+    //     ViewNumber::new(2),
+    // ));
+    // input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
+    // input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
+
+    // output.insert(
+    //     HotShotEvent::QuorumProposalRecv(proposal_view2.clone(), public_key_view2),
+    //     1,
+    // );
+    // output.insert(
+    //     HotShotEvent::TransactionsSequenced(encoded_transactions, (), ViewNumber::new(2)),
+    //     1,
+    // );
+    // output.insert(
+    //     HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
+    //     2,
+    // );
+    // output.insert(
+    //     HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+    //     1,
+    // );
+    // output.insert(
+    //     HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
+    //     2, // 2 occurrences: 1 from `input`, 1 from the DA task
+    // );
+    // output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
+    // if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
+    //     output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
+    //     input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
+    //     output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
+    // }
+
+    output.insert(
+        HotShotEvent::ViewChange(ViewNumber::new(1)), 
+        2, // 2 occurrences: 1 from `QuorumProposalRecv`, 1 from input
+    );
+    // output.insert(
+    //     HotShotEvent::ViewChange(ViewNumber::new(2)), 
+    //     2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
+    // );
+
+    input.push(HotShotEvent::Shutdown);
     output.insert(HotShotEvent::Shutdown, 1);
 
     let build_fn = |task_runner, event_stream| {
@@ -251,3 +368,4 @@ async fn test_consensus_vote() {
 
     run_harness(input, output, None, build_fn).await;
 }
+
