@@ -378,7 +378,7 @@ use tide_disco::{App, StatusCode};
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
-/// Item within a [`Block`].
+/// Item within a [`Payload`].
 pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]

@@ -241,9 +241,9 @@ pub struct BlockQueryData<Types: NodeType> {
 }
 
 impl<Types: NodeType> BlockQueryData<Types> {
-    /// Collect information about a [`Block`].
+    /// Collect information about a block.
     ///
-    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `block`.
+    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `payload`.
     ///
     /// # Errors
     ///
