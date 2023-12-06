@@ -17,7 +17,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot::{
-    demo::DemoState,
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
         implementations::{MemoryCommChannel, MemoryStorage},
@@ -26,21 +25,24 @@ use hotshot::{
     types::Event,
 };
 use hotshot_signature_key::bn254::BLSPubKey;
+use hotshot_testing::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestState,
+};
 use hotshot_types::{
-    block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
     data::{QuorumProposal, ViewNumber},
     traits::node_implementation::{ChannelMaps, NodeType},
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-pub type MockState = DemoState;
-pub type MockHeader = VIDBlockHeader;
-pub type MockPayload = VIDBlockPayload;
-pub type MockTransaction = VIDTransaction;
+pub type MockState = TestState;
+pub type MockHeader = TestBlockHeader;
+pub type MockPayload = TestBlockPayload;
+pub type MockTransaction = TestTransaction;
 
 pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
-    VIDTransaction(payload)
+    TestTransaction(payload)
 }
 
 impl QueryablePayload for MockPayload {

@@ -22,7 +22,7 @@ default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
 file-system-data-source = ["atomic_store"]
 metrics-data-source = []
 sql-data-source = ["anyhow", "include_dir", "refinery", "serde_json", "tokio", "tokio-postgres"]
-testing = ["espresso-macros", "portpicker", "rand", "spin_sleep", "tempdir"]
+testing = ["espresso-macros", "hotshot-testing", "portpicker", "rand", "spin_sleep", "tempdir"]
 
 [[example]]
 name = "simple-server"
@@ -71,6 +71,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.1", optional = true }
@@ -94,9 +95,3 @@ rand = "0.8"
 spin_sleep = "1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.3" }
 tempdir = "0.3"
-
-[patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
-hotshot-types = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
-hotshot-utils = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
