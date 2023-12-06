@@ -594,7 +594,6 @@ contract Queue_Test is Test {
     function testFuzz_QueueIsEmpty(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
         uint64 epoch;
         SM.QueueType queueType;
-
         queueType = convertIntToQueueType(typeOfQueueInt);
 
         epochInTheFuture = uint64(bound(epochInTheFuture, 2, type(uint64).max - 1));
@@ -607,5 +606,50 @@ contract Queue_Test is Test {
         epoch = stakeTable.nextEpoch(queueType);
         assertEq(epoch, epochInTheFuture + 1);
         checkQueueParameters(queueType, epoch, 1);
+    }
+
+    function testFuzz_QueueIsFilledUp(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
+        uint64 epoch;
+        SM.QueueType queueType;
+        queueType = convertIntToQueueType(typeOfQueueInt);
+        epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 2));
+        lightClientContract.setCurrentEpoch(epochInTheFuture);
+
+        // Fill up the queue
+        for (uint256 i = 0; i < stakeTable.MAX_CHURN_RATE(); i++) {
+            epoch = stakeTable.nextEpoch(queueType);
+            checkQueueParameters(queueType, epoch, uint64(i + 1));
+            assertEq(epoch, epochInTheFuture + 1);
+        }
+
+        // Check that after the queue is filled up a new one is created for the subsequent epoch
+        epoch = stakeTable.nextEpoch(queueType);
+        assertEq(epoch, epochInTheFuture + 2);
+        checkQueueParameters(queueType, epoch, 1);
+    }
+
+    function testFuzz_QueueIsPartiallyFilled(
+        uint256 typeOfQueueInt,
+        uint64 epochInTheFuture,
+        uint64 pendingRequests
+    ) external {
+        uint64 epoch;
+        SM.QueueType queueType;
+        queueType = convertIntToQueueType(typeOfQueueInt);
+        pendingRequests = uint64(bound(pendingRequests, 0, stakeTable.MAX_CHURN_RATE() - 1));
+        epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 1));
+        lightClientContract.setCurrentEpoch(epochInTheFuture);
+
+        // Fill up the queue partially
+        for (uint256 i = 0; i < pendingRequests; i++) {
+            epoch = stakeTable.nextEpoch(queueType);
+            checkQueueParameters(queueType, epoch, uint64(i + 1));
+            assertEq(epoch, epochInTheFuture + 1);
+        }
+
+        // Check that if we add another element in the queue the epoch stays the same
+        epoch = stakeTable.nextEpoch(queueType);
+        assertEq(epoch, epochInTheFuture + 1);
+        checkQueueParameters(queueType, epoch, pendingRequests + 1);
     }
 }

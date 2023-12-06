@@ -65,7 +65,7 @@ contract StakeTable is AbstractStakeTable {
     /// Exit queue
     Queue public exitQueue;
 
-    uint256 constant MAX_CHURN_RATE = 20;
+    uint256 public constant MAX_CHURN_RATE = 20;
 
     constructor(address _tokenAddress, address _lightClientAddress) {
         tokenAddress = _tokenAddress;

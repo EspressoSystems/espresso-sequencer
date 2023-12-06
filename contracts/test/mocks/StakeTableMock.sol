@@ -34,14 +34,4 @@ contract StakeTableMock is StakeTable {
 
         return (firstAvailableEpoch, pendingRequests);
     }
-
-    function resetQueue(QueueType queueType) public {
-        if (queueType == QueueType.Registration) {
-            registrationQueue.firstAvailableEpoch = 0;
-            registrationQueue.pendingRequests = 0;
-        } else {
-            exitQueue.firstAvailableEpoch = 0;
-            exitQueue.pendingRequests = 0;
-        }
-    }
 }
