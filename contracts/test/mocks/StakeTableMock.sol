@@ -12,9 +12,9 @@ contract StakeTableMock is StakeTable {
 
     function nextEpoch(QueueType queueType) public returns (uint64) {
         if (queueType == QueueType.Registration) {
-            return this.nextRegistrationEpoch();
+            return nextRegistrationEpoch();
         } else {
-            return this.nextExitEpoch();
+            return nextExitEpoch();
         }
     }
 

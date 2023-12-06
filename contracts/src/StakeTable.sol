@@ -142,7 +142,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the next available epoch for new registration.
     /// @return Number of the epoch when the user can register.
-    function nextRegistrationEpoch() external override returns (uint64) {
+    function nextRegistrationEpoch() internal override returns (uint64) {
         return _nextEpoch(QueueType.Registration);
     }
 
@@ -152,7 +152,7 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Get the next available epoch for exit
-    function nextExitEpoch() external override returns (uint64) {
+    function nextExitEpoch() internal override returns (uint64) {
         return _nextEpoch(QueueType.Exit);
     }
 
@@ -211,7 +211,7 @@ contract StakeTable is AbstractStakeTable {
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        uint64 registerEpoch = this.nextRegistrationEpoch();
+        uint64 registerEpoch = nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
@@ -309,7 +309,7 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        node.exitEpoch = this.nextExitEpoch();
+        node.exitEpoch = nextExitEpoch();
 
         nodes[key] = node;
 
