@@ -899,7 +899,7 @@ where
                 message: format!("failed to serialize header: {err}"),
             })?;
         stmts.push((
-            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3, $4)".into(),
+            "INSERT INTO header (height, hash, data) VALUES ($1, $2, $3)".into(),
             vec![
                 Box::new(leaf.height() as i64),
                 Box::new(leaf.block_hash().to_string()),
