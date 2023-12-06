@@ -595,6 +595,7 @@ contract Queue_Test is Test {
         uint64 epoch;
         SM.QueueType queueType;
         queueType = convertIntToQueueType(typeOfQueueInt);
+        checkQueueParameters(queueType, 0, 0);
 
         epochInTheFuture = uint64(bound(epochInTheFuture, 2, type(uint64).max - 1));
         epoch = stakeTable.nextEpoch(queueType);
