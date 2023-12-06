@@ -13,15 +13,14 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryableBlock,
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, QueryResult,
+    Payload, QueryResult,
 };
 use async_trait::async_trait;
-use commit::Committable;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::ops::RangeBounds;
 
@@ -133,8 +132,7 @@ where
     D: AvailabilityDataSource<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    Block<Types>: QueryableBlock,
-    <Types as NodeType>::BlockPayload: Committable,
+    Payload<Types>: QueryablePayload,
 {
     type LeafStream = D::LeafStream;
     type BlockStream = D::BlockStream;
@@ -202,8 +200,6 @@ where
     D: UpdateAvailabilityData<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    Block<Types>: QueryableBlock,
-    <Types as NodeType>::BlockPayload: Committable,
 {
     type Error = D::Error;
 

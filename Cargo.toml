@@ -93,3 +93,9 @@ rand = "0.8"
 spin_sleep = "1.1"
 surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.3" }
 tempdir = "0.3"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
+hotshot-types = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }
+hotshot-utils = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/committable-block-header" }

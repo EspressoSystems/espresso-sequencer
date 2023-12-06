@@ -11,9 +11,9 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{
-    BlockQueryData, LeafQueryData, QueryableBlock, TransactionHash, TransactionIndex,
+    BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
 };
-use crate::{Block, Leaf, QueryResult};
+use crate::{Header, Leaf, Payload, QueryResult};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
@@ -54,13 +54,13 @@ impl<T: Committable> PartialOrd for ResourceId<T> {
     }
 }
 
-pub type BlockId<Types> = ResourceId<Block<Types>>;
+pub type BlockId<Types> = ResourceId<Header<Types>>;
 pub type LeafId<Types> = ResourceId<Leaf<Types>>;
 
 #[async_trait]
 pub trait AvailabilityDataSource<Types: NodeType>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types>>> + Unpin + Send;
     type BlockStream: Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin + Send;
@@ -109,10 +109,7 @@ where
 }
 
 #[async_trait]
-pub trait UpdateAvailabilityData<Types: NodeType>
-where
-    Block<Types>: QueryableBlock,
-{
+pub trait UpdateAvailabilityData<Types: NodeType> {
     type Error: Error + Debug + Send + Sync + 'static;
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;

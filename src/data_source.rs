@@ -44,13 +44,13 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 #[espresso_macros::generic_tests]
 pub mod data_source_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData},
+        availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
         status::MempoolQueryData,
         testing::{
             consensus::MockNetwork,
             mocks::{
-                MockBlock, MockHeader, MockNodeImpl, MockState, MockTransaction, MockTypes,
-                TestableDataSource,
+                mock_transaction, MockHeader, MockNodeImpl, MockPayload, MockState,
+                MockTransaction, MockTypes, TestableDataSource,
             },
             setup_test, sleep,
         },
@@ -117,11 +117,8 @@ pub mod data_source_tests {
             };
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
-            assert_eq!(block.hash(), block.block().commit());
-            assert_eq!(
-                block.size(),
-                bincode_opts().serialized_size(block.block()).unwrap()
-            );
+            assert_eq!(block.hash(), block.header().commit());
+            assert_eq!(block.size(), payload_size::<MockTypes>(block.payload()));
 
             // Check indices.
             assert_eq!(block, ds.get_block(i).await.unwrap());
@@ -130,7 +127,7 @@ pub mod data_source_tests {
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
             assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), *ix);
 
-            for (j, txn) in block.block().iter().enumerate() {
+            for (j, txn) in block.payload().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
                 // For duplicate transactions, this function returns the index of the first
                 // duplicate.
@@ -199,7 +196,7 @@ pub mod data_source_tests {
                 .enumerate()
         };
         for nonce in 0..3 {
-            let txn = MockTransaction { nonce };
+            let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
@@ -274,7 +271,7 @@ pub mod data_source_tests {
         }
 
         // Submit a transaction, and check that it is reflected in the mempool.
-        let txn = MockTransaction { nonce: 0 };
+        let txn = MockTransaction::default();
         network.submit_transaction(txn.clone()).await;
         loop {
             let mempool = { ds.read().await.mempool_info().await.unwrap() };

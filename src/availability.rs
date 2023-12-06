@@ -10,9 +10,8 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{api::load_api, Block, QueryError};
+use crate::{api::load_api, Payload, QueryError};
 use clap::Args;
-use commit::Committable;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
@@ -136,7 +135,7 @@ pub fn define_api<State, Types: NodeType>(options: &Options) -> Result<Api<State
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
-    Block<Types>: QueryableBlock + Committable,
+    Payload<Types>: QueryablePayload,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -191,7 +190,7 @@ where
                                     height: height as u64,
                                     reason: err.to_string(),
                                 })?
-                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header())))
+                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header().clone())))
                         }
                         .boxed()
                     })
@@ -249,10 +248,14 @@ where
                             resource: id.to_string(),
                         })?;
                         let i = req.integer_param("index")?;
-                        let index = block.block().nth(i).context(InvalidTransactionIndexSnafu {
-                            height: height as u64,
-                            index: i as u64,
-                        })?;
+                        let index =
+                            block
+                                .payload()
+                                .nth(i)
+                                .context(InvalidTransactionIndexSnafu {
+                                    height: height as u64,
+                                    index: i as u64,
+                                })?;
                         (block, index)
                     }
                 };

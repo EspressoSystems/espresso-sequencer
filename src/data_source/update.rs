@@ -11,11 +11,8 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
+use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
 use crate::status::UpdateStatusData;
-use crate::{
-    availability::{BlockQueryData, LeafQueryData, QueryableBlock, UpdateAvailabilityData},
-    Block,
-};
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
 use hotshot_types::traits::node_implementation::NodeType;
@@ -34,8 +31,6 @@ use std::iter::once;
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>:
     UpdateAvailabilityData<Types> + UpdateStatusData
-where
-    Block<Types>: QueryableBlock,
 {
     /// Update query state based on a new consensus event.
     ///
@@ -48,21 +43,14 @@ where
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>
-    where
-        Block<Types>: QueryableBlock;
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
 impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
     UpdateDataSource<Types> for T
-where
-    Block<Types>: QueryableBlock,
 {
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>
-    where
-        Block<Types>: QueryableBlock,
-    {
+    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())

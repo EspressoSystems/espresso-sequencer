@@ -22,13 +22,13 @@ use crate::{
             AvailabilityDataSource, BlockId, LeafId, ResourceId, UpdateAvailabilityData,
         },
         query_data::{
-            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
+            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryablePayload, TransactionHash,
             TransactionIndex,
         },
     },
     metrics::PrometheusMetrics,
     status::data_source::StatusDataSource,
-    Block, MissingSnafu, NotFoundSnafu, QueryResult,
+    MissingSnafu, NotFoundSnafu, Payload, QueryResult,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -167,7 +167,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 #[derive(custom_debug::Debug)]
 pub struct FileSystemDataSource<Types: NodeType>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
@@ -182,7 +182,7 @@ where
 
 impl<Types: NodeType> FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     /// Create a new [FileSystemDataSource] with storage at `path`.
     ///
@@ -261,7 +261,7 @@ where
         let mut index_by_txn_hash = HashMap::new();
         for block in block_storage.iter().flatten() {
             let height = block.height();
-            for (txn_ix, txn) in block.block().enumerate() {
+            for (txn_ix, txn) in block.payload().enumerate() {
                 update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
             }
         }
@@ -299,7 +299,7 @@ where
 #[async_trait]
 impl<Types: NodeType> VersionedDataSource for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type Error = PersistenceError;
 
@@ -369,7 +369,7 @@ where
 #[async_trait]
 impl<Types: NodeType> AvailabilityDataSource<Types> for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types>>>;
     type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
@@ -403,7 +403,6 @@ where
     async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
-        <Types as NodeType>::BlockPayload: Committable,
     {
         let n = match id.into() {
             ResourceId::Number(n) => n,
@@ -491,7 +490,7 @@ where
 #[async_trait]
 impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type Error = PersistenceError;
 
@@ -514,7 +513,7 @@ where
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
-        for (txn_ix, txn) in block.block().enumerate() {
+        for (txn_ix, txn) in block.payload().enumerate() {
             update_index_by_hash(
                 &mut self.index_by_txn_hash,
                 txn.commit(),
@@ -546,7 +545,7 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 #[async_trait]
 impl<Types: NodeType> StatusDataSource for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.leaf_storage.iter().len())

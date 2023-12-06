@@ -356,7 +356,6 @@ mod resolvable;
 pub mod status;
 pub mod testing;
 
-pub use availability::QueryableBlock;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
@@ -377,16 +376,10 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{App, StatusCode};
 
-/// Leaf type appended to a chain by consensus.
-// pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
-/// Certificate justifying a [`Leaf`].
-// pub type QuorumCertificate<Types> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
-/// State change indicated by a [`Leaf`].
-// pub type Deltas<Types, I> = <Leaf<Types> as LeafType>::DeltasType;
-/// Block of data appened to a chain by consensus.
-pub type Block<Types> = <Types as NodeType>::BlockPayload;
+pub type Payload<Types> = <Types as NodeType>::BlockPayload;
+pub type Header<Types> = <Types as NodeType>::BlockHeader;
 /// Item within a [`Block`].
-pub type Transaction<Types> = <Block<Types> as BlockPayload>::Transaction;
+pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -430,7 +423,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
     mut hotshot: SystemContextHandle<Types, I>,
 ) -> Result<(), Error>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: availability::QueryablePayload,
     D: availability::AvailabilityDataSource<Types>
         + status::StatusDataSource
         + data_source::UpdateDataSource<Types>
