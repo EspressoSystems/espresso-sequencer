@@ -5,7 +5,6 @@ use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ff::{Fp2, MontFp, PrimeField};
 use ark_std::{rand::Rng, str::FromStr, UniformRand};
-use diff_test as diff_test_bn254;
 pub use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point};
 use ethers::{
     abi::AbiDecode,
@@ -130,26 +129,26 @@ impl From<ParsedTranscript> for SolidityTranscript {
 /// intermediate representation of `VerifyingKey` in solidity.
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
 pub struct ParsedVerifyingKey {
-    domain_size: U256,
-    num_inputs: U256,
-    sigma_0: ParsedG1Point,
-    sigma_1: ParsedG1Point,
-    sigma_2: ParsedG1Point,
-    sigma_3: ParsedG1Point,
-    sigma_4: ParsedG1Point,
-    q_1: ParsedG1Point,
-    q_2: ParsedG1Point,
-    q_3: ParsedG1Point,
-    q_4: ParsedG1Point,
-    q_m_12: ParsedG1Point,
-    q_m_34: ParsedG1Point,
-    q_o: ParsedG1Point,
-    q_c: ParsedG1Point,
-    q_h_1: ParsedG1Point,
-    q_h_2: ParsedG1Point,
-    q_h_3: ParsedG1Point,
-    q_h_4: ParsedG1Point,
-    q_ecc: ParsedG1Point,
+    pub domain_size: U256,
+    pub num_inputs: U256,
+    pub sigma_0: ParsedG1Point,
+    pub sigma_1: ParsedG1Point,
+    pub sigma_2: ParsedG1Point,
+    pub sigma_3: ParsedG1Point,
+    pub sigma_4: ParsedG1Point,
+    pub q_1: ParsedG1Point,
+    pub q_2: ParsedG1Point,
+    pub q_3: ParsedG1Point,
+    pub q_4: ParsedG1Point,
+    pub q_m_12: ParsedG1Point,
+    pub q_m_34: ParsedG1Point,
+    pub q_o: ParsedG1Point,
+    pub q_c: ParsedG1Point,
+    pub q_h_1: ParsedG1Point,
+    pub q_h_2: ParsedG1Point,
+    pub q_h_3: ParsedG1Point,
+    pub q_h_4: ParsedG1Point,
+    pub q_ecc: ParsedG1Point,
 }
 
 impl FromStr for ParsedVerifyingKey {

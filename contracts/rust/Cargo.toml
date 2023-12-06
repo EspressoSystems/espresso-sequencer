@@ -22,7 +22,7 @@ async-trait = "0.1.74"
 clap = { version = "^4.4", features = ["derive"] }
 contract-bindings = { path = "../../contract-bindings" }
 crs = { git = "https://github.com/alxiong/crs", rev = "4f320d819514a50138dd114440b3b3e30e83a081" }
-diff-test = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
+diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
