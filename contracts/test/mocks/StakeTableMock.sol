@@ -6,11 +6,6 @@ import { StakeTable } from "../../src/StakeTable.sol";
 
 /// @dev A helper that wraps LightClient contract for testing
 contract StakeTableMock is StakeTable {
-    enum QueueType {
-        Registration,
-        Exit
-    }
-
     constructor(address _tokenAddress, address _lightClientAddress)
         StakeTable(_tokenAddress, _lightClientAddress)
     { }

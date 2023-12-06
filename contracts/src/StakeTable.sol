@@ -59,6 +59,12 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
+    /// Enum to be able to distinguish between the two kind of queues
+    enum QueueType {
+        Registration,
+        Exit
+    }
+
     /// Registration queue
     Queue public registrationQueue;
 
@@ -111,21 +117,33 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    // TODO avoid code duplication by passing the queue as parameter if possible
+    /// @dev Helper function to avoid code duplication. Contains the core logic of a queue for
+    /// finding the next epoch.
+    /// @param queueType can be Registration or Exit.
+    /// @return Number of the epoch when a user can register/exit.
+    function _nextEpoch(QueueType queueType) private returns (uint64) {
+        Queue storage queue;
+        if (queueType == QueueType.Registration) {
+            queue = registrationQueue;
+        } else {
+            queue = exitQueue;
+        }
+        if (queue.firstAvailableEpoch < currentEpoch() + 1) {
+            queue.firstAvailableEpoch = currentEpoch() + 1;
+            queue.pendingRequests = 1;
+        } else if (queue.pendingRequests >= MAX_CHURN_RATE) {
+            queue.firstAvailableEpoch += 1;
+            queue.pendingRequests = 1;
+        } else {
+            queue.pendingRequests += 1;
+        }
+        return queue.firstAvailableEpoch;
+    }
 
     /// @notice Get the next available epoch for new registration.
     /// @return Number of the epoch when the user can register.
     function nextRegistrationEpoch() external override returns (uint64) {
-        if (registrationQueue.firstAvailableEpoch < currentEpoch() + 1) {
-            registrationQueue.firstAvailableEpoch = currentEpoch() + 1;
-            registrationQueue.pendingRequests = 1;
-        } else if (registrationQueue.pendingRequests >= MAX_CHURN_RATE) {
-            registrationQueue.firstAvailableEpoch += 1;
-            registrationQueue.pendingRequests = 1;
-        } else {
-            registrationQueue.pendingRequests += 1;
-        }
-        return registrationQueue.firstAvailableEpoch;
+        return _nextEpoch(QueueType.Registration);
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
@@ -135,16 +153,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the next available epoch for exit
     function nextExitEpoch() external override returns (uint64) {
-        if (exitQueue.firstAvailableEpoch < currentEpoch() + 1) {
-            exitQueue.firstAvailableEpoch = currentEpoch() + 1;
-            exitQueue.pendingRequests = 1;
-        } else if (exitQueue.pendingRequests >= MAX_CHURN_RATE) {
-            exitQueue.firstAvailableEpoch += 1;
-            exitQueue.pendingRequests = 1;
-        } else {
-            exitQueue.pendingRequests += 1;
-        }
-        return exitQueue.firstAvailableEpoch;
+        return _nextEpoch(QueueType.Exit);
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue

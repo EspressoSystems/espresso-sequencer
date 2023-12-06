@@ -566,6 +566,7 @@ contract Queue_Test is Test {
         stakeTable = new SM(address(token),lightClientAddress);
     }
 
+    /// @dev Helper function to check the queue parameters depending on the queue type
     function checkQueueParameters(
         SM.QueueType queueType,
         uint64 expectedFirstAvailableEpoch,
@@ -577,13 +578,14 @@ contract Queue_Test is Test {
         assertEq(w, expectedPendingRequests);
     }
 
+    /// @dev Helper function to be able to fuzz with the type of queue
     function convertIntToQueueType(uint256 n) private view returns (SM.QueueType) {
         SM.QueueType queueType;
         uint256 typeOfQueueInt = bound(n, 0, 1);
         if (typeOfQueueInt == 0) {
-            queueType = SM.QueueType.Registration;
+            queueType = S.QueueType.Registration;
         } else if (typeOfQueueInt == 1) {
-            queueType = SM.QueueType.Exit;
+            queueType = S.QueueType.Exit;
         } else {
             revert("Queue type not supported");
         }
