@@ -1413,23 +1413,20 @@ pub mod testing {
 mod generic_test {
     use super::super::data_source_tests;
     use super::SqlDataSource;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes};
+    use crate::testing::mocks::MockTypes;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(SqlDataSource<MockTypes, MockNodeImpl>);
+    instantiate_data_source_tests!(SqlDataSource<MockTypes>);
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use super::{testing::TmpDb, *};
-    use crate::testing::{
-        mocks::{MockNodeImpl, MockTypes},
-        setup_test,
-    };
+    use crate::testing::{mocks::MockTypes, setup_test};
 
     #[async_std::test]
     async fn test_migrations() {
@@ -1447,7 +1444,7 @@ mod test {
             if !migrations {
                 cfg = cfg.no_migrations();
             }
-            let client: SqlDataSource<MockTypes, MockNodeImpl> = cfg.connect().await?;
+            let client: SqlDataSource<MockTypes> = cfg.connect().await?;
             Ok::<_, Error>(client)
         };
 

@@ -96,7 +96,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{MockNodeImpl, MockTransaction, MockTypes},
+            mocks::{MockTransaction, MockTypes},
             setup_test, sleep,
         },
         Error,
@@ -133,7 +133,7 @@ mod test {
 
         // Submit a transaction. We have not yet started the validators, so this transaction will
         // stay in the mempool, allowing us to check the mempool endpoint.
-        let txn = MockTransaction { nonce: 0 };
+        let txn = MockTransaction::default();
         let txn_size = bincode_opts().serialized_size(&txn).unwrap();
         network.submit_transaction(txn.clone()).await;
         loop {
@@ -229,7 +229,7 @@ mod test {
 
         let dir = TempDir::new("test_status_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path()).unwrap(),
             0,
         );
 
@@ -245,7 +245,7 @@ mod test {
         };
 
         let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
         >(&Options {
             extensions: vec![extensions.into()],
             ..Default::default()

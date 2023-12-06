@@ -21,23 +21,22 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::{
-        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
-        NodeImplementation,
+    traits::implementations::{
+        MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_query_service::{
     data_source, run_standalone_service,
     status::UpdateStatusData,
-    testing::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTypes, TestableDataSource},
+    testing::mocks::{MockMembership, MockNodeImpl, MockTypes, TestableDataSource},
     Error,
 };
 use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    traits::{election::Membership, node_implementation::ExchangesType},
-    ExecutionType, HotShotConfig,
+    consensus::ConsensusMetricsValue, light_client::StateKeyPair, ExecutionType, HotShotConfig,
+    ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 
@@ -55,11 +54,11 @@ struct Options {
 }
 
 #[cfg(not(target_os = "windows"))]
-type DataSource = data_source::SqlDataSource<MockTypes, MockNodeImpl>;
+type DataSource = data_source::SqlDataSource<MockTypes>;
 
 // To use SqlDataSource, we need to run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(target_os = "windows")]
-type DataSource = data_source::FileSystemDataSource<MockTypes, MockNodeImpl>;
+type DataSource = data_source::FileSystemDataSource<MockTypes>;
 
 type Db = <DataSource as TestableDataSource>::Storage;
 
@@ -141,7 +140,6 @@ async fn init_consensus(
         .collect();
     let config = HotShotConfig {
         total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
-        known_nodes: pub_keys.clone(),
         known_nodes_with_stake: known_nodes_with_stake.clone(),
         start_delay: 0,
         round_start_delay: 0,
@@ -155,35 +153,78 @@ async fn init_consensus(
         execution_type: ExecutionType::Continuous,
         election_config: None,
         da_committee_size: pub_keys.len(),
+        my_own_validator_config: Default::default(),
     };
     join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
         |(node_id, (priv_key, data_source))| {
             let pub_keys = pub_keys.clone();
             let known_nodes_with_stake = known_nodes_with_stake.clone();
-            let config = config.clone();
+            let mut config = config.clone();
             let master_map = master_map.clone();
-            let election_config = MockMembership::default_election_config(pub_keys.len() as u64);
 
             async move {
+                config.my_own_validator_config = ValidatorConfig {
+                    public_key: pub_keys[node_id],
+                    private_key: priv_key.clone(),
+                    stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
+                    state_key_pair: StateKeyPair::generate(),
+                };
+
+                let membership = MockMembership::new(&pub_keys, known_nodes_with_stake.clone());
+                let memberships = Memberships {
+                    quorum_membership: membership.clone(),
+                    da_membership: membership.clone(),
+                    vid_membership: membership.clone(),
+                    view_sync_membership: membership,
+                };
+
+                let metrics = data_source.populate_metrics();
+                let metrics = NetworkingMetricsValue {
+                    values: Default::default(),
+                    connected_peers: metrics.create_gauge(String::from("connected_peers"), None),
+                    incoming_direct_message_count: metrics
+                        .create_counter(String::from("incoming_direct_message_count"), None),
+                    incoming_broadcast_message_count: metrics
+                        .create_counter(String::from("incoming_broadcast_message_count"), None),
+                    outgoing_direct_message_count: metrics
+                        .create_counter(String::from("outgoing_direct_message_count"), None),
+                    outgoing_broadcast_message_count: metrics
+                        .create_counter(String::from("outgoing_broadcast_message_count"), None),
+                    message_failed_to_send: metrics
+                        .create_counter(String::from("message_failed_to_send"), None),
+                };
                 let network = Arc::new(MemoryNetwork::new(
                     pub_keys[node_id],
-                    data_source.populate_metrics(),
+                    metrics,
                     master_map.clone(),
                     None,
                 ));
-                let consensus_channel = MemoryCommChannel::new(network.clone());
-                let da_channel = MemoryCommChannel::new(network.clone());
-                let view_sync_channel = MemoryCommChannel::new(network.clone());
+                let networks = Networks {
+                    quorum_network: MemoryCommChannel::new(network.clone()),
+                    da_network: MemoryCommChannel::new(network),
+                    _pd: Default::default(),
+                };
 
-                let exchanges = <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
-                    known_nodes_with_stake.clone(),
-                    pub_keys.clone(),
-                    (election_config.clone(), election_config.clone()),
-                    (consensus_channel, view_sync_channel, da_channel),
-                    pub_keys[node_id],
-                    pub_keys[node_id].get_stake_table_entry(1u64),
-                    priv_key.clone(),
-                );
+                let metrics = data_source.populate_metrics();
+                let metrics = ConsensusMetricsValue {
+                    values: Default::default(),
+                    last_synced_block_height: metrics
+                        .create_gauge(String::from("last_synced_block_height"), None),
+                    last_decided_view: metrics
+                        .create_gauge(String::from("last_decided_view"), None),
+                    current_view: metrics.create_gauge(String::from("current_view"), None),
+                    number_of_views_since_last_decide: metrics
+                        .create_gauge(String::from("number_of_views_since_last_decide"), None),
+                    number_of_views_per_decide_event: metrics
+                        .create_histogram(String::from("number_of_views_per_decide_event"), None),
+                    invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
+                    outstanding_transactions: metrics
+                        .create_gauge(String::from("outstanding_transactions"), None),
+                    outstanding_transactions_memory_size: metrics
+                        .create_gauge(String::from("outstanding_transactions_memory_size"), None),
+                    number_of_timeouts: metrics
+                        .create_counter(String::from("number_of_timeouts"), None),
+                };
 
                 SystemContext::init(
                     pub_keys[node_id],
@@ -191,9 +232,10 @@ async fn init_consensus(
                     node_id as u64,
                     config,
                     MemoryStorage::empty(),
-                    exchanges,
-                    HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                    data_source.populate_metrics(),
+                    memberships,
+                    networks,
+                    HotShotInitializer::from_genesis().unwrap(),
+                    metrics,
                 )
                 .await
                 .unwrap()

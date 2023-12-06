@@ -254,13 +254,11 @@ mod impl_testable_data_source {
 mod test {
     use super::super::{data_source_tests, FileSystemDataSource};
     use super::ExtensibleDataSource;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes};
+    use crate::testing::mocks::MockTypes;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(
-        ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, ()>
-    );
+    instantiate_data_source_tests!(ExtensibleDataSource<FileSystemDataSource<MockTypes>, ()>);
 }

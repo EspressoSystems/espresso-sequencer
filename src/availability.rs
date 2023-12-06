@@ -297,7 +297,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{MockNodeImpl, MockTransaction, MockTypes},
+            mocks::{mock_transaction, MockNodeImpl, MockTransaction, MockTypes},
             setup_test,
         },
         Error, QueryResult,
@@ -360,7 +360,7 @@ mod test {
         let mut seen_txns = HashSet::new();
         for i in 0..height {
             // Check that looking up the leaf various ways returns the correct leaf.
-            let leaf: LeafQueryData<MockTypes, MockNodeImpl> =
+            let leaf: LeafQueryData<MockTypes> =
                 client.get(&format!("leaf/{}", i)).send().await.unwrap();
             assert_eq!(leaf.height(), i);
             assert_eq!(
@@ -392,7 +392,7 @@ mod test {
             }
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
-            let proposals: Vec<LeafQueryData<MockTypes, MockNodeImpl>> = client
+            let proposals: Vec<LeafQueryData<MockTypes>> = client
                 .get(&format!("proposals/{}", leaf.proposer()))
                 .send()
                 .await
@@ -412,7 +412,7 @@ mod test {
             // include new empty blocks committed since we started checking.
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/1",
                         leaf.proposer()
                     ))
@@ -424,7 +424,7 @@ mod test {
             );
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/0",
                         leaf.proposer()
                     ))
@@ -437,7 +437,7 @@ mod test {
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
-            for (j, txn_from_block) in block.block().iter().enumerate() {
+            for (j, txn_from_block) in block.payload().enumerate() {
                 let txn: TransactionQueryData<MockTypes> = client
                     .get(&format!("transaction/{}/{}", i, j))
                     .send()
@@ -446,7 +446,7 @@ mod test {
                 assert_eq!(txn.height(), i);
                 assert_eq!(txn.block_hash(), block.hash());
                 assert_eq!(txn.hash(), txn_from_block.commit());
-                assert_eq!(txn.transaction(), txn_from_block);
+                assert_eq!(txn.transaction(), &txn_from_block);
                 // We should be able to look up the transaction by hash as long as it's not a
                 // duplicate. For duplicate transactions, this endpoint only returns the first one.
                 if !seen_txns.contains(&txn.hash()) {
@@ -492,7 +492,7 @@ mod test {
         // preserves the consistency of the data and indices.
         let leaves = client
             .socket("stream/leaves/0")
-            .subscribe::<QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>>()
+            .subscribe::<QueryResult<LeafQueryData<MockTypes>>>()
             .await
             .unwrap();
         let blocks = client
@@ -502,7 +502,7 @@ mod test {
             .unwrap();
         let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
-            let txn = MockTransaction { nonce };
+            let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
