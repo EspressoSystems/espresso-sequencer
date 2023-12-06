@@ -90,21 +90,11 @@ impl BlockPayload {
     fn get_tx_table_len(&self) -> Option<TxTableEntry> {
         TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)
     }
-    fn get_tx_table_len_as_usize(&self) -> Option<usize> {
-        self.get_tx_table_len()?.try_into().ok()
-    }
     fn get_tx_table_len_as<T>(&self) -> Option<T>
     where
         TxTableEntry: TryInto<T>,
     {
         self.get_tx_table_len()?.try_into().ok()
-    }
-
-    // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
-    fn tx_bodies_offset(&self) -> Option<usize> {
-        self.get_tx_table_len_as_usize()?
-            .checked_add(1)?
-            .checked_mul(TxTableEntry::byte_len())
     }
 
     // Fetch the tx table length range proof from cache.
@@ -120,6 +110,9 @@ impl BlockPayload {
     }
 }
 
+// Returns the range `range_start+len..range_end+len` or `None` on error.
+//
+// Lots of ugly type conversion and checked arithmetic.
 fn tx_payload_range(
     tx_table_range_start: &Option<TxTableEntry>,
     tx_table_range_end: &TxTableEntry,
@@ -145,7 +138,7 @@ impl QueryableBlock for BlockPayload {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self) -> usize {
-        self.get_tx_table_len_as_usize().unwrap_or(0)
+        self.get_tx_table_len_as().unwrap_or(0)
     }
 
     fn iter(&self) -> Self::Iter<'_> {
@@ -157,27 +150,21 @@ impl QueryableBlock for BlockPayload {
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let index_usize = usize::try_from(*index).ok()?;
-        let tx_table_len = self.get_tx_table_len_as_usize()?;
-        if index_usize >= tx_table_len {
-            return None; // index out of bounds
+        if index_usize >= self.get_tx_table_len_as()? {
+            return None; // error: index out of bounds
         }
 
         let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
 
-        // let (tx_range, tx_table_range_proof) = self.get_tx_range_with_proof(*index, &vid)?;
+        // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
+        //
+        // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
+        //
+        // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
 
-        // BEGIN
-
-        // check args
-
-        // start index
+        // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
-            (
-                index_usize
-                    .checked_add(1)?
-                    .checked_mul(TxTableEntry::byte_len())?,
-                None,
-            )
+            (TxTableEntry::byte_len(), None)
         } else {
             let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
             (
@@ -188,7 +175,7 @@ impl QueryableBlock for BlockPayload {
             )
         };
 
-        // end index
+        // end
         let tx_table_range_proof_end = index_usize
             .checked_add(2)?
             .checked_mul(TxTableEntry::byte_len())?;
@@ -197,6 +184,7 @@ impl QueryableBlock for BlockPayload {
                 ..tx_table_range_proof_end,
         )?)?;
 
+        // correctness proof for the tx payload range
         let tx_table_range_proof = vid
             .payload_proof(
                 &self.payload,
@@ -209,26 +197,6 @@ impl QueryableBlock for BlockPayload {
             &tx_table_range_end,
             &self.get_tx_table_len()?,
         )?;
-
-        // // The first entry in the tx table is the table length, so add 1
-        // let start = usize::try_from(index)
-        //     .ok()?
-        //     .checked_mul(TxTableEntry::byte_len())?;
-        // let mid = start.checked_add(TxTableEntry::byte_len())?;
-        // let tx_start: usize = TxTableEntry::from_bytes(self.payload.get(start..mid)?)?
-        //     .try_into()
-        //     .ok()?;
-        // let end = mid.checked_add(TxTableEntry::byte_len())?;
-        // let tx_end: usize = TxTableEntry::from_bytes(self.payload.get(mid..end)?)?
-        //     .try_into()
-        //     .ok()?;
-        // let tx_range_proof = vid.payload_proof(&self.payload, start..end).ok()?;
-        // Some((
-        //     (tx_start.checked_add(tx_bodies_offset)?..tx_end.checked_add(tx_bodies_offset)?),
-        //     tx_range_proof,
-        // ));
-
-        // END
 
         Some((
             // TODO don't copy the tx bytes into the return value
@@ -272,11 +240,11 @@ pub struct TxInclusionProof {
 }
 
 impl TxInclusionProof {
-    // TODO(795) prototype only!
+    // TODO prototype only!
     //
-    // - Obnoxious arg list; where to store all this cruft?
+    // - We need to decide where to store VID params.
     // - Returns `None` if an error occurred.
-    // - Use of `Result<(),()>` pattern to indicate a must-use bool return type.
+    // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
     #[allow(dead_code)] // TODO temporary
     #[allow(clippy::too_many_arguments)]
     fn verify(
@@ -287,8 +255,8 @@ impl TxInclusionProof {
         vid_commit: &boilerplate::VidSchemeCommit,
         vid_common: &boilerplate::VidSchemeCommon,
     ) -> Option<Result<(), ()>> {
-        // verify tx payload proof
-        // proof is `None` if and only if tx has zero length.
+        // Verify proof for tx payload.
+        // Proof is `None` if and only if tx has zero length.
         match &self.tx_payload_proof {
             Some(tx_payload_proof) => {
                 let tx_payload_range = tx_payload_range(
@@ -309,18 +277,17 @@ impl TxInclusionProof {
                     .ok()?
                     .is_err()
                 {
-                    // TODO(795) it would be nice to use ? here...
-                    return Some(Err(()));
+                    return Some(Err(())); // TODO it would be nice to use ? here...
                 }
             }
             None => {
                 if !tx.payload().is_empty() {
-                    return None; // error
+                    return None; // error: nonempty payload but no proof
                 }
             }
         };
 
-        // verify tx table len proof
+        // Verify proof for tx table len.
         if vid
             .payload_verify(
                 Statement {
@@ -337,27 +304,33 @@ impl TxInclusionProof {
             return Some(Err(()));
         }
 
-        // verify tx table entry proof
+        // Verify proof for tx table entries.
+        // Start index missing for the 0th tx
         let index: usize = tx_index.try_into().ok()?;
-
-        // TODO don't use bytes, it's ugly
-        let mut bytes = Vec::with_capacity(2 * TxTableEntry::byte_len());
+        let mut tx_table_range_bytes =
+            Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
         let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
-            bytes.extend(tx_table_range_start.to_bytes());
+            if index == 0 {
+                return None; // error: first tx should have empty start index
+            }
+            tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
             index * TxTableEntry::byte_len()
         } else {
             if index != 0 {
-                return None; // error
+                return None; // error: only the first tx should have empty start index
             }
             TxTableEntry::byte_len()
         };
-        bytes.extend(self.tx_table_range_end.to_bytes());
-        let range = start..(index + 2) * TxTableEntry::byte_len();
+        tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
+        let range = start
+            ..index
+                .checked_add(2)?
+                .checked_mul(TxTableEntry::byte_len())?;
 
         if vid
             .payload_verify(
                 Statement {
-                    payload_subslice: &bytes,
+                    payload_subslice: &tx_table_range_bytes,
                     range,
                     commit: vid_commit,
                     common: vid_common,
@@ -610,43 +583,11 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
             for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index_usize).unwrap();
-
-                // test get_tx_range_with_proof()
-                // let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
-                // let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
-                // assert_eq!(tx_body, block_tx_body);
-
-                tracing::info!(
-                    "test: index {} tx range start [] end []",
-                    index,
-                    // tx_range.start,
-                    // tx_range.end
-                );
+                tracing::info!("tx index {}", index,);
 
                 // test `transaction_with_proof()`
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
-
-                // TODO(795): verify() is ugly. This cruft is temporary.
-                let tx_table_entry_start_bytes = if index == 0 {
-                    &[]
-                } else {
-                    block
-                        .payload
-                        .get(
-                            index_usize * TxTableEntry::byte_len()
-                                ..(index_usize + 1) * TxTableEntry::byte_len(),
-                        )
-                        .unwrap()
-                };
-                let tx_table_entry_end_bytes = block
-                    .payload
-                    .get(
-                        (index_usize + 1) * TxTableEntry::byte_len()
-                            ..(index_usize + 2) * TxTableEntry::byte_len(),
-                    )
-                    .unwrap();
-
                 proof
                     .verify(
                         &tx,
