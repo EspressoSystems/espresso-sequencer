@@ -18,6 +18,7 @@
 //! concrete persistence implementations:
 //! * [`FileSystemDataSource`]
 //! * [`SqlDataSource`]
+//! * [`MetricsDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
 //!
@@ -29,12 +30,15 @@ mod buffered_channel;
 mod extension;
 mod fs;
 mod ledger_log;
+mod metrics;
 pub mod sql;
 mod update;
 
 pub use extension::ExtensibleDataSource;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
+#[cfg(feature = "metrics-data-source")]
+pub use metrics::MetricsDataSource;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlDataSource;
 pub use update::{UpdateDataSource, VersionedDataSource};
