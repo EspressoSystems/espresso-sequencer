@@ -69,9 +69,10 @@ abstract contract AbstractStakeTable {
         EdOnBN254.EdOnBN254Point schnorrVK;
     }
 
+    // TODO document
     struct Queue {
         uint64 firstAvailableEpoch;
-        uint64 pendingRegistrations;
+        uint64 pendingRequests;
     }
 
     // === Table State & Stats ===
@@ -87,11 +88,11 @@ abstract contract AbstractStakeTable {
     // === Queuing Stats ===
 
     /// @notice Get the next available epoch for new registration
-    function nextRegistrationEpoch() external view virtual returns (uint64);
+    function nextRegistrationEpoch() external virtual returns (uint64);
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view virtual returns (uint64);
     /// @notice Get the next available epoch for exit
-    function nextExitEpoch() external view virtual returns (uint64);
+    function nextExitEpoch() external virtual returns (uint64);
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExit() external view virtual returns (uint64);
 

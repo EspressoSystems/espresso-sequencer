@@ -566,12 +566,46 @@ contract Queue_Test is Test {
         stakeTable = new SM(address(token),lightClientAddress);
     }
 
-    function test_QueueIsEmpty() external {
-        AbstractStakeTable.Queue memory queue = AbstractStakeTable.Queue(0, 0);
+    function checkQueueParameters(
+        SM.QueueType queueType,
+        uint64 expectedFirstAvailableEpoch,
+        uint64 expectedPendingRequests
+    ) private {
+        (uint64 v, uint64 w) = stakeTable.getQueueParameters(queueType);
 
-        uint64 epoch = stakeTable.nextEpoch(queue);
+        assertEq(v, expectedFirstAvailableEpoch);
+        assertEq(w, expectedPendingRequests);
+    }
+
+    function convertIntToQueueType(uint256 n) private view returns (SM.QueueType) {
+        SM.QueueType queueType;
+        uint256 typeOfQueueInt = bound(n, 0, 1);
+        if (typeOfQueueInt == 0) {
+            queueType = SM.QueueType.Registration;
+        } else if (typeOfQueueInt == 1) {
+            queueType = SM.QueueType.Exit;
+        } else {
+            revert("Queue type not supported");
+        }
+
+        return queueType;
+    }
+
+    function testFuzz_QueueIsEmpty(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
+        uint64 epoch;
+        SM.QueueType queueType;
+
+        queueType = convertIntToQueueType(typeOfQueueInt);
+
+        epochInTheFuture = uint64(bound(epochInTheFuture, 2, type(uint64).max - 1));
+        epoch = stakeTable.nextEpoch(queueType);
         assertEq(epoch, 1);
-        assertEq(queue.firstAvailableEpoch, 1);
-        assertEq(queue.pendingRegistrations, 1);
+        checkQueueParameters(queueType, 1, 1);
+
+        // Moving forward in time. The queue is empty again
+        lightClientContract.setCurrentEpoch(epochInTheFuture);
+        epoch = stakeTable.nextEpoch(queueType);
+        assertEq(epoch, epochInTheFuture + 1);
+        checkQueueParameters(queueType, epoch, 1);
     }
 }

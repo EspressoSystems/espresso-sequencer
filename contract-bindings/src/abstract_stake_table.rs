@@ -138,7 +138,7 @@ pub mod abstract_stake_table {
                             ),
                         },],
                         constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                     },],
                 ),
                 (
@@ -154,7 +154,7 @@ pub mod abstract_stake_table {
                             ),
                         },],
                         constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                     },],
                 ),
                 (
