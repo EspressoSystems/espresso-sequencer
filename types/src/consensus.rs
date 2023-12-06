@@ -203,8 +203,7 @@ impl Label for ConsensusMetrics {
 impl ConsensusMetricsValue {
     /// Create a new instance of this [`ConsensusMetricsValue`] struct, setting all the counters and gauges
     #[must_use]
-    #[allow(clippy::borrowed_box)]
-    pub fn new(metrics: &Box<dyn Metrics>) -> Self {
+    pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
@@ -226,7 +225,7 @@ impl ConsensusMetricsValue {
 
 impl Default for ConsensusMetricsValue {
     fn default() -> Self {
-        Self::new(&NoMetrics::boxed())
+        Self::new(&*NoMetrics::boxed())
     }
 }
 

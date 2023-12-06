@@ -161,8 +161,7 @@ impl Label for NetworkingMetrics {
 impl NetworkingMetricsValue {
     /// Create a new instance of this [`NetworkingMetricsValue`] struct, setting all the counters and gauges
     #[must_use]
-    #[allow(clippy::borrowed_box)]
-    pub fn new(metrics: &Box<dyn Metrics>) -> Self {
+    pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
             connected_peers: metrics.create_gauge(String::from("connected_peers"), None),
             incoming_direct_message_count: metrics
@@ -181,6 +180,6 @@ impl NetworkingMetricsValue {
 
 impl Default for NetworkingMetricsValue {
     fn default() -> Self {
-        Self::new(&NoMetrics::boxed())
+        Self::new(&*NoMetrics::boxed())
     }
 }
