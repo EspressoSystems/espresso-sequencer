@@ -1,7 +1,6 @@
 use crate::{
     l1_client::{L1Client, L1ClientOptions, L1Snapshot},
-    Error, L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId,
-    MAX_NMT_DEPTH,
+    L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId, MAX_NMT_DEPTH,
 };
 use ark_serialize::CanonicalSerialize;
 use async_std::task::{block_on, sleep};
@@ -12,8 +11,8 @@ use hotshot_types::{
     traits::block_contents::{vid_commitment, BlockHeader, BlockPayload},
 };
 use jf_primitives::merkle_tree::{
-    namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeScheme,
+    namespaced_merkle_tree::NamespacedMerkleTreeScheme, LookupResult, MerkleCommitment,
+    MerkleTreeScheme,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

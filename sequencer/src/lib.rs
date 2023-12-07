@@ -21,15 +21,14 @@ use hotshot::{
         },
         NodeImplementation,
     },
-    types::{Message, SignatureKey, SystemContextHandle},
+    types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{DAProposal, QuorumProposal, ViewNumber},
+    data::ViewNumber,
     traits::{
-        election::Membership as MembershipTrait,
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
         node_implementation::{ChannelMaps, NodeType},
@@ -230,8 +229,6 @@ async fn init_hotshot<N: network::Type>(
     config: HotShotConfig<PubKey, ElectionConfig>,
     metrics: &dyn Metrics,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let num_nodes = nodes_pub_keys.len() as u64;
-
     let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
     let memberships = Memberships {
         quorum_membership: membership.clone(),
@@ -327,7 +324,7 @@ pub async fn init_node(
     // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
     // populated, so that monitoring software built to work with network-related metrics doesn't
     // crash horribly just because we're not using the P2P network yet.
-    NetworkingMetricsValue::new(metrics);
+    let _ = NetworkingMetricsValue::new(metrics);
 
     (
         init_hotshot(
@@ -349,18 +346,13 @@ pub mod testing {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use commit::Committable;
-    use either::Either;
     use futures::{Stream, StreamExt};
     use hotshot::traits::{
         implementations::{MasterMap, MemoryNetwork},
         BlockPayload,
     };
     use hotshot::types::EventType::Decide;
-    use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::network::{TestableChannelImplementation, TestableNetworkingImplementation},
-        ExecutionType, ValidatorConfig,
-    };
+    use hotshot_types::{light_client::StateKeyPair, ExecutionType, ValidatorConfig};
     use std::time::Duration;
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>

@@ -5,13 +5,12 @@ use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{future::try_join_all, stream::StreamExt};
 use hotshot_query_service::availability::LeafQueryData;
-use hotshot_types::traits::node_implementation::NodeImplementation;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::{network, Header, Node, SeqTypes};
+use crate::{Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -200,16 +199,14 @@ pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Signer>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Leaf, Transaction};
+    use crate::Leaf;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
-    use hotshot_types::{
-        data::ViewNumber, simple_certificate::QuorumCertificate, traits::state::ConsensusTime,
-    };
+    use hotshot_types::simple_certificate::QuorumCertificate;
     use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::AnvilOptions;
     use surf_disco::{Error, StatusCode};

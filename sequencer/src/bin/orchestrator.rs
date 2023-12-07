@@ -7,7 +7,6 @@ use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
 use sequencer::{PubKey, MAX_NMT_DEPTH};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
-use std::net::{IpAddr, Ipv4Addr};
 use std::num::{NonZeroUsize, ParseIntError};
 use std::str::FromStr;
 use std::time::Duration;

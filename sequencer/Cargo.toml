@@ -30,7 +30,6 @@ commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = "0.99.17"
-either = "1.8.1"
 ethers = { version = "2.0", features = ["ws"] }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"

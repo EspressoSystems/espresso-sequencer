@@ -49,7 +49,6 @@ mod test {
     use endpoints::TimeWindowQueryData;
     use futures::FutureExt;
     use hotshot_query_service::availability::BlockQueryData;
-    use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;

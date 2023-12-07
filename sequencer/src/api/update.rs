@@ -1,7 +1,7 @@
 //! Update loop for query API state.
 
 use super::{data_source::SequencerDataSource, AppState};
-use crate::{network, Leaf, SeqTypes};
+use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;

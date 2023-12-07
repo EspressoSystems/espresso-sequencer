@@ -4,7 +4,7 @@ use super::{
     data_source::{SequencerDataSource, SubmitDataSource},
     AppState,
 };
-use crate::{network, Header, NamespaceProofType, Node, SeqTypes, Transaction};
+use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
 use async_std::sync::{Arc, RwLock};
 use futures::FutureExt;
 use hotshot_query_service::{

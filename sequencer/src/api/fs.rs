@@ -1,7 +1,7 @@
 use super::{
     data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Fs as Options,
 };
-use crate::{network, Node, SeqTypes};
+use crate::SeqTypes;
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{

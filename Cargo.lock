@@ -7205,7 +7205,6 @@ dependencies = [
  "contract-bindings",
  "derivative",
  "derive_more",
- "either",
  "ethers",
  "ethers-contract-derive",
  "futures",

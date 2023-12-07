@@ -1,18 +1,10 @@
-use crate::{
-    chain_variables::ChainVariables,
-    l1_client::{L1Client, L1ClientOptions, L1Snapshot},
-    Error, Header, Payload,
-};
-use async_std::task::{block_on, sleep};
+use crate::{chain_variables::ChainVariables, Error, Header, Payload};
 use commit::{Commitment, Committable};
 use ethers::prelude::BlockNumber;
 use hotshot::traits::State as HotShotState;
 use hotshot_types::data::ViewNumber;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::fmt::Debug;
-use std::time::Duration;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct State {
