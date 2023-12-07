@@ -54,5 +54,4 @@ contract BLSSig_Test is Test {
     //        BN254.G2Point memory badVK = BN254.P2();
     //        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
     //        BLSSig.verifyBlsSig(message, sig, badVK);
-    //    }
 }
