@@ -54,12 +54,12 @@ contract StakeTable is AbstractStakeTable {
     LightClient public lightClient;
 
     /// Registration queue
-    uint64 firstAvailableRegistrationEpoch;
-    uint64 pendingRegistrations;
+    uint64 public firstAvailableRegistrationEpoch;
+    uint64 public pendingRegistrations;
 
     /// Exit queue
-    uint64 firstAvailableExitEpoch;
-    uint64 pendingExits;
+    uint64 public firstAvailableExitEpoch;
+    uint64 public pendingExits;
 
     uint256 public constant MAX_CHURN_RATE = 20;
 
