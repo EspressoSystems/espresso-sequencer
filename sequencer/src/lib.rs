@@ -468,7 +468,7 @@ pub mod testing {
 mod test {
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use hotshot_testing::test_builder::TestMetadata;
+    use hotshot_testing::test_builder::{TestMetadata, TimingData};
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
@@ -477,11 +477,17 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        TestMetadata::default()
-            .gen_launcher::<SeqTypes, Node<network::Memory>>(0)
-            .launch()
-            .run_test()
-            .await;
+        TestMetadata {
+            timing_data: TimingData {
+                next_view_timeout: 3000,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .gen_launcher::<SeqTypes, Node<network::Memory>>(0)
+        .launch()
+        .run_test()
+        .await;
     }
 
     #[async_std::test]
