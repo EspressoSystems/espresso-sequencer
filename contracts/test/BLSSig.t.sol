@@ -36,22 +36,32 @@ contract BLSSig_Test is Test {
         (BN254.G2Point memory vk, BN254.G1Point memory sig) = genBLSSig(message);
         BLSSig.verifyBlsSig(message, sig, vk);
     }
-    // TODO this test fails in a weird way
-    //    function test_RevertWhen_SignatureIsInvalid() external {
-    //        bytes memory message = "Hi";
-    //        (BN254.G2Point memory vk, BN254.G1Point memory sig) = genBLSSig(message);
-    //
-    //        BN254.G1Point memory badSig = BN254.P1();
-    //        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
-    //        BLSSig.verifyBlsSig(message, badSig, vk);
-    //    }
 
-    // TODO this test fails in a weird way
-    //    function test_RevertWhen_usingWrongVK() external {
-    //        bytes memory message = "Hi";
-    //        (BN254.G2Point memory vk, BN254.G1Point memory sig) = genBLSSig(message);
-    //
-    //        BN254.G2Point memory badVK = BN254.P2();
-    //        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
-    //        BLSSig.verifyBlsSig(message, sig, badVK);
+    // This is due to a current limitation/bug of foundry. See
+    // https://github.com/foundry-rs/foundry/issues/4405
+    function wrapVerifyBlsSig(
+        bytes memory message,
+        BN254.G1Point memory sig,
+        BN254.G2Point memory vk
+    ) public view {
+        BLSSig.verifyBlsSig(message, sig, vk);
+    }
+
+    function test_RevertWhen_SignatureIsInvalid() external {
+        bytes memory message = "Hi";
+
+        BN254.G1Point memory badSig = BN254.P1();
+        (BN254.G2Point memory vk,) = genBLSSig(message);
+        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+        this.wrapVerifyBlsSig(message, badSig, vk);
+    }
+
+    function test_RevertWhen_usingWrongVK() external {
+        bytes memory message = "Hi";
+        (BN254.G2Point memory vk, BN254.G1Point memory sig) = genBLSSig(message);
+        vk; // To avoid compiler warning
+        BN254.G2Point memory badVK = BN254.P2();
+        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+        this.wrapVerifyBlsSig(message, sig, badVK);
+    }
 }
