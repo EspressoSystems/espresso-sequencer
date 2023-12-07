@@ -109,7 +109,7 @@ async fn test_consensus_task() {
         proposal.clone(),
         public_key,
     ));
-    
+
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::QCFormed(either::Left(qc)), 1);
@@ -121,10 +121,7 @@ async fn test_consensus_task() {
         HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
         1,
     );
-    output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)),
-        1,
-    );
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
 
     if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal.data).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
@@ -149,13 +146,12 @@ async fn test_consensus_task() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_with_vid_vote() {
     use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::block_types::TestTransaction;
+    use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;
     use hotshot_types::data::VidSchemeTrait;
     use hotshot_types::{
-        data::VidDisperse, message::Proposal,
-        traits::node_implementation::NodeType,
+        data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
     };
     use std::marker::PhantomData;
 
@@ -216,12 +212,10 @@ async fn test_consensus_with_vid_vote() {
         output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
     }
 
-
-
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     // Sishan TODO: this proposal_view2's justify_qc does not have correct view number
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-    
+
     // For the test of vote logic with vid
     // Sishan TODO: Still need a valid DAC cert
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
@@ -244,11 +238,11 @@ async fn test_consensus_with_vid_vote() {
     // }
 
     output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)), 
+        HotShotEvent::ViewChange(ViewNumber::new(1)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`, 1 from input
     );
     output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(2)), 
+        HotShotEvent::ViewChange(ViewNumber::new(2)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
     );
 
@@ -292,7 +286,6 @@ async fn test_consensus_no_vote_without_vid_share() {
         public_key_view1,
     ));
 
-
     output.insert(
         HotShotEvent::QuorumProposalRecv(proposal_view1.clone(), public_key_view1),
         1,
@@ -319,11 +312,11 @@ async fn test_consensus_no_vote_without_vid_share() {
     );
 
     output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)), 
+        HotShotEvent::ViewChange(ViewNumber::new(1)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`, 1 from input
     );
     output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(2)), 
+        HotShotEvent::ViewChange(ViewNumber::new(2)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
     );
 
@@ -386,4 +379,3 @@ async fn test_consensus_vote() {
 
     run_harness(input, output, None, build_fn).await;
 }
-
