@@ -2,12 +2,10 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
-use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-use ark_ff::Fp2Config;
-use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
+use ark_ff::{Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::{
@@ -15,6 +13,7 @@ use ark_std::{
     UniformRand,
 };
 use clap::{Parser, ValueEnum};
+use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point, ParsedG2Point};
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
@@ -576,19 +575,6 @@ fn open_key() -> OpenKey<Bn254> {
     }
 }
 
-fn field_to_u256<F: PrimeField>(f: F) -> U256 {
-    if F::MODULUS_BIT_SIZE > 256 {
-        panic!("Shouldn't convert a >256-bit field to U256");
-    }
-    U256::from_little_endian(&f.into_bigint().to_bytes_le())
-}
-
-fn u256_to_field<F: PrimeField>(x: U256) -> F {
-    let mut bytes = [0u8; 32];
-    x.to_little_endian(&mut bytes);
-    F::from_le_bytes_mod_order(&bytes)
-}
-
 /// an intermediate representation of the transcript parsed from abi.encode(transcript) from Solidity.
 #[derive(Clone, EthAbiType, EthAbiCodec)]
 struct ParsedTranscript {
@@ -623,112 +609,6 @@ impl From<ParsedTranscript> for SolidityTranscript {
         state[..32].copy_from_slice(&t.state[0].to_fixed_bytes());
         state[32..].copy_from_slice(&t.state[1].to_fixed_bytes());
         Self::from_internal(t.transcript.to_vec(), state)
-    }
-}
-
-/// an intermediate representation of `BN254.G1Point` in solidity.
-#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
-struct ParsedG1Point {
-    x: U256,
-    y: U256,
-}
-
-// this is convention from BN256 precompile
-impl Default for ParsedG1Point {
-    fn default() -> Self {
-        Self {
-            x: U256::from(0),
-            y: U256::from(0),
-        }
-    }
-}
-
-// TODO rely on diff-test crate of solidity-bn254 repository instead
-impl FromStr for ParsedG1Point {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
-    }
-}
-
-impl<P: SWCurveConfig> From<Affine<P>> for ParsedG1Point
-where
-    P::BaseField: PrimeField,
-{
-    fn from(p: Affine<P>) -> Self {
-        if p.is_zero() {
-            // this convention is from the BN precompile
-            Self {
-                x: U256::from(0),
-                y: U256::from(0),
-            }
-        } else {
-            Self {
-                x: field_to_u256::<P::BaseField>(*p.x().unwrap()),
-                y: field_to_u256::<P::BaseField>(*p.y().unwrap()),
-            }
-        }
-    }
-}
-
-impl<P: SWCurveConfig> From<ParsedG1Point> for Affine<P>
-where
-    P::BaseField: PrimeField,
-{
-    fn from(p: ParsedG1Point) -> Self {
-        if p == ParsedG1Point::default() {
-            Self::default()
-        } else {
-            Self::new(
-                u256_to_field::<P::BaseField>(p.x),
-                u256_to_field::<P::BaseField>(p.y),
-            )
-        }
-    }
-}
-
-// TODO rely on diff-test crate of solidity-bn254 repository instead
-/// Intermediate representation of `G2Point` in Solidity
-#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
-pub struct ParsedG2Point {
-    x0: U256,
-    x1: U256,
-    y0: U256,
-    y1: U256,
-}
-
-impl FromStr for ParsedG2Point {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
-    }
-}
-
-impl<P: SWCurveConfig<BaseField = Fp2<C>>, C> From<ParsedG2Point> for Affine<P>
-where
-    C: Fp2Config,
-{
-    fn from(p: ParsedG2Point) -> Self {
-        Self::new_unchecked(
-            Fp2::new(u256_to_field(p.x0), u256_to_field(p.x1)),
-            Fp2::new(u256_to_field(p.y0), u256_to_field(p.y1)),
-        )
-    }
-}
-
-impl<P: SWCurveConfig<BaseField = Fp2<C>>, C> From<Affine<P>> for ParsedG2Point
-where
-    C: Fp2Config,
-{
-    fn from(p: Affine<P>) -> Self {
-        Self {
-            x0: field_to_u256(p.x().unwrap().c0),
-            x1: field_to_u256(p.x().unwrap().c1),
-            y0: field_to_u256(p.y().unwrap().c0),
-            y1: field_to_u256(p.y().unwrap().c1),
-        }
     }
 }
 
