@@ -875,7 +875,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::DACRecv(cert) => {
-                debug!("DAC Recved for view ! {}", *cert.view_number);
+                debug!("DAC Received for view ! {}", *cert.view_number);
                 let view = cert.view_number;
 
                 self.quorum_network
