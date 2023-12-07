@@ -204,7 +204,7 @@ pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Signer>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Block, Leaf, Transaction};
+    use crate::{Leaf, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
@@ -212,9 +212,7 @@ mod test {
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::{
-        certificate::QuorumCertificate,
-        data::{LeafType, ViewNumber},
-        traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
+        data::ViewNumber, simple_certificate::QuorumCertificate, traits::state::ConsensusTime,
     };
     use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::AnvilOptions;
@@ -224,7 +222,7 @@ mod test {
 
     #[derive(Clone, Debug, Default)]
     struct MockDataSource {
-        leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>>,
+        leaves: Vec<LeafQueryData<SeqTypes>>,
     }
 
     #[async_trait]
@@ -257,17 +255,9 @@ mod test {
     }
 
     fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes, Node<network::Memory>> {
-        let txn = Transaction::new(1.into(), vec![]);
-        let block = Block::new().add_transaction_raw(&txn).unwrap();
-
-        // Fake a leaf that sequences this block.
-        let mut qc = QuorumCertificate::genesis();
-        let mut leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
-        // Mimic the behavior of HotShot, where leaf heights are indexed starting from 1, since the
-        // 0-height genesis leaf is implicit.
-        leaf.height = height + 1;
-        qc.leaf_commitment = leaf.commit();
-        LeafQueryData::new(leaf, qc).unwrap()
+        let mut leaf = Leaf::genesis();
+        leaf.block_header.height = height;
+        leaf
     }
 
     async fn wait_for_new_batches(

@@ -1,13 +1,13 @@
 {
-    "metadata": {
-        "timestamp": 789,
-        "l1_head": 124,
-        "l1_finalized": {
-            "number": 123,
-            "timestamp": "0x456",
-            "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-        }
+    "height": 42,
+    "timestamp": 789,
+    "l1_head": 124,
+    "l1_finalized": {
+        "number": 123,
+        "timestamp": "0x456",
+        "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     },
+    "payload_commitment": "VID~???",
     "transactions_root": {
         "root": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     }

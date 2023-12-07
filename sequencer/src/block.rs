@@ -343,7 +343,6 @@ mod reference {
         pub static ref NMT_ROOT: Value = load_reference!("nmt_root");
         pub static ref L1_BLOCK: Value = load_reference!("l1_block");
         pub static ref HEADER: Value = load_reference!("header");
-        pub static ref BLOCK: Value = load_reference!("block");
     }
 
     fn reference_test<T: DeserializeOwned, C: Committable>(
@@ -393,20 +392,5 @@ mod reference {
             "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
             |header| header.commit(),
         );
-    }
-
-    #[test]
-    fn test_reference_block() {
-        reference_test::<Block, _>(
-            BLOCK.clone(),
-            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
-            |block| block.commit(),
-        );
-    }
-
-    #[test]
-    fn test_header_block_commitment_equivalence() {
-        let block: Block = serde_json::from_value(BLOCK.clone()).unwrap();
-        assert_eq!(block.commit(), block.header().commit());
     }
 }
