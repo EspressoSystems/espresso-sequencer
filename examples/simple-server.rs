@@ -85,7 +85,7 @@ async fn init_data_source(db: &Db) -> DataSource {
 
 #[cfg(target_os = "windows")]
 async fn init_data_source(db: &Db) -> DataSource {
-    DataSource::create(db.path()).unwrap()
+    DataSource::create(db.path()).await.unwrap()
 }
 
 #[async_std::main]
