@@ -4,17 +4,14 @@ use clap::Parser;
 use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{future::try_join_all, stream::StreamExt};
-use hotshot_query_service::{
-    availability::{BlockHeaderQueryData, LeafQueryData},
-    Block, Deltas, Resolvable,
-};
+use hotshot_query_service::availability::LeafQueryData;
 use hotshot_types::traits::node_implementation::NodeImplementation;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::{network, Node, SeqTypes};
+use crate::{network, Header, Node, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -91,9 +88,7 @@ async fn sequence<I: NodeImplementation<SeqTypes>>(
     max_blocks: u64,
     hotshot: HotShotClient,
     contract: HotShot<Signer>,
-) where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+) {
     loop {
         if let Err(err) = sync_with_l1::<I>(max_blocks, &hotshot, &contract).await {
             tracing::error!("error synchronizing with HotShot contract: {err}");
@@ -124,7 +119,7 @@ impl<I: NodeImplementation<SeqTypes>> HotShotDataSource<I> for HotShotClient {
     async fn wait_for_block_height(&self, height: u64) -> Result<(), Self::Error> {
         let mut stream = self
             .socket(&format!("availability/stream/block/headers/{height}"))
-            .subscribe::<BlockHeaderQueryData<SeqTypes>>()
+            .subscribe::<Header>()
             .await?;
         stream.next().await;
         Ok(())
@@ -141,10 +136,7 @@ async fn sync_with_l1<I: NodeImplementation<SeqTypes>>(
     max_blocks: u64,
     hotshot: &impl HotShotDataSource<I>,
     contract: &HotShot<Signer>,
-) -> Result<(), anyhow::Error>
-where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+) -> Result<(), anyhow::Error> {
     let contract_block_height = contract.block_height().call().await?.as_u64();
     let hotshot_block_height = loop {
         let height = hotshot.block_height().await?;
@@ -186,10 +178,7 @@ where
 fn build_sequence_batches_txn<I: NodeImplementation<SeqTypes>, M: ethers::prelude::Middleware>(
     contract: &HotShot<M>,
     leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
-) -> ContractCall<M, ()>
-where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+) -> ContractCall<M, ()> {
     let qcs = leaves
         .into_iter()
         .map(|leaf| Qc {

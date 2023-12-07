@@ -51,7 +51,7 @@ use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
 use typenum::U2;
 
-pub use block::{Block, Header};
+pub use block::{Header, Payload};
 pub use chain_variables::ChainVariables;
 use jf_primitives::merkle_tree::{
     examples::{Sha3Digest, Sha3Node},
