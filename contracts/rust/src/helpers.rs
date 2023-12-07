@@ -5,8 +5,6 @@ use ark_ff::PrimeField;
 pub use contract_bindings::shared_types::{G1Point, G2Point};
 use ethers::types::U256;
 
-pub(crate) mod hotshot_contract {}
-
 // TODO put somewhere else, like jellyfish?
 fn convert_fq_to_u256(f: ark_bn254::Fq) -> U256 {
     let b_int = f.into_bigint();
