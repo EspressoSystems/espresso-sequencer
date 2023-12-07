@@ -468,7 +468,9 @@ pub mod testing {
 mod test {
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use hotshot_testing::test_builder::{TestMetadata, TimingData};
+    use hotshot_testing::{
+        overall_safety_task::OverallSafetyPropertiesDescription, test_builder::TestMetadata,
+    };
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
@@ -478,8 +480,8 @@ mod test {
         setup_backtrace();
 
         TestMetadata {
-            timing_data: TimingData {
-                next_view_timeout: 3000,
+            overall_safety_properties: OverallSafetyPropertiesDescription {
+                num_successful_views: 10,
                 ..Default::default()
             },
             ..Default::default()
