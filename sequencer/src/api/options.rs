@@ -64,7 +64,7 @@ impl Options {
         // The server state type depends on whether we are running a query API or not, so we handle
         // the two cases differently.
         let node = if let Some(opt) = self.query_fs {
-            init_with_query_module::<N, fs::DataSource<N>>(
+            init_with_query_module::<N, fs::DataSource>(
                 opt,
                 init_handle,
                 self.submit.is_some(),

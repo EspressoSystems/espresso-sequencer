@@ -4,8 +4,7 @@ use cld::ClDuration;
 use hotshot::traits::election::static_committee::StaticElectionConfig;
 use hotshot::types::SignatureKey;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use hotshot_signature_key::bn254::BN254Pub;
-use sequencer::{SignatureKeyType, MAX_NMT_DEPTH};
+use sequencer::{PubKey, MAX_NMT_DEPTH};
 use snafu::Snafu;
 use std::fmt::{self, Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
@@ -174,18 +173,14 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = Args::parse();
-    let mut config = NetworkConfig::<
-        SignatureKeyType,
-        <SignatureKeyType as SignatureKey>::StakeTableEntry,
-        StaticElectionConfig,
-    > {
+    let mut config = NetworkConfig::<PubKey, StaticElectionConfig> {
         start_delay_seconds: args.start_delay.as_secs(),
         ..Default::default()
     };
     let (pub_keys, _): (Vec<_>, Vec<_>) = (0..args.num_nodes.into())
-        .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
+        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
-    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> =
+    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> =
         (0..args.num_nodes.into())
             .map(|id| pub_keys[id].get_stake_table_entry(1u64))
             .collect();
@@ -202,8 +197,8 @@ async fn main() {
     config.config.propose_max_round_time = args.max_propose_time;
     config.config.da_committee_size = args.num_nodes.get();
     config.config.min_transactions = args.min_transactions;
-    config.config.known_nodes = pub_keys;
 
-    let ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-    run_orchestrator(config, ip, args.port).await.unwrap();
+    run_orchestrator(config, format!("0.0.0.0:{}", args.port).parse().unwrap())
+        .await
+        .unwrap();
 }

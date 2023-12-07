@@ -9,7 +9,7 @@ use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     data::VidCommitment,
-    traits::block_contents::{BlockHeader, BlockPayload},
+    traits::block_contents::{vid_commitment, BlockHeader, BlockPayload},
 };
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
@@ -81,12 +81,9 @@ impl Committable for Header {
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
             .u64_field("l1_head", self.l1_head)
-            .option_field(
-                "l1_finalized",
-                self.l1_finalized().as_ref().map(Committable::commit),
-            )
+            .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .fixed_size_bytes(self.payload_commitment.into())
+            .fixed_size_bytes(&self.payload_commitment.into())
             .field("transactions_root", self.transactions_root.commit())
             .finalize()
     }
@@ -116,6 +113,45 @@ impl BlockHeader for Header {
     type Payload = Payload;
 
     fn new(payload_commitment: VidCommitment, metadata: NMTRoot, parent_header: &Self) -> Self {
+        Self::from_parent(
+            payload_commitment,
+            metadata,
+            Some(parent_header.height),
+            parent_header.timestamp,
+        )
+    }
+
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    ) {
+        let (payload, metadata) = Payload::genesis();
+        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
+        let header = Self::from_parent(payload_commitment, metadata, None, 0);
+        (header, payload, metadata)
+    }
+
+    fn block_number(&self) -> u64 {
+        self.height
+    }
+
+    fn payload_commitment(&self) -> VidCommitment {
+        self.payload_commitment
+    }
+
+    fn metadata(&self) -> NMTRoot {
+        self.transactions_root
+    }
+}
+
+impl Header {
+    fn from_parent(
+        payload_commitment: VidCommitment,
+        transactions_root: NMTRoot,
+        parent_height: Option<u64>,
+        parent_timestamp: u64,
+    ) -> Self {
         // The HotShot APIs should be redesigned so that
         // * they are async
         // * new blocks being created have access to the application state, which in our case could
@@ -132,14 +168,20 @@ impl BlockHeader for Header {
             }
         };
 
+        // Increment height.
+        let height = match parent_height {
+            Some(height) => height + 1,
+            None => 0,
+        };
+
         // Sample a timestamp, ensuring that it does not decrease.
         let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        if timestamp < parent_header.timestamp {
+        if timestamp < parent_timestamp {
             tracing::warn!(
                 "Espresso timestamp {timestamp} behind parent {}",
-                parent_header.timestamp
+                parent_timestamp
             );
-            timestamp = parent_header.timestamp;
+            timestamp = parent_timestamp;
         }
 
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
@@ -153,11 +195,12 @@ impl BlockHeader for Header {
         }
 
         Self {
+            height,
             timestamp,
             l1_head: l1.head,
             l1_finalized: l1.finalized,
             payload_commitment,
-            transactions_root: metadata,
+            transactions_root,
         }
     }
 }
@@ -218,22 +261,48 @@ impl QueryablePayload for Payload {
 }
 
 impl BlockPayload for Payload {
-    type Error = Error;
+    type Error = bincode::Error;
+    type Transaction = Transaction;
     type Metadata = NMTRoot;
+    type Encode<'a> = <Vec<u8> as IntoIterator>::IntoIter;
 
-    fn genesis() -> (Self, Self::Metadata) {
-        let transaction_nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, &[]).unwrap();
+    fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction>,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        let transaction_nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, transactions).unwrap();
         let root = NMTRoot {
             root: transaction_nmt.commitment().digest(),
         };
-        (Self { transaction_nmt }, root)
+        Ok((Self { transaction_nmt }, root))
+    }
+
+    fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+    where
+        I: Iterator<Item = u8>,
+    {
+        // TODO for now, we panic if the transactions are not properly encoded. This only works as
+        // long as all proposers are honest. We should soon replace this with the VID-specific
+        // payload implementation in block2.rs.
+        bincode::deserialize(encoded_transactions.collect::<Vec<u8>>().as_slice()).unwrap()
+    }
+
+    fn genesis() -> (Self, Self::Metadata) {
+        Self::from_transactions([]).unwrap()
+    }
+
+    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+        Ok(bincode::serialize(self)?.into_iter())
+    }
+
+    fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+        self.enumerate().map(|(_, tx)| tx.commit()).collect()
     }
 }
 
 #[cfg(any(test, feature = "testing"))]
 impl hotshot_types::traits::state::TestableBlock for Payload {
     fn genesis() -> Self {
-        Self::genesis().0
+        BlockPayload::genesis().0
     }
 
     fn txn_count(&self) -> u64 {

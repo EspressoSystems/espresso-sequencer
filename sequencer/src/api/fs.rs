@@ -27,9 +27,9 @@ impl SequencerDataSource for DataSource {
         let storage_path = Path::new(&opt.storage_path);
         let data_source = {
             if opt.reset_store {
-                FileSystemDataSource::create(storage_path)?
+                FileSystemDataSource::create(storage_path).await?
             } else {
-                FileSystemDataSource::open(storage_path)?
+                FileSystemDataSource::open(storage_path).await?
             }
         };
         let mut index = Index::default();
@@ -98,7 +98,7 @@ impl SequencerDataSource for DataSource {
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
             let prev = self.get_block(first_block - 1).await?;
-            res.prev = Some(prev.block().header());
+            res.prev = Some(prev.header().clone());
         }
 
         // Add blocks to the window, starting from `first_block`, until we reach the end of the
@@ -106,8 +106,8 @@ impl SequencerDataSource for DataSource {
         let mut blocks = self.get_block_range(first_block..).await?;
         while let Some(block) = blocks.next().await {
             let block = block?;
-            let header = block.block().header();
-            if header.timestamp() >= end {
+            let header = block.header().clone();
+            if header.timestamp >= end {
                 res.next = Some(header);
                 break;
             }
@@ -123,7 +123,7 @@ fn index_block_by_time(
     block: &BlockQueryData<SeqTypes>,
 ) {
     blocks_by_time
-        .entry(block.block().timestamp())
+        .entry(block.header().timestamp)
         .or_default()
         .push(block.height());
 }

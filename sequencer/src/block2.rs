@@ -424,19 +424,47 @@ mod tx_table_entry {
 }
 
 mod boilerplate {
-    use super::{BlockPayload, PolynomialCommitmentScheme, Transaction, UnivariateKzgPCS};
+    use super::{
+        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
+    };
+    use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
-    use commit::Committable;
+    use commit::{Commitment, Committable};
     use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
+    use snafu::OptionExt;
     use std::fmt::Display;
 
     // Skeleton impl for now so as to enable `QueryablePayload`.
     impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
+        type Transaction = Transaction;
         type Metadata = ();
+        type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+
+        fn from_transactions(
+            transactions: impl IntoIterator<Item = Self::Transaction>,
+        ) -> Result<(Self, Self::Metadata), Self::Error> {
+            let payload = Self::from_txs(transactions).context(BlockBuildingSnafu)?;
+            Ok((payload, ()))
+        }
+
+        fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+        where
+            I: Iterator<Item = u8>,
+        {
+            Self::from_bytes(encoded_transactions)
+        }
 
         fn genesis() -> (Self, Self::Metadata) {
-            (Self::from_txs([]).unwrap(), ())
+            Self::from_transactions([]).unwrap()
+        }
+
+        fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+            Ok(self.payload.iter().cloned())
+        }
+
+        fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+            self.enumerate().map(|(_, tx)| tx.commit()).collect()
         }
     }
 

@@ -15,7 +15,10 @@ use derivative::Derivative;
 use hotshot::{
     traits::{
         election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-        implementations::{MemoryCommChannel, MemoryStorage, WebCommChannel, WebServerNetwork},
+        implementations::{
+            MemoryCommChannel, MemoryStorage, NetworkingMetricsValue, WebCommChannel,
+            WebServerNetwork,
+        },
         NodeImplementation,
     },
     types::{Message, SignatureKey, SystemContextHandle},
@@ -72,7 +75,7 @@ pub fn init_static() {
     lazy_static::initialize(&block::L1_CLIENT);
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NMTRoot {
     #[serde(with = "nmt_root_serializer")]
     root: <TransactionNMT as MerkleTreeScheme>::NodeValue,
@@ -214,6 +217,8 @@ pub enum Error {
 
     // Merkle tree error
     MerkleTreeError { error: String },
+
+    BlockBuilding,
 }
 
 async fn init_hotshot<N: network::Type>(
@@ -263,7 +268,7 @@ pub async fn init_node(
 ) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
     let validator_args = ValidatorArgs {
-        host: network_params.orchestrator_url.host().unwrap().to_string(),
+        url: network_params.orchestrator_url.to_string(),
         port: network_params
             .orchestrator_url
             .port_or_known_default()
@@ -298,30 +303,18 @@ pub async fn init_node(
     // Initialize networking.
     let wait_time = Duration::from_millis(100);
     let networks = Networks {
-        da_network: Arc::new(WebServerNetwork::create(
-            &network_params.da_server_url.host().unwrap().to_string(),
-            network_params
-                .da_server_url
-                .port_or_known_default()
-                .unwrap(),
+        da_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+            network_params.da_server_url,
             wait_time,
-            pub_keys[node_index],
+            pub_keys[node_index as usize],
             true,
-        )),
-        quorum_nework: Arc::new(WebServerNetwork::create(
-            &network_params
-                .consensus_server_url
-                .host()
-                .unwrap()
-                .to_string(),
-            network_params
-                .consensus_server_url
-                .port_or_known_default()
-                .unwrap(),
+        ))),
+        quorum_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
+            network_params.consensus_server_url,
             wait_time,
-            pub_keys[node_index],
+            pub_keys[node_index as usize],
             false,
-        )),
+        ))),
         _pd: Default::default(),
     };
 
@@ -329,6 +322,12 @@ pub async fn init_node(
     orchestrator_client
         .wait_for_all_nodes_ready(node_index.into())
         .await;
+
+    // The web server network doesn't have any metrics. By creating and dropping a
+    // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
+    // populated, so that monitoring software built to work with network-related metrics doesn't
+    // crash horribly just because we're not using the P2P network yet.
+    NetworkingMetricsValue::new(metrics);
 
     (
         init_hotshot(
@@ -349,13 +348,18 @@ pub async fn init_node(
 pub mod testing {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use commit::Committable;
     use either::Either;
     use futures::{Stream, StreamExt};
-    use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
+    use hotshot::traits::{
+        implementations::{MasterMap, MemoryNetwork},
+        BlockPayload,
+    };
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
+        light_client::StateKeyPair,
         traits::network::{TestableChannelImplementation, TestableNetworkingImplementation},
-        ExecutionType,
+        ExecutionType, ValidatorConfig,
     };
     use std::time::Duration;
 
@@ -385,7 +389,6 @@ pub mod testing {
         let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
-            known_nodes: pub_keys.clone(),
             min_transactions: 1,
             max_transactions: 10000.try_into().unwrap(),
             known_nodes_with_stake: known_nodes_with_stake.clone(),
@@ -398,19 +401,28 @@ pub mod testing {
             propose_max_round_time: Duration::from_secs(1),
             election_config: None,
             da_committee_size: num_nodes,
+            my_own_validator_config: Default::default(),
         };
 
         // Create HotShot instances.
         for node_id in 0..num_nodes {
+            let mut config = config.clone();
+            config.my_own_validator_config = ValidatorConfig {
+                public_key: pub_keys[node_id],
+                private_key: priv_keys[node_id].clone(),
+                stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
+                state_key_pair: StateKeyPair::generate(),
+            };
+
             let network = Arc::new(MemoryNetwork::new(
                 pub_keys[node_id],
-                &NoMetrics,
+                NetworkingMetricsValue::new(&NoMetrics),
                 master_map.clone(),
                 None,
             ));
             let networks = Networks {
                 da_network: MemoryCommChannel::new(network.clone()),
-                quorum_nework: MemoryCommChannel::new(network),
+                quorum_network: MemoryCommChannel::new(network),
                 _pd: Default::default(),
             };
 
@@ -420,7 +432,8 @@ pub mod testing {
                 node_id,
                 priv_keys[node_id].clone(),
                 networks,
-                config.clone(),
+                config,
+                &NoMetrics,
             )
             .await;
 
@@ -432,26 +445,23 @@ pub mod testing {
     // Wait for decide event, make sure it matches submitted transaction
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = Event> + Unpin),
-        submitted_txn: Transaction,
+        submitted_txn: &Transaction,
     ) -> Result<(), ()> {
+        let commitment = submitted_txn.commit();
+
         // Keep getting events until we see a Decide event
         loop {
             let event = events.next().await;
             tracing::info!("Received event from handle: {event:?}");
 
             if let Some(Event {
-                event: Decide {
-                    leaf_chain: leaf, ..
-                },
+                event: Decide { leaf_chain, .. },
                 ..
             }) = event
             {
-                if leaf.iter().any(|leaf| match leaf.get_deltas() {
-                    Either::Left(block) => block
-                        .transaction_nmt
-                        .leaves()
-                        .any(|txn| txn == &submitted_txn),
-                    Either::Right(_) => false,
+                if leaf_chain.iter().any(|leaf| match &leaf.block_payload {
+                    Some(block) => block.transaction_commitments().contains(&commitment),
+                    None => false,
                 }) {
                     return Ok(());
                 }
@@ -476,7 +486,7 @@ mod test {
         setup_backtrace();
 
         TestMetadata::default()
-            .gen_launcher::<SeqTypes, Node<network::Memory>>()
+            .gen_launcher::<SeqTypes, Node<network::Memory>>(0)
             .launch()
             .run_test()
             .await;
@@ -502,6 +512,6 @@ mod test {
             .expect("Failed to submit transaction");
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
-        wait_for_decide_on_handle(&mut events, submitted_txn).await
+        wait_for_decide_on_handle(&mut events, &submitted_txn).await
     }
 }
