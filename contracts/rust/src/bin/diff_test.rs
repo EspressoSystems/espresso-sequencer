@@ -5,6 +5,7 @@ use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
+use ark_ff::Fp2Config;
 use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
@@ -83,6 +84,8 @@ enum Action {
     TestOnly,
     /// Generate Client Wallet
     GenClientWallet,
+    /// Generate BLS keys and a signature
+    GenBLSSig,
 }
 
 #[allow(clippy::type_complexity)]
@@ -443,6 +446,28 @@ fn main() {
             );
             println!("{}", res.encode_hex());
         }
+        Action::GenBLSSig => {
+            let mut rng = jf_utils::test_rng();
+
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=message");
+            }
+            let message_bytes = cli.args[0].parse::<Bytes>().unwrap();
+
+            // Generate the BLS ver key
+            let key_pair = BLSKeyPair::generate(&mut rng);
+            let vk = key_pair.ver_key();
+            let vk_g2_affine: G2Affine = vk.to_affine();
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
+
+            // Sign the message
+            let sig: Signature = key_pair.sign(&message_bytes, CS_ID_BLS_BN254);
+            let sig_affine_point = sig.sigma.into_affine();
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
+
+            let res = (vk_parsed, sig_parsed);
+            println!("{}", res.encode_hex());
+        }
     };
 }
 
@@ -585,6 +610,7 @@ impl Default for ParsedG1Point {
     }
 }
 
+// TODO rely on diff-test crate of solidity-bn254 repository instead
 impl FromStr for ParsedG1Point {
     type Err = AbiError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -625,6 +651,50 @@ where
                 u256_to_field::<P::BaseField>(p.x),
                 u256_to_field::<P::BaseField>(p.y),
             )
+        }
+    }
+}
+
+// TODO rely on diff-test crate of solidity-bn254 repository instead
+/// Intermediate representation of `G2Point` in Solidity
+#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
+pub struct ParsedG2Point {
+    x0: U256,
+    x1: U256,
+    y0: U256,
+    y1: U256,
+}
+
+impl FromStr for ParsedG2Point {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
+impl<P: SWCurveConfig<BaseField = Fp2<C>>, C> From<ParsedG2Point> for Affine<P>
+where
+    C: Fp2Config,
+{
+    fn from(p: ParsedG2Point) -> Self {
+        Self::new_unchecked(
+            Fp2::new(u256_to_field(p.x0), u256_to_field(p.x1)),
+            Fp2::new(u256_to_field(p.y0), u256_to_field(p.y1)),
+        )
+    }
+}
+
+impl<P: SWCurveConfig<BaseField = Fp2<C>>, C> From<Affine<P>> for ParsedG2Point
+where
+    C: Fp2Config,
+{
+    fn from(p: Affine<P>) -> Self {
+        Self {
+            x0: field_to_u256(p.x().unwrap().c0),
+            x1: field_to_u256(p.x().unwrap().c1),
+            y0: field_to_u256(p.y().unwrap().c0),
+            y1: field_to_u256(p.y().unwrap().c1),
         }
     }
 }
