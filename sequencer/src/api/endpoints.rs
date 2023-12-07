@@ -47,7 +47,7 @@ pub(super) type AvailState<N, D> = Arc<RwLock<AppState<N, D>>>;
 pub(super) fn availability<N, D>() -> anyhow::Result<Api<AvailState<N, D>, availability::Error>>
 where
     N: network::Type,
-    D: SequencerDataSource<N> + Send + Sync + 'static,
+    D: SequencerDataSource + Send + Sync + 'static,
 {
     let mut options = availability::Options::default();
     let extension = toml::from_str(include_str!("../../api/availability.toml"))?;

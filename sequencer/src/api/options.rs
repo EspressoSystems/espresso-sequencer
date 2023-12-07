@@ -132,7 +132,7 @@ async fn init_with_query_module<N, D>(
 ) -> anyhow::Result<SequencerNode<N>>
 where
     N: network::Type,
-    D: SequencerDataSource<N> + Send + Sync + 'static,
+    D: SequencerDataSource + Send + Sync + 'static,
 {
     type State<N, D> = Arc<RwLock<AppState<N, D>>>;
 

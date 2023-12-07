@@ -17,10 +17,10 @@ pub struct Index {
     blocks_by_time: BTreeMap<u64, Vec<u64>>,
 }
 
-pub type DataSource<N> = ExtensibleDataSource<FileSystemDataSource<SeqTypes, Node<N>>, Index>;
+pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes>, Index>;
 
 #[async_trait]
-impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
+impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options) -> anyhow::Result<Self> {
