@@ -69,14 +69,6 @@ abstract contract AbstractStakeTable {
         EdOnBN254.EdOnBN254Point schnorrVK;
     }
 
-    /// @notice Struct representing a queue
-    /// @param firstAvailableEpoch epoch where the queue is located.
-    /// @param pendingRequests current size of the queue.
-    struct Queue {
-        uint64 firstAvailableEpoch;
-        uint64 pendingRequests;
-    }
-
     // === Table State & Stats ===
 
     /// @notice Total stakes of the registered keys in the latest stake table (Head).
