@@ -14,29 +14,23 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate
 use derivative::Derivative;
 use hotshot::{
     traits::{
-        election::static_committee::{
-            GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-        },
+        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
         implementations::{MemoryCommChannel, MemoryStorage, WebCommChannel, WebServerNetwork},
         NodeImplementation,
     },
     types::{Message, SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_signature_key::bn254::BN254Pub;
+use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
-    message::SequencingMessage,
+    consensus::ConsensusMetricsValue,
+    data::{DAProposal, QuorumProposal, ViewNumber},
     traits::{
-        election::{
-            CommitteeExchange, Membership as MembershipTrait, QuorumExchange, ViewSyncExchange,
-        },
+        election::Membership as MembershipTrait,
         metrics::{Metrics, NoMetrics},
         network::CommunicationChannel,
-        node_implementation::{ChannelMaps, ExchangesType, NodeType, SequencingExchanges},
+        node_implementation::{ChannelMaps, NodeType},
     },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
     HotShotConfig,
 };
 
@@ -75,7 +69,7 @@ pub type NamespaceProofType = <TransactionNMT as NamespacedMerkleTreeScheme>::Na
 ///
 /// Calling it early on startup makes it easier to catch errors.
 pub fn init_static() {
-    lazy_static::initialize(&state::L1_CLIENT);
+    lazy_static::initialize(&block::L1_CLIENT);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -121,71 +115,24 @@ pub mod network {
     use super::*;
 
     pub trait Type: 'static {
-        type DAChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
-                SeqTypes,
-                Message<SeqTypes, I>,
-                DAProposal<SeqTypes>,
-                DAVote<SeqTypes>,
-                Membership,
-            > + Debug;
-        type QuorumChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
-                SeqTypes,
-                Message<SeqTypes, I>,
-                QuorumProposal<SeqTypes, Leaf>,
-                QuorumVote<SeqTypes, Leaf>,
-                Membership,
-            > + Debug;
-        type ViewSyncChannel<I: NodeImplementation<SeqTypes>>: CommunicationChannel<
-                SeqTypes,
-                Message<SeqTypes, I>,
-                ViewSyncCertificate<SeqTypes>,
-                ViewSyncVote<SeqTypes>,
-                Membership,
-            > + Debug;
+        type DAChannel: CommunicationChannel<SeqTypes> + Debug;
+        type QuorumChannel: CommunicationChannel<SeqTypes> + Debug;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Web;
 
     impl Type for Web {
-        type DAChannel<I: NodeImplementation<SeqTypes>> =
-            WebCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes>, Membership>;
-        type QuorumChannel<I: NodeImplementation<SeqTypes>> = WebCommChannel<
-            SeqTypes,
-            I,
-            QuorumProposal<SeqTypes, Leaf>,
-            QuorumVote<SeqTypes, Leaf>,
-            Membership,
-        >;
-        type ViewSyncChannel<I: NodeImplementation<SeqTypes>> = WebCommChannel<
-            SeqTypes,
-            I,
-            ViewSyncCertificate<SeqTypes>,
-            ViewSyncVote<SeqTypes>,
-            Membership,
-        >;
+        type DAChannel = WebCommChannel<SeqTypes>;
+        type QuorumChannel = WebCommChannel<SeqTypes>;
     }
 
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Memory;
 
     impl Type for Memory {
-        type DAChannel<I: NodeImplementation<SeqTypes>> =
-            MemoryCommChannel<SeqTypes, I, DAProposal<SeqTypes>, DAVote<SeqTypes>, Membership>;
-        type QuorumChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
-            SeqTypes,
-            I,
-            QuorumProposal<SeqTypes, Leaf>,
-            QuorumVote<SeqTypes, Leaf>,
-            Membership,
-        >;
-        type ViewSyncChannel<I: NodeImplementation<SeqTypes>> = MemoryCommChannel<
-            SeqTypes,
-            I,
-            ViewSyncCertificate<SeqTypes>,
-            ViewSyncVote<SeqTypes>,
-            Membership,
-        >;
+        type DAChannel = MemoryCommChannel<SeqTypes>;
+        type QuorumChannel = MemoryCommChannel<SeqTypes>;
     }
 }
 
@@ -214,57 +161,36 @@ impl<N: network::Type> Clone for Node<N> {
 )]
 pub struct SeqTypes;
 
-pub type Leaf = SequencingLeaf<SeqTypes>;
-pub type Membership = GeneralStaticCommittee<SeqTypes, Leaf, SignatureKeyType>;
-pub type Storage = MemoryStorage<SeqTypes, Leaf>;
-pub type Event = hotshot::types::Event<SeqTypes, Leaf>;
+pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
+pub type Storage = MemoryStorage<SeqTypes>;
+pub type Event = hotshot::types::Event<SeqTypes>;
 
-pub type SignatureKeyType = BN254Pub;
+pub type PubKey = BLSPubKey;
+pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
+
 type ElectionConfig = StaticElectionConfig;
 
 impl<N: network::Type> NodeImplementation<SeqTypes> for Node<N> {
-    type Leaf = Leaf;
     type Storage = Storage;
-    type ConsensusMessage = SequencingMessage<SeqTypes, Self>;
-    type Exchanges = SequencingExchanges<
-        SeqTypes,
-        Message<SeqTypes, Self>,
-        QuorumExchange<
-            SeqTypes,
-            Leaf,
-            QuorumProposal<SeqTypes, Leaf>,
-            Membership,
-            N::QuorumChannel<Self>,
-            Message<SeqTypes, Self>,
-        >,
-        CommitteeExchange<SeqTypes, Membership, N::DAChannel<Self>, Message<SeqTypes, Self>>,
-        ViewSyncExchange<
-            SeqTypes,
-            ViewSyncCertificate<SeqTypes>,
-            Membership,
-            N::ViewSyncChannel<Self>,
-            Message<SeqTypes, Self>,
-        >,
-    >;
+    type QuorumNetwork = N::QuorumChannel;
+    type CommitteeNetwork = N::DAChannel;
 
     fn new_channel_maps(
         start_view: ViewNumber,
-    ) -> (
-        ChannelMaps<SeqTypes, Self>,
-        Option<ChannelMaps<SeqTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<SeqTypes>, Option<ChannelMaps<SeqTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
 
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
-    type BlockType = Block;
-    type SignatureKey = SignatureKeyType;
-    type VoteTokenType = StaticVoteToken<SignatureKeyType>;
+    type BlockHeader = Header;
+    type BlockPayload = Payload;
+    type SignatureKey = PubKey;
     type Transaction = Transaction;
     type ElectionConfigType = ElectionConfig;
     type StateType = State;
+    type Membership = GeneralStaticCommittee<Self, PubKey>;
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -290,87 +216,35 @@ pub enum Error {
     MerkleTreeError { error: String },
 }
 
-type PubKey = BN254Pub;
-type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
-struct CommChannels<N: network::Type> {
-    da: N::DAChannel<Node<N>>,
-    quorum: N::QuorumChannel<Node<N>>,
-    view_sync: N::ViewSyncChannel<Node<N>>,
-}
-
-impl CommChannels<network::Web> {
-    fn web(network_params: NetworkParams, pub_key: PubKey) -> Self {
-        let wait_time = Duration::from_millis(100);
-        let da_network = Arc::new(WebServerNetwork::create(
-            &network_params.da_server_url.host().unwrap().to_string(),
-            network_params
-                .da_server_url
-                .port_or_known_default()
-                .unwrap(),
-            wait_time,
-            pub_key,
-            true,
-        ));
-        let consensus_network = Arc::new(WebServerNetwork::create(
-            &network_params
-                .consensus_server_url
-                .host()
-                .unwrap()
-                .to_string(),
-            network_params
-                .consensus_server_url
-                .port_or_known_default()
-                .unwrap(),
-            wait_time,
-            pub_key,
-            false,
-        ));
-        Self {
-            da: WebCommChannel::new(da_network),
-            quorum: WebCommChannel::new(consensus_network.clone()),
-            view_sync: WebCommChannel::new(consensus_network),
-        }
-    }
-}
-
 async fn init_hotshot<N: network::Type>(
     nodes_pub_keys: Vec<PubKey>,
     known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
-    genesis_block: Block,
     node_id: usize,
     priv_key: PrivKey,
-    channels: CommChannels<N>,
-    config: HotShotConfig<PubKey, <PubKey as SignatureKey>::StakeTableEntry, ElectionConfig>,
+    networks: Networks<SeqTypes, Node<N>>,
+    config: HotShotConfig<PubKey, ElectionConfig>,
+    metrics: &dyn Metrics,
 ) -> SystemContextHandle<SeqTypes, Node<N>> {
-    let storage = Storage::empty();
-    let initializer = HotShotInitializer::<SeqTypes, SequencingLeaf<SeqTypes>>::from_genesis(
-        genesis_block.clone(),
-    )
-    .unwrap();
-    let metrics = Box::<NoMetrics>::default();
     let num_nodes = nodes_pub_keys.len() as u64;
-    let election_config = Membership::default_election_config(num_nodes);
 
-    let exchanges = SequencingExchanges::create(
-        known_nodes_with_stake,
-        nodes_pub_keys.clone(),
-        (election_config.clone(), election_config),
-        (channels.quorum, channels.da, channels.view_sync),
-        nodes_pub_keys[node_id],
-        nodes_pub_keys[node_id].get_stake_table_entry(1u64),
-        priv_key.clone(),
-    );
+    let membership = GeneralStaticCommittee::new(&nodes_pub_keys, known_nodes_with_stake.clone());
+    let memberships = Memberships {
+        quorum_membership: membership.clone(),
+        da_membership: membership.clone(),
+        vid_membership: membership.clone(),
+        view_sync_membership: membership,
+    };
 
     SystemContext::init(
         nodes_pub_keys[node_id],
         priv_key,
         node_id as u64,
         config,
-        storage,
-        exchanges,
-        initializer,
-        metrics,
+        Storage::empty(),
+        memberships,
+        networks,
+        HotShotInitializer::from_genesis().unwrap(),
+        ConsensusMetricsValue::new(metrics),
     )
     .await
     .unwrap()
@@ -385,8 +259,7 @@ pub struct NetworkParams {
 
 pub async fn init_node(
     network_params: NetworkParams,
-    genesis_block: Block,
-    _metrics: Box<dyn Metrics>,
+    metrics: &dyn Metrics,
 ) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -415,12 +288,42 @@ pub async fn init_node(
     // These are deterministic keys suitable *only* for testing and demo purposes.
     let num_nodes = config.config.total_nodes.get();
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
-        .map(|i| SignatureKeyType::generated_from_seed_indexed(config.seed, i as u64))
+        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64))
         .unzip();
     let priv_key = priv_keys[node_index as usize].clone();
-    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0..num_nodes)
+    let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
+
+    // Initialize networking.
+    let wait_time = Duration::from_millis(100);
+    let networks = Networks {
+        da_network: Arc::new(WebServerNetwork::create(
+            &network_params.da_server_url.host().unwrap().to_string(),
+            network_params
+                .da_server_url
+                .port_or_known_default()
+                .unwrap(),
+            wait_time,
+            pub_keys[node_index],
+            true,
+        )),
+        quorum_nework: Arc::new(WebServerNetwork::create(
+            &network_params
+                .consensus_server_url
+                .host()
+                .unwrap()
+                .to_string(),
+            network_params
+                .consensus_server_url
+                .port_or_known_default()
+                .unwrap(),
+            wait_time,
+            pub_keys[node_index],
+            false,
+        )),
+        _pd: Default::default(),
+    };
 
     // Wait for other nodes to connect.
     orchestrator_client
@@ -431,11 +334,11 @@ pub async fn init_node(
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
-            genesis_block,
             node_index as usize,
             priv_key,
-            CommChannels::web(network_params, pub_keys[node_index as usize]),
+            networks,
             config.config,
+            metrics,
         )
         .await,
         node_index.into(),
@@ -450,121 +353,28 @@ pub mod testing {
     use futures::{Stream, StreamExt};
     use hotshot::traits::implementations::{MasterMap, MemoryNetwork};
     use hotshot::types::EventType::Decide;
-    use hotshot_signature_key::bn254::BN254Priv;
     use hotshot_types::{
-        data::LeafType,
-        traits::{
-            election::ConsensusExchange,
-            network::{TestableChannelImplementation, TestableNetworkingImplementation},
-            node_implementation::TestableExchange,
-        },
+        traits::network::{TestableChannelImplementation, TestableNetworkingImplementation},
         ExecutionType,
     };
     use std::time::Duration;
-
-    impl TestableExchange<SeqTypes, Leaf, Message<SeqTypes, Node<network::Memory>>>
-        for <Node<network::Memory> as NodeImplementation<SeqTypes>>::Exchanges
-    {
-        fn gen_comm_channels(
-            expected_node_count: usize,
-            num_bootstrap: usize,
-            da_committee_size: usize,
-        ) -> Box<
-            dyn Fn(
-                    u64,
-                ) -> (
-                    <Self::QuorumExchange as ConsensusExchange<
-                        SeqTypes,
-                        Message<SeqTypes, Node<network::Memory>>,
-                    >>::Networking,
-                    <Self::CommitteeExchange as ConsensusExchange<
-                        SeqTypes,
-                        Message<SeqTypes, Node<network::Memory>>,
-                    >>::Networking,
-                    <Self::ViewSyncExchange as ConsensusExchange<
-                        SeqTypes,
-                        Message<SeqTypes, Node<network::Memory>>,
-                    >>::Networking,
-                ) + 'static,
-        > {
-            #[allow(clippy::arc_with_non_send_sync)]
-            let network_generator = Arc::new(<MemoryNetwork<
-                Message<SeqTypes, Node<network::Memory>>,
-                <SeqTypes as NodeType>::SignatureKey,
-            > as TestableNetworkingImplementation<
-                SeqTypes,
-                Message<SeqTypes, Node<network::Memory>>,
-            >>::generator(
-                expected_node_count,
-                num_bootstrap,
-                0,
-                da_committee_size,
-                false,
-            ));
-            #[allow(clippy::arc_with_non_send_sync)]
-            let network_da_generator = Arc::new(<MemoryNetwork<
-                Message<SeqTypes, Node<network::Memory>>,
-                <SeqTypes as NodeType>::SignatureKey,
-            > as TestableNetworkingImplementation<
-                SeqTypes,
-                Message<SeqTypes, Node<network::Memory>>,
-            >>::generator(
-                expected_node_count,
-                num_bootstrap,
-                1,
-                da_committee_size,
-                true,
-            ));
-            Box::new(move |id| {
-                let network = Arc::new(network_generator(id));
-                let network_da = Arc::new(network_da_generator(id));
-                let quorum_chan = <<Self::QuorumExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network.clone());
-                let committee_chan = <<Self::CommitteeExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network_da);
-                let view_sync_chan = <<Self::ViewSyncExchange as hotshot_types::traits::election::ConsensusExchange<SeqTypes, Message<SeqTypes, Node<network::Memory>>>>::Networking as TestableChannelImplementation<_, _, _, _, _, _>>::generate_network()(network);
-
-                (quorum_chan, committee_chan, view_sync_chan)
-            })
-        }
-    }
-
-    impl CommChannels<network::Memory> {
-        fn memory(
-            master_map: Arc<MasterMap<Message<SeqTypes, Node<network::Memory>>, PubKey>>,
-            pub_key: PubKey,
-        ) -> Self {
-            let network = Arc::new(MemoryNetwork::new(
-                pub_key,
-                Box::<NoMetrics>::default(),
-                master_map,
-                None,
-            ));
-            Self {
-                da: MemoryCommChannel::new(network.clone()),
-                quorum: MemoryCommChannel::new(network.clone()),
-                view_sync: MemoryCommChannel::new(network),
-            }
-        }
-    }
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
     {
         setup_logging();
         setup_backtrace();
 
-        let genesis_block = Block::genesis();
-
         let num_nodes = 5;
 
         // Generate keys for the nodes.
         let priv_keys = (0..num_nodes)
-            .map(|_| BN254Priv::generate())
+            .map(|_| PrivKey::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
-            .map(BN254Pub::from_private)
+            .map(PubKey::from_private)
             .collect::<Vec<_>>();
-        let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
-            ..num_nodes)
+        let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
             .map(|id| pub_keys[id].get_stake_table_entry(1u64))
             .collect();
 
@@ -572,7 +382,7 @@ pub mod testing {
 
         let master_map = MasterMap::new();
 
-        let config: HotShotConfig<_, _, _> = HotShotConfig {
+        let config: HotShotConfig<_, _> = HotShotConfig {
             execution_type: ExecutionType::Continuous,
             total_nodes: num_nodes.try_into().unwrap(),
             known_nodes: pub_keys.clone(),
@@ -586,19 +396,30 @@ pub mod testing {
             num_bootstrap: 1usize,
             propose_min_round_time: Duration::from_secs(1),
             propose_max_round_time: Duration::from_secs(1),
-            election_config: Some(Membership::default_election_config(num_nodes as u64)),
+            election_config: None,
             da_committee_size: num_nodes,
         };
 
         // Create HotShot instances.
         for node_id in 0..num_nodes {
+            let network = Arc::new(MemoryNetwork::new(
+                pub_keys[node_id],
+                &NoMetrics,
+                master_map.clone(),
+                None,
+            ));
+            let networks = Networks {
+                da_network: MemoryCommChannel::new(network.clone()),
+                quorum_nework: MemoryCommChannel::new(network),
+                _pd: Default::default(),
+            };
+
             let handle = init_hotshot(
                 pub_keys.clone(),
                 known_nodes_with_stake.clone(),
-                genesis_block.clone(),
                 node_id,
                 priv_keys[node_id].clone(),
-                CommChannels::memory(master_map.clone(), pub_keys[node_id]),
+                networks,
                 config.clone(),
             )
             .await;

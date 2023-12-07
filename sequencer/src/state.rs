@@ -28,7 +28,7 @@ impl HotShotState for State {
 
     type Time = ViewNumber;
 
-    fn validate_block(&self, _block: &Self::BlockType, _view_number: &Self::Time) -> bool {
+    fn validate_block(&self, _header: &Self::BlockHeader, _view_number: &Self::Time) -> bool {
         unimplemented!("Using sequencing consensus, no validation")
     }
 
@@ -39,7 +39,7 @@ impl HotShotState for State {
     // This function is called exactly once, with the first block.
     fn append(
         &self,
-        _block: &Self::BlockType,
+        _header: &Self::BlockHeader,
         _view_number: &Self::Time,
     ) -> Result<Self, Self::Error> {
         Ok(self.clone())
@@ -62,7 +62,7 @@ impl hotshot_types::traits::state::TestableState for State {
         _state: Option<&Self>,
         rng: &mut dyn rand::RngCore,
         _padding: u64,
-    ) -> <Self::BlockType as hotshot::traits::Block>::Transaction {
+    ) -> crate::Transaction {
         crate::Transaction::random(rng)
     }
 }

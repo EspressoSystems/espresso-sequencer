@@ -1,23 +1,33 @@
 use crate::{
+    l1_client::{L1Client, L1ClientOptions, L1Snapshot},
     Error, L1BlockInfo, NMTRoot, NamespaceProofType, Transaction, TransactionNMT, VmId,
     MAX_NMT_DEPTH,
 };
 use ark_serialize::CanonicalSerialize;
+use async_std::task::{block_on, sleep};
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::block_contents::{BlockHeader, BlockPayload};
+use hotshot_types::{
+    data::VidCommitment,
+    traits::block_contents::{BlockHeader, BlockPayload},
+};
 use jf_primitives::merkle_tree::{
     namespaced_merkle_tree::NamespacedMerkleTreeScheme, AppendableMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeScheme,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Debug, Display};
+use std::{
+    env,
+    fmt::{Debug, Display},
+    time::Duration,
+};
 use time::OffsetDateTime;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
+    pub height: u64,
     pub timestamp: u64,
 
     /// The Espresso block header includes a reference to the current head of the L1 chain.
@@ -67,17 +77,16 @@ pub struct Header {
 
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new(&Block::tag())
-            .u64_field("timestamp", self.timestamp())
-            .u64_field("l1_head", self.l1_head())
-            .array_field(
+        RawCommitmentBuilder::new(&Self::tag())
+            .u64_field("height", self.height)
+            .u64_field("timestamp", self.timestamp)
+            .u64_field("l1_head", self.l1_head)
+            .option_field(
                 "l1_finalized",
-                self.l1_finalized()
-                    .iter()
-                    .map(|block| block.commit())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
+                self.l1_finalized().as_ref().map(Committable::commit),
             )
+            .constant_str("payload_commitment")
+            .fixed_size_bytes(self.payload_commitment.into())
             .field("transactions_root", self.transactions_root.commit())
             .finalize()
     }
@@ -113,7 +122,7 @@ impl BlockHeader for Header {
         //   contain an already connected L1 client.
         // For now, as a workaround, we will create a new L1 client based on environment variables
         // and use `block_on` to query it.
-        let L1Snapshot { finalized, head } = if let Some(l1_client) = &*L1_CLIENT {
+        let l1 = if let Some(l1_client) = &*L1_CLIENT {
             block_on(l1_client.snapshot())
         } else {
             // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
@@ -135,7 +144,7 @@ impl BlockHeader for Header {
 
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
         // only happen if our clock is badly out of sync with L1.
-        if let Some(l1_block) = &l1_finalized {
+        if let Some(l1_block) = &l1.finalized {
             let l1_timestamp = l1_block.timestamp.as_u64();
             if timestamp < l1_timestamp {
                 tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}");
@@ -145,8 +154,8 @@ impl BlockHeader for Header {
 
         Self {
             timestamp,
-            l1_head,
-            l1_finalized,
+            l1_head: l1.head,
+            l1_finalized: l1.finalized,
             payload_commitment,
             transactions_root: metadata,
         }
@@ -222,9 +231,9 @@ impl BlockPayload for Payload {
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::state::TestableBlock for Block {
+impl hotshot_types::traits::state::TestableBlock for Payload {
     fn genesis() -> Self {
-        Block::genesis().0
+        Self::genesis().0
     }
 
     fn txn_count(&self) -> u64 {
@@ -232,13 +241,13 @@ impl hotshot_types::traits::state::TestableBlock for Block {
     }
 }
 
-impl Display for Block {
+impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
 }
 
-impl Block {
+impl Payload {
     /// Return namespace proof for a `V`, which can be used to extract the transactions for `V` in this block
     /// and the root of the NMT
     pub fn get_namespace_proof(&self, vm_id: VmId) -> NamespaceProofType {
