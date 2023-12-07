@@ -505,54 +505,49 @@ mod test {
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use jf_primitives::vid::VidScheme;
+    use jf_primitives::vid::{
+        payload_prover::{PayloadProver, Statement},
+        VidScheme,
+    };
+    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            // 3 non-empty txs
-            vec![
-                vec![0, 1, 2, 3, 4],
-                vec![5, 6, 7, 8, 9, 10, 11, 12],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx at the beginning
-            vec![
-                vec![],
-                vec![5, 6, 7, 8, 9, 10, 11, 12],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx in the middle
-            vec![
-                vec![0, 1, 2, 3, 4],
-                vec![],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx at the end
-            vec![vec![0, 1, 2, 3, 4], vec![5, 6, 7, 8, 9, 10, 11, 12], vec![]],
-            // 1 nonempty tx
-            vec![vec![0, 1, 2, 3, 4]],
-            // 1 empty tx
-            vec![vec![]],
-            // zero txs
-            vec![],
+            vec![5, 13, 21], // 3 non-empty txs
+            vec![0, 8, 16],  // 1 empty tx at the beginning
+            vec![5, 5, 13],  // 1 empty tx in the middle
+            vec![5, 13, 13], // 1 empty tx at the end
+            vec![5],         // 1 nonempty tx
+            vec![0],         // 1 empty tx
+            vec![],          // zero txs
         ];
 
         setup_logging();
         setup_backtrace();
+        let mut rng = jf_utils::test_rng();
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, tx_bodies) in test_cases.into_iter().enumerate() {
+        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
             tracing::info!(
-                "test payload {} of {} with {} txs",
+                "test block payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                tx_bodies.len()
+                tx_table_entries.len()
             );
 
             // prepare things as a function of the test case
+            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
+            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
+            assert_eq!(
+                // enforce well-formed test case
+                tx_payloads_flat,
+                tx_bodies.iter().flatten().cloned().collect::<Vec<_>>(),
+                "test block payload {} is malformed",
+                t + 1
+            );
             let txs = tx_bodies
                 .iter()
                 .cloned()
@@ -588,7 +583,6 @@ mod test {
             assert_eq!(tx_table, tx_offsets);
 
             // test block payload body
-            let tx_payloads_flat: Vec<u8> = tx_bodies.iter().flatten().cloned().collect();
             assert_eq!(payload, tx_payloads_flat);
             assert_eq!(tx_bodies.len(), block.len());
 
@@ -613,5 +607,113 @@ mod test {
                     .unwrap();
             }
         }
+    }
+
+    // #[test]
+    // fn malformed_payloads() {
+    //     // play with this
+    //     let test_cases = vec![
+    //         // 1 negative-length tx
+    //         // vec![10, 9, 20],
+    //         // 2 negative-length txs
+    //         // vec![10, 9, 5],
+
+    //         // well-formed test cases
+    //         vec![5, 10, 15],
+    //         vec![20, 40, 60],
+    //     ];
+
+    //     // TODO more test cases:
+    //     // - overflow u32
+    //     // - txs off the end of the payload
+    //     // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
+
+    //     setup_logging();
+    //     setup_backtrace();
+
+    //     let mut rng = jf_utils::test_rng();
+    //     let vid = test_vid_factory();
+    //     let num_test_cases = test_cases.len();
+    //     for (t, entries) in test_cases.into_iter().enumerate() {
+    //         tracing::info!(
+    //             "test payload {} of {} with {} txs",
+    //             t + 1,
+    //             num_test_cases,
+    //             entries.len()
+    //         );
+    //         let block = BlockPayload::from_bytes(random_payload(&entries, &mut rng));
+    //         let disperse_data = vid.disperse(&block.payload).unwrap();
+
+    //         for i in 0..entries.len() {
+    //             let index = TxIndex::try_from(i).unwrap();
+    //             let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
+
+    //             tracing::info!(
+    //                 "index {} tx range start {} end {}",
+    //                 index,
+    //                 tx_range.start,
+    //                 tx_range.end
+    //             );
+
+    //             let (tx, proof) = block.transaction_with_proof(&index).unwrap();
+
+    //             // TODO use TxInclusionProof::verify()
+    //             vid.payload_verify(
+    //                 Statement {
+    //                     payload_subslice: tx.payload(),
+    //                     range: tx_range,
+    //                     commit: &disperse_data.commit,
+    //                     common: &disperse_data.common,
+    //                 },
+    //                 &proof.tx_payload_proof.unwrap(),
+    //             )
+    //             .unwrap()
+    //             .unwrap();
+    //         }
+    //     }
+    // }
+
+    fn tx_table(entries: &[usize]) -> Vec<u8> {
+        let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
+        tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
+        for entry in entries {
+            tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+        }
+        tx_table
+    }
+
+    fn random_tx_payloads_flat<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+    where
+        R: RngCore,
+    {
+        // lergest entry dictates size of tx bodies
+        let mut result = vec![0; *entries.iter().max().unwrap_or(&0)];
+        rng.fill_bytes(&mut result);
+        result
+    }
+
+    fn extract_tx_payloads(entries: &[usize], tx_payloads_flat: &[u8]) -> Vec<Vec<u8>> {
+        let mut result = Vec::with_capacity(entries.len());
+        let mut start = 0;
+        for end in entries {
+            let end = std::cmp::min(*end, tx_payloads_flat.len());
+            let tx_payload = if start >= end {
+                Vec::new()
+            } else {
+                tx_payloads_flat[start..end].to_vec()
+            };
+            start = end;
+            result.push(tx_payload);
+        }
+        result
+    }
+
+    fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+    where
+        R: RngCore,
+    {
+        let mut result = tx_table(entries);
+        result.extend(random_tx_payloads_flat(entries, rng));
+        result
     }
 }
