@@ -111,46 +111,7 @@ impl Committable for NMTRoot {
 impl BlockHeader for Header {
     type Payload = Payload;
 
-    fn new(payload_commitment: VidCommitment, metadata: NMTRoot, parent_header: &Self) -> Self {
-        Self::from_parent(
-            payload_commitment,
-            metadata,
-            Some(parent_header.height),
-            parent_header.timestamp,
-        )
-    }
-
-    fn genesis() -> (
-        Self,
-        Self::Payload,
-        <Self::Payload as BlockPayload>::Metadata,
-    ) {
-        let (payload, metadata) = Payload::genesis();
-        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
-        let header = Self::from_parent(payload_commitment, metadata, None, 0);
-        (header, payload, metadata)
-    }
-
-    fn block_number(&self) -> u64 {
-        self.height
-    }
-
-    fn payload_commitment(&self) -> VidCommitment {
-        self.payload_commitment
-    }
-
-    fn metadata(&self) -> NMTRoot {
-        self.transactions_root
-    }
-}
-
-impl Header {
-    fn from_parent(
-        payload_commitment: VidCommitment,
-        transactions_root: NMTRoot,
-        parent_height: Option<u64>,
-        parent_timestamp: u64,
-    ) -> Self {
+    fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
         // The HotShot APIs should be redesigned so that
         // * they are async
         // * new blocks being created have access to the application state, which in our case could
@@ -168,19 +129,16 @@ impl Header {
         };
 
         // Increment height.
-        let height = match parent_height {
-            Some(height) => height + 1,
-            None => 0,
-        };
+        let height = parent.height + 1;
 
         // Sample a timestamp, ensuring that it does not decrease.
         let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        if timestamp < parent_timestamp {
+        if timestamp < parent.timestamp {
             tracing::warn!(
-                "Espresso timestamp {timestamp} behind parent {}",
-                parent_timestamp
+                "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
+                parent.timestamp
             );
-            timestamp = parent_timestamp;
+            timestamp = parent.timestamp;
         }
 
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
@@ -188,7 +146,7 @@ impl Header {
         if let Some(l1_block) = &l1.finalized {
             let l1_timestamp = l1_block.timestamp.as_u64();
             if timestamp < l1_timestamp {
-                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}");
+                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
                 timestamp = l1_timestamp;
             }
         }
@@ -201,6 +159,38 @@ impl Header {
             payload_commitment,
             transactions_root,
         }
+    }
+
+    fn genesis() -> (
+        Self,
+        Self::Payload,
+        <Self::Payload as BlockPayload>::Metadata,
+    ) {
+        let (payload, transactions_root) = Payload::genesis();
+        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
+        let header = Self {
+            // The genesis header needs to be completely deterministic, so we can't sample real
+            // timestamps or L1 values.
+            height: 0,
+            timestamp: 0,
+            l1_head: 0,
+            l1_finalized: None,
+            payload_commitment,
+            transactions_root,
+        };
+        (header, payload, transactions_root)
+    }
+
+    fn block_number(&self) -> u64 {
+        self.height
+    }
+
+    fn payload_commitment(&self) -> VidCommitment {
+        self.payload_commitment
+    }
+
+    fn metadata(&self) -> NMTRoot {
+        self.transactions_root
     }
 }
 
