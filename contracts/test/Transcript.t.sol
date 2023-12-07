@@ -8,7 +8,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { VkTest } from "./stubs/Transfer1In2Out24DepthVk.sol";
+import { VkTest } from "./mocks/Transfer1In2Out24DepthVk.sol";
 
 // Target contract
 import { Transcript as T } from "../src/libraries/Transcript.sol";

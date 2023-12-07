@@ -540,7 +540,16 @@ fn open_key() -> OpenKey<Bn254> {
         ),
     );
 
-    OpenKey { g, h, beta_h }
+    let powers_of_g = vec![g];
+    let powers_of_h = vec![h, beta_h];
+
+    OpenKey {
+        g,
+        h,
+        beta_h,
+        powers_of_g,
+        powers_of_h,
+    }
 }
 
 fn field_to_u256<F: PrimeField>(f: F) -> U256 {
@@ -1043,9 +1052,11 @@ fn gen_plonk_proof_for_test(
     let rng = &mut jf_utils::test_rng();
     let srs = {
         let aztec_srs = crs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
+        let powers_of_h = vec![aztec_srs.h, aztec_srs.beta_h];
 
         UnivariateUniversalParams {
             powers_of_g: aztec_srs.powers_of_g,
+            powers_of_h,
             h: aztec_srs.h,
             beta_h: aztec_srs.beta_h,
         }
