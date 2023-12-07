@@ -2,7 +2,7 @@ use self::tx_table_entry::TxTableEntry;
 use crate::Transaction;
 use ark_bls12_381::Bls12_381;
 use derivative::Derivative;
-use hotshot_query_service::QueryableBlock;
+use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     vid::{
@@ -132,7 +132,7 @@ fn tx_payload_range(
     )
 }
 
-impl QueryableBlock for BlockPayload {
+impl QueryablePayload for BlockPayload {
     type TransactionIndex = u32;
     type Iter<'a> = Range<Self::TransactionIndex>;
     type InclusionProof = TxInclusionProof;
@@ -221,7 +221,7 @@ impl QueryableBlock for BlockPayload {
     }
 }
 
-type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
+type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
 
 // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
 type RangeProof =
@@ -430,28 +430,13 @@ mod boilerplate {
     use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
     use std::fmt::Display;
 
-    // TODO temporary.
-    // `Block` trait subject to change/delection.
-    // Skeleton impl for now so as to enable `QueryableBlock`.
-    impl hotshot::traits::Block for BlockPayload {
+    // Skeleton impl for now so as to enable `QueryablePayload`.
+    impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
-        type Transaction = Transaction;
+        type Metadata = ();
 
-        fn new() -> Self {
-            todo!()
-        }
-
-        fn add_transaction_raw(
-            &self,
-            _tx: &Self::Transaction,
-        ) -> std::result::Result<Self, Self::Error> {
-            todo!()
-        }
-
-        fn contained_transactions(
-            &self,
-        ) -> std::collections::HashSet<commit::Commitment<Self::Transaction>> {
-            todo!()
+        fn genesis() -> (Self, Self::Metadata) {
+            (Self::from_txs([]).unwrap(), ())
         }
     }
 
@@ -488,7 +473,7 @@ mod boilerplate {
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, QueryableBlock, Transaction, TxIndex,
+        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction, TxIndex,
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
