@@ -158,7 +158,7 @@ async fn test_consensus_with_vid_vote() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let (handle, _event_stream) = build_system_handle(2).await;
     // We assign node's key pair rather than read from config file since it's a test
     let (private_key_view1, public_key_view1) = key_pair_for_id(1);
     // In view 2, node 2 is the leader.

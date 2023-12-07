@@ -414,7 +414,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!(
-                    "Receved Quorum Propsoal for view {}",
+                    "Received Quorum Propsoal for view {}",
                     *proposal.data.view_number
                 );
 
