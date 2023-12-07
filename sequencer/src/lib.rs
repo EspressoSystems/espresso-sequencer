@@ -29,7 +29,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
     traits::{
-        metrics::{Metrics, NoMetrics},
+        metrics::Metrics,
         network::CommunicationChannel,
         node_implementation::{ChannelMaps, NodeType},
     },
@@ -352,7 +352,9 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::EventType::Decide;
-    use hotshot_types::{light_client::StateKeyPair, ExecutionType, ValidatorConfig};
+    use hotshot_types::{
+        light_client::StateKeyPair, traits::metrics::NoMetrics, ExecutionType, ValidatorConfig,
+    };
     use std::time::Duration;
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
