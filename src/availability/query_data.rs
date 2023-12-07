@@ -10,32 +10,35 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{Block, Deltas, Leaf, QuorumCertificate, Resolvable, Transaction};
-use bincode::Options;
+use crate::{Header, Payload, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_types::{
-    data::LeafType,
+    data::Leaf,
+    simple_certificate::QuorumCertificate,
     traits::{
         self,
-        election::SignedCertificate,
-        node_implementation::{NodeImplementation, NodeType},
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::NodeType,
         signature_key::EncodedPublicKey,
     },
 };
-use hotshot_utils::bincode::bincode_opts;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::fmt::Debug;
 
-pub type LeafHash<Types, I> = Commitment<Leaf<Types, I>>;
-pub type BlockHash<Types> = Commitment<Block<Types>>;
+pub type LeafHash<Types> = Commitment<Leaf<Types>>;
+/// A block hash is the hash of the block header.
+///
+/// A block consists of a header and a payload. But the header itself contains a commitment to the
+/// payload, so we can commit to the entire block simply by hashing the header.
+pub type BlockHash<Types> = Commitment<Header<Types>>;
 pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
-pub type TransactionIndex<Types> = <Block<Types> as QueryableBlock>::TransactionIndex;
-pub type TransactionInclusionProof<Types> = <Block<Types> as QueryableBlock>::InclusionProof;
+pub type TransactionIndex<Types> = <Payload<Types> as QueryablePayload>::TransactionIndex;
+pub type TransactionInclusionProof<Types> = <Payload<Types> as QueryablePayload>::InclusionProof;
 
 pub type Timestamp = time::OffsetDateTime;
 
-/// A block whose contents (e.g. individual transactions) can be examined.
+/// A block payload whose contents (e.g. individual transactions) can be examined.
 ///
 /// Note to implementors: this trait has only a few required methods. The provided methods, for
 /// querying transactions in various ways, are implemented in terms of the required
@@ -43,7 +46,7 @@ pub type Timestamp = time::OffsetDateTime;
 /// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
 /// unnecessary inclusion proof). It is good practice to override these default implementations if
 /// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
-pub trait QueryableBlock: traits::Block {
+pub trait QueryablePayload: traits::BlockPayload {
     /// An index which can be used to efficiently retrieve a transaction for the block.
     ///
     /// This is left abstract so that different block implementations can index transactions
@@ -162,19 +165,19 @@ pub trait QueryableBlock: traits::Block {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct LeafQueryData<Types: NodeType, I: NodeImplementation<Types>> {
-    pub(crate) leaf: Leaf<Types, I>,
-    pub(crate) qc: QuorumCertificate<Types, I>,
+pub struct LeafQueryData<Types: NodeType> {
+    pub(crate) leaf: Leaf<Types>,
+    pub(crate) qc: QuorumCertificate<Types>,
 }
 
 #[derive(Clone, Debug, Snafu)]
-#[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
-pub struct InconsistentLeafError<Types: NodeType, I: NodeImplementation<Types>> {
-    pub leaf: Leaf<Types, I>,
-    pub qc: QuorumCertificate<Types, I>,
+#[snafu(display("QC references leaf {qc_leaf}, but expected {leaf}"))]
+pub struct InconsistentLeafError<Types: NodeType> {
+    pub leaf: LeafHash<Types>,
+    pub qc_leaf: LeafHash<Types>,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
+impl<Types: NodeType> LeafQueryData<Types> {
     /// Collect information about a [`Leaf`].
     ///
     /// Returns a new [`LeafQueryData`] object populated from `leaf` and `qc`.
@@ -183,41 +186,44 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
     ///
     /// Fails with an [`InconsistentLeafError`] if `qc` does not reference `leaf`.
     pub fn new(
-        leaf: Leaf<Types, I>,
-        qc: QuorumCertificate<Types, I>,
-    ) -> Result<Self, InconsistentLeafError<Types, I>> {
+        leaf: Leaf<Types>,
+        qc: QuorumCertificate<Types>,
+    ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
-            qc.leaf_commitment() == leaf.commit(),
-            InconsistentLeafSnafu { leaf, qc }
+            qc.data.leaf_commit == leaf.commit(),
+            InconsistentLeafSnafu {
+                leaf: leaf.commit(),
+                qc_leaf: qc.data.leaf_commit
+            }
         );
         Ok(Self { leaf, qc })
     }
 
-    pub fn leaf(&self) -> &Leaf<Types, I> {
+    pub fn genesis() -> Self {
+        Self {
+            leaf: Leaf::genesis(),
+            qc: QuorumCertificate::genesis(),
+        }
+    }
+
+    pub fn leaf(&self) -> &Leaf<Types> {
         &self.leaf
     }
 
-    pub fn qc(&self) -> &QuorumCertificate<Types, I> {
+    pub fn qc(&self) -> &QuorumCertificate<Types> {
         &self.qc
     }
 
     pub fn height(&self) -> u64 {
-        leaf_height(&self.leaf)
+        self.leaf.block_header.block_number()
     }
 
-    pub fn timestamp(&self) -> Timestamp {
-        parse_timestamp(self.leaf.get_timestamp())
-    }
-
-    pub fn hash(&self) -> LeafHash<Types, I> {
+    pub fn hash(&self) -> LeafHash<Types> {
         self.leaf.commit()
     }
 
-    pub fn block_hash(&self) -> BlockHash<Types>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
-        self.leaf.get_deltas().commitment()
+    pub fn block_hash(&self) -> BlockHash<Types> {
+        self.leaf.block_header.commit()
     }
 
     pub fn proposer(&self) -> EncodedPublicKey {
@@ -227,83 +233,69 @@ impl<Types: NodeType, I: NodeImplementation<Types>> LeafQueryData<Types, I> {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
-pub struct BlockQueryData<Types: NodeType>
-where
-    Block<Types>: QueryableBlock,
-{
-    pub(crate) block: Block<Types>,
+pub struct BlockQueryData<Types: NodeType> {
+    pub(crate) header: Header<Types>,
+    pub(crate) payload: Payload<Types>,
     pub(crate) hash: BlockHash<Types>,
-    pub(crate) height: u64,
-    pub(crate) timestamp: i128,
     pub(crate) size: u64,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(bound = "")]
-pub struct BlockHeaderQueryData<Types: NodeType> {
-    hash: BlockHash<Types>,
-    height: u64,
-    size: u64,
-}
-
-#[derive(Clone, Debug, Snafu)]
-pub enum InconsistentBlockError<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Deltas<Types, I>: Resolvable<Block<Types>>,
-    Block<Types>: Serialize,
-{
-    #[snafu(display("QC references leaf {}, but expected {}", qc.leaf_commitment(), leaf.commit()))]
-    InconsistentQc {
-        qc: QuorumCertificate<Types, I>,
-        leaf: Leaf<Types, I>,
-    },
-    #[snafu(display("Leaf {} references block {}, but expected {}",
-        leaf.commit(), block.commit(), leaf.get_deltas().commitment()))]
-    InconsistentBlock {
-        leaf: Leaf<Types, I>,
-        block: Block<Types>,
-    },
-}
-
-impl<Types: NodeType> BlockQueryData<Types>
-where
-    Block<Types>: QueryableBlock,
-{
-    /// Collect information about a [`Block`].
+impl<Types: NodeType> BlockQueryData<Types> {
+    /// Collect information about a block.
     ///
-    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `block`.
+    /// Returns a new [`BlockQueryData`] object populated from `leaf`, `qc`, and `payload`.
     ///
     /// # Errors
     ///
-    /// Fails with an [`InconsistentBlockError`] if `qc`, `leaf`, and `block` do not all correspond
-    /// to the same block.
-    pub fn new<I: NodeImplementation<Types>>(
-        leaf: Leaf<Types, I>,
-        qc: QuorumCertificate<Types, I>,
-        block: Block<Types>,
-    ) -> Result<Self, InconsistentBlockError<Types, I>>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    /// Fails with an [`InconsistentLeafError`] if `qc` and `leaf` do not correspond to the same
+    /// block. If `payload` does not correspond to the same block as `leaf`, the behavior is
+    /// unspecified. In debug builds, the call may panic. However, this consistency check is quite
+    /// expensive, and may be omitted in optimized builds. The responsibility of ensuring
+    /// consistency between `leaf` and `payload` ultimately falls on the caller.
+    pub fn new(
+        leaf: Leaf<Types>,
+        qc: QuorumCertificate<Types>,
+        payload: Payload<Types>,
+    ) -> Result<Self, InconsistentLeafError<Types>> {
         ensure!(
-            qc.leaf_commitment() == leaf.commit(),
-            InconsistentQcSnafu { qc, leaf }
+            qc.data.leaf_commit == leaf.commit(),
+            InconsistentLeafSnafu {
+                leaf: leaf.commit(),
+                qc_leaf: qc.data.leaf_commit
+            },
         );
-        ensure!(
-            leaf.get_deltas().commitment() == block.commit(),
-            InconsistentBlockSnafu { leaf, block }
+        debug_assert!(
+            leaf.block_header.payload_commitment()
+                == hotshot_types::traits::block_contents::vid_commitment(
+                    &payload.encode().unwrap().collect()
+                )
         );
         Ok(Self {
-            hash: block.commit(),
-            height: leaf_height(&leaf),
-            timestamp: round_timestamp(leaf.get_timestamp()),
-            size: bincode_opts().serialized_size(&block).unwrap_or_default(),
-            block,
+            hash: leaf.block_header.commit(),
+            header: leaf.block_header,
+            size: payload_size::<Types>(&payload),
+            payload,
         })
     }
 
-    pub fn block(&self) -> &Types::BlockType {
-        &self.block
+    pub fn genesis() -> Self {
+        let (header, payload, _) = Types::BlockHeader::genesis();
+        let size = payload_size::<Types>(&payload);
+        let hash = header.commit();
+        Self {
+            header,
+            payload,
+            hash,
+            size,
+        }
+    }
+
+    pub fn header(&self) -> &Header<Types> {
+        &self.header
+    }
+
+    pub fn payload(&self) -> &Payload<Types> {
+        &self.payload
     }
 
     pub fn hash(&self) -> BlockHash<Types> {
@@ -311,35 +303,32 @@ where
     }
 
     pub fn height(&self) -> u64 {
-        self.height
-    }
-
-    pub fn timestamp(&self) -> Timestamp {
-        parse_timestamp(self.timestamp)
+        self.header.block_number()
     }
 
     pub fn size(&self) -> u64 {
         self.size
     }
 
-    pub fn len(&self) -> usize {
-        self.block().len()
+    pub fn len(&self) -> usize
+    where
+        Payload<Types>: QueryablePayload,
+    {
+        self.payload.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool
+    where
+        Payload<Types>: QueryablePayload,
+    {
         self.len() == 0
     }
 
-    pub fn header(&self) -> BlockHeaderQueryData<Types> {
-        BlockHeaderQueryData {
-            hash: self.hash,
-            height: self.height,
-            size: self.size,
-        }
-    }
-
-    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>> {
-        let (transaction, proof) = self.block.transaction_with_proof(i)?;
+    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>>
+    where
+        Payload<Types>: QueryablePayload,
+    {
+        let (transaction, proof) = self.payload.transaction_with_proof(i)?;
         Some(TransactionQueryData {
             transaction: transaction.clone(),
             block_hash: self.hash(),
@@ -350,25 +339,11 @@ where
     }
 }
 
-impl<Types: NodeType> BlockHeaderQueryData<Types> {
-    pub fn hash(&self) -> BlockHash<Types> {
-        self.hash
-    }
-
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
-    pub fn size(&self) -> u64 {
-        self.size
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct TransactionQueryData<Types: NodeType>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     transaction: Transaction<Types>,
     block_hash: BlockHash<Types>,
@@ -379,7 +354,7 @@ where
 
 impl<Types: NodeType> TransactionQueryData<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     pub fn transaction(&self) -> &Transaction<Types> {
         &self.transaction
@@ -398,19 +373,9 @@ where
     }
 }
 
-fn parse_timestamp(ns: i128) -> Timestamp {
-    Timestamp::from_unix_timestamp_nanos(ns).expect("HotShot timestamp out of range")
-}
-
-fn round_timestamp(ns: i128) -> i128 {
-    // HotShot gives us the timestamp with nanosecond precision, which is far more than necessary
-    // and can't be stored accurately in Postgres. Round down to microsecond precision.
-    (ns / 1000) * 1000
-}
-
-fn leaf_height<L: LeafType>(leaf: &L) -> u64 {
-    // HotShot generates a genesis leaf with height 0, but we don't see it in the event stream.
-    // Therefore, the first leaf we see has height 1. But to clients, the first leaf should have
-    // height 0, since there is nothing before it, so we adjust the height here.
-    leaf.get_height() - 1
+pub(crate) fn payload_size<Types: NodeType>(payload: &Payload<Types>) -> u64 {
+    match payload.encode() {
+        Ok(iter) => iter.count() as u64,
+        Err(_) => 0,
+    }
 }

@@ -96,7 +96,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{MockNodeImpl, MockTransaction, MockTypes},
+            mocks::{MockTransaction, MockTypes},
             setup_test, sleep,
         },
         Error,
@@ -133,7 +133,7 @@ mod test {
 
         // Submit a transaction. We have not yet started the validators, so this transaction will
         // stay in the mempool, allowing us to check the mempool endpoint.
-        let txn = MockTransaction { nonce: 0 };
+        let txn = MockTransaction::default();
         let txn_size = bincode_opts().serialized_size(&txn).unwrap();
         network.submit_transaction(txn.clone()).await;
         loop {
@@ -155,13 +155,14 @@ mod test {
             );
             sleep(Duration::from_secs(1)).await;
         }
+        // The block height is initially 1 (for the genesis block).
         assert_eq!(
             client
                 .get::<u64>("latest_block_height")
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
 
         // Test Prometheus export.
@@ -206,7 +207,7 @@ mod test {
             .send()
             .await
             .unwrap()
-            == 0
+            == 1
         {
             tracing::info!("waiting for block height to update");
             sleep(Duration::from_secs(1)).await;
@@ -214,9 +215,7 @@ mod test {
         let success_rate = client.get::<f64>("success_rate").send().await.unwrap();
         // If metrics are populating correctly, we should get a finite number. If not, we might get
         // NaN or infinity due to division by 0.
-        // TODO re-enable this check once HotShot is populating view metrics again
-        //      https://github.com/EspressoSystems/HotShot/issues/2066
-        // assert!(success_rate.is_finite(), "{success_rate}");
+        assert!(success_rate.is_finite(), "{success_rate}");
         // We know at least some views have been successful, since we finalized a block.
         assert!(success_rate > 0.0, "{success_rate}");
 
@@ -229,7 +228,9 @@ mod test {
 
         let dir = TempDir::new("test_status_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path())
+                .await
+                .unwrap(),
             0,
         );
 
@@ -245,7 +246,7 @@ mod test {
         };
 
         let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
         >(&Options {
             extensions: vec![extensions.into()],
             ..Default::default()
@@ -285,7 +286,7 @@ mod test {
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
     }
 }

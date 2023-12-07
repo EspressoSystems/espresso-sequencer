@@ -21,23 +21,22 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::{
-        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
-        NodeImplementation,
+    traits::implementations::{
+        MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage, NetworkingMetricsValue,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_query_service::{
     data_source, run_standalone_service,
     status::UpdateStatusData,
-    testing::mocks::{MockBlock, MockMembership, MockNodeImpl, MockTypes, TestableDataSource},
+    testing::mocks::{DataSourceLifeCycle, MockMembership, MockNodeImpl, MockTypes},
     Error,
 };
-use hotshot_signature_key::bn254::{BN254Priv, BN254Pub};
+use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    traits::{election::Membership, node_implementation::ExchangesType},
-    ExecutionType, HotShotConfig,
+    consensus::ConsensusMetricsValue, light_client::StateKeyPair, ExecutionType, HotShotConfig,
+    ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 
@@ -55,13 +54,13 @@ struct Options {
 }
 
 #[cfg(not(target_os = "windows"))]
-type DataSource = data_source::SqlDataSource<MockTypes, MockNodeImpl>;
+type DataSource = data_source::SqlDataSource<MockTypes>;
 
 // To use SqlDataSource, we need to run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(target_os = "windows")]
-type DataSource = data_source::FileSystemDataSource<MockTypes, MockNodeImpl>;
+type DataSource = data_source::FileSystemDataSource<MockTypes>;
 
-type Db = <DataSource as TestableDataSource>::Storage;
+type Db = <DataSource as DataSourceLifeCycle>::Storage;
 
 #[cfg(not(target_os = "windows"))]
 async fn init_db() -> Db {
@@ -86,7 +85,7 @@ async fn init_data_source(db: &Db) -> DataSource {
 
 #[cfg(target_os = "windows")]
 async fn init_data_source(db: &Db) -> DataSource {
-    DataSource::create(db.path()).unwrap()
+    DataSource::create(db.path()).await.unwrap()
 }
 
 #[async_std::main]
@@ -128,20 +127,19 @@ async fn init_consensus(
     data_sources: &[DataSource],
 ) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
     let priv_keys = (0..data_sources.len())
-        .map(|_| BN254Priv::generate())
+        .map(|_| BLSPrivKey::generate())
         .collect::<Vec<_>>();
     let pub_keys = priv_keys
         .iter()
-        .map(BN254Pub::from_private)
+        .map(BLSPubKey::from_private)
         .collect::<Vec<_>>();
     let master_map = MasterMap::new();
-    let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = pub_keys
+    let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = pub_keys
         .iter()
         .map(|pub_key| pub_key.get_stake_table_entry(1u64))
         .collect();
     let config = HotShotConfig {
         total_nodes: NonZeroUsize::new(pub_keys.len()).unwrap(),
-        known_nodes: pub_keys.clone(),
         known_nodes_with_stake: known_nodes_with_stake.clone(),
         start_delay: 0,
         round_start_delay: 0,
@@ -155,35 +153,42 @@ async fn init_consensus(
         execution_type: ExecutionType::Continuous,
         election_config: None,
         da_committee_size: pub_keys.len(),
+        my_own_validator_config: Default::default(),
     };
     join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
         |(node_id, (priv_key, data_source))| {
             let pub_keys = pub_keys.clone();
             let known_nodes_with_stake = known_nodes_with_stake.clone();
-            let config = config.clone();
+            let mut config = config.clone();
             let master_map = master_map.clone();
-            let election_config = MockMembership::default_election_config(pub_keys.len() as u64);
 
             async move {
+                config.my_own_validator_config = ValidatorConfig {
+                    public_key: pub_keys[node_id],
+                    private_key: priv_key.clone(),
+                    stake_value: known_nodes_with_stake[node_id].stake_amount.as_u64(),
+                    state_key_pair: StateKeyPair::generate(),
+                };
+
+                let membership = MockMembership::new(&pub_keys, known_nodes_with_stake.clone());
+                let memberships = Memberships {
+                    quorum_membership: membership.clone(),
+                    da_membership: membership.clone(),
+                    vid_membership: membership.clone(),
+                    view_sync_membership: membership,
+                };
+
                 let network = Arc::new(MemoryNetwork::new(
                     pub_keys[node_id],
-                    data_source.populate_metrics(),
+                    NetworkingMetricsValue::new(&*data_source.populate_metrics()),
                     master_map.clone(),
                     None,
                 ));
-                let consensus_channel = MemoryCommChannel::new(network.clone());
-                let da_channel = MemoryCommChannel::new(network.clone());
-                let view_sync_channel = MemoryCommChannel::new(network.clone());
-
-                let exchanges = <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
-                    known_nodes_with_stake.clone(),
-                    pub_keys.clone(),
-                    (election_config.clone(), election_config.clone()),
-                    (consensus_channel, view_sync_channel, da_channel),
-                    pub_keys[node_id],
-                    pub_keys[node_id].get_stake_table_entry(1u64),
-                    priv_key.clone(),
-                );
+                let networks = Networks {
+                    quorum_network: MemoryCommChannel::new(network.clone()),
+                    da_network: MemoryCommChannel::new(network),
+                    _pd: Default::default(),
+                };
 
                 SystemContext::init(
                     pub_keys[node_id],
@@ -191,9 +196,10 @@ async fn init_consensus(
                     node_id as u64,
                     config,
                     MemoryStorage::empty(),
-                    exchanges,
-                    HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                    data_source.populate_metrics(),
+                    memberships,
+                    networks,
+                    HotShotInitializer::from_genesis().unwrap(),
+                    ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                 )
                 .await
                 .unwrap()

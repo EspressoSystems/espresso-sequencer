@@ -10,14 +10,11 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{api::load_api, Block, QueryError};
+use crate::{api::load_api, Payload, QueryError};
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt};
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::fmt::Display;
@@ -134,13 +131,11 @@ impl Error {
     }
 }
 
-pub fn define_api<State, Types: NodeType, I: NodeImplementation<Types>>(
-    options: &Options,
-) -> Result<Api<State, Error>, ApiError>
+pub fn define_api<State, Types: NodeType>(options: &Options) -> Result<Api<State, Error>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types, I>,
-    Block<Types>: QueryableBlock,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
+    Payload<Types>: QueryablePayload,
 {
     let mut api = load_api::<State, Error>(
         options.api_path.as_ref(),
@@ -195,7 +190,7 @@ where
                                     height: height as u64,
                                     reason: err.to_string(),
                                 })?
-                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header())))
+                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header().clone())))
                         }
                         .boxed()
                     })
@@ -253,10 +248,14 @@ where
                             resource: id.to_string(),
                         })?;
                         let i = req.integer_param("index")?;
-                        let index = block.block().nth(i).context(InvalidTransactionIndexSnafu {
-                            height: height as u64,
-                            index: i as u64,
-                        })?;
+                        let index =
+                            block
+                                .payload()
+                                .nth(i)
+                                .context(InvalidTransactionIndexSnafu {
+                                    height: height as u64,
+                                    index: i as u64,
+                                })?;
                         (block, index)
                     }
                 };
@@ -298,7 +297,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{MockNodeImpl, MockTransaction, MockTypes},
+            mocks::{mock_transaction, MockTypes},
             setup_test,
         },
         Error, QueryResult,
@@ -307,7 +306,7 @@ mod test {
     use commit::Committable;
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BN254Pub;
+    use hotshot_signature_key::bn254::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::collections::HashSet;
     use std::time::Duration;
@@ -321,13 +320,11 @@ mod test {
         client: &Client<Error>,
     ) -> (
         u64,
-        Vec<(
-            LeafQueryData<MockTypes, MockNodeImpl>,
-            BlockQueryData<MockTypes>,
-        )>,
+        Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
     ) {
         let mut blocks = vec![];
-        for i in 0.. {
+        // Ignore the genesis block (start from height 1).
+        for i in 1.. {
             match client
                 .get::<BlockQueryData<MockTypes>>(&format!("block/{}", i))
                 .send()
@@ -364,7 +361,7 @@ mod test {
         let mut seen_txns = HashSet::new();
         for i in 0..height {
             // Check that looking up the leaf various ways returns the correct leaf.
-            let leaf: LeafQueryData<MockTypes, MockNodeImpl> =
+            let leaf: LeafQueryData<MockTypes> =
                 client.get(&format!("leaf/{}", i)).send().await.unwrap();
             assert_eq!(leaf.height(), i);
             assert_eq!(
@@ -396,7 +393,7 @@ mod test {
             }
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
-            let proposals: Vec<LeafQueryData<MockTypes, MockNodeImpl>> = client
+            let proposals: Vec<LeafQueryData<MockTypes>> = client
                 .get(&format!("proposals/{}", leaf.proposer()))
                 .send()
                 .await
@@ -416,7 +413,7 @@ mod test {
             // include new empty blocks committed since we started checking.
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/1",
                         leaf.proposer()
                     ))
@@ -428,7 +425,7 @@ mod test {
             );
             assert_eq!(
                 client
-                    .get::<Vec<LeafQueryData<MockTypes, MockNodeImpl>>>(&format!(
+                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
                         "proposals/{}/limit/0",
                         leaf.proposer()
                     ))
@@ -441,7 +438,7 @@ mod test {
 
             // Check that looking up each transaction in the block various ways returns the correct
             // transaction.
-            for (j, txn_from_block) in block.block().iter().enumerate() {
+            for (j, txn_from_block) in block.payload().enumerate() {
                 let txn: TransactionQueryData<MockTypes> = client
                     .get(&format!("transaction/{}/{}", i, j))
                     .send()
@@ -450,7 +447,7 @@ mod test {
                 assert_eq!(txn.height(), i);
                 assert_eq!(txn.block_hash(), block.hash());
                 assert_eq!(txn.hash(), txn_from_block.commit());
-                assert_eq!(txn.transaction(), txn_from_block);
+                assert_eq!(txn.transaction(), &txn_from_block);
                 // We should be able to look up the transaction by hash as long as it's not a
                 // duplicate. For duplicate transactions, this endpoint only returns the first one.
                 if !seen_txns.contains(&txn.hash()) {
@@ -496,7 +493,7 @@ mod test {
         // preserves the consistency of the data and indices.
         let leaves = client
             .socket("stream/leaves/0")
-            .subscribe::<QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>>()
+            .subscribe::<QueryResult<LeafQueryData<MockTypes>>>()
             .await
             .unwrap();
         let blocks = client
@@ -506,7 +503,7 @@ mod test {
             .unwrap();
         let mut leaf_blocks = leaves.zip(blocks).enumerate();
         for nonce in 0..3 {
-            let txn = MockTransaction { nonce };
+            let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
@@ -542,7 +539,9 @@ mod test {
 
         let dir = TempDir::new("test_availability_extensions").unwrap();
         let data_source = ExtensibleDataSource::new(
-            FileSystemDataSource::<MockTypes, MockNodeImpl>::create(dir.path()).unwrap(),
+            FileSystemDataSource::<MockTypes>::create(dir.path())
+                .await
+                .unwrap(),
             0,
         );
 
@@ -559,9 +558,8 @@ mod test {
         };
 
         let mut api = define_api::<
-            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, u64>>,
+            RwLock<ExtensibleDataSource<FileSystemDataSource<MockTypes>, u64>>,
             MockTypes,
-            MockNodeImpl,
         >(&Options {
             extensions: vec![extensions.into()],
             ..Default::default()
@@ -598,7 +596,7 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        let (key, _) = BN254Pub::generated_from_seed_indexed([0; 32], 0);
+        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
                 .get::<u64>(&format!("proposals/{}/count", key.to_bytes()))

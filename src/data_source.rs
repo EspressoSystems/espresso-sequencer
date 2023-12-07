@@ -18,6 +18,7 @@
 //! concrete persistence implementations:
 //! * [`FileSystemDataSource`]
 //! * [`SqlDataSource`]
+//! * [`MetricsDataSource`]
 //!
 //! The user can choose which data source to use when initializing the query service.
 //!
@@ -29,53 +30,45 @@ mod buffered_channel;
 mod extension;
 mod fs;
 mod ledger_log;
+mod metrics;
 pub mod sql;
 mod update;
 
 pub use extension::ExtensibleDataSource;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemDataSource;
+#[cfg(feature = "metrics-data-source")]
+pub use metrics::MetricsDataSource;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlDataSource;
 pub use update::{UpdateDataSource, VersionedDataSource};
 
-/// Generic tests we can instantiate for all the data sources.
+/// Generic tests we can instantiate for all the availability data sources.
 #[cfg(any(test, feature = "testing"))]
 #[espresso_macros::generic_tests]
-pub mod data_source_tests {
+pub mod availability_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData},
-        status::MempoolQueryData,
+        availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
         testing::{
             consensus::MockNetwork,
-            mocks::{
-                MockBlock, MockNodeImpl, MockState, MockTransaction, MockTypes, TestableDataSource,
-            },
-            setup_test, sleep,
+            mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
+            setup_test,
         },
-        Leaf, QueryError, QuorumCertificate,
+        Leaf, QueryError,
     };
     use async_std::sync::RwLock;
-    use bincode::Options;
     use commit::Committable;
     use futures::{StreamExt, TryStreamExt};
-    use hotshot_types::{
-        data::{LeafType, ViewNumber},
-        traits::{election::SignedCertificate, state::ConsensusTime, Block, State},
-    };
-    use hotshot_utils::bincode::bincode_opts;
+    use hotshot_types::simple_certificate::QuorumCertificate;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Bound, RangeBounds};
-    use std::time::Duration;
 
     async fn get_non_empty_blocks(
         ds: &RwLock<impl TestableDataSource>,
-    ) -> Vec<(
-        LeafQueryData<MockTypes, MockNodeImpl>,
-        BlockQueryData<MockTypes>,
-    )> {
+    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
         let ds = ds.read().await;
-        ds.get_leaf_range(..)
+        // Ignore the genesis block (start from height 1).
+        ds.get_leaf_range(1..)
             .await
             .unwrap()
             .zip(ds.get_block_range(..).await.unwrap())
@@ -118,11 +111,8 @@ pub mod data_source_tests {
             };
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
-            assert_eq!(block.hash(), block.block().commit());
-            assert_eq!(
-                block.size(),
-                bincode_opts().serialized_size(block.block()).unwrap()
-            );
+            assert_eq!(block.hash(), block.header().commit());
+            assert_eq!(block.size(), payload_size::<MockTypes>(block.payload()));
 
             // Check indices.
             assert_eq!(block, ds.get_block(i).await.unwrap());
@@ -131,7 +121,7 @@ pub mod data_source_tests {
             let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
             assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), *ix);
 
-            for (j, txn) in block.block().iter().enumerate() {
+            for (j, txn) in block.payload().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
                 // For duplicate transactions, this function returns the index of the first
                 // duplicate.
@@ -200,7 +190,7 @@ pub mod data_source_tests {
                 .enumerate()
         };
         for nonce in 0..3 {
-            let txn = MockTransaction { nonce };
+            let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
 
             // Wait for the transaction to be finalized.
@@ -257,98 +247,6 @@ pub mod data_source_tests {
         }
 
         network.shut_down().await;
-    }
-
-    #[async_std::test]
-    pub async fn test_metrics<D: TestableDataSource>() {
-        setup_test();
-
-        let mut network = MockNetwork::<D>::init().await;
-        let ds = network.data_source();
-
-        {
-            // With consensus paused, check that the success rate returns NaN (since the block
-            // height, the numerator, and view number, the denominator, are both 0).
-            assert!(ds.read().await.success_rate().await.unwrap().is_nan());
-            // Check that block height is initially zero.
-            assert_eq!(ds.read().await.block_height().await.unwrap(), 0);
-        }
-
-        // Submit a transaction, and check that it is reflected in the mempool.
-        let txn = MockTransaction { nonce: 0 };
-        network.submit_transaction(txn.clone()).await;
-        loop {
-            let mempool = { ds.read().await.mempool_info().await.unwrap() };
-            let expected = MempoolQueryData {
-                transaction_count: 1,
-                memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-            };
-            if mempool == expected {
-                break;
-            }
-            tracing::info!(
-                "waiting for mempool to reflect transaction (currently {:?})",
-                mempool
-            );
-            sleep(Duration::from_secs(1)).await;
-        }
-        {
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-                }
-            );
-        }
-
-        // Submitting the same transaction should not affect the mempool.
-        network.submit_transaction(txn.clone()).await;
-        sleep(Duration::from_secs(3)).await;
-        {
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 1,
-                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
-                }
-            );
-        }
-
-        // Start consensus and wait for the transaction to be finalized.
-        let mut blocks = { ds.read().await.subscribe_blocks(0).await.unwrap() };
-        network.start().await;
-        loop {
-            if !blocks.next().await.unwrap().unwrap().is_empty() {
-                break;
-            }
-        }
-
-        {
-            // Check that block height and success rate have been updated. Note that we can only
-            // check if success rate is positive. We don't know exactly what it is because we can't
-            // know how many views have elapsed without race conditions. Similarly, we can only
-            // check that block height is at least 2, because we know that the genesis block and our
-            // transaction's block have both been committed, but we can't know how many empty blocks
-            // were committed.
-            let success_rate = ds.read().await.success_rate().await.unwrap();
-            // TODO re-enable this check once HotShot is populating view metrics again
-            //      https://github.com/EspressoSystems/HotShot/issues/2066
-            // assert!(success_rate.is_finite(), "{success_rate}");
-            assert!(success_rate > 0.0, "{success_rate}");
-            assert!(ds.read().await.block_height().await.unwrap() >= 2);
-        }
-
-        {
-            // Check that the transaction is no longer reflected in the mempool.
-            assert_eq!(
-                ds.read().await.mempool_info().await.unwrap(),
-                MempoolQueryData {
-                    transaction_count: 0,
-                    memory_footprint: 0,
-                }
-            );
-        }
     }
 
     #[async_std::test]
@@ -425,35 +323,155 @@ pub mod data_source_tests {
         let mut ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let block = MockBlock::new();
-        let time = ViewNumber::genesis();
-        let state = MockState::default().append(&block, &time).unwrap();
-        let mut qc = QuorumCertificate::<MockTypes, MockNodeImpl>::genesis();
-        let mut leaf = Leaf::<MockTypes, MockNodeImpl>::new(time, qc.clone(), block.clone(), state);
-        leaf.set_height(1);
+        let mut qc = QuorumCertificate::<MockTypes>::genesis();
+        let mut leaf = Leaf::<MockTypes>::genesis();
+        // Increment the block number, to distinguish this block from the genesis block, which
+        // already exists.
+        leaf.block_header.block_number += 1;
+        qc.data.leaf_commit = leaf.commit();
 
-        qc.leaf_commitment = leaf.commit();
-        let block = BlockQueryData::new::<MockNodeImpl>(leaf.clone(), qc.clone(), block).unwrap();
+        let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
         ds.insert_leaf(leaf.clone()).await.unwrap();
         ds.insert_block(block.clone()).await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 1);
-        assert_eq!(leaf, ds.get_leaf(0).await.unwrap());
-        assert_eq!(block, ds.get_block(0).await.unwrap());
+        assert_eq!(ds.block_height().await.unwrap(), 2);
+        assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
+        assert_eq!(block, ds.get_block(1).await.unwrap());
 
         // Revert the changes.
         ds.revert().await;
-        assert_eq!(ds.block_height().await.unwrap(), 0);
+        assert_eq!(ds.block_height().await.unwrap(), 1);
         assert!(matches!(
-            ds.get_leaf(0).await.unwrap_err(),
+            ds.get_leaf(1).await.unwrap_err(),
             QueryError::NotFound
         ));
         assert!(matches!(
-            ds.get_block(0).await.unwrap_err(),
+            ds.get_block(1).await.unwrap_err(),
             QueryError::NotFound
         ));
     }
+}
+
+/// Generic tests we can instantiate for all the status data sources.
+#[cfg(any(test, feature = "testing"))]
+#[espresso_macros::generic_tests]
+pub mod status_tests {
+    use crate::{
+        status::{MempoolQueryData, StatusDataSource},
+        testing::{
+            consensus::MockNetwork,
+            mocks::{mock_transaction, DataSourceLifeCycle},
+            setup_test, sleep,
+        },
+    };
+    use bincode::Options;
+    use hotshot_utils::bincode::bincode_opts;
+    use std::time::Duration;
+
+    #[async_std::test]
+    pub async fn test_metrics<D: DataSourceLifeCycle + StatusDataSource>() {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+
+        {
+            let ds = ds.read().await;
+            // Check that block height is initially one (for the genesis block).
+            assert_eq!(ds.block_height().await.unwrap(), 1);
+            // With consensus paused, check that the success rate returns infinity (since the block
+            // height, the numerator, is 1, and the view number, the denominator, is 0).
+            assert_eq!(ds.success_rate().await.unwrap(), f64::INFINITY);
+        }
+
+        // Submit a transaction, and check that it is reflected in the mempool.
+        let txn = mock_transaction(vec![1, 2, 3]);
+        network.submit_transaction(txn.clone()).await;
+        loop {
+            let mempool = { ds.read().await.mempool_info().await.unwrap() };
+            let expected = MempoolQueryData {
+                transaction_count: 1,
+                memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+            };
+            if mempool == expected {
+                break;
+            }
+            tracing::info!(
+                "waiting for mempool to reflect transaction (currently {:?})",
+                mempool
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
+        {
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+                }
+            );
+        }
+
+        // Submitting the same transaction should not affect the mempool.
+        network.submit_transaction(txn.clone()).await;
+        sleep(Duration::from_secs(3)).await;
+        {
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 1,
+                    memory_footprint: bincode_opts().serialized_size(&txn).unwrap(),
+                }
+            );
+        }
+
+        // Start consensus and wait for the transaction to be finalized.
+        network.start().await;
+        // First wait for the transaction to be taken out of the mempool.
+        let block_height = loop {
+            let ds = ds.read().await;
+            if ds.mempool_info().await.unwrap().transaction_count == 0 {
+                break ds.block_height().await.unwrap();
+            }
+            sleep(Duration::from_secs(1)).await;
+        };
+        // Now wait for at least one block to be finalized.
+        loop {
+            if ds.read().await.block_height().await.unwrap() > block_height {
+                break;
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        {
+            // Check that the success rate has been updated. Note that we can only check if success
+            // rate is positive. We don't know exactly what it is because we can't know how many
+            // views have elapsed without race conditions.
+            let success_rate = ds.read().await.success_rate().await.unwrap();
+            assert!(success_rate.is_finite(), "{success_rate}");
+            assert!(success_rate > 0.0, "{success_rate}");
+        }
+
+        {
+            // Check that the transaction is no longer reflected in the mempool.
+            assert_eq!(
+                ds.read().await.mempool_info().await.unwrap(),
+                MempoolQueryData {
+                    transaction_count: 0,
+                    memory_footprint: 0,
+                }
+            );
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! instantiate_data_source_tests {
+    ($t:ty) => {
+        instantiate_availability_tests!($t);
+        instantiate_status_tests!($t);
+    };
 }

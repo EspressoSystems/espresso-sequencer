@@ -24,6 +24,7 @@
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
+//! # use hotshot_types::consensus::ConsensusMetricsValue;
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
 //! use hotshot_query_service::{
@@ -39,13 +40,14 @@
 //! use tide_disco::App;
 //!
 //! // Create or open a data source.
-//! let data_source = FileSystemDataSource::<AppTypes, AppNodeImpl>::create(storage_path)
+//! let data_source = FileSystemDataSource::<AppTypes>::create(storage_path)
+//!     .await
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
 //! let (mut hotshot, _) = SystemContext::<AppTypes, AppNodeImpl>::init(
-//! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
-//!     data_source.populate_metrics(),
+//! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
+//!     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
 //!     // Other fields omitted
 //! ).await.map_err(Error::internal)?;
 //!
@@ -88,12 +90,12 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
-//! # use hotshot_query_service::testing::mocks::{MockTypes, MockNodeImpl};
+//! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
 //! # use std::path::Path;
-//! # fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
-//! let data_source = FileSystemDataSource::create(storage_path).map_err(Error::internal)?;
+//! let data_source = FileSystemDataSource::create(storage_path).await.map_err(Error::internal)?;
 //! spawn(run_standalone_service(options, data_source, hotshot));
 //! # Ok(())
 //! # }
@@ -148,12 +150,12 @@
 //! ```
 //! # use hotshot_query_service::{
 //! #   availability::{AvailabilityDataSource, TransactionIndex},
-//! #   testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes},
+//! #   testing::mocks::MockTypes as AppTypes,
 //! # };
 //! use async_trait::async_trait;
 //!
 //! #[async_trait]
-//! trait UtxoDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> {
+//! trait UtxoDataSource: AvailabilityDataSource<AppTypes> {
 //!     // Index mapping UTXO index to (block index, transaction index, output index)
 //!     async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
 //! }
@@ -169,14 +171,12 @@
 //! # use hotshot_query_service::availability::{
 //! #   self, AvailabilityDataSource, QueryBlockSnafu, TransactionIndex,
 //! # };
-//! # use hotshot_query_service::testing::mocks::{
-//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-//! # };
+//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use hotshot_query_service::Error;
 //! # use snafu::ResultExt;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
 //! # #[async_trait]
-//! # trait UtxoDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> {
+//! # trait UtxoDataSource: AvailabilityDataSource<AppTypes> {
 //! #   async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
 //! # }
 //!
@@ -259,9 +259,7 @@
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
 //! # use hotshot_query_service::status::StatusDataSource;
-//! # use hotshot_query_service::testing::mocks::{
-//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-//! # };
+//! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
 //! # type AppQueryData = ();
 //! // Our AppState takes an underlying data source `D` which already implements the relevant
@@ -273,8 +271,8 @@
 //!
 //! // Implement data source trait for availability API by delegating to the underlying data source.
 //! #[async_trait]
-//! impl<D: AvailabilityDataSource<AppTypes, AppNodeImpl> + Send + Sync>
-//!     AvailabilityDataSource<AppTypes, AppNodeImpl> for AppState<D>
+//! impl<D: AvailabilityDataSource<AppTypes> + Send + Sync>
+//!     AvailabilityDataSource<AppTypes> for AppState<D>
 //! {
 //!     type LeafRange<'a, R> = D::LeafRange<'a, R>
 //!     where
@@ -288,9 +286,9 @@
 //!     type LeafStream = D::LeafStream;
 //!     type BlockStream = D::BlockStream;
 //!
-//!     async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<AppTypes, AppNodeImpl>>
+//!     async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<AppTypes>>
 //!     where
-//!         ID: Into<LeafId<AppTypes, AppNodeImpl>> + Send + Sync,
+//!         ID: Into<LeafId<AppTypes>> + Send + Sync,
 //!     {
 //!         self.hotshot_qs.get_leaf(id).await
 //!     }
@@ -306,7 +304,7 @@
 //! #   async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes, AppNodeImpl>>> { todo!() }
+//! #   async fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes>>> { todo!() }
 //! #   async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> { todo!() }
 //! #   async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> { todo!() }
 //! #   async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> { todo!() }
@@ -356,7 +354,6 @@ mod resolvable;
 pub mod status;
 pub mod testing;
 
-pub use availability::QueryableBlock;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
@@ -365,28 +362,22 @@ use async_std::{
     task::spawn,
 };
 use futures::StreamExt;
-use hotshot::{certificate, types::SystemContextHandle};
+use hotshot::types::SystemContextHandle;
 use hotshot_types::{
-    data::LeafType,
+    data::Leaf,
     traits::{
-        block_contents,
         node_implementation::{NodeImplementation, NodeType},
+        BlockPayload,
     },
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tide_disco::{App, StatusCode};
 
-/// Leaf type appended to a chain by consensus.
-pub type Leaf<Types, I> = <I as NodeImplementation<Types>>::Leaf;
-/// Certificate justifying a [`Leaf`].
-pub type QuorumCertificate<Types, I> = certificate::QuorumCertificate<Types, Leaf<Types, I>>;
-/// State change indicated by a [`Leaf`].
-pub type Deltas<Types, I> = <Leaf<Types, I> as LeafType>::DeltasType;
-/// Block of data appened to a chain by consensus.
-pub type Block<Types> = <Types as NodeType>::BlockType;
-/// Item within a [`Block`].
-pub type Transaction<Types> = <Block<Types> as block_contents::Block>::Transaction;
+pub type Payload<Types> = <Types as NodeType>::BlockPayload;
+pub type Header<Types> = <Types as NodeType>::BlockHeader;
+/// Item within a [`Payload`].
+pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
@@ -430,11 +421,10 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
     mut hotshot: SystemContextHandle<Types, I>,
 ) -> Result<(), Error>
 where
-    Deltas<Types, I>: Resolvable<Block<Types>>,
-    Block<Types>: QueryableBlock,
-    D: availability::AvailabilityDataSource<Types, I>
+    Payload<Types>: availability::QueryablePayload,
+    D: availability::AvailabilityDataSource<Types>
         + status::StatusDataSource
-        + data_source::UpdateDataSource<Types, I>
+        + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
         + Send
         + Sync
@@ -484,17 +474,14 @@ mod test {
         },
         metrics::PrometheusMetrics,
         status::StatusDataSource,
-        testing::{
-            consensus::MockDataSource,
-            mocks::{MockNodeImpl, MockTypes},
-        },
+        testing::{consensus::MockDataSource, mocks::MockTypes},
     };
     use async_std::{sync::RwLock, task::spawn};
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
     use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BN254Pub;
+    use hotshot_signature_key::bn254::BLSPubKey;
     use hotshot_types::traits::signature_key::EncodedPublicKey;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
@@ -511,16 +498,13 @@ mod test {
     }
 
     #[async_trait]
-    impl AvailabilityDataSource<MockTypes, MockNodeImpl> for CompositeState {
-        type LeafStream =
-            <MockDataSource as AvailabilityDataSource<MockTypes, MockNodeImpl>>::LeafStream;
-        type BlockStream =
-            <MockDataSource as AvailabilityDataSource<MockTypes, MockNodeImpl>>::BlockStream;
+    impl AvailabilityDataSource<MockTypes> for CompositeState {
+        type LeafStream = <MockDataSource as AvailabilityDataSource<MockTypes>>::LeafStream;
+        type BlockStream = <MockDataSource as AvailabilityDataSource<MockTypes>>::BlockStream;
 
         type LeafRange<'a, R> =
             <MockDataSource as AvailabilityDataSource<
                 MockTypes,
-                MockNodeImpl,
             >>::LeafRange<'a, R>
         where
             Self: 'a,
@@ -528,15 +512,14 @@ mod test {
         type BlockRange<'a, R> =
             <MockDataSource as AvailabilityDataSource<
                 MockTypes,
-                MockNodeImpl,
             >>::BlockRange<'a, R>
         where
             Self: 'a,
             R: RangeBounds<usize> + Send;
 
-        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes, MockNodeImpl>>
+        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<MockTypes>>
         where
-            ID: Into<LeafId<MockTypes, MockNodeImpl>> + Send + Sync,
+            ID: Into<LeafId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_leaf(id).await
         }
@@ -568,7 +551,7 @@ mod test {
             &self,
             proposer: &EncodedPublicKey,
             limit: Option<usize>,
-        ) -> QueryResult<Vec<LeafQueryData<MockTypes, MockNodeImpl>>> {
+        ) -> QueryResult<Vec<LeafQueryData<MockTypes>>> {
             self.hotshot_qs.get_proposals(proposer, limit).await
         }
         async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
@@ -598,7 +581,9 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::new("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let hotshot_qs = MockDataSource::create_with_store(&mut loader).unwrap();
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader)
+            .await
+            .unwrap();
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();
         let state = CompositeState {
@@ -665,9 +650,9 @@ mod test {
                 .send()
                 .await
                 .unwrap(),
-            0
+            1
         );
-        let (key, _) = BN254Pub::generated_from_seed_indexed([0; 32], 0);
+        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
                 .get::<u64>(&format!("availability/proposals/{}/count", key.to_bytes()))

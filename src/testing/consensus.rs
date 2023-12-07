@@ -11,85 +11,94 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::mocks::{
-    MockBlock, MockMembership, MockNodeImpl, MockTransaction, MockTypes, TestableDataSource,
+    DataSourceLifeCycle, MockDANetwork, MockMembership, MockNodeImpl, MockQuorumNetwork,
+    MockTransaction, MockTypes,
 };
-use crate::data_source::FileSystemDataSource;
+use crate::{data_source::FileSystemDataSource, status::UpdateStatusData};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
 };
 use futures::{future::join_all, stream::StreamExt};
 use hotshot::{
-    traits::{
-        implementations::{MasterMap, MemoryCommChannel, MemoryNetwork, MemoryStorage},
-        NodeImplementation,
-    },
+    traits::implementations::{MasterMap, MemoryNetwork, MemoryStorage, NetworkingMetricsValue},
     types::SystemContextHandle,
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_signature_key::bn254::{BN254Priv, BN254Pub};
+use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
-    traits::{
-        election::Membership, node_implementation::ExchangesType, signature_key::SignatureKey,
-    },
-    ExecutionType, HotShotConfig,
+    consensus::ConsensusMetricsValue,
+    light_client::StateKeyPair,
+    traits::{election::Membership, signature_key::SignatureKey},
+    ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-struct MockNode<D: TestableDataSource> {
+struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
     data_source: Arc<RwLock<D>>,
     storage: D::Storage,
 }
 
-pub struct MockNetwork<D: TestableDataSource> {
+pub struct MockNetwork<D: DataSourceLifeCycle> {
     nodes: Vec<MockNode<D>>,
 }
 
-// MockNetwork can be used with any TestableDataSource, but it's nice to have a default with a
+// MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
 // convenient type alias.
-pub type MockDataSource = FileSystemDataSource<MockTypes, MockNodeImpl>;
+pub type MockDataSource = FileSystemDataSource<MockTypes>;
 
 const MINIMUM_NODES: usize = 2;
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
         let priv_keys = (0..MINIMUM_NODES)
-            .map(|_| BN254Priv::generate())
+            .map(|_| BLSPrivKey::generate())
             .collect::<Vec<_>>();
         let pub_keys = priv_keys
             .iter()
-            .map(BN254Pub::from_private)
+            .map(BLSPubKey::from_private)
             .collect::<Vec<_>>();
         let total_nodes = NonZeroUsize::new(pub_keys.len()).unwrap();
         let master_map = MasterMap::new();
-        let known_nodes_with_stake: Vec<<BN254Pub as SignatureKey>::StakeTableEntry> = (0
+        let stake = 1u64;
+        let known_nodes_with_stake: Vec<<BLSPubKey as SignatureKey>::StakeTableEntry> = (0
             ..total_nodes.into())
-            .map(|id| pub_keys[id].get_stake_table_entry(1u64))
+            .map(|id| pub_keys[id].get_stake_table_entry(stake))
             .collect();
-        let config = HotShotConfig {
-            total_nodes,
-            known_nodes: pub_keys.clone(),
-            known_nodes_with_stake: known_nodes_with_stake.clone(),
-            start_delay: 0,
-            round_start_delay: 0,
-            next_view_timeout: 10000,
-            timeout_ratio: (11, 10),
-            propose_min_round_time: Duration::from_secs(0),
-            propose_max_round_time: Duration::from_secs(2),
-            min_transactions: 1,
-            max_transactions: NonZeroUsize::new(100).unwrap(),
-            num_bootstrap: 0,
-            execution_type: ExecutionType::Continuous,
-            election_config: None,
-            da_committee_size: total_nodes.into(),
-        };
         let nodes = join_all(
             priv_keys
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
+                    let my_own_validator_config = ValidatorConfig {
+                        public_key: pub_keys[node_id],
+                        private_key: priv_key.clone(),
+                        stake_value: stake,
+                        state_key_pair: StateKeyPair::generate_from_seed_indexed(
+                            [0; 32],
+                            node_id as u64,
+                        ),
+                    };
+                    let config = HotShotConfig {
+                        total_nodes,
+                        known_nodes_with_stake: known_nodes_with_stake.clone(),
+                        my_own_validator_config,
+                        start_delay: 0,
+                        round_start_delay: 0,
+                        next_view_timeout: 10000,
+                        timeout_ratio: (11, 10),
+                        propose_min_round_time: Duration::from_secs(0),
+                        propose_max_round_time: Duration::from_secs(2),
+                        min_transactions: 1,
+                        max_transactions: NonZeroUsize::new(100).unwrap(),
+                        num_bootstrap: 0,
+                        execution_type: ExecutionType::Continuous,
+                        election_config: None,
+                        da_committee_size: total_nodes.into(),
+                    };
+
                     let pub_keys = pub_keys.clone();
                     let known_nodes_with_stake = known_nodes_with_stake.clone();
                     let config = config.clone();
@@ -100,26 +109,30 @@ impl<D: TestableDataSource> MockNetwork<D> {
                     async move {
                         let storage = D::create(node_id).await;
                         let data_source = D::connect(&storage).await;
+
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            data_source.populate_metrics(),
+                            NetworkingMetricsValue::new(&*data_source.populate_metrics()),
                             master_map.clone(),
                             None,
                         ));
-                        let consensus_channel = MemoryCommChannel::new(network.clone());
-                        let da_channel = MemoryCommChannel::new(network.clone());
-                        let view_sync_channel = MemoryCommChannel::new(network.clone());
 
-                        let exchanges =
-                            <MockNodeImpl as NodeImplementation<MockTypes>>::Exchanges::create(
-                                known_nodes_with_stake.clone(),
-                                pub_keys.clone(),
-                                (election_config.clone(), election_config.clone()),
-                                (consensus_channel, view_sync_channel, da_channel),
-                                pub_keys[node_id],
-                                pub_keys[node_id].get_stake_table_entry(1u64),
-                                priv_key.clone(),
-                            );
+                        let networks = Networks {
+                            quorum_network: MockQuorumNetwork::new(network.clone()),
+                            da_network: MockDANetwork::new(network),
+                            _pd: std::marker::PhantomData,
+                        };
+                        let membership = MockMembership::create_election(
+                            known_nodes_with_stake.clone(),
+                            election_config.clone(),
+                        );
+
+                        let memberships = Memberships {
+                            quorum_membership: membership.clone(),
+                            da_membership: membership.clone(),
+                            vid_membership: membership.clone(),
+                            view_sync_membership: membership.clone(),
+                        };
 
                         let (hotshot, _) = SystemContext::init(
                             pub_keys[node_id],
@@ -127,9 +140,10 @@ impl<D: TestableDataSource> MockNetwork<D> {
                             node_id as u64,
                             config,
                             MemoryStorage::empty(),
-                            exchanges,
-                            HotShotInitializer::from_genesis(MockBlock::genesis()).unwrap(),
-                            data_source.populate_metrics(),
+                            memberships,
+                            networks,
+                            HotShotInitializer::from_genesis().unwrap(),
+                            ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                         )
                         .await
                         .unwrap();
@@ -147,7 +161,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle> MockNetwork<D> {
     pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
         self.nodes[0].hotshot.clone()
     }
@@ -175,7 +189,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> MockNetwork<D> {
+impl<D: DataSourceLifeCycle> MockNetwork<D> {
     pub async fn start(&mut self) {
         // Spawn the update tasks.
         for node in &mut self.nodes {
@@ -185,8 +199,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
                 while let Some(event) = events.next().await {
                     tracing::info!("EVENT {:?}", event.event);
                     let mut ds = ds.write().await;
-                    ds.update(&event).await.unwrap();
-                    ds.commit().await.unwrap();
+                    ds.handle_event(&event).await;
                 }
             });
         }
@@ -200,7 +213,7 @@ impl<D: TestableDataSource> MockNetwork<D> {
     }
 }
 
-impl<D: TestableDataSource> Drop for MockNetwork<D> {
+impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
         async_std::task::block_on(self.shut_down_impl())
     }

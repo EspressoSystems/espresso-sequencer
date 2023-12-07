@@ -11,209 +11,41 @@
 // see <https://www.gnu.org/licenses/>.
 
 use crate::{
-    availability::AvailabilityDataSource,
+    availability::{AvailabilityDataSource, QueryablePayload},
     data_source::{UpdateDataSource, VersionedDataSource},
     status::StatusDataSource,
-    QueryableBlock,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
-use commit::{Commitment, Committable, RawCommitmentBuilder};
-use derive_more::{Display, Index, IndexMut};
 use hotshot::{
     traits::{
-        election::static_committee::{
-            GeneralStaticCommittee, StaticElectionConfig, StaticVoteToken,
-        },
+        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
         implementations::{MemoryCommChannel, MemoryStorage},
-        Block, NodeImplementation,
+        NodeImplementation,
     },
-    types::Message,
+    types::Event,
 };
-use hotshot_signature_key::bn254::BN254Pub;
+use hotshot_signature_key::bn254::BLSPubKey;
+use hotshot_testing::{
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::TestState,
+};
 use hotshot_types::{
-    certificate::ViewSyncCertificate,
-    data::{DAProposal, QuorumProposal, SequencingLeaf, ViewNumber},
-    message::SequencingMessage,
-    traits::{
-        block_contents::Transaction,
-        election::{CommitteeExchange, QuorumExchange, ViewSyncExchange},
-        node_implementation::{ChannelMaps, NodeType, SequencingExchanges},
-        state::{State, TestableBlock, TestableState},
-    },
-    vote::{DAVote, QuorumVote, ViewSyncVote},
+    data::{QuorumProposal, ViewNumber},
+    traits::node_implementation::{ChannelMaps, NodeType},
 };
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
-use std::collections::{BTreeSet, HashSet};
 use std::ops::Range;
 
-#[derive(Clone, Debug, Snafu)]
-pub enum MockError {
-    DoubleSpend { nonce: u64 },
+pub type MockState = TestState;
+pub type MockHeader = TestBlockHeader;
+pub type MockPayload = TestBlockPayload;
+pub type MockTransaction = TestTransaction;
+
+pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
+    TestTransaction(payload)
 }
 
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
-pub struct MockTransaction {
-    pub nonce: u64,
-}
-
-impl Committable for MockTransaction {
-    fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("MockTransaction")
-            .u64_field("nonce", self.nonce)
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "MOCKTXN".to_string()
-    }
-}
-
-impl Transaction for MockTransaction {}
-
-#[derive(Clone, Debug, Display, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[display(fmt = "{:?}", self)]
-pub struct MockState {
-    pub last_block: Commitment<MockBlock>,
-    pub spent: Arc<BTreeSet<u64>>,
-}
-
-impl Default for MockState {
-    fn default() -> Self {
-        Self {
-            last_block: MockBlock::genesis().commit(),
-            spent: Default::default(),
-        }
-    }
-}
-
-impl Committable for MockState {
-    fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new("MockState")
-            .field("last_block", self.last_block)
-            .var_size_bytes(&bincode::serialize(&self.spent).unwrap())
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "MOCKSTATE".to_string()
-    }
-}
-
-impl MockState {
-    fn validate(&self, block: &MockBlock) -> Result<(), MockError> {
-        if let Some(txn) = block.iter().find(|txn| self.spent.contains(&txn.nonce)) {
-            return Err(DoubleSpendSnafu { nonce: txn.nonce }.build());
-        }
-        Ok(())
-    }
-}
-
-impl State for MockState {
-    type Error = MockError;
-    type BlockType = MockBlock;
-    type Time = ViewNumber;
-
-    fn next_block(_prev_commitment: Option<Self>) -> Self::BlockType {
-        MockBlock::default()
-    }
-
-    fn validate_block(&self, block: &Self::BlockType, _view_number: &Self::Time) -> bool {
-        self.validate(block).is_ok()
-    }
-
-    fn append(
-        &self,
-        block: &Self::BlockType,
-        _view_number: &Self::Time,
-    ) -> Result<Self, Self::Error> {
-        self.validate(block)?;
-
-        let mut spent = (*self.spent).clone();
-        for txn in block.iter() {
-            spent.insert(txn.nonce);
-        }
-        Ok(Self {
-            last_block: block.commit(),
-            spent: Arc::new(spent),
-        })
-    }
-
-    fn on_commit(&self) {}
-}
-
-impl TestableState for MockState {
-    fn create_random_transaction(
-        state: Option<&Self>,
-        rng: &mut dyn RngCore,
-        _padding: u64,
-    ) -> <Self::BlockType as Block>::Transaction {
-        loop {
-            let nonce = rng.next_u64();
-            if let Some(state) = state {
-                if state.spent.contains(&nonce) {
-                    continue;
-                }
-            }
-            break MockTransaction { nonce };
-        }
-    }
-}
-
-#[derive(
-    PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug, Default, Display, Index, IndexMut,
-)]
-#[display(fmt = "{:?}", self)]
-pub struct MockBlock {
-    #[index]
-    #[index_mut]
-    pub transactions: Vec<MockTransaction>,
-}
-
-impl Committable for MockBlock {
-    fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new("MockBlock")
-            .array_field(
-                "transactions",
-                &self
-                    .transactions
-                    .iter()
-                    .map(|txn| txn.commit())
-                    .collect::<Vec<_>>(),
-            )
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "MOCKBLOCK".to_string()
-    }
-}
-
-impl MockBlock {
-    pub fn genesis() -> Self {
-        Self::default()
-    }
-
-    pub fn len(&self) -> usize {
-        self.transactions.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.transactions.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &MockTransaction> {
-        self.transactions.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut MockTransaction> {
-        self.transactions.iter_mut()
-    }
-}
-
-impl QueryableBlock for MockBlock {
+impl QueryablePayload for MockPayload {
     type TransactionIndex = usize;
     type Iter<'a> = Range<usize>;
     type InclusionProof = ();
@@ -230,44 +62,7 @@ impl QueryableBlock for MockBlock {
         &self,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        Some((self.transactions.get(*index)?.clone(), ()))
-    }
-}
-
-impl IntoIterator for MockBlock {
-    type Item = MockTransaction;
-    type IntoIter = std::vec::IntoIter<MockTransaction>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.transactions.into_iter()
-    }
-}
-
-impl Block for MockBlock {
-    type Transaction = MockTransaction;
-    type Error = MockError;
-
-    fn add_transaction_raw(&self, tx: &Self::Transaction) -> Result<Self, Self::Error> {
-        let mut block = self.clone();
-        block.transactions.push(tx.clone());
-        Ok(block)
-    }
-    fn contained_transactions(&self) -> HashSet<Commitment<Self::Transaction>> {
-        self.transactions.iter().map(|tx| tx.commit()).collect()
-    }
-
-    fn new() -> Self {
-        Self::genesis()
-    }
-}
-
-impl TestableBlock for MockBlock {
-    fn genesis() -> Self {
-        Self::genesis()
-    }
-
-    fn txn_count(&self) -> u64 {
-        self.transactions.len() as u64
+        self.transactions.get(*index).cloned().map(|tx| (tx, ()))
     }
 }
 
@@ -278,37 +73,20 @@ pub struct MockTypes;
 
 impl NodeType for MockTypes {
     type Time = ViewNumber;
-    type BlockType = MockBlock;
-    type SignatureKey = BN254Pub;
-    type VoteTokenType = StaticVoteToken<BN254Pub>;
+    type BlockHeader = MockHeader;
+    type BlockPayload = MockPayload;
+    type SignatureKey = BLSPubKey;
     type Transaction = MockTransaction;
     type ElectionConfigType = StaticElectionConfig;
     type StateType = MockState;
+    type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
 }
 
-pub type MockLeaf = SequencingLeaf<MockTypes>;
-pub type MockMembership =
-    GeneralStaticCommittee<MockTypes, MockLeaf, <MockTypes as NodeType>::SignatureKey>;
+pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 
-pub type MockQuorumProposal = QuorumProposal<MockTypes, MockLeaf>;
-pub type MockQuorumVote = QuorumVote<MockTypes, MockLeaf>;
-pub type MockQuorumNetwork =
-    MemoryCommChannel<MockTypes, MockNodeImpl, MockQuorumProposal, MockQuorumVote, MockMembership>;
-
-pub type MockViewSyncProposal = ViewSyncCertificate<MockTypes>;
-pub type MockViewSyncVote = ViewSyncVote<MockTypes>;
-pub type MockViewSyncNetwork = MemoryCommChannel<
-    MockTypes,
-    MockNodeImpl,
-    MockViewSyncProposal,
-    MockViewSyncVote,
-    MockMembership,
->;
-
-pub type MockDAProposal = DAProposal<MockTypes>;
-pub type MockDAVote = DAVote<MockTypes>;
-pub type MockDANetwork =
-    MemoryCommChannel<MockTypes, MockNodeImpl, MockDAProposal, MockDAVote, MockMembership>;
+pub type MockQuorumProposal = QuorumProposal<MockTypes>;
+pub type MockQuorumNetwork = MemoryCommChannel<MockTypes>;
+pub type MockDANetwork = MemoryCommChannel<MockTypes>;
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -316,51 +94,19 @@ pub type MockDANetwork =
 pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
-    type Storage = MemoryStorage<MockTypes, Self::Leaf>;
-    type Leaf = MockLeaf;
-    type ConsensusMessage = SequencingMessage<MockTypes, Self>;
-    type Exchanges = SequencingExchanges<
-        MockTypes,
-        Message<MockTypes, Self>,
-        QuorumExchange<
-            MockTypes,
-            Self::Leaf,
-            MockQuorumProposal,
-            MockMembership,
-            MockQuorumNetwork,
-            Message<MockTypes, Self>,
-        >,
-        CommitteeExchange<MockTypes, MockMembership, MockDANetwork, Message<MockTypes, Self>>,
-        ViewSyncExchange<
-            MockTypes,
-            MockViewSyncProposal,
-            MockMembership,
-            MockViewSyncNetwork,
-            Message<MockTypes, Self>,
-        >,
-    >;
+    type Storage = MemoryStorage<MockTypes>;
+    type QuorumNetwork = MockQuorumNetwork;
+    type CommitteeNetwork = MockDANetwork;
 
     fn new_channel_maps(
         start_view: ViewNumber,
-    ) -> (
-        ChannelMaps<MockTypes, Self>,
-        Option<ChannelMaps<MockTypes, Self>>,
-    ) {
+    ) -> (ChannelMaps<MockTypes>, Option<ChannelMaps<MockTypes>>) {
         (ChannelMaps::new(start_view), None)
     }
 }
 
 #[async_trait]
-pub trait TestableDataSource:
-    AvailabilityDataSource<MockTypes, MockNodeImpl>
-    + StatusDataSource
-    + UpdateDataSource<MockTypes, MockNodeImpl>
-    + VersionedDataSource
-    + Send
-    + Sync
-    + Sized
-    + 'static
-{
+pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
     /// Backing storage for the data source.
     ///
     /// This can be used to connect to data sources to the same underlying data. It must be kept
@@ -369,4 +115,23 @@ pub trait TestableDataSource:
 
     async fn create(node_id: usize) -> Self::Storage;
     async fn connect(storage: &Self::Storage) -> Self;
+    async fn handle_event(&mut self, event: &Event<MockTypes>);
+}
+
+pub trait TestableDataSource:
+    DataSourceLifeCycle
+    + AvailabilityDataSource<MockTypes>
+    + StatusDataSource
+    + UpdateDataSource<MockTypes>
+    + VersionedDataSource
+{
+}
+
+impl<T> TestableDataSource for T where
+    T: DataSourceLifeCycle
+        + AvailabilityDataSource<MockTypes>
+        + StatusDataSource
+        + UpdateDataSource<MockTypes>
+        + VersionedDataSource
+{
 }

@@ -13,18 +13,15 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryableBlock,
+        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload,
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
     status::StatusDataSource,
-    Block, Deltas, QueryResult, Resolvable,
+    Payload, QueryResult,
 };
 use async_trait::async_trait;
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -44,14 +41,10 @@ use std::ops::RangeBounds;
 /// # use async_trait::async_trait;
 /// # use hotshot_query_service::availability::{AvailabilityDataSource, TransactionIndex};
 /// # use hotshot_query_service::data_source::ExtensibleDataSource;
-/// # use hotshot_query_service::testing::{
-/// #   mocks::{
-/// #       MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// #   },
-/// # };
+/// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # use std::collections::HashMap;
 /// # #[async_trait]
-/// # trait UtxoDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> {
+/// # trait UtxoDataSource: AvailabilityDataSource<AppTypes> {
 /// #   async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)>;
 /// # }
 /// type UtxoIndex = HashMap<u64, (usize, TransactionIndex<AppTypes>, usize)>;
@@ -60,7 +53,7 @@ use std::ops::RangeBounds;
 /// impl<UnderlyingDataSource> UtxoDataSource for
 ///     ExtensibleDataSource<UnderlyingDataSource, UtxoIndex>
 /// where
-///     UnderlyingDataSource: AvailabilityDataSource<AppTypes, AppNodeImpl> + Send + Sync,
+///     UnderlyingDataSource: AvailabilityDataSource<AppTypes> + Send + Sync,
 /// {
 ///     async fn find_utxo(&self, utxo: u64) -> Option<(usize, TransactionIndex<AppTypes>, usize)> {
 ///         self.as_ref().get(&utxo).cloned()
@@ -130,13 +123,12 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, I> AvailabilityDataSource<Types, I> for ExtensibleDataSource<D, U>
+impl<D, U, Types> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
 where
-    D: AvailabilityDataSource<Types, I> + Send + Sync,
+    D: AvailabilityDataSource<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    I: NodeImplementation<Types>,
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type LeafStream = D::LeafStream;
     type BlockStream = D::BlockStream;
@@ -150,9 +142,9 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
+        ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.data_source.get_leaf(id).await
     }
@@ -184,7 +176,7 @@ where
         &self,
         proposer: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         self.data_source.get_proposals(proposer, limit).await
     }
     async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
@@ -199,20 +191,15 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types, I> UpdateAvailabilityData<Types, I> for ExtensibleDataSource<D, U>
+impl<D, U, Types> UpdateAvailabilityData<Types> for ExtensibleDataSource<D, U>
 where
-    D: UpdateAvailabilityData<Types, I> + Send + Sync,
+    D: UpdateAvailabilityData<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    I: NodeImplementation<Types>,
-    Block<Types>: QueryableBlock,
 {
     type Error = D::Error;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         self.data_source.insert_leaf(leaf).await
     }
 
@@ -239,10 +226,14 @@ where
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::TestableDataSource;
+    use crate::{
+        data_source::UpdateDataSource,
+        testing::mocks::{DataSourceLifeCycle, MockTypes, TestableDataSource},
+    };
+    use hotshot::types::Event;
 
     #[async_trait]
-    impl<D, U> TestableDataSource for ExtensibleDataSource<D, U>
+    impl<D, U> DataSourceLifeCycle for ExtensibleDataSource<D, U>
     where
         D: TestableDataSource,
         U: Default + Send + Sync + 'static,
@@ -256,20 +247,23 @@ mod impl_testable_data_source {
         async fn connect(storage: &Self::Storage) -> Self {
             Self::new(D::connect(storage).await, Default::default())
         }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::{data_source_tests, FileSystemDataSource};
+    use super::super::{availability_tests, status_tests, FileSystemDataSource};
     use super::ExtensibleDataSource;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes};
+    use crate::testing::mocks::MockTypes;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(
-        ExtensibleDataSource<FileSystemDataSource<MockTypes, MockNodeImpl>, ()>
-    );
+    instantiate_data_source_tests!(ExtensibleDataSource<FileSystemDataSource<MockTypes>, ()>);
 }

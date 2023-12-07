@@ -11,18 +11,15 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::query_data::{
-    BlockQueryData, LeafQueryData, QueryableBlock, TransactionHash, TransactionIndex,
+    BlockQueryData, LeafQueryData, QueryablePayload, TransactionHash, TransactionIndex,
 };
-use crate::{Block, Deltas, Leaf, QueryResult, Resolvable};
+use crate::{Header, Leaf, Payload, QueryResult};
 use async_trait::async_trait;
 use commit::{Commitment, Committable};
 use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::Stream;
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Debug;
@@ -57,18 +54,18 @@ impl<T: Committable> PartialOrd for ResourceId<T> {
     }
 }
 
-pub type BlockId<Types> = ResourceId<Block<Types>>;
-pub type LeafId<Types, I> = ResourceId<Leaf<Types, I>>;
+pub type BlockId<Types> = ResourceId<Header<Types>>;
+pub type LeafId<Types> = ResourceId<Leaf<Types>>;
 
 #[async_trait]
-pub trait AvailabilityDataSource<Types: NodeType, I: NodeImplementation<Types>>
+pub trait AvailabilityDataSource<Types: NodeType>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
-    type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin + Send;
+    type LeafStream: Stream<Item = QueryResult<LeafQueryData<Types>>> + Unpin + Send;
     type BlockStream: Stream<Item = QueryResult<BlockQueryData<Types>>> + Unpin + Send;
 
-    type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types, I>>> + Unpin
+    type LeafRange<'a, R>: 'a + Stream<Item = QueryResult<LeafQueryData<Types>>> + Unpin
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
@@ -77,9 +74,10 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync;
+        ID: Into<LeafId<Types>> + Send + Sync;
+
     async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
@@ -87,6 +85,7 @@ where
     async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
     where
         R: RangeBounds<usize> + Send;
+
     async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
     where
         R: RangeBounds<usize> + Send;
@@ -102,7 +101,7 @@ where
         &self,
         proposer: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>>;
+    ) -> QueryResult<Vec<LeafQueryData<Types>>>;
     async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize>;
 
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream>;
@@ -110,13 +109,8 @@ where
 }
 
 #[async_trait]
-pub trait UpdateAvailabilityData<Types: NodeType, I: NodeImplementation<Types>>
-where
-    Block<Types>: QueryableBlock,
-{
+pub trait UpdateAvailabilityData<Types: NodeType> {
     type Error: Error + Debug + Send + Sync + 'static;
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>;
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
 }

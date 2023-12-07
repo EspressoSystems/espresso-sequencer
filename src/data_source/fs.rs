@@ -22,22 +22,19 @@ use crate::{
             AvailabilityDataSource, BlockId, LeafId, ResourceId, UpdateAvailabilityData,
         },
         query_data::{
-            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryableBlock, TransactionHash,
+            BlockHash, BlockQueryData, LeafHash, LeafQueryData, QueryablePayload, TransactionHash,
             TransactionIndex,
         },
     },
     metrics::PrometheusMetrics,
     status::data_source::StatusDataSource,
-    Block, Deltas, MissingSnafu, NotFoundSnafu, QueryResult, Resolvable,
+    MissingSnafu, NotFoundSnafu, Payload, QueryResult,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use commit::Committable;
 use futures::stream::{self, BoxStream, Stream, StreamExt, TryStreamExt};
-use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
-    signature_key::EncodedPublicKey,
-};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::hash_map::{Entry, HashMap};
@@ -69,15 +66,13 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// ```
 /// # use atomic_store::PersistenceError;
 /// # use hotshot_query_service::data_source::{ExtensibleDataSource, FileSystemDataSource};
-/// # use hotshot_query_service::testing::mocks::{
-/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
-/// # };
+/// # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 /// # use std::path::Path;
-/// # fn doc(storage_path: &Path) -> Result<(), PersistenceError> {
+/// # async fn doc(storage_path: &Path) -> Result<(), PersistenceError> {
 /// type AppState = &'static str;
 ///
-/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes, AppNodeImpl>, AppState> =
-///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path)?, "app state");
+/// let data_source: ExtensibleDataSource<FileSystemDataSource<AppTypes>, AppState> =
+///     ExtensibleDataSource::new(FileSystemDataSource::create(storage_path).await?, "app state");
 /// # Ok(())
 /// # }
 /// ```
@@ -128,17 +123,18 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// struct AppState {
 ///     // Top-level storage coordinator
 ///     store: AtomicStore,
-///     hotshot_qs: FileSystemDataSource<AppTypes, AppNodeImpl>,
+///     hotshot_qs: FileSystemDataSource<AppTypes>,
 ///     // additional state for other modules
 /// }
 ///
-/// fn init_server(
+/// async fn init_server(
 ///     storage_path: &Path,
 ///     mut hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;
 ///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader)
+///         .await
 ///         .map_err(Error::internal)?;
 ///     // Initialize storage for other modules using the same loader.
 ///
@@ -168,33 +164,33 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 /// }
 /// ```
 #[derive(custom_debug::Debug)]
-pub struct FileSystemDataSource<Types: NodeType, I: NodeImplementation<Types>>
+pub struct FileSystemDataSource<Types: NodeType>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
-    index_by_leaf_hash: HashMap<LeafHash<Types, I>, u64>,
+    index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
     index_by_proposer_id: HashMap<EncodedPublicKey, Vec<u64>>,
     #[debug(skip)]
     top_storage: Option<AtomicStore>,
-    leaf_storage: LedgerLog<LeafQueryData<Types, I>>,
+    leaf_storage: LedgerLog<LeafQueryData<Types>>,
     block_storage: LedgerLog<BlockQueryData<Types>>,
     metrics: PrometheusMetrics,
 }
 
-impl<Types: NodeType, I: NodeImplementation<Types>> FileSystemDataSource<Types, I>
+impl<Types: NodeType> FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     /// Create a new [FileSystemDataSource] with storage at `path`.
     ///
     /// If there is already data at `path`, it will be archived.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn create(path: &Path) -> Result<Self, PersistenceError> {
+    pub async fn create(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
-        let mut data_source = Self::create_with_store(&mut loader)?;
+        let mut data_source = Self::create_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -204,12 +200,9 @@ where
     /// If there is no data at `path`, a new store will be created.
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
-    pub fn open(path: &Path) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    pub async fn open(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
-        let mut data_source = Self::open_with_store(&mut loader)?;
+        let mut data_source = Self::open_with_store(&mut loader).await?;
         data_source.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
@@ -222,8 +215,10 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn create_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
-        Ok(Self {
+    pub async fn create_with_store(
+        loader: &mut AtomicStoreLoader,
+    ) -> Result<Self, PersistenceError> {
+        let mut ds = Self {
             index_by_leaf_hash: Default::default(),
             index_by_block_hash: Default::default(),
             index_by_txn_hash: Default::default(),
@@ -232,7 +227,13 @@ where
             leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
             block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
             metrics: Default::default(),
-        })
+        };
+
+        // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it is
+        // present.
+        ds.insert_genesis().await?;
+
+        Ok(ds)
     }
 
     /// Open an existing [FileSystemDataSource] using a persistent storage loader.
@@ -243,12 +244,9 @@ where
     /// The [FileSystemDataSource] will register its persistent data structures with `loader`. The
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
-    pub fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    pub async fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
         let leaf_storage =
-            LedgerLog::<LeafQueryData<Types, I>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
+            LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
         let block_storage =
             LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
 
@@ -270,12 +268,12 @@ where
         let mut index_by_txn_hash = HashMap::new();
         for block in block_storage.iter().flatten() {
             let height = block.height();
-            for (txn_ix, txn) in block.block().enumerate() {
+            for (txn_ix, txn) in block.payload().enumerate() {
                 update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
             }
         }
 
-        Ok(Self {
+        let mut ds = Self {
             index_by_leaf_hash,
             index_by_block_hash,
             index_by_txn_hash,
@@ -284,7 +282,13 @@ where
             block_storage,
             top_storage: None,
             metrics: Default::default(),
-        })
+        };
+
+        // HotShot doesn't emit an event for the genesis block, so we need to manually ensure it is
+        // present.
+        ds.insert_genesis().await?;
+
+        Ok(ds)
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
@@ -303,13 +307,27 @@ where
         }
         Ok(())
     }
+
+    async fn insert_genesis(&mut self) -> Result<(), PersistenceError> {
+        let block_height =
+            self.block_height()
+                .await
+                .map_err(|err| PersistenceError::OtherLoad {
+                    inner: Box::new(err),
+                })?;
+        if block_height == 0 {
+            self.insert_leaf(LeafQueryData::genesis()).await?;
+            self.insert_block(BlockQueryData::genesis()).await?;
+            self.commit().await?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> VersionedDataSource
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> VersionedDataSource for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type Error = PersistenceError;
 
@@ -377,15 +395,14 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> AvailabilityDataSource<Types, I>
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> AvailabilityDataSource<Types> for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
-    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types, I>>>;
+    type LeafStream = BoxStream<'static, QueryResult<LeafQueryData<Types>>>;
     type BlockStream = BoxStream<'static, QueryResult<BlockQueryData<Types>>>;
 
-    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types, I>>>
+    type LeafRange<'a, R> = BoxStream<'a, QueryResult<LeafQueryData<Types>>>
     where
         Self: 'a,
         R: RangeBounds<usize> + Send;
@@ -394,9 +411,9 @@ where
         Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types, I>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
     where
-        ID: Into<LeafId<Types, I>> + Send + Sync,
+        ID: Into<LeafId<Types>> + Send + Sync,
     {
         let n = match id.into() {
             ResourceId::Number(n) => n,
@@ -455,7 +472,7 @@ where
         &self,
         id: &EncodedPublicKey,
         limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types, I>>> {
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
         let all_ids = self
             .index_by_proposer_id
             .get(id)
@@ -499,17 +516,13 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> UpdateAvailabilityData<Types, I>
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     type Error = PersistenceError;
 
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types, I>) -> Result<(), Self::Error>
-    where
-        Deltas<Types, I>: Resolvable<Block<Types>>,
-    {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
         self.leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
         self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
@@ -528,7 +541,7 @@ where
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.block_storage
             .insert(block.height() as usize, block.clone())?;
-        for (txn_ix, txn) in block.block().enumerate() {
+        for (txn_ix, txn) in block.payload().enumerate() {
             update_index_by_hash(
                 &mut self.index_by_txn_hash,
                 txn.commit(),
@@ -558,10 +571,9 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 }
 
 #[async_trait]
-impl<Types: NodeType, I: NodeImplementation<Types>> StatusDataSource
-    for FileSystemDataSource<Types, I>
+impl<Types: NodeType> StatusDataSource for FileSystemDataSource<Types>
 where
-    Block<Types>: QueryableBlock,
+    Payload<Types>: QueryablePayload,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.leaf_storage.iter().len())
@@ -575,11 +587,15 @@ where
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
     use super::*;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes, TestableDataSource};
+    use crate::{
+        data_source::UpdateDataSource,
+        testing::mocks::{DataSourceLifeCycle, MockTypes},
+    };
+    use hotshot::types::Event;
     use tempdir::TempDir;
 
     #[async_trait]
-    impl TestableDataSource for FileSystemDataSource<MockTypes, MockNodeImpl> {
+    impl DataSourceLifeCycle for FileSystemDataSource<MockTypes> {
         type Storage = TempDir;
 
         async fn create(node_id: usize) -> Self::Storage {
@@ -587,20 +603,25 @@ mod impl_testable_data_source {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Self::open(storage.path()).unwrap()
+            Self::open(storage.path()).await.unwrap()
+        }
+
+        async fn handle_event(&mut self, event: &Event<MockTypes>) {
+            self.update(event).await.unwrap();
+            self.commit().await.unwrap();
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::data_source_tests;
+    use super::super::{availability_tests, status_tests};
     use super::FileSystemDataSource;
-    use crate::testing::mocks::{MockNodeImpl, MockTypes};
+    use crate::testing::mocks::MockTypes;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_data_source_tests!(FileSystemDataSource<MockTypes, MockNodeImpl>);
+    instantiate_data_source_tests!(FileSystemDataSource<MockTypes>);
 }
