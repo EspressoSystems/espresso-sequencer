@@ -1,58 +1,16 @@
 #![cfg(any(test, feature = "testing"))]
 
-use ark_bn254::{Fq, G1Affine};
 use ark_ec::AffineRepr;
-use ark_ff::{BigInt, PrimeField};
+use ark_ff::PrimeField;
 pub use contract_bindings::shared_types::{G1Point, G2Point};
 use ethers::types::U256;
 
-pub(crate) mod hotshot_contract {
-    use anyhow::Result;
-    use contract_bindings::bls_helper::BLSHelper;
-    use ethers::middleware::SignerMiddleware;
-    use ethers::providers::{Http, Middleware, Provider};
-    use ethers::signers::LocalWallet;
-    use sequencer_utils::test_utils::TestClients;
-
-    type EthMiddleware = SignerMiddleware<Provider<Http>, LocalWallet>;
-
-    pub struct TestBLSSystem {
-        pub clients: TestClients,
-        pub bls: BLSHelper<EthMiddleware>,
-        pub provider: Provider<Http>,
-    }
-
-    impl TestBLSSystem {
-        pub async fn deploy(provider: Provider<Http>) -> Result<Self> {
-            let chain_id = provider.get_chainid().await?.as_u64();
-            let clients = TestClients::new(&provider, chain_id);
-            let bls = BLSHelper::deploy(clients.deployer.provider.clone(), ())?
-                .send()
-                .await?;
-            Ok(Self {
-                clients,
-                bls,
-                provider,
-            })
-        }
-    }
-}
+pub(crate) mod hotshot_contract {}
 
 // TODO put somewhere else, like jellyfish?
 fn convert_fq_to_u256(f: ark_bn254::Fq) -> U256 {
     let b_int = f.into_bigint();
     U256([b_int.0[0], b_int.0[1], b_int.0[2], b_int.0[3]])
-}
-
-pub(crate) fn compare_field_elems(field_elem_rust: Fq, field_elem_contract: U256) {
-    let x_rust_big_int = field_elem_rust.into_bigint();
-    let x_contract_big_int = BigInt::new(field_elem_contract.0);
-    assert_eq!(x_rust_big_int, x_contract_big_int);
-}
-
-pub(crate) fn compare_group_elems(group_elem_rust: G1Affine, group_elem_contract: G1Point) {
-    compare_field_elems(group_elem_rust.x, group_elem_contract.x);
-    compare_field_elems(group_elem_rust.y, group_elem_contract.y);
 }
 
 // TODO Some of the code below are copied/adapted from https://github.com/EspressoSystems/cape/blob/77f343849db3d9e721c6e3d0f7108155c178dbee/contracts/rust/src/types.rs#L41
