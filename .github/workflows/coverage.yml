@@ -36,7 +36,7 @@ jobs:
           skipPush: ${{ github.actor == 'dependabot[bot]' }}
 
       - name: Cache cargo
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v3.3.2
         with:
           path: |
             ~/.cargo/registry/index
