@@ -29,7 +29,22 @@ contract BLSSig_Test is Test {
         return (vk, sig);
     }
 
-    // TODO Philippe Tests low level functions
+    function testFuzz_BLS_hashes_computation(bytes memory input) external {
+        //bytes memory input = "Message";
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "gen-bls-hashes";
+        cmds[2] = vm.toString(input);
+
+        bytes memory result = vm.ffi(cmds);
+
+        (uint256 fieldElem, BN254.G1Point memory hashToCurveElem) =
+            abi.decode(result, (uint256, BN254.G1Point));
+
+        assertEq(fieldElem, BLSSig.hashToField(input));
+        assertEq(abi.encode(hashToCurveElem), abi.encode(BLSSig.hashToCurve(input)));
+    }
 
     function test_SigVerification_Succeeds() external {
         bytes memory message = "Hi";
