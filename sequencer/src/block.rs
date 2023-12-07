@@ -268,6 +268,8 @@ impl BlockPayload for Payload {
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
+        let mut transactions = transactions.into_iter().collect::<Vec<_>>();
+        transactions.sort_by_key(|tx| tx.vm());
         let transaction_nmt = TransactionNMT::from_elems(MAX_NMT_DEPTH, transactions).unwrap();
         let root = NMTRoot {
             root: transaction_nmt.commitment().digest(),
@@ -457,7 +459,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~Gk26ovvxhxeEBcTPg0DP142QkkGeHqlm-7dllaitoZW0",
+            "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
             |header| header.commit(),
         );
     }
