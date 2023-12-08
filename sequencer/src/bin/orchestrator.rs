@@ -197,7 +197,10 @@ async fn main() {
     config.config.da_committee_size = args.num_nodes.get();
     config.config.min_transactions = args.min_transactions;
 
-    run_orchestrator(config, format!("0.0.0.0:{}", args.port).parse().unwrap())
-        .await
-        .unwrap();
+    run_orchestrator(
+        config,
+        format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
+    )
+    .await
+    .unwrap();
 }
