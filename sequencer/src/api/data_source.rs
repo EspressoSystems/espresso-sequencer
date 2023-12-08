@@ -14,10 +14,10 @@ use hotshot_query_service::{
 /// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
 /// provided sequencer-specific endpoints.
 #[async_trait]
-pub(super) trait SequencerDataSource<N: network::Type>:
-    AvailabilityDataSource<SeqTypes, Node<N>>
+pub(super) trait SequencerDataSource:
+    AvailabilityDataSource<SeqTypes>
     + StatusDataSource
-    + UpdateDataSource<SeqTypes, Node<N>>
+    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {

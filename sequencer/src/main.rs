@@ -8,7 +8,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, init_static, Block, NetworkParams, Options,
+    init_node, init_static, NetworkParams, Options,
 };
 
 #[async_std::main]
@@ -22,9 +22,6 @@ async fn main() {
     let opt = Options::parse();
     let modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
-
-    // Create genesis block.
-    let genesis = Block::genesis();
 
     let mut tasks = vec![];
     let network_params = NetworkParams {
@@ -54,20 +51,15 @@ async fn main() {
             } else {
                 None
             };
-            let init_handle =
-                Box::new(move |metrics| init_node(network_params, genesis, metrics).boxed());
             let SequencerNode { handle, .. } = opt
-                .serve(init_handle)
+                .serve(move |metrics| {
+                    async move { init_node(network_params, &*metrics).await }.boxed()
+                })
                 .await
                 .expect("Failed to initialize API");
             (handle, query_api_port)
         }
-        None => (
-            init_node(network_params, genesis, Box::new(NoMetrics))
-                .await
-                .0,
-            None,
-        ),
+        None => (init_node(network_params, &NoMetrics).await.0, None),
     };
     // Register a task to run consensus.
     tasks.push(
