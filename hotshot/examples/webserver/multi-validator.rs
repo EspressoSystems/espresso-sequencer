@@ -6,6 +6,7 @@ use clap::Parser;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_testing::state_types::TestTypes;
 use std::net::IpAddr;
+use surf_disco::Url;
 use tracing::instrument;
 use types::VIDNetwork;
 
@@ -21,9 +22,7 @@ struct MultiValidatorArgs {
     /// Number of validators to run
     pub num_nodes: u16,
     /// The address the orchestrator runs on
-    pub url: String,
-    /// The port the orchestrator runs on
-    pub port: u16,
+    pub url: Url,
     /// This node's public IP address, for libp2p
     /// If no IP address is passed in, it will default to 127.0.0.1
     pub public_ip: Option<IpAddr>,
@@ -39,11 +38,7 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = MultiValidatorArgs::parse();
-    tracing::error!(
-        "connecting to orchestrator at {:?}:{:?}",
-        args.url,
-        args.port
-    );
+    tracing::error!("connecting to orchestrator at {:?}", args.url,);
     let mut nodes = Vec::new();
     for _ in 0..args.num_nodes {
         let url = args.url.clone();
@@ -58,7 +53,6 @@ async fn main() {
                 ThisRun,
             >(ValidatorArgs {
                 url,
-                port: args.port,
                 public_ip: args.public_ip,
             })
             .await

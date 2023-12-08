@@ -7,6 +7,7 @@ use futures::{Future, FutureExt};
 
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::{error::ClientError, Client};
+use tide_disco::Url;
 
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
@@ -23,9 +24,7 @@ pub struct OrchestratorClient {
 /// Arguments passed to the validator
 pub struct ValidatorArgs {
     /// The address the orchestrator runs on
-    pub url: String,
-    /// The port the orchestrator runs on
-    pub port: u16,
+    pub url: Url,
     /// This node's public IP address, for libp2p
     /// If no IP address is passed in, it will default to 127.0.0.1
     pub public_ip: Option<IpAddr>,
@@ -34,8 +33,7 @@ pub struct ValidatorArgs {
 impl OrchestratorClient {
     /// Creates the client that connects to the orchestrator
     pub async fn connect_to_orchestrator(args: ValidatorArgs) -> Self {
-        let base_url = format!("{0}:{1}", args.url, args.port).parse().unwrap();
-        let client = surf_disco::Client::<ClientError>::new(base_url);
+        let client = surf_disco::Client::<ClientError>::new(args.url);
         // TODO ED: Add healthcheck wait here
         OrchestratorClient { client }
     }
