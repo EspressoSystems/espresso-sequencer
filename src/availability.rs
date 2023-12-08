@@ -355,9 +355,8 @@ mod test {
     }
 
     async fn validate(client: &Client<Error>, height: u64) {
-        // Check the consistency of every block/leaf pair. Keep track of blocks and transactions we
-        // have seen so we can detect duplicates.
-        let mut seen_blocks = HashSet::new();
+        // Check the consistency of every block/leaf pair. Keep track of transactions we have seen
+        // so we can detect duplicates.
         let mut seen_txns = HashSet::new();
         for i in 0..height {
             // Check that looking up the leaf various ways returns the correct leaf.
@@ -378,19 +377,14 @@ mod test {
                 client.get(&format!("block/{}", i)).send().await.unwrap();
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i);
-            // We should be able to look up the block by hash as long as it's not a duplicate. For
-            // duplicate blocks, this endpoint only returns the first one.
-            if !seen_blocks.contains(&block.hash()) {
-                assert_eq!(
-                    block,
-                    client
-                        .get(&format!("block/hash/{}", block.hash()))
-                        .send()
-                        .await
-                        .unwrap()
-                );
-                seen_blocks.insert(block.hash());
-            }
+            assert_eq!(
+                block,
+                client
+                    .get(&format!("block/hash/{}", block.hash()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
 
             // Check that this block is included as a proposal by the proposer listed in the leaf.
             let proposals: Vec<LeafQueryData<MockTypes>> = client
