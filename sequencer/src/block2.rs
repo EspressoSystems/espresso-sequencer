@@ -164,6 +164,7 @@ impl QueryablePayload for BlockPayload {
         //
         // TODO why isn't cargo fmt wrapping these comments?
 
+        tracing::info!("1");
         // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
             (TxTableEntry::byte_len(), None)
@@ -177,6 +178,7 @@ impl QueryablePayload for BlockPayload {
             )
         };
 
+        tracing::info!("2");
         // end
         let tx_table_range_proof_end = index_usize
             .checked_add(2)?
@@ -186,6 +188,7 @@ impl QueryablePayload for BlockPayload {
                 ..tx_table_range_proof_end,
         )?)?;
 
+        tracing::info!("3");
         // correctness proof for the tx payload range
         let tx_table_range_proof = vid
             .payload_proof(
@@ -194,6 +197,7 @@ impl QueryablePayload for BlockPayload {
             )
             .ok()?;
 
+        tracing::info!("4");
         let tx_payload_range = tx_payload_range(
             &tx_table_range_start,
             &tx_table_range_end,
@@ -205,7 +209,10 @@ impl QueryablePayload for BlockPayload {
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(
                 crate::VmId(0),
-                self.payload.get(tx_payload_range.clone())?.to_vec(),
+                self.payload
+                    .get(tx_payload_range.clone())
+                    .expect("fail1")
+                    .to_vec(),
             ),
             TxInclusionProof {
                 tx_table_len: self.get_tx_table_len()?,
@@ -283,6 +290,8 @@ impl TxInclusionProof {
                 }
             }
             None => {
+                // TODO check that tx_payload_range is empty!!! ...or that it's truncated by the payload len!
+                // Otherwise someone could verify that `tx_index`th tx is empty even if it's not!
                 if !tx.payload().is_empty() {
                     return None; // error: nonempty payload but no proof
                 }
@@ -615,20 +624,20 @@ mod test {
         let test_cases = vec![
             random_payload(&[10, 9, 20], &mut rng), // 1 negative-length tx
             random_payload(&[10, 9, 5], &mut rng),  // 2 negative-length txs
-
-                                                    // {
-                                                    //     // truncated tx payloads
-                                                    //     let entries = [10, 20, 30];
-                                                    //     let mut tx_payloads_flat = random_tx_payloads_flat(&entries, &mut rng);
-                                                    //     tx_payloads_flat.truncate(tx_payloads_flat.len() / 2);
-                                                    //     [tx_table(&entries), tx_payloads_flat].concat()
-                                                    // },
+            {
+                // truncated tx payloads
+                let entries = [10, 20, 30]; // all positive-length txs
+                let mut tx_payloads_flat = random_tx_payloads_flat(&entries, &mut rng);
+                tx_payloads_flat.truncate(tx_payloads_flat.len() / 2);
+                [tx_table(&entries), tx_payloads_flat].concat()
+            },
         ];
 
         // TODO more test cases:
         // - overflow u32
         // - txs off the end of the payload
         // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
+        // - payload <4 bytes
 
         setup_logging();
         setup_backtrace();
