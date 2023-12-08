@@ -193,6 +193,7 @@
             nixWithFlakes
             nixpkgs-fmt
             entr
+            process-compose
 
             # Figures
             graphviz
