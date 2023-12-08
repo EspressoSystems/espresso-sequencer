@@ -153,6 +153,7 @@ async fn test_consensus_with_vid_vote() {
     use hotshot_types::{
         data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
     };
+    use tracing::error;
     use std::marker::PhantomData;
 
     async_compatibility_layer::logging::setup_logging();
@@ -214,9 +215,8 @@ async fn test_consensus_with_vid_vote() {
 
     // For the test of vote logic with vid
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    let mut proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-    // This proposal_view2's justify_qc does not have correct view number, therefore we assign one
-    proposal_view2.data.justify_qc.view_number = ViewNumber::new(2);
+    // Sishan TOOD: this proposal on view 2 doesn't have a valid justify QC
+    let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
     // Sishan TODO: Still need a valid DAC cert
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
