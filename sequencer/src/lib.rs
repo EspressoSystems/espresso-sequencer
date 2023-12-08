@@ -265,11 +265,7 @@ pub async fn init_node(
 ) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
     let validator_args = ValidatorArgs {
-        url: network_params.orchestrator_url.to_string(),
-        port: network_params
-            .orchestrator_url
-            .port_or_known_default()
-            .unwrap(),
+        url: network_params.orchestrator_url,
         public_ip: None,
     };
     let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
