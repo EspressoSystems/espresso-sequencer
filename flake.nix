@@ -193,6 +193,7 @@
             nixWithFlakes
             nixpkgs-fmt
             entr
+            process-compose
             # `postgresql` defaults to an older version (15), so we select the latest version (16)
             # explicitly.
             postgresql_16
