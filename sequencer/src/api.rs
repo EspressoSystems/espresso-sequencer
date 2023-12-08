@@ -291,8 +291,8 @@ mod generic_tests {
         client
             .get::<TimeWindowQueryData>(&format!(
                 "availability/headers/window/{}/{}",
-                u64::MAX - 1,
-                u64::MAX
+                test_blocks[2].last().unwrap().timestamp + 1,
+                test_blocks[2].last().unwrap().timestamp + 2
             ))
             .send()
             .await
