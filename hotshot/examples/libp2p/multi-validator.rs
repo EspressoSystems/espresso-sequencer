@@ -38,7 +38,7 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = MultiValidatorArgs::parse();
-    tracing::error!("connecting to orchestrator at {:?}:{:?}", args.url,);
+    tracing::error!("connecting to orchestrator at {:?}", args.url);
     let mut nodes = Vec::new();
     for _ in 0..args.num_nodes {
         let url: String = args.url.clone();
