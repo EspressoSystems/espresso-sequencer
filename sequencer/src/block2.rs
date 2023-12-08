@@ -110,9 +110,10 @@ impl BlockPayload {
     }
 }
 
-// Returns the range `range_start+len..range_end+len` or `None` on error.
+// Returns the range `range_start+len..max(range_start,range_end)+len` or `None` on error.
 //
 // Lots of ugly type conversion and checked arithmetic.
+// Range end must be max(range_start,range_end) otherwise Rust will barf.
 fn tx_payload_range(
     tx_table_range_start: &Option<TxTableEntry>,
     tx_table_range_end: &TxTableEntry,
@@ -122,14 +123,13 @@ fn tx_payload_range(
         .ok()?
         .checked_add(1)?
         .checked_mul(TxTableEntry::byte_len())?;
-    Some(
-        usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
-            .ok()?
-            .checked_add(tx_bodies_offset)?
-            ..usize::try_from(tx_table_range_end.clone())
-                .ok()?
-                .checked_add(tx_bodies_offset)?,
-    )
+    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = usize::try_from(tx_table_range_end.clone())
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    Some(start..std::cmp::max(start, end))
 }
 
 impl QueryablePayload for BlockPayload {
@@ -161,6 +161,8 @@ impl QueryablePayload for BlockPayload {
         // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
         //
         // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
+        //
+        // TODO why isn't cargo fmt wrapping these comments?
 
         // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
@@ -505,10 +507,7 @@ mod test {
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use jf_primitives::vid::{
-        payload_prover::{PayloadProver, Statement},
-        VidScheme,
-    };
+    use jf_primitives::vid::VidScheme;
     use rand::RngCore;
 
     #[test]
@@ -609,69 +608,60 @@ mod test {
         }
     }
 
-    // #[test]
-    // fn malformed_payloads() {
-    //     // play with this
-    //     let test_cases = vec![
-    //         // 1 negative-length tx
-    //         // vec![10, 9, 20],
-    //         // 2 negative-length txs
-    //         // vec![10, 9, 5],
+    #[test]
+    fn malformed_payloads() {
+        // play with this
+        let test_cases = vec![
+            vec![10, 9, 20], // 1 negative-length tx
+            vec![10, 9, 5],  // 2 negative-length txs
+        ];
 
-    //         // well-formed test cases
-    //         vec![5, 10, 15],
-    //         vec![20, 40, 60],
-    //     ];
+        // TODO more test cases:
+        // - overflow u32
+        // - txs off the end of the payload
+        // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
 
-    //     // TODO more test cases:
-    //     // - overflow u32
-    //     // - txs off the end of the payload
-    //     // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
+        setup_logging();
+        setup_backtrace();
 
-    //     setup_logging();
-    //     setup_backtrace();
+        let mut rng = jf_utils::test_rng();
+        let vid = test_vid_factory();
+        let num_test_cases = test_cases.len();
+        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
+            tracing::info!(
+                "test payload {} of {} with {} txs",
+                t + 1,
+                num_test_cases,
+                tx_table_entries.len()
+            );
 
-    //     let mut rng = jf_utils::test_rng();
-    //     let vid = test_vid_factory();
-    //     let num_test_cases = test_cases.len();
-    //     for (t, entries) in test_cases.into_iter().enumerate() {
-    //         tracing::info!(
-    //             "test payload {} of {} with {} txs",
-    //             t + 1,
-    //             num_test_cases,
-    //             entries.len()
-    //         );
-    //         let block = BlockPayload::from_bytes(random_payload(&entries, &mut rng));
-    //         let disperse_data = vid.disperse(&block.payload).unwrap();
+            let tx_table = tx_table(&tx_table_entries);
+            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
+            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
 
-    //         for i in 0..entries.len() {
-    //             let index = TxIndex::try_from(i).unwrap();
-    //             let tx_range = block.get_tx_range_with_proof(index, &vid).unwrap().0;
+            let block = BlockPayload::from_bytes([tx_table, tx_payloads_flat].concat());
+            let disperse_data = vid.disperse(&block.payload).unwrap();
 
-    //             tracing::info!(
-    //                 "index {} tx range start {} end {}",
-    //                 index,
-    //                 tx_range.start,
-    //                 tx_range.end
-    //             );
+            for (i, tx_body) in tx_bodies.iter().enumerate() {
+                let index = TxIndex::try_from(i).unwrap();
+                tracing::info!("tx index {}", index,);
 
-    //             let (tx, proof) = block.transaction_with_proof(&index).unwrap();
+                let (tx, proof) = block.transaction_with_proof(&index).unwrap();
+                assert_eq!(tx_body, tx.payload());
 
-    //             // TODO use TxInclusionProof::verify()
-    //             vid.payload_verify(
-    //                 Statement {
-    //                     payload_subslice: tx.payload(),
-    //                     range: tx_range,
-    //                     commit: &disperse_data.commit,
-    //                     common: &disperse_data.common,
-    //                 },
-    //                 &proof.tx_payload_proof.unwrap(),
-    //             )
-    //             .unwrap()
-    //             .unwrap();
-    //         }
-    //     }
-    // }
+                proof
+                    .verify(
+                        &tx,
+                        index,
+                        &vid,
+                        &disperse_data.commit,
+                        &disperse_data.common,
+                    )
+                    .unwrap()
+                    .unwrap();
+            }
+        }
+    }
 
     fn tx_table(entries: &[usize]) -> Vec<u8> {
         let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
@@ -705,15 +695,7 @@ mod test {
             start = end;
             result.push(tx_payload);
         }
-        result
-    }
-
-    fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        let mut result = tx_table(entries);
-        result.extend(random_tx_payloads_flat(entries, rng));
+        assert_eq!(result.len(), entries.len());
         result
     }
 }
