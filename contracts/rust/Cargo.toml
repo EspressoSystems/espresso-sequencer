@@ -23,7 +23,7 @@ contract-bindings = { path = "../../contract-bindings" }
 crs = { git = "https://github.com/alxiong/crs" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
-ethers-providers = "2.0.4"
+ethers-providers = "2.0.11"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
 itertools = "0.10.3"
