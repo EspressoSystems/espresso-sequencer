@@ -1,7 +1,7 @@
 use super::{
     data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Sql as Options,
 };
-use crate::{network, Node, SeqTypes};
+use crate::SeqTypes;
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{
@@ -11,10 +11,10 @@ use hotshot_query_service::{
 };
 use snafu::OptionExt;
 
-pub type DataSource<N> = SqlDataSource<SeqTypes, Node<N>>;
+pub type DataSource = SqlDataSource<SeqTypes>;
 
 #[async_trait]
-impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
+impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options) -> anyhow::Result<Self> {
@@ -98,7 +98,7 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
             let prev = self.get_block(first_block - 1).await?;
-            res.prev = Some(prev.block().header());
+            res.prev = Some(prev.header().clone());
         }
 
         // Add blocks to the window, starting from `first_block`, until we reach the end of the
@@ -114,8 +114,8 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
         let mut blocks = self.get_block_range(first_block..).await?;
         while let Some(block) = blocks.next().await {
             let block = block?;
-            let header = block.block().header();
-            if header.timestamp() >= end {
+            let header = block.header().clone();
+            if header.timestamp >= end {
                 res.next = Some(header);
                 break;
             }
@@ -129,14 +129,11 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::{
-        api::{self, data_source::testing::TestableSequencerDataSource},
-        network::Memory,
-    };
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
     use hotshot_query_service::data_source::sql::testing::TmpDb;
 
     #[async_trait]
-    impl TestableSequencerDataSource for DataSource<Memory> {
+    impl TestableSequencerDataSource for DataSource {
         type Storage = TmpDb;
 
         async fn create_storage() -> Self::Storage {
@@ -158,11 +155,10 @@ mod impl_testable_data_source {
 mod generic_tests {
     use super::super::generic_tests;
     use super::DataSource;
-    use crate::network::Memory;
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
 
-    instantiate_generic_tests!(DataSource<Memory>);
+    instantiate_generic_tests!(DataSource);
 }

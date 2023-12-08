@@ -23,7 +23,24 @@ abstract contract AbstractStakeTable {
     /// (LastEpochStart)
     uint256 public totalVotingStake;
 
-    event Registered(bytes32, uint64, StakeType, uint256);
+    /// @notice Signals a registration of a BLS public key.
+    /// @param blsVKhash hash of the BLS public key that is registered.
+    /// @param registerEpoch epoch when the registration becomes effective.
+    /// @param stakeType native or restake token.
+    /// @param amountDeposited amount deposited when registering the new node.
+    event Registered(
+        bytes32 blsVKhash, uint64 registerEpoch, StakeType stakeType, uint256 amountDeposited
+    );
+
+    /// @notice Signals an exit request has been granted.
+    /// @param blsVKhash hash of the BLS public key owned by the user who requested to exit.
+    /// @param exitEpoch epoch when the user will be allowed to withdraw its funds.
+    event Exit(bytes32 blsVKhash, uint64 exitEpoch);
+
+    /// @notice Signals a deposit to a BLS public key.
+    /// @param blsVKhash hash of the BLS public key that received the deposit.
+    /// @param amount amount of the deposit
+    event Deposit(bytes32 blsVKhash, uint256 amount);
 
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,

@@ -44,11 +44,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
+        # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --release --workspace
 
       - name: Test
+        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           cargo test --release --workspace --all-features --no-run
           cargo test --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
         timeout-minutes: 30
