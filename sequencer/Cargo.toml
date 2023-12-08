@@ -60,7 +60,7 @@ tracing = "0.1"
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
-url = "2.3"
+url = "2.5"
 
 # Dependencies for feature `testing`
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main", optional = true }
