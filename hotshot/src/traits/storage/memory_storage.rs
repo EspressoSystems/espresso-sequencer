@@ -117,7 +117,10 @@ mod test {
     use hotshot_types::{
         data::{fake_commitment, genesis_proposer_id, Leaf},
         simple_certificate::QuorumCertificate,
-        traits::{node_implementation::NodeType, state::ConsensusTime},
+        traits::{
+            block_contents::genesis_vid_commitment, node_implementation::NodeType,
+            state::ConsensusTime,
+        },
     };
     use std::marker::PhantomData;
     use tracing::instrument;
@@ -126,7 +129,7 @@ mod test {
         let payload = TestBlockPayload::genesis();
         let header = TestBlockHeader {
             block_number: 0,
-            payload_commitment: payload.payload_commitment,
+            payload_commitment: genesis_vid_commitment(),
         };
         let dummy_leaf_commit = fake_commitment::<Leaf<TestTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {

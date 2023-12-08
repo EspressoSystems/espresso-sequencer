@@ -153,9 +153,9 @@ async fn webserver_network_from_config<TYPES: NodeType>(
     let WebServerConfig {
         url,
         wait_between_polls,
-    }: WebServerConfig = config.clone().web_server_config.unwrap();
+    }: WebServerConfig = config.web_server_config.unwrap();
 
-    WebServerNetwork::create(url, wait_between_polls, pub_key.clone(), false)
+    WebServerNetwork::create(url, wait_between_polls, pub_key, false)
 }
 
 async fn libp2p_network_from_config<TYPES: NodeType>(

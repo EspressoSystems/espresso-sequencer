@@ -41,7 +41,7 @@ async fn main() {
     tracing::error!("connecting to orchestrator at {:?}", args.url);
     let mut nodes = Vec::new();
     for _ in 0..args.num_nodes {
-        let url: String = args.url.clone();
+        let url = args.url.clone();
 
         let node = async_spawn(async move {
             infra::main_entry_point::<

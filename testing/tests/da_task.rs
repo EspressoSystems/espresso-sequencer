@@ -8,7 +8,7 @@ use hotshot_types::{
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        block_contents::vid_commitment, consensus_api::ConsensusSharedApi,
+        block_contents::vid_commitment, consensus_api::ConsensusSharedApi, election::Membership,
         node_implementation::NodeType, state::ConsensusTime,
     },
 };
@@ -37,7 +37,15 @@ async fn test_da_task() {
     let pub_key = *api.public_key();
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
-    let payload_commitment = vid_commitment(&encoded_transactions);
+    let payload_commitment = vid_commitment(
+        &encoded_transactions,
+        handle
+            .hotshot
+            .inner
+            .memberships
+            .quorum_membership
+            .total_nodes(),
+    );
     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
 
     let signature =

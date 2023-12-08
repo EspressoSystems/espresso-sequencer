@@ -618,12 +618,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                         encoded_txns.clone().into_iter(),
                                         leaf.get_block_header().metadata(),
                                     );
-                                    if let Err(e) = leaf.fill_block_payload(payload) {
-                                        error!(
-                                            "Saved block payload and commitment don't match: {:?}",
-                                            e
-                                        );
-                                    }
+
+                                    leaf.fill_block_payload_unchecked(payload);
                                 }
 
                                 leaf_views.push(leaf.clone());
