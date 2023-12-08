@@ -212,11 +212,11 @@ async fn test_consensus_with_vid_vote() {
         output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
     }
 
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    // Sishan TODO: this proposal_view2's justify_qc does not have correct view number
-    let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-
     // For the test of vote logic with vid
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    let mut proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
+    // This proposal_view2's justify_qc does not have correct view number, therefore we assign one
+    proposal_view2.data.justify_qc.view_number = ViewNumber::new(2);
     // Sishan TODO: Still need a valid DAC cert
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
