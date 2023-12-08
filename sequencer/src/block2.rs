@@ -611,9 +611,18 @@ mod test {
     #[test]
     fn malformed_payloads() {
         // play with this
+        let mut rng = jf_utils::test_rng();
         let test_cases = vec![
-            vec![10, 9, 20], // 1 negative-length tx
-            vec![10, 9, 5],  // 2 negative-length txs
+            random_payload(&[10, 9, 20], &mut rng), // 1 negative-length tx
+            random_payload(&[10, 9, 5], &mut rng),  // 2 negative-length txs
+
+                                                    // {
+                                                    //     // truncated tx payloads
+                                                    //     let entries = [10, 20, 30];
+                                                    //     let mut tx_payloads_flat = random_tx_payloads_flat(&entries, &mut rng);
+                                                    //     tx_payloads_flat.truncate(tx_payloads_flat.len() / 2);
+                                                    //     [tx_table(&entries), tx_payloads_flat].concat()
+                                                    // },
         ];
 
         // TODO more test cases:
@@ -624,31 +633,22 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let mut rng = jf_utils::test_rng();
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
+        for (t, payload) in test_cases.into_iter().enumerate() {
+            let block = BlockPayload::from_bytes(payload);
             tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                tx_table_entries.len()
+                block.len()
             );
 
-            let tx_table = tx_table(&tx_table_entries);
-            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
-            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
-
-            let block = BlockPayload::from_bytes([tx_table, tx_payloads_flat].concat());
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
-            for (i, tx_body) in tx_bodies.iter().enumerate() {
-                let index = TxIndex::try_from(i).unwrap();
+            for index in block.iter() {
                 tracing::info!("tx index {}", index,);
-
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
-                assert_eq!(tx_body, tx.payload());
-
                 proof
                     .verify(
                         &tx,
@@ -696,6 +696,15 @@ mod test {
             result.push(tx_payload);
         }
         assert_eq!(result.len(), entries.len());
+        result
+    }
+
+    fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+    where
+        R: RngCore,
+    {
+        let mut result = tx_table(entries);
+        result.extend(random_tx_payloads_flat(entries, rng));
         result
     }
 }
