@@ -355,6 +355,12 @@ pub mod testing {
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
     {
+        init_hotshot_handles_with_metrics(&NoMetrics).await
+    }
+
+    pub async fn init_hotshot_handles_with_metrics(
+        metrics: &dyn Metrics,
+    ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
         setup_backtrace();
 
@@ -396,6 +402,8 @@ pub mod testing {
 
         // Create HotShot instances.
         for node_id in 0..num_nodes {
+            let metrics = if node_id == 0 { metrics } else { &NoMetrics };
+
             let mut config = config.clone();
             config.my_own_validator_config = ValidatorConfig {
                 public_key: pub_keys[node_id],
@@ -406,7 +414,7 @@ pub mod testing {
 
             let network = Arc::new(MemoryNetwork::new(
                 pub_keys[node_id],
-                NetworkingMetricsValue::new(&NoMetrics),
+                NetworkingMetricsValue::new(metrics),
                 master_map.clone(),
                 None,
             ));
@@ -423,7 +431,7 @@ pub mod testing {
                 priv_keys[node_id].clone(),
                 networks,
                 config,
-                &NoMetrics,
+                metrics,
             )
             .await;
 

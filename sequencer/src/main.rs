@@ -43,6 +43,9 @@ async fn main() {
             if let Some(submit) = modules.submit {
                 opt = opt.submit(submit);
             }
+            if let Some(status) = modules.status {
+                opt = opt.status(status);
+            }
 
             // Save the port if we are running a query API. This can be used later when starting the
             // commitment task; otherwise the user must give us the URL of an external query API.

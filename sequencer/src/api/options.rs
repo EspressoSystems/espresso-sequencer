@@ -11,7 +11,11 @@ use async_std::{
 };
 use clap::Parser;
 use futures::future::{BoxFuture, TryFutureExt};
-use hotshot_query_service::{data_source::ExtensibleDataSource, status, Error};
+use hotshot_query_service::{
+    data_source::{ExtensibleDataSource, MetricsDataSource},
+    status::{self, UpdateStatusData},
+    Error,
+};
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use std::path::PathBuf;
 use tide_disco::App;
@@ -21,6 +25,7 @@ pub struct Options {
     pub http: Http,
     pub query_fs: Option<Fs>,
     pub submit: Option<Submit>,
+    pub status: Option<Status>,
 }
 
 impl From<Http> for Options {
@@ -29,6 +34,7 @@ impl From<Http> for Options {
             http,
             query_fs: None,
             submit: None,
+            status: None,
         }
     }
 }
@@ -46,6 +52,12 @@ impl Options {
         self
     }
 
+    /// Add a status API module.
+    pub fn status(mut self, opt: Status) -> Self {
+        self.status = Some(opt);
+        self
+    }
+
     /// Whether these options will run the query API.
     pub fn has_query_module(&self) -> bool {
         self.query_fs.is_some()
@@ -56,22 +68,46 @@ impl Options {
     /// The function `init_handle` is used to create a consensus handle from a metrics object. The
     /// metrics object is created from the API data source, so that consensus will populuate metrics
     /// that can then be read and served by the API.
-    pub async fn serve<N, F>(self, init_handle: F) -> anyhow::Result<SequencerNode<N>>
+    pub async fn serve<N, F>(mut self, init_handle: F) -> anyhow::Result<SequencerNode<N>>
     where
         N: network::Type,
         F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (Consensus<N>, NodeIndex)>,
     {
-        // The server state type depends on whether we are running a query API or not, so we handle
-        // the two cases differently.
-        let node = if let Some(opt) = self.query_fs {
-            init_with_query_module::<N, fs::DataSource>(
-                opt,
-                init_handle,
-                self.submit.is_some(),
-                self.http.port,
-            )
-            .await?
+        // The server state type depends on whether we are running a query or status API or not, so
+        // we handle the two cases differently.
+        let node = if let Some(opt) = self.query_fs.take() {
+            init_with_query_module::<N, fs::DataSource>(self, opt, init_handle).await?
+        } else if self.status.is_some() {
+            // If a status API is requested but no availability API, we use the `MetricsDataSource`,
+            // which allows us to run the status API with no persistent storage.
+            let ds = MetricsDataSource::default();
+            let (handle, node_index) = init_handle(ds.populate_metrics()).await;
+            let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
+                ExtensibleDataSource::new(ds, handle.clone()),
+            )));
+
+            // Initialize status API.
+            let status_api = status::define_api(&Default::default())?;
+            app.register_module("status", status_api)?;
+
+            // Initialize submit API
+            if self.submit.is_some() {
+                let submit_api = endpoints::submit()?;
+                app.register_module("submit", submit_api)?;
+            }
+
+            SequencerNode {
+                handle,
+                node_index,
+                update_task: spawn(
+                    app.serve(format!("0.0.0.0:{}", self.http.port))
+                        .map_err(anyhow::Error::from),
+                ),
+            }
         } else {
+            // If no status or availability API is requested, we don't need metrics or a query
+            // service data source. The only app state is the HotShot handle, which we use to submit
+            // transactions.
             let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone()));
 
@@ -112,6 +148,10 @@ pub struct Http {
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Submit;
 
+/// Options for the status API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Status;
+
 /// Options for the query API module backed by the file system.
 #[derive(Parser, Clone, Debug)]
 pub struct Fs {
@@ -125,10 +165,9 @@ pub struct Fs {
 }
 
 async fn init_with_query_module<N, D>(
-    opt: D::Options,
+    opt: Options,
+    mod_opt: D::Options,
     init_handle: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (Consensus<N>, NodeIndex)>,
-    submit: bool,
-    port: u16,
 ) -> anyhow::Result<SequencerNode<N>>
 where
     N: network::Type,
@@ -136,7 +175,7 @@ where
 {
     type State<N, D> = Arc<RwLock<AppState<N, D>>>;
 
-    let ds = D::create(opt).await?;
+    let ds = D::create(mod_opt).await?;
     let metrics = ds.populate_metrics();
 
     // Start up handle
@@ -153,22 +192,24 @@ where
     let mut app = App::<_, Error>::with_state(state.clone());
 
     // Initialize submit API
-    if submit {
+    if opt.submit.is_some() {
         let submit_api = endpoints::submit::<N, State<N, D>>()?;
         app.register_module("submit", submit_api)?;
     }
 
-    // Initialize availability and status APIs
-    let availability_api = endpoints::availability::<N, D>()?;
-    let status_api = status::define_api::<State<N, D>>(&Default::default())?;
+    // Initialize status API
+    if opt.status.is_some() {
+        let status_api = status::define_api::<State<N, D>>(&Default::default())?;
+        app.register_module("status", status_api)?;
+    }
 
-    // Register modules in app
-    app.register_module("availability", availability_api)?
-        .register_module("status", status_api)?;
+    // Initialize availability API
+    let availability_api = endpoints::availability::<N, D>()?;
+    app.register_module("availability", availability_api)?;
 
     let update_task = spawn(async move {
         futures::join!(
-            app.serve(format!("0.0.0.0:{port}"))
+            app.serve(format!("0.0.0.0:{}", opt.http.port))
                 .map_err(anyhow::Error::from),
             update_loop(state, events),
         )
