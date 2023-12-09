@@ -78,6 +78,8 @@ Note: if the sequencer shows a `"Connection refused"` error you may need to use 
 connecting to the web server. This is because `localhost` may resolve to `::1` if dual stack (ipv4 and ipv6) networking
 is enabled.
 
+For running a full demo natively run `just demo-native`.
+
 ### Contracts
 
 #### Development
