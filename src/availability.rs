@@ -10,10 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{api::load_api, Payload, QueryError};
+use crate::{api::load_api, Payload, QueryError, QueryResult};
 use clap::Args;
 use derive_more::From;
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt, Snafu};
@@ -92,13 +92,13 @@ pub enum Error {
     #[snafu(display("unable to open leaf stream at {}: {}", height, reason))]
     #[from(ignore)]
     LeafStream {
-        height: u64,
+        height: usize,
         reason: String,
     },
     #[snafu(display("unable to open block stream at {}: {}", height, reason))]
     #[from(ignore)]
     BlockStream {
-        height: u64,
+        height: usize,
         reason: String,
     },
     Custom {
@@ -161,14 +161,14 @@ where
                 state
                     .read(|state| {
                         async move {
-                            Ok(state
-                                .subscribe_leaves(height)
-                                .await
-                                .map_err(|err| Error::LeafStream {
-                                    height: height as u64,
+                            handle_stream_errors(
+                                height,
+                                state.subscribe_leaves(height).await,
+                                |height, err| Error::LeafStream {
+                                    height,
                                     reason: err.to_string(),
-                                })?
-                                .map(Ok))
+                                },
+                            )
                         }
                         .boxed()
                     })
@@ -177,20 +177,40 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .stream("streamblockheaders", |req, state| {
+        .get("getheader", |req, state| {
+            async move {
+                let id = match req.opt_integer_param("height")? {
+                    Some(height) => ResourceId::Number(height),
+                    None => ResourceId::Hash(req.blob_param("hash")?),
+                };
+                Ok(state
+                    .get_block(id)
+                    .await
+                    .context(QueryBlockSnafu {
+                        resource: id.to_string(),
+                    })?
+                    .header()
+                    .clone())
+            }
+            .boxed()
+        })?
+        .stream("streamheaders", |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
                         async move {
-                            Ok(state
-                                .subscribe_blocks(height)
-                                .await
-                                .map_err(|err| Error::LeafStream {
-                                    height: height as u64,
+                            handle_stream_errors(
+                                height,
+                                state
+                                    .subscribe_blocks(height)
+                                    .await
+                                    .map(|blocks| blocks.map_ok(|block| block.header().clone())),
+                                |height, err| Error::BlockStream {
+                                    height,
                                     reason: err.to_string(),
-                                })?
-                                .map(|block| Ok(block.context(StreamBlockSnafu)?.header().clone())))
+                                },
+                            )
                         }
                         .boxed()
                     })
@@ -217,14 +237,14 @@ where
                 state
                     .read(|state| {
                         async move {
-                            Ok(state
-                                .subscribe_blocks(height)
-                                .await
-                                .map_err(|err| Error::BlockStream {
-                                    height: height as u64,
+                            handle_stream_errors(
+                                height,
+                                state.subscribe_blocks(height).await,
+                                |height, err| Error::BlockStream {
+                                    height,
                                     reason: err.to_string(),
-                                })?
-                                .map(Ok))
+                                },
+                            )
                         }
                         .boxed()
                     })
@@ -290,6 +310,21 @@ where
     Ok(api)
 }
 
+fn handle_stream_errors<T, S, F>(
+    height: usize,
+    stream: QueryResult<S>,
+    map_err: F,
+) -> Result<impl Stream<Item = Result<T, Error>>, Error>
+where
+    S: Stream<Item = QueryResult<T>>,
+    F: Fn(usize, QueryError) -> Error,
+{
+    Ok(stream
+        .map_err(|err| map_err(height, err))?
+        .enumerate()
+        .map(move |(i, res)| res.map_err(|err| map_err(height + i, err))))
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -300,7 +335,7 @@ mod test {
             mocks::{mock_transaction, MockTypes},
             setup_test,
         },
-        Error, QueryResult,
+        Error, Header,
     };
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
@@ -381,6 +416,18 @@ mod test {
                 block,
                 client
                     .get(&format!("block/hash/{}", block.hash()))
+                    .send()
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(
+                *block.header(),
+                client.get(&format!("header/{i}")).send().await.unwrap()
+            );
+            assert_eq!(
+                *block.header(),
+                client
+                    .get(&format!("header/hash/{}", block.hash()))
                     .send()
                     .await
                     .unwrap()
@@ -487,15 +534,20 @@ mod test {
         // preserves the consistency of the data and indices.
         let leaves = client
             .socket("stream/leaves/0")
-            .subscribe::<QueryResult<LeafQueryData<MockTypes>>>()
+            .subscribe::<LeafQueryData<MockTypes>>()
+            .await
+            .unwrap();
+        let headers = client
+            .socket("stream/headers/0")
+            .subscribe::<Header<MockTypes>>()
             .await
             .unwrap();
         let blocks = client
             .socket("stream/blocks/0")
-            .subscribe::<QueryResult<BlockQueryData<MockTypes>>>()
+            .subscribe::<BlockQueryData<MockTypes>>()
             .await
             .unwrap();
-        let mut leaf_blocks = leaves.zip(blocks).enumerate();
+        let mut chain = leaves.zip(headers.zip(blocks)).enumerate();
         for nonce in 0..3 {
             let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
@@ -503,12 +555,20 @@ mod test {
             // Wait for the transaction to be finalized.
             let (i, leaf, block) = loop {
                 tracing::info!("waiting for block with transaction {}", nonce);
-                let (i, (leaf, block)) = leaf_blocks.next().await.unwrap();
-                tracing::info!("got block {}\nLeaf: {:?}\nBlock: {:?}", i, leaf, block);
-                let leaf = leaf.unwrap().unwrap();
-                let block = block.unwrap().unwrap();
+                let (i, (leaf, (header, block))) = chain.next().await.unwrap();
+                tracing::info!(
+                    "got block {}\nLeaf: {:?}\nHeader: {:?}\nBlock: {:?}",
+                    i,
+                    leaf,
+                    header,
+                    block
+                );
+                let leaf = leaf.unwrap();
+                let header = header.unwrap();
+                let block = block.unwrap();
                 assert_eq!(leaf.height() as usize, i);
                 assert_eq!(leaf.block_hash(), block.hash());
+                assert_eq!(block.header(), &header);
                 if !block.is_empty() {
                     break (i, leaf, block);
                 }
