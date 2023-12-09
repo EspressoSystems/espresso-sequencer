@@ -95,6 +95,7 @@ async fn main() {
             >(ValidatorArgs {
                 url: orchestrator_url,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                network_config_file: None,
             })
             .await
         });
