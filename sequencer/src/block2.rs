@@ -1,23 +1,36 @@
-use self::tx_table::TxTableEntry;
+use self::tx_table_entry::TxTableEntry;
 use crate::Transaction;
 use ark_bls12_381::Bls12_381;
-use hotshot_query_service::QueryableBlock;
+use derivative::Derivative;
+use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{advz::payload_prover::SmallRangeProof, payload_prover::PayloadProver},
+    vid::{
+        advz::payload_prover::SmallRangeProof,
+        payload_prover::{PayloadProver, Statement},
+    },
 };
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
+use std::{ops::Range, sync::OnceLock};
 
 #[allow(dead_code)] // TODO temporary
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
+#[derivative(Hash, PartialEq)]
 pub struct BlockPayload {
     payload: Vec<u8>,
+
+    // cache frequently used items
+    //
+    // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[serde(skip)]
+    tx_table_len_proof: OnceLock<Option<RangeProof>>,
 }
 
 impl BlockPayload {
     #[allow(dead_code)] // TODO temporary
-    fn build(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
+    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
         // `tx_table` is a bytes representation of the following table:
         // word[0]: [number n of entries in tx table]
         // word[j>0]: [end byte index of the (j-1)th tx in the payload]
@@ -54,106 +67,292 @@ impl BlockPayload {
         payload.extend(tx_table_len.to_bytes());
         payload.extend(tx_table);
         payload.extend(tx_bodies);
-        Some(Self { payload })
+        Some(Self {
+            payload,
+            tx_table_len_proof: Default::default(),
+        })
     }
 
-    // Return the range `r` such that the `index`th tx bytes are at `self.payload[r]`.
-    fn get_tx_range(&self, index: TxIndex) -> Option<Range<usize>> {
-        let tx_bodies_offset = self.tx_bodies_offset()?;
-
-        // See `build()` comment.
-        // Recall: tx table entry i is the *end* byte index for tx i.
-        // Thus, the *start* byte index for tx i is at the (i-1)th tx table entry.
-        // Edge case i=0: start index is implicitly 0.
-        let start = if index == 0 {
-            0
-        } else {
-            self.get_tx_table_entry(index - 1)?
+    #[allow(dead_code)] // TODO temporary
+    fn from_bytes<B>(bytes: B) -> Self
+    where
+        B: IntoIterator<Item = u8>,
+    {
+        Self {
+            payload: bytes.into_iter().collect(),
+            tx_table_len_proof: Default::default(),
         }
-        .checked_add(tx_bodies_offset)?;
-
-        let end = self
-            .get_tx_table_entry(index)?
-            .checked_add(tx_bodies_offset)?;
-
-        Some(start..end)
-    }
-
-    // Return the `index`th entry from the tx table as `usize`
-    // Return `None` if `index` exceeds the tx table length.
-    fn get_tx_table_entry(&self, index: TxIndex) -> Option<usize> {
-        // check args
-        if index >= self.get_tx_table_len()?.try_into().ok()? {
-            return None;
-        }
-
-        // The first entry in the tx table is the table length, so add 1
-        let start = usize::try_from(index.checked_add(1)?)
-            .ok()?
-            .checked_mul(TxTableEntry::byte_len())?;
-
-        let end = start.checked_add(TxTableEntry::byte_len())?;
-        TxTableEntry::from_bytes(self.payload.get(start..end)?)?
-            .try_into()
-            .ok()
     }
 
     // Return length of the tx table
     // == number of txs in the payload
     // == the first `TxTableEntry` word of `self.payload`.
-    fn get_tx_table_len(&self) -> Option<usize> {
-        TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)?
-            .try_into()
-            .ok()
+    fn get_tx_table_len(&self) -> Option<TxTableEntry> {
+        TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)
+    }
+    fn get_tx_table_len_as<T>(&self) -> Option<T>
+    where
+        TxTableEntry: TryInto<T>,
+    {
+        self.get_tx_table_len()?.try_into().ok()
     }
 
-    // Return the byte index in `self.payload` of the start of the tx bodies (after the tx table).
-    fn tx_bodies_offset(&self) -> Option<usize> {
-        self.get_tx_table_len()?
-            .checked_add(1)?
-            .checked_mul(TxTableEntry::byte_len())
+    // Fetch the tx table length range proof from cache.
+    // Build the proof if missing from cache.
+    // Returns `None` if an error occurred.
+    fn get_tx_table_len_proof(&self, vid: &boilerplate::VidScheme) -> Option<&RangeProof> {
+        self.tx_table_len_proof
+            .get_or_init(|| {
+                vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
+                    .ok()
+            })
+            .as_ref()
     }
 }
 
-type TxIndex = <BlockPayload as QueryableBlock>::TransactionIndex;
+// Returns the range `range_start+len..range_end+len` or `None` on error.
+//
+// Lots of ugly type conversion and checked arithmetic.
+fn tx_payload_range(
+    tx_table_range_start: &Option<TxTableEntry>,
+    tx_table_range_end: &TxTableEntry,
+    tx_table_len: &TxTableEntry,
+) -> Option<Range<usize>> {
+    let tx_bodies_offset = usize::try_from(tx_table_len.clone())
+        .ok()?
+        .checked_add(1)?
+        .checked_mul(TxTableEntry::byte_len())?;
+    Some(
+        usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+            .ok()?
+            .checked_add(tx_bodies_offset)?
+            ..usize::try_from(tx_table_range_end.clone())
+                .ok()?
+                .checked_add(tx_bodies_offset)?,
+    )
+}
 
-// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-type TxInclusionProof =
-    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
-
-impl QueryableBlock for BlockPayload {
+impl QueryablePayload for BlockPayload {
     type TransactionIndex = u32;
     type Iter<'a> = Range<Self::TransactionIndex>;
     type InclusionProof = TxInclusionProof;
 
     fn len(&self) -> usize {
-        self.get_tx_table_len().unwrap_or(0)
+        self.get_tx_table_len_as().unwrap_or(0)
     }
 
     fn iter(&self) -> Self::Iter<'_> {
-        0..self.get_tx_table_len().unwrap_or(0).try_into().unwrap_or(0)
+        0..self.get_tx_table_len_as().unwrap_or(0)
     }
 
     fn transaction_with_proof(
         &self,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        let index_usize = usize::try_from(*index).ok()?;
+        if index_usize >= self.get_tx_table_len_as()? {
+            return None; // error: index out of bounds
+        }
+
         let vid = boilerplate::test_vid_factory(); // TODO temporary VID construction
-        let tx_range = self.get_tx_range(*index)?;
+
+        // Read the tx payload range from the tx table into `tx_table_range_[start|end]` and compute a proof that this range is correct.
+        //
+        // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
+        //
+        // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
+
+        // start
+        let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
+            (TxTableEntry::byte_len(), None)
+        } else {
+            let range_proof_start = index_usize.checked_mul(TxTableEntry::byte_len())?;
+            (
+                range_proof_start,
+                Some(TxTableEntry::from_bytes(self.payload.get(
+                    range_proof_start..range_proof_start.checked_add(TxTableEntry::byte_len())?,
+                )?)?),
+            )
+        };
+
+        // end
+        let tx_table_range_proof_end = index_usize
+            .checked_add(2)?
+            .checked_mul(TxTableEntry::byte_len())?;
+        let tx_table_range_end = TxTableEntry::from_bytes(self.payload.get(
+            tx_table_range_proof_end.checked_sub(TxTableEntry::byte_len())?
+                ..tx_table_range_proof_end,
+        )?)?;
+
+        // correctness proof for the tx payload range
+        let tx_table_range_proof = vid
+            .payload_proof(
+                &self.payload,
+                tx_table_range_proof_start..tx_table_range_proof_end,
+            )
+            .ok()?;
+
+        let tx_payload_range = tx_payload_range(
+            &tx_table_range_start,
+            &tx_table_range_end,
+            &self.get_tx_table_len()?,
+        )?;
+
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-            Transaction::new(crate::VmId(0), self.payload.get(tx_range.clone())?.to_vec()),
-            vid.payload_proof(&self.payload, tx_range).ok()?,
+            Transaction::new(
+                crate::VmId(0),
+                self.payload.get(tx_payload_range.clone())?.to_vec(),
+            ),
+            TxInclusionProof {
+                tx_table_len: self.get_tx_table_len()?,
+                tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
+                tx_table_range_start,
+                tx_table_range_end,
+                tx_table_range_proof,
+                tx_payload_proof: if tx_payload_range.is_empty() {
+                    None
+                } else {
+                    vid.payload_proof(&self.payload, tx_payload_range).ok()
+                },
+            },
         ))
     }
 }
 
-mod tx_table {
+type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
+
+// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+type RangeProof =
+    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TxInclusionProof {
+    tx_table_len: TxTableEntry,
+    tx_table_len_proof: RangeProof,
+
+    tx_table_range_start: Option<TxTableEntry>, // `None` for the 0th tx
+    tx_table_range_end: TxTableEntry,
+    tx_table_range_proof: RangeProof,
+
+    tx_payload_proof: Option<RangeProof>, // `None` if the tx has zero length
+}
+
+impl TxInclusionProof {
+    // TODO prototype only!
+    //
+    // - We need to decide where to store VID params.
+    // - Returns `None` if an error occurred.
+    // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
+    #[allow(dead_code)] // TODO temporary
+    #[allow(clippy::too_many_arguments)]
+    fn verify(
+        &self,
+        tx: &Transaction,
+        tx_index: TxIndex,
+        vid: &boilerplate::VidScheme,
+        vid_commit: &boilerplate::VidSchemeCommit,
+        vid_common: &boilerplate::VidSchemeCommon,
+    ) -> Option<Result<(), ()>> {
+        // Verify proof for tx payload.
+        // Proof is `None` if and only if tx has zero length.
+        match &self.tx_payload_proof {
+            Some(tx_payload_proof) => {
+                let tx_payload_range = tx_payload_range(
+                    &self.tx_table_range_start,
+                    &self.tx_table_range_end,
+                    &self.tx_table_len,
+                )?;
+                if vid
+                    .payload_verify(
+                        Statement {
+                            payload_subslice: tx.payload(),
+                            range: tx_payload_range,
+                            commit: vid_commit,
+                            common: vid_common,
+                        },
+                        tx_payload_proof,
+                    )
+                    .ok()?
+                    .is_err()
+                {
+                    return Some(Err(())); // TODO it would be nice to use ? here...
+                }
+            }
+            None => {
+                if !tx.payload().is_empty() {
+                    return None; // error: nonempty payload but no proof
+                }
+            }
+        };
+
+        // Verify proof for tx table len.
+        if vid
+            .payload_verify(
+                Statement {
+                    payload_subslice: &self.tx_table_len.to_bytes(),
+                    range: 0..TxTableEntry::byte_len(),
+                    commit: vid_commit,
+                    common: vid_common,
+                },
+                &self.tx_table_len_proof,
+            )
+            .ok()?
+            .is_err()
+        {
+            return Some(Err(()));
+        }
+
+        // Verify proof for tx table entries.
+        // Start index missing for the 0th tx
+        let index: usize = tx_index.try_into().ok()?;
+        let mut tx_table_range_bytes =
+            Vec::with_capacity(2usize.checked_mul(TxTableEntry::byte_len())?);
+        let start = if let Some(tx_table_range_start) = &self.tx_table_range_start {
+            if index == 0 {
+                return None; // error: first tx should have empty start index
+            }
+            tx_table_range_bytes.extend(tx_table_range_start.to_bytes());
+            index * TxTableEntry::byte_len()
+        } else {
+            if index != 0 {
+                return None; // error: only the first tx should have empty start index
+            }
+            TxTableEntry::byte_len()
+        };
+        tx_table_range_bytes.extend(self.tx_table_range_end.to_bytes());
+        let range = start
+            ..index
+                .checked_add(2)?
+                .checked_mul(TxTableEntry::byte_len())?;
+
+        if vid
+            .payload_verify(
+                Statement {
+                    payload_subslice: &tx_table_range_bytes,
+                    range,
+                    commit: vid_commit,
+                    common: vid_common,
+                },
+                &self.tx_table_range_proof,
+            )
+            .ok()?
+            .is_err()
+        {
+            return Some(Err(()));
+        }
+
+        Some(Ok(()))
+    }
+}
+
+mod tx_table_entry {
+    use super::{Deserialize, Serialize, TxIndex};
     use std::mem::size_of;
 
     // Use newtype pattern so that tx table entires cannot be confused with other types.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
     pub struct TxTableEntry(TxTableEntryWord);
     type TxTableEntryWord = u32;
 
@@ -183,6 +382,14 @@ mod tx_table {
         pub const fn byte_len() -> usize {
             size_of::<TxTableEntryWord>()
         }
+
+        #[cfg(test)]
+        pub fn from_usize(val: usize) -> Self {
+            Self(
+                val.try_into()
+                    .expect("usize -> TxTableEntry should succeed"),
+            )
+        }
     }
 
     impl TryFrom<usize> for TxTableEntry {
@@ -200,44 +407,64 @@ mod tx_table {
         }
     }
 
-    impl TryFrom<super::TxIndex> for TxTableEntry {
-        type Error = <TxTableEntryWord as TryFrom<super::TxIndex>>::Error;
+    impl TryFrom<TxIndex> for TxTableEntry {
+        type Error = <TxTableEntryWord as TryFrom<TxIndex>>::Error;
 
-        fn try_from(value: super::TxIndex) -> Result<Self, Self::Error> {
+        fn try_from(value: TxIndex) -> Result<Self, Self::Error> {
             TxTableEntryWord::try_from(value).map(Self)
+        }
+    }
+    impl TryFrom<TxTableEntry> for TxIndex {
+        type Error = <TxIndex as TryFrom<TxTableEntryWord>>::Error;
+
+        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
+            TxIndex::try_from(value.0)
         }
     }
 }
 
 mod boilerplate {
-    use super::{BlockPayload, PolynomialCommitmentScheme, Transaction, UnivariateKzgPCS};
+    use super::{
+        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
+    };
+    use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
-    use commit::Committable;
+    use commit::{Commitment, Committable};
     use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
+    use snafu::OptionExt;
     use std::fmt::Display;
 
-    // TODO temporary.
-    // `Block` trait subject to change/delection.
-    // Skeleton impl for now so as to enable `QueryableBlock`.
-    impl hotshot::traits::Block for BlockPayload {
+    // Skeleton impl for now so as to enable `QueryablePayload`.
+    impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
         type Transaction = Transaction;
+        type Metadata = ();
+        type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
-        fn new() -> Self {
-            todo!()
+        fn from_transactions(
+            transactions: impl IntoIterator<Item = Self::Transaction>,
+        ) -> Result<(Self, Self::Metadata), Self::Error> {
+            let payload = Self::from_txs(transactions).context(BlockBuildingSnafu)?;
+            Ok((payload, ()))
         }
 
-        fn add_transaction_raw(
-            &self,
-            _tx: &Self::Transaction,
-        ) -> std::result::Result<Self, Self::Error> {
-            todo!()
+        fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
+        where
+            I: Iterator<Item = u8>,
+        {
+            Self::from_bytes(encoded_transactions)
         }
 
-        fn contained_transactions(
-            &self,
-        ) -> std::collections::HashSet<commit::Commitment<Self::Transaction>> {
-            todo!()
+        fn genesis() -> (Self, Self::Metadata) {
+            Self::from_transactions([]).unwrap()
+        }
+
+        fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
+            Ok(self.payload.iter().cloned())
+        }
+
+        fn transaction_commitments(&self) -> Vec<Commitment<Self::Transaction>> {
+            self.enumerate().map(|(_, tx)| tx.commit()).collect()
         }
     }
 
@@ -265,19 +492,23 @@ mod boilerplate {
         .unwrap();
         Advz::<_, _>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
     }
+
+    pub(super) type VidScheme = Advz<Bls12_381, sha2::Sha256>;
+    pub(super) type VidSchemeCommit = <VidScheme as jf_primitives::vid::VidScheme>::Commit;
+    pub(super) type VidSchemeCommon = <VidScheme as jf_primitives::vid::VidScheme>::Common;
 }
 
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, PayloadProver, QueryableBlock, Transaction,
-        TxIndex, TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction, TxIndex,
+        TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use jf_primitives::vid::{payload_prover::Statement, VidScheme};
+    use jf_primitives::vid::VidScheme;
 
     #[test]
-    fn build_basic_correctness() {
+    fn basic_correctness() {
         // play with this
         let test_cases = vec![
             // 3 non-empty txs
@@ -337,7 +568,7 @@ mod test {
                 })
                 .collect();
 
-            let block = BlockPayload::build(txs).unwrap();
+            let block = BlockPayload::from_txs(txs).unwrap();
 
             // test tx table length
             let (tx_table_len_bytes, payload) = block.payload.split_at(TxTableEntry::byte_len());
@@ -363,41 +594,23 @@ mod test {
 
             // tests for individual txs
             let disperse_data = vid.disperse(&block.payload).unwrap();
-            for (index, tx_body) in tx_bodies.iter().enumerate() {
-                let index = TxIndex::try_from(index).unwrap();
+            for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
+                let index = TxIndex::try_from(index_usize).unwrap();
+                tracing::info!("tx index {}", index,);
 
-                // test get_tx_range()
-                let tx_range = block.get_tx_range(index).unwrap();
-                let block_tx_body = block.payload.get(tx_range.clone()).unwrap();
-                assert_eq!(tx_body, block_tx_body);
-
-                // test `transaction_with_proof()` (nonempty txs only)
-                let log_msg = format!(
-                    "test: index {} tx range start {} end {}",
-                    index, tx_range.start, tx_range.end
-                );
-                if tx_range.is_empty() {
-                    tracing::info!("{} empty, skipping", log_msg);
-                    continue;
-                } else {
-                    tracing::info!("{}", log_msg);
-                }
-
+                // test `transaction_with_proof()`
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 assert_eq!(tx_body, tx.payload());
-
-                // test proof verification
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: tx_body,
-                        range: tx_range,
-                        commit: &disperse_data.commit,
-                        common: &disperse_data.common,
-                    },
-                    &proof,
-                )
-                .unwrap()
-                .unwrap();
+                proof
+                    .verify(
+                        &tx,
+                        index,
+                        &vid,
+                        &disperse_data.commit,
+                        &disperse_data.common,
+                    )
+                    .unwrap()
+                    .unwrap();
             }
         }
     }

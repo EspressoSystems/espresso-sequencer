@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-testing = []
+testing = ["hotshot-testing"]
 
 [dev-dependencies]
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 portpicker = "0.1.1"
 rand = "0.8.5"
 serde_json = "1.0"
@@ -16,8 +17,8 @@ tempfile = "3.7.1"
 
 [dependencies]
 anyhow = "1.0"
-ark-bls12-381 = "0.4.0"
-ark-serialize = { version = "0.4.0", features = ["derive"] }
+ark-bls12-381 = "0.4"
+ark-serialize = { version = "0.4", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
 ] }
@@ -26,11 +27,10 @@ async-trait = "0.1.71"
 bincode = "1.3.3"
 clap = { version = "4.3", features = ["derive", "env"] }
 cld = "0.5"
-commit = { git = "https://github.com/EspressoSystems/commit", tag = "0.2.2" }
+commit = { git = "https://github.com/EspressoSystems/commit" }
 contract-bindings = { path = "../contract-bindings" }
 derivative = "2.2"
 derive_more = "0.99.17"
-either = "1.8.1"
 ethers = { version = "2.0", features = ["ws"] }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"
@@ -41,11 +41,10 @@ time = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", rev = "fa6638821573c61320fcd281685a338a795d174f" } # TODO remove `rev` and upgrade to latest main
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
 jf-primitives = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
@@ -54,11 +53,14 @@ rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
 serde = { version = "1.0.192", features = ["derive"] }
 snafu = "0.7.4"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.2" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.2" }
-toml = "0.7"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.3" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.3" }
+toml = "0.8"
 tracing = "0.1"
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }
 url = "2.3"
+
+# Dependencies for feature `testing`
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main", optional = true }

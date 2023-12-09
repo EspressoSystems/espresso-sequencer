@@ -4,6 +4,10 @@ default:
 demo *args:
     docker compose up {{args}}
 
+just demo-native:
+    cargo build --release
+    scripts/demo-native
+
 down *args:
     docker compose down {{args}}
 

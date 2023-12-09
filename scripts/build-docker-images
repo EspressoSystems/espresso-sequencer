@@ -4,6 +4,10 @@ set -euxo pipefail
 nix develop .#crossShell --command cargo build --release
 nix develop .#armCrossShell --command cargo build --release
 
+# The rest of the script doesn't run in a nix shell but we need to know where
+# the binaries are.
+CARGO_TARGET_DIR="./target/nix"
+
 # Copy binaries to a temporary directory.
 WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
 
@@ -27,8 +31,8 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "web-server" "sequencer" "cli" "commitment-task"; do
-    cp -v target/${TARGET}/release/$binary ${WORKDIR}/target/$ARCH/release
+  for binary in "orchestrator" "web-server" "sequencer" "commitment-task"; do
+    cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
 done
 
