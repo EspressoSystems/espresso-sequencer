@@ -42,6 +42,7 @@ use jf_primitives::merkle_tree::{
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::net::Ipv4Addr;
+use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -262,24 +263,20 @@ pub struct NetworkParams {
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
+    config_path: Option<&Path>,
 ) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         public_ip: None,
+        network_config_file: config_path.map(|path| path.display().to_string()),
     };
-    let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
-
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string()).await;
 
-    let node_index: u16 = orchestrator_client
-        .identify_with_orchestrator(public_ip.to_string())
-        .await;
-
-    let config = orchestrator_client
-        .get_config_from_orchestrator::<SeqTypes>(node_index)
-        .await;
+    let config = orchestrator_client.get_config(public_ip.to_string()).await;
+    let node_index = config.node_index;
 
     // Generate public keys and this node's private keys.
     //
@@ -313,7 +310,7 @@ pub async fn init_node(
 
     // Wait for other nodes to connect.
     orchestrator_client
-        .wait_for_all_nodes_ready(node_index.into())
+        .wait_for_all_nodes_ready(node_index)
         .await;
 
     // The web server network doesn't have any metrics. By creating and dropping a
@@ -333,7 +330,7 @@ pub async fn init_node(
             metrics,
         )
         .await,
-        node_index.into(),
+        node_index,
     )
 }
 
