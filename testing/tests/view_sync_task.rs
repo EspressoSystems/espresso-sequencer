@@ -32,8 +32,8 @@ async fn test_view_sync_task() {
     let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes>::create_signed_vote(
         vote_data,
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
-        hotshot_types::traits::consensus_api::ConsensusSharedApi::public_key(&api),
-        hotshot_types::traits::consensus_api::ConsensusSharedApi::private_key(&api),
+        hotshot_types::traits::consensus_api::ConsensusApi::public_key(&api),
+        hotshot_types::traits::consensus_api::ConsensusApi::private_key(&api),
     );
 
     tracing::error!("Vote in test is {:?}", vote.clone());

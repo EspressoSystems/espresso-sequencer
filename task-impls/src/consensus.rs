@@ -553,7 +553,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 );
                 let safety_check = outcome.is_ok();
                 if let Err(e) = outcome {
-                    self.api.send_view_error(view, Arc::new(e)).await;
+                    self.api
+                        .send_event(Event {
+                            view_number: view,
+                            event: EventType::Error { error: Arc::new(e) },
+                        })
+                        .await;
                     return;
                 }
 

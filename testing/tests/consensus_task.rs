@@ -19,7 +19,7 @@ use hotshot_types::{
 };
 use hotshot_types::{
     simple_vote::QuorumData,
-    traits::{consensus_api::ConsensusSharedApi, election::Membership},
+    traits::{consensus_api::ConsensusApi, election::Membership},
 };
 
 use std::collections::HashMap;

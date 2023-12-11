@@ -9,7 +9,7 @@ use crate::{
 };
 use hotshot::{types::SystemContextHandle, Memberships};
 
-use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
+use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 use hotshot_task::{
     event_stream::ChannelStream, global_registry::GlobalRegistry, task_launcher::TaskRunner,
 };
@@ -46,7 +46,6 @@ pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
 where
-    SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
     /// excecute test

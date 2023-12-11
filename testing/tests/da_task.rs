@@ -8,7 +8,7 @@ use hotshot_types::{
     data::{DAProposal, ViewNumber},
     simple_vote::{DAData, DAVote},
     traits::{
-        block_contents::vid_commitment, consensus_api::ConsensusSharedApi, election::Membership,
+        block_contents::vid_commitment, consensus_api::ConsensusApi, election::Membership,
         node_implementation::NodeType, state::ConsensusTime,
     },
 };

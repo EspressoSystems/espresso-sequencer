@@ -8,7 +8,7 @@ use hotshot_testing::{
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
-    traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
+    traits::{consensus_api::ConsensusApi, state::ConsensusTime},
 };
 use std::collections::HashMap;
 use std::marker::PhantomData;

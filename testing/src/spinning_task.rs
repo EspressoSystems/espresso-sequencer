@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_compatibility_layer::channel::UnboundedStream;
 use futures::FutureExt;
-use hotshot::{traits::TestableNodeImplementation, HotShotType, SystemContext};
+use hotshot::{traits::TestableNodeImplementation, SystemContext};
 use hotshot_task::{
     event_stream::ChannelStream,
     task::{FilterEvent, HandleEvent, HandleMessage, HotShotTaskCompleted, HotShotTaskTypes, TS},

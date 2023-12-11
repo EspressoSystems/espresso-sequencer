@@ -29,7 +29,7 @@ use hotshot_types::{
     message::Messages,
     traits::{
         block_contents::vid_commitment,
-        consensus_api::ConsensusSharedApi,
+        consensus_api::ConsensusApi,
         network::{CommunicationChannel, ConsensusIntentEvent, TransmitType},
         node_implementation::{NodeImplementation, NodeType},
         state::ConsensusTime,

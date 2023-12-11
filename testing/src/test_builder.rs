@@ -18,7 +18,6 @@ use crate::{
 use super::{
     overall_safety_task::OverallSafetyPropertiesDescription, txn_task::TxnTaskDescription,
 };
-use hotshot::{HotShotType, SystemContext};
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {
@@ -185,7 +184,6 @@ impl TestMetadata {
     ) -> TestLauncher<TYPES, I>
     where
         I: NodeImplementation<TYPES>,
-        SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     {
         let TestMetadata {
             total_nodes,
