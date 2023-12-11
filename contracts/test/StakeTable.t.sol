@@ -578,7 +578,7 @@ contract Queue_Test is Test {
     }
 
     /// @dev Helper function to be able to fuzz with the type of queue
-    function convertIntToQueueType(uint256 n) private view returns (SM.QueueType) {
+    function asQueueType(uint256 n) private view returns (SM.QueueType) {
         SM.QueueType queueType;
         uint256 typeOfQueueInt = bound(n, 0, 1);
         if (typeOfQueueInt == 0) {
@@ -595,7 +595,7 @@ contract Queue_Test is Test {
     function testFuzz_QueueIsEmpty(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
         uint64 epoch;
         SM.QueueType queueType;
-        queueType = convertIntToQueueType(typeOfQueueInt);
+        queueType = asQueueType(typeOfQueueInt);
         checkQueueParameters(queueType, 0, 0);
 
         epochInTheFuture = uint64(bound(epochInTheFuture, 2, type(uint64).max - 1));
@@ -613,7 +613,7 @@ contract Queue_Test is Test {
     function testFuzz_QueueIsFilledUp(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
         uint64 epoch;
         SM.QueueType queueType;
-        queueType = convertIntToQueueType(typeOfQueueInt);
+        queueType = asQueueType(typeOfQueueInt);
         epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 2));
         lightClientContract.setCurrentEpoch(epochInTheFuture);
 
@@ -637,7 +637,7 @@ contract Queue_Test is Test {
     ) external {
         uint64 epoch;
         SM.QueueType queueType;
-        queueType = convertIntToQueueType(typeOfQueueInt);
+        queueType = asQueueType(typeOfQueueInt);
         pendingRequests = uint64(bound(pendingRequests, 0, stakeTable.MAX_CHURN_RATE() - 1));
         epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 1));
         lightClientContract.setCurrentEpoch(epochInTheFuture);
