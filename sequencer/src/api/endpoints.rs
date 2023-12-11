@@ -71,16 +71,6 @@ where
         }
         .boxed()
     })?
-    .get("getheader", |req, state| {
-        async move {
-            let height: usize = req.integer_param("height")?;
-            let block = state.get_block(height).await.context(QueryBlockSnafu {
-                resource: height.to_string(),
-            })?;
-            Ok(block.header().clone())
-        }
-        .boxed()
-    })?
     .get("gettimestampwindow", |req, state| {
         async move {
             let end = req.integer_param("end")?;
