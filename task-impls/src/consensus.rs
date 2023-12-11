@@ -582,6 +582,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut current_chain_length = 0usize;
                 if parent_view + 1 == view {
                     current_chain_length += 1;
+                    let mut is_ancestor = false; // For metrics use: mark whether we're going to the ancestor of the leaf, only assign block_height for the most recent one.
                     if let Err(e) = consensus.visit_leaf_ancestors(
                         parent_view,
                         Terminator::Exclusive(old_anchor_view),
@@ -609,11 +610,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                             if new_decide_reached {
                                 let mut leaf = leaf.clone();
-                                consensus
-                                    .metrics
-                                    .last_synced_block_height
-                                    .set(usize::try_from(leaf.get_height()).unwrap_or(0));
-
+                                if !is_ancestor {
+                                    consensus
+                                        .metrics
+                                        .last_synced_block_height
+                                        .set(usize::try_from(leaf.get_height()).unwrap_or(0));
+                                }
+                                is_ancestor = true;
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
                                 if let Some(encoded_txns) =
