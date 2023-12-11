@@ -41,14 +41,69 @@ impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
 mod test_helpers {
     use super::*;
     use crate::{
-        testing::{init_hotshot_handles, wait_for_decide_on_handle},
+        testing::{
+            init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
+        },
         Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
     use futures::FutureExt;
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let init_handle = |metrics: Box<dyn crate::Metrics>| {
+            async move {
+                let handles = init_hotshot_handles_with_metrics(&*metrics).await;
+                for handle in &handles {
+                    handle.hotshot.start_consensus().await;
+                }
+                (handles[0].clone(), 0)
+            }
+            .boxed()
+        };
+
+        let options = opt(Options::from(options::Http { port }).status(Default::default()));
+        options.serve(init_handle).await.unwrap();
+        client.connect(None).await;
+
+        // The status API is well tested in the query service repo. Here we are just smoke testing
+        // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
+        // check the success rate metrics.
+        tracing::info!(
+            "metrics {}",
+            client.get::<String>("status/metrics").send().await.unwrap()
+        );
+        while client
+            .get::<u64>("status/latest_block_height")
+            .send()
+            .await
+            .unwrap()
+            <= 1
+        {
+            sleep(Duration::from_secs(1)).await;
+        }
+        let success_rate = client
+            .get::<f64>("status/success_rate")
+            .send()
+            .await
+            .unwrap();
+        // If metrics are populating correctly, we should get a finite number. If not, we might get
+        // NaN or infinity due to division by 0.
+        assert!(success_rate.is_finite(), "{success_rate}");
+        // We know at least some views have been successful, since we finalized a block.
+        assert!(success_rate > 0.0, "{success_rate}");
+    }
 
     pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
@@ -104,13 +159,19 @@ mod generic_tests {
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
-    use test_helpers::submit_test_helper;
+    use test_helpers::{status_test_helper, submit_test_helper};
     use tide_disco::error::ServerError;
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         submit_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn status_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        status_test_helper(|opt| D::options(&storage, opt)).await
     }
 
     #[async_std::test]
@@ -126,6 +187,7 @@ mod generic_tests {
         let storage = D::create_storage().await;
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
+            .status(Default::default())
             .serve(|_| async move { (handle, 0) }.boxed())
             .await
             .unwrap();
@@ -308,7 +370,7 @@ mod test {
     use futures::FutureExt;
     use portpicker::pick_unused_port;
     use surf_disco::Client;
-    use test_helpers::submit_test_helper;
+    use test_helpers::{status_test_helper, submit_test_helper};
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
     #[async_std::test]
@@ -334,6 +396,11 @@ mod test {
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
         assert_eq!(health.status, HealthStatus::Available);
+    }
+
+    #[async_std::test]
+    async fn status_test_without_query_module() {
+        status_test_helper(|opt| opt).await
     }
 
     #[async_std::test]
