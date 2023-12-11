@@ -40,7 +40,9 @@ impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
 mod test {
     use super::*;
     use crate::{
-        testing::{init_hotshot_handles, wait_for_decide_on_handle},
+        testing::{
+            init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
+        },
         Header, Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -138,6 +140,76 @@ mod test {
     }
 
     #[async_std::test]
+    async fn status_test_with_query_module() {
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path = tmp_dir.path().join("tmp_storage");
+        status_test_helper(Some(options::Fs {
+            storage_path,
+            reset_store: true,
+        }))
+        .await
+    }
+
+    #[async_std::test]
+    async fn status_test_without_query_module() {
+        status_test_helper(None).await
+    }
+
+    async fn status_test_helper(query_opt: Option<options::Fs>) {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let init_handle = |metrics: Box<dyn crate::Metrics>| {
+            async move {
+                let handles = init_hotshot_handles_with_metrics(&*metrics).await;
+                for handle in &handles {
+                    handle.hotshot.start_consensus().await;
+                }
+                (handles[0].clone(), 0)
+            }
+            .boxed()
+        };
+
+        let mut options = Options::from(options::Http { port }).status(Default::default());
+        if let Some(query) = query_opt {
+            options = options.query_fs(query);
+        }
+        options.serve(init_handle).await.unwrap();
+        client.connect(None).await;
+
+        // The status API is well tested in the query service repo. Here we are just smoke testing
+        // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
+        // check the success rate metrics.
+        tracing::info!(
+            "metrics {}",
+            client.get::<String>("status/metrics").send().await.unwrap()
+        );
+        while client
+            .get::<u64>("status/latest_block_height")
+            .send()
+            .await
+            .unwrap()
+            <= 1
+        {
+            sleep(Duration::from_secs(1)).await;
+        }
+        let success_rate = client
+            .get::<f64>("status/success_rate")
+            .send()
+            .await
+            .unwrap();
+        // If metrics are populating correctly, we should get a finite number. If not, we might get
+        // NaN or infinity due to division by 0.
+        assert!(success_rate.is_finite(), "{success_rate}");
+        // We know at least some views have been successful, since we finalized a block.
+        assert!(success_rate > 0.0, "{success_rate}");
+    }
+
+    #[async_std::test]
     async fn test_timestamp_window() {
         setup_logging();
         setup_backtrace();
@@ -157,6 +229,7 @@ mod test {
                 storage_path,
                 reset_store: true,
             })
+            .status(Default::default())
             .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
             .await
             .unwrap();
