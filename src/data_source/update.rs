@@ -15,7 +15,7 @@ use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData}
 use crate::status::UpdateStatusData;
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::error::Error;
 use std::fmt::Debug;
 use std::iter::once;
@@ -78,6 +78,11 @@ impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send
                             .expect("inconsistent block"),
                     )
                     .await?;
+                } else {
+                    tracing::info!(
+                        "block {} not available at decide",
+                        leaf.block_header.block_number()
+                    );
                 }
             }
         }
