@@ -1,0 +1,50 @@
+name: Geth Docker Build
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+    tags:
+      # YYYYMMDD
+      - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  geth-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker BuildKit (buildx)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate geth docker metadata
+        uses: docker/metadata-action@v5
+        id: geth
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/geth
+
+      - name: Build and push geth docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/geth.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.geth.outputs.tags }}
+          labels: ${{ steps.geth.outputs.labels }}
