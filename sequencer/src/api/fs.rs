@@ -93,7 +93,7 @@ impl SequencerDataSource for DataSource {
             ResourceId::Hash(h) => self.get_block(h).await?.height() as usize,
         };
 
-        let mut res = TimeWindowQueryData::new(first_block as u64);
+        let mut res = TimeWindowQueryData::default();
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {

@@ -5,7 +5,7 @@ use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 
 mod data_source;
-mod endpoints;
+pub mod endpoints;
 pub mod fs;
 pub mod options;
 pub mod sql;
@@ -249,7 +249,7 @@ mod generic_tests {
                 }
             } else {
                 // `prev` can only be `None` if the first block in the window is the genesis block.
-                assert_eq!(res.from, 0);
+                assert_eq!(res.from().unwrap(), 0);
             };
             for header in &res.window {
                 assert!(start <= header.timestamp);
@@ -299,7 +299,7 @@ mod generic_tests {
 
         // Case 2: no `next`, end of window is after the most recently sequenced block.
         let start = test_blocks[2][0].timestamp;
-        let end = u64::MAX;
+        let end = test_blocks[2].last().unwrap().timestamp + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
         // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
@@ -336,7 +336,7 @@ mod generic_tests {
             .await
             .unwrap();
         check_invariants(&more2, start, end, false);
-        assert_eq!(more2.from, more.from);
+        assert_eq!(more2.from().unwrap(), more.from().unwrap());
         assert_eq!(more2.prev, more.prev);
         assert_eq!(more2.next, more.next);
         assert_eq!(more2.window[..more.window.len()], more.window);
