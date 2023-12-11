@@ -3771,7 +3771,7 @@ dependencies = [
  "ethers-providers",
  "ethers-solc",
  "hex",
- "itertools 0.10.5",
+ "itertools 0.12.0",
  "jf-plonk",
  "jf-primitives",
  "jf-relation",
