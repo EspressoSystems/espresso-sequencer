@@ -5,6 +5,13 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "efee8ff7dc3c903a6099a77eec7cfc18f9806ef8" }
+
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
