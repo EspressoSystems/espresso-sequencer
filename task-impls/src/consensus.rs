@@ -105,7 +105,7 @@ pub struct ConsensusTaskState<
     pub timeout_vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// timeout task handle
-    pub timeout_task: JoinHandle<()>,
+    pub timeout_task: Option<JoinHandle<()>>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
@@ -340,6 +340,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Updating view from {} to {} in consensus task",
                 *self.cur_view, *new_view
             );
+            // cancel the old timeout task
+            if let Some(timeout_task) = self.timeout_task.take() {
+                timeout_task.cancel().await;
+            }
 
             // Remove old certs, we won't vote on past views
             for view in *self.cur_view..*new_view - 1 {
@@ -381,7 +385,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // Spawn a timeout task if we did actually update view
             let timeout = self.timeout;
-            self.timeout_task = async_spawn({
+            self.timeout_task = Some(async_spawn({
                 let stream = self.event_stream.clone();
                 // Nuance: We timeout on the view + 1 here because that means that we have
                 // not seen evidence to transition to this new view
@@ -392,7 +396,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish(HotShotEvent::Timeout(TYPES::Time::new(*view_number)))
                         .await;
                 }
-            });
+            }));
             let consensus = self.consensus.read().await;
             consensus
                 .metrics
