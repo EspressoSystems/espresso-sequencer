@@ -4,7 +4,7 @@ use super::{
     data_source::{SequencerDataSource, SubmitDataSource},
     AppState,
 };
-use crate::{network, Header, NamespaceProofType, Node, SeqTypes, Transaction};
+use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
 use async_std::sync::{Arc, RwLock};
 use futures::FutureExt;
 use hotshot_query_service::{
@@ -47,12 +47,12 @@ pub(super) type AvailState<N, D> = Arc<RwLock<AppState<N, D>>>;
 pub(super) fn availability<N, D>() -> anyhow::Result<Api<AvailState<N, D>, availability::Error>>
 where
     N: network::Type,
-    D: SequencerDataSource<N> + Send + Sync + 'static,
+    D: SequencerDataSource + Send + Sync + 'static,
 {
     let mut options = availability::Options::default();
     let extension = toml::from_str(include_str!("../../api/availability.toml"))?;
     options.extensions.push(extension);
-    let mut api = availability::define_api::<AvailState<N, D>, SeqTypes, Node<N>>(&options)?;
+    let mut api = availability::define_api::<AvailState<N, D>, SeqTypes>(&options)?;
 
     api.get("getnamespaceproof", |req, state| {
         async move {
@@ -62,22 +62,12 @@ where
                 resource: height.to_string(),
             })?;
 
-            let proof = block.block().get_namespace_proof(namespace.into());
+            let proof = block.payload().get_namespace_proof(namespace.into());
             Ok(NamespaceProofQueryData {
                 transactions: proof.get_namespace_leaves().into_iter().cloned().collect(),
                 proof,
-                header: block.block().header(),
+                header: block.header().clone(),
             })
-        }
-        .boxed()
-    })?
-    .get("getheader", |req, state| {
-        async move {
-            let height: usize = req.integer_param("height")?;
-            let block = state.get_block(height).await.context(QueryBlockSnafu {
-                resource: height.to_string(),
-            })?;
-            Ok(block.block().header())
         }
         .boxed()
     })?

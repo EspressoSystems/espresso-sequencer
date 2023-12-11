@@ -40,15 +40,17 @@ impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
 mod test {
     use super::*;
     use crate::{
-        testing::{init_hotshot_handles, wait_for_decide_on_handle},
+        testing::{
+            init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
+        },
         Header, Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
+    use commit::Committable;
     use endpoints::TimeWindowQueryData;
     use futures::FutureExt;
     use hotshot_query_service::availability::BlockQueryData;
-    use hotshot_types::traits::metrics::Metrics;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -68,11 +70,12 @@ mod test {
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
-        let init_handle =
-            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
 
         let options = Options::from(options::Http { port });
-        options.serve(init_handle).await.unwrap();
+        options
+            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .await
+            .unwrap();
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -112,14 +115,14 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
-        let init_handle =
-            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
-
         let mut options = Options::from(options::Http { port }).submit(Default::default());
         if let Some(query) = query_opt {
             options = options.query_fs(query);
         }
-        let SequencerNode { mut handle, .. } = options.serve(init_handle).await.unwrap();
+        let SequencerNode { mut handle, .. } = options
+            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .await
+            .unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
 
         client.connect(None).await;
@@ -133,7 +136,77 @@ mod test {
             .unwrap();
 
         // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, txn).await.unwrap()
+        wait_for_decide_on_handle(&mut events, &txn).await.unwrap()
+    }
+
+    #[async_std::test]
+    async fn status_test_with_query_module() {
+        let tmp_dir = TempDir::new().unwrap();
+        let storage_path = tmp_dir.path().join("tmp_storage");
+        status_test_helper(Some(options::Fs {
+            storage_path,
+            reset_store: true,
+        }))
+        .await
+    }
+
+    #[async_std::test]
+    async fn status_test_without_query_module() {
+        status_test_helper(None).await
+    }
+
+    async fn status_test_helper(query_opt: Option<options::Fs>) {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let init_handle = |metrics: Box<dyn crate::Metrics>| {
+            async move {
+                let handles = init_hotshot_handles_with_metrics(&*metrics).await;
+                for handle in &handles {
+                    handle.hotshot.start_consensus().await;
+                }
+                (handles[0].clone(), 0)
+            }
+            .boxed()
+        };
+
+        let mut options = Options::from(options::Http { port }).status(Default::default());
+        if let Some(query) = query_opt {
+            options = options.query_fs(query);
+        }
+        options.serve(init_handle).await.unwrap();
+        client.connect(None).await;
+
+        // The status API is well tested in the query service repo. Here we are just smoke testing
+        // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
+        // check the success rate metrics.
+        tracing::info!(
+            "metrics {}",
+            client.get::<String>("status/metrics").send().await.unwrap()
+        );
+        while client
+            .get::<u64>("status/latest_block_height")
+            .send()
+            .await
+            .unwrap()
+            <= 1
+        {
+            sleep(Duration::from_secs(1)).await;
+        }
+        let success_rate = client
+            .get::<f64>("status/success_rate")
+            .send()
+            .await
+            .unwrap();
+        // If metrics are populating correctly, we should get a finite number. If not, we might get
+        // NaN or infinity due to division by 0.
+        assert!(success_rate.is_finite(), "{success_rate}");
+        // We know at least some views have been successful, since we finalized a block.
+        assert!(success_rate > 0.0, "{success_rate}");
     }
 
     #[async_std::test]
@@ -151,14 +224,13 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let tmp_dir = TempDir::new().unwrap();
         let storage_path = tmp_dir.path().join("tmp_storage");
-        let init_handle =
-            Box::new(|_: Box<dyn Metrics>| async move { (handles[0].clone(), 0) }.boxed());
         Options::from(options::Http { port })
             .query_fs(options::Fs {
                 storage_path,
                 reset_store: true,
             })
-            .serve(init_handle)
+            .status(Default::default())
+            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
             .await
             .unwrap();
 
@@ -189,9 +261,9 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            let header = block.block().header();
+            let header = block.header().clone();
             if let Some(last_timestamp) = test_blocks.last_mut() {
-                if last_timestamp[0].timestamp() == header.timestamp() {
+                if last_timestamp[0].timestamp == header.timestamp {
                     last_timestamp.push(header);
                 } else {
                     test_blocks.push(vec![header]);
@@ -207,25 +279,25 @@ mod test {
             let mut prev = res.prev.as_ref();
             if let Some(prev) = prev {
                 if check_prev {
-                    assert!(prev.timestamp() < start);
+                    assert!(prev.timestamp < start);
                 }
             } else {
                 // `prev` can only be `None` if the first block in the window is the genesis block.
                 assert_eq!(res.from, 0);
             };
             for header in &res.window {
-                assert!(start <= header.timestamp());
-                assert!(header.timestamp() < end);
+                assert!(start <= header.timestamp);
+                assert!(header.timestamp < end);
                 if let Some(prev) = prev {
-                    assert!(prev.timestamp() <= header.timestamp());
+                    assert!(prev.timestamp <= header.timestamp);
                 }
                 prev = Some(header);
             }
             if let Some(next) = &res.next {
-                assert!(next.timestamp() >= end);
+                assert!(next.timestamp >= end);
                 // If there is a `next`, there must be at least one previous block (either `prev`
                 // itself or the last block if the window is nonempty), so we can `unwrap` here.
-                assert!(next.timestamp() >= prev.unwrap().timestamp());
+                assert!(next.timestamp >= prev.unwrap().timestamp);
             }
         };
 
@@ -244,7 +316,7 @@ mod test {
         };
 
         // Case 0: happy path. All blocks are available, including prev and next.
-        let start = test_blocks[1][0].timestamp();
+        let start = test_blocks[1][0].timestamp;
         let end = start + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());
@@ -253,14 +325,14 @@ mod test {
 
         // Case 1: no `prev`, start of window is before genesis.
         let start = 0;
-        let end = test_blocks[0][0].timestamp() + 1;
+        let end = test_blocks[0][0].timestamp + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev, None);
         assert_eq!(res.window, test_blocks[0]);
         assert_eq!(res.next.unwrap(), test_blocks[1][0]);
 
         // Case 2: no `next`, end of window is after the most recently sequenced block.
-        let start = test_blocks[2][0].timestamp();
+        let start = test_blocks[2][0].timestamp;
         let end = u64::MAX;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
@@ -304,7 +376,7 @@ mod test {
         assert_eq!(more2.window[..more.window.len()], more.window);
 
         // Case 3: the window is empty.
-        let start = test_blocks[1][0].timestamp();
+        let start = test_blocks[1][0].timestamp;
         let end = start;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[0].last().unwrap());

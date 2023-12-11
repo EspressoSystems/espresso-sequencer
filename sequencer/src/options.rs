@@ -110,6 +110,7 @@ impl ModuleArgs {
                     curr = m.add(&mut modules.query_fs, &mut provided)?
                 }
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
+                SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::CommitmentTask(m) => {
                     curr = m.add(&mut modules.commitment_task, &mut provided)?
                 }
@@ -140,6 +141,7 @@ macro_rules! module {
 module!("http", api::options::Http);
 module!("query-fs", api::options::Fs, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
+module!("status", api::options::Status, requires: "http");
 module!("commitment-task", CommitmentTaskOptions);
 
 #[derive(Clone, Debug, Args)]
@@ -192,12 +194,16 @@ enum SequencerModule {
     Query(Module<api::options::Fs>),
     /// Run the query service API module, backed by the file system.
     ///
-    /// This modules requires the http module to be started.
+    /// This module requires the http module to be started.
     QueryFs(Module<api::options::Fs>),
     /// Run the transaction submission API module.
     ///
-    /// This modules requires the http module to be started.
+    /// This module requires the http module to be started.
     Submit(Module<api::options::Submit>),
+    /// Run the status API module.
+    ///
+    /// This module requires the http module to be started.
+    Status(Module<api::options::Status>),
     CommitmentTask(Module<CommitmentTaskOptions>),
 }
 
@@ -206,5 +212,6 @@ pub struct Modules {
     pub http: Option<api::options::Http>,
     pub query_fs: Option<api::options::Fs>,
     pub submit: Option<api::options::Submit>,
+    pub status: Option<api::options::Status>,
     pub commitment_task: Option<CommitmentTaskOptions>,
 }
