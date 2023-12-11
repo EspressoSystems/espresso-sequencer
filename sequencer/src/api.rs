@@ -181,7 +181,7 @@ mod test {
         options.serve(init_handle).await.unwrap();
         client.connect(None).await;
 
-        // The status API is will tested in the query service repo. Here we are just smoke testing
+        // The status API is well tested in the query service repo. Here we are just smoke testing
         // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
         // check the success rate metrics.
         tracing::info!(
