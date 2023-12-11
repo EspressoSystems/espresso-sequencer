@@ -85,11 +85,8 @@ pub mod availability_tests {
     async fn validate(ds: &RwLock<impl TestableDataSource>) {
         let ds = ds.read().await;
 
-        // Check the consistency of every block/leaf pair. Keep track of blocks and transactions
-        // we've seen so we can detect duplicates.
-        // TODO eliminate duplicate blocks:
-        // https://github.com/EspressoSystems/hotshot-query-service/issues/284
-        let mut seen_blocks = HashMap::new();
+        // Check the consistency of every block/leaf pair. Keep track of transactions we've seen so
+        // we can detect duplicates.
         let mut seen_transactions = HashMap::new();
         let mut leaves = ds.get_leaf_range(..).await.unwrap().enumerate();
         while let Some((i, leaf)) = leaves.next().await {
@@ -116,10 +113,7 @@ pub mod availability_tests {
 
             // Check indices.
             assert_eq!(block, ds.get_block(i).await.unwrap());
-            // We should be able to look up the block by hash unless it is a duplicate. For
-            // duplicate blocks, this function returns the index of the first duplicate.
-            let ix = seen_blocks.entry(block.hash()).or_insert(i as u64);
-            assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), *ix);
+            assert_eq!(ds.get_block(block.hash()).await.unwrap().height(), i as u64);
 
             for (j, txn) in block.payload().enumerate() {
                 // We should be able to look up the transaction by hash unless it is a duplicate.
