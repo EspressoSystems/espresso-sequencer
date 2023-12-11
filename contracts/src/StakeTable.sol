@@ -67,10 +67,12 @@ contract StakeTable is AbstractStakeTable {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 
-        firstAvailableRegistrationEpoch = 0;
+        // A set of hardcoded stakers is defined for the first epoch.
+        firstAvailableRegistrationEpoch = 1;
         pendingRegistrations = 0;
 
-        firstAvailableExitEpoch = 0;
+        // It is not possible to exit during the first epoch.
+        firstAvailableExitEpoch = 1;
         pendingExits = 0;
     }
 
