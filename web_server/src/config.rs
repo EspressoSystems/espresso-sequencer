@@ -18,7 +18,7 @@ pub fn post_proposal_route(view_number: u64) -> String {
 }
 
 pub fn get_recent_proposal_route() -> String {
-    "api/proposal".to_string()
+    "api/proposal/recent".to_string()
 }
 
 pub fn get_da_certificate_route(view_number: u64) -> String {
