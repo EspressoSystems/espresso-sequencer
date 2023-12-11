@@ -27,7 +27,7 @@ application).
 
 - Provides a query interface to a persistent store containing the history of a blockchain
   (represented as a chain of HotShot
-  [leaves](https://hotshot.docs.espressosys.com/hotshot/data/struct.Leaf.html))
+  [leaves](https://hotshot.docs.espressosys.com/hotshot_types/data/struct.Leaf.html))
 - Provides a query interface for validator status and metrics
 - Integrates with HotShot to populate the persistent database
 - Generic over application types (within a leaf, the block and block commitment can be any type the
