@@ -562,8 +562,7 @@ contract Queue_Test is Test {
             threshold: 0
         });
         lightClientContract = new LightClientTest(genesis,10);
-        address lightClientAddress = address(lightClientContract);
-        stakeTable = new SM(address(token),lightClientAddress);
+        stakeTable = new SM(address(token),address(lightClientContract));
     }
 
     /// @dev Helper function to check the queue parameters depending on the queue type
