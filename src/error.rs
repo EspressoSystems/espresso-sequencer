@@ -19,8 +19,11 @@ use tide_disco::StatusCode;
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 pub enum Error {
+    #[snafu(display("{source}"))]
     Availability { source: availability::Error },
+    #[snafu(display("{source}"))]
     Status { source: status::Error },
+    #[snafu(display("error {status}: {message}"))]
     Custom { message: String, status: StatusCode },
 }
 
