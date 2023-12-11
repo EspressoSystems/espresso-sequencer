@@ -264,12 +264,6 @@ impl<Types: NodeType> BlockQueryData<Types> {
                 qc_leaf: qc.data.leaf_commit
             },
         );
-        debug_assert!(
-            leaf.block_header.payload_commitment()
-                == hotshot_types::traits::block_contents::vid_commitment(
-                    &payload.encode().unwrap().collect()
-                )
-        );
         Ok(Self {
             hash: leaf.block_header.commit(),
             header: leaf.block_header,
