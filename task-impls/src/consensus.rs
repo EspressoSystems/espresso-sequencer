@@ -559,7 +559,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             event: EventType::Error { error: Arc::new(e) },
                         })
                         .await;
-                    return;
                 }
 
                 // Skip if both saftey and liveness checks fail.
