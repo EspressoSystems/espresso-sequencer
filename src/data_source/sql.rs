@@ -48,7 +48,7 @@ use std::{
 };
 use tokio_postgres::{
     types::{BorrowToSql, ToSql},
-    Client, NoTls, Row, RowStream, ToStatement,
+    Client, NoTls, Row, ToStatement,
 };
 
 pub use crate::include_migrations;
@@ -647,17 +647,6 @@ impl<Types> SqlDataSource<Types>
 where
     Types: NodeType,
 {
-    /// Query the underlying SQL database.
-    pub async fn query<T, P>(&self, query: &T, params: P) -> Result<RowStream, Error>
-    where
-        T: ?Sized + ToStatement,
-        P: IntoIterator,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        Ok(self.client.query_raw(query, params).await?)
-    }
-
     /// Access the transaction which is accumulating all uncommitted changes to the data source.
     ///
     /// This can be used to manually group database modifications to custom state atomically with
@@ -666,15 +655,27 @@ where
     /// If there is no currently open transaction, a new transaction will be opened. No changes
     /// made through the transaction objeect returned by this method will be persisted until
     /// [`commit`](Self::commit) is called.
-    pub async fn transaction(&mut self) -> Result<Transaction<'_>, Error> {
+    pub async fn transaction(&mut self) -> QueryResult<Transaction<'_>> {
         if !self.tx_in_progress {
             // If there is no transaction in progress, open one.
-            self.client.batch_execute("BEGIN").await?;
+            self.client
+                .batch_execute("BEGIN")
+                .await
+                .map_err(postgres_err)?;
             self.tx_in_progress = true;
         }
         Ok(Transaction {
             client: &mut self.client,
         })
+    }
+}
+
+impl<Types> Query for SqlDataSource<Types>
+where
+    Types: NodeType,
+{
+    fn client(&self) -> &Client {
+        &self.client
     }
 }
 
@@ -758,14 +759,7 @@ where
             ResourceId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
         };
         let query = format!("SELECT leaf, qc FROM leaf WHERE {where_clause}");
-        let row = self
-            .client
-            .query_opt(&query, &[&*param])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?
-            .context(NotFoundSnafu)?;
+        let row = self.query_one(&query, [param]).await?;
         parse_leaf(row)
     }
 
@@ -784,14 +778,7 @@ where
               WHERE {where_clause}
               LIMIT 1"
         );
-        let row = self
-            .client
-            .query_opt(&query, &[&*param])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?
-            .context(NotFoundSnafu)?;
+        let row = self.query_one(&query, [param]).await?;
         parse_block(row)
     }
 
@@ -801,21 +788,9 @@ where
     {
         let (where_clause, params) = bounds_to_where_clause(range, "height");
         let query = format!("SELECT leaf, qc FROM leaf {where_clause} ORDER BY height ASC");
-        let rows =
-            self.client
-                .query_raw(&query, params)
-                .await
-                .map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?;
+        let rows = self.query(&query, params).await?;
 
-        Ok(rows
-            .map(|res| {
-                parse_leaf(res.map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?)
-            })
-            .boxed())
+        Ok(rows.map(|res| parse_leaf(res?)).boxed())
     }
 
     async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
@@ -830,21 +805,9 @@ where
               {where_clause}
               ORDER BY h.height ASC"
         );
-        let rows =
-            self.client
-                .query_raw(&query, params)
-                .await
-                .map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?;
+        let rows = self.query(&query, params).await?;
 
-        Ok(rows
-            .map(|res| {
-                parse_block(res.map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?)
-            })
-            .boxed())
+        Ok(rows.map(|res| parse_block(res?)).boxed())
     }
 
     async fn get_block_with_transaction(
@@ -862,14 +825,7 @@ where
                 ORDER BY t.id ASC
                 LIMIT 1"
         );
-        let row = self
-            .client
-            .query_opt(&query, &[&hash.to_string()])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?
-            .context(NotFoundSnafu)?;
+        let row = self.query_one(&query, &[&hash.to_string()]).await?;
 
         // Extract the transaction index.
         let index = row.try_get("tx_index").map_err(|err| QueryError::Error {
@@ -897,21 +853,8 @@ where
             // recent leaves, so order by descending height.
             query = format!("{query} ORDER BY height DESC limit {limit}");
         }
-        let rows = self
-            .client
-            .query_raw(&query, &[&proposer.to_string()])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
-        let mut leaves: Vec<_> = rows
-            .map(|res| {
-                parse_leaf(res.map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?)
-            })
-            .try_collect()
-            .await?;
+        let rows = self.query(&query, &[&proposer.to_string()]).await?;
+        let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
 
         if limit.is_some() {
             // If there was a limit, we selected the leaves in descending order to get the most
@@ -924,13 +867,7 @@ where
 
     async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
         let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self
-            .client
-            .query_one(query, &[&proposer.to_string()])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
+        let row = self.query_one(query, &[&proposer.to_string()]).await?;
         let count: i64 = row.get(0);
         Ok(count as usize)
     }
@@ -1009,14 +946,8 @@ where
         ));
 
         // Grab a transaction and execute all the statements.
-        let mut tx = self.transaction().await.map_err(|err| QueryError::Error {
-            message: err.to_string(),
-        })?;
-        tx.execute_many(stmts)
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
+        let mut tx = self.transaction().await?;
+        tx.execute_many(stmts).await?;
 
         self.leaf_stream.push(leaf);
         Ok(())
@@ -1070,14 +1001,8 @@ where
             ));
         }
 
-        let mut tx = self.transaction().await.map_err(|err| QueryError::Error {
-            message: err.to_string(),
-        })?;
-        tx.execute_many(stmts)
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
+        let mut tx = self.transaction().await?;
+        tx.execute_many(stmts).await?;
 
         self.block_stream.push(block);
         Ok(())
@@ -1091,13 +1016,7 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         let query = "SELECT max(height) FROM header";
-        let row = self
-            .client
-            .query_one(query, &[])
-            .await
-            .map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
+        let row = self.query_one_static(query).await?;
         let height: Option<i64> = row.get(0);
         match height {
             Some(height) => {
@@ -1134,37 +1053,28 @@ pub struct Transaction<'a> {
 }
 
 impl<'a> Transaction<'a> {
-    /// Query the underlying SQL database.
-    ///
-    /// The results will reflect the state after the statements thus far added to this transaction
-    /// have been applied, even though those effects have not been committed to the database yet.
-    pub async fn query<T, P>(&self, query: &T, params: P) -> Result<RowStream, Error>
-    where
-        T: ?Sized + ToStatement,
-        P: IntoIterator,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        Ok(self.client.query_raw(query, params).await?)
-    }
-
     /// Execute a statement against the underlying database.
     ///
     /// The results of the statement will be reflected immediately in future statements made within
     /// this transaction, but will not be reflected in the underlying database until the transaction
     /// is committed with [`SqlDataSource::commit`].
-    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> Result<(), Error>
+    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> QueryResult<()>
     where
         T: ?Sized + ToStatement,
         P: IntoIterator,
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
     {
-        self.client.execute_raw(statement, params).await?;
+        self.client
+            .execute_raw(statement, params)
+            .await
+            .map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
         Ok(())
     }
 
-    pub async fn execute_many<S, T, P>(&mut self, statements: S) -> Result<(), Error>
+    pub async fn execute_many<S, T, P>(&mut self, statements: S) -> QueryResult<()>
     where
         S: IntoIterator<Item = (T, P)>,
         T: ToStatement,
@@ -1176,6 +1086,95 @@ impl<'a> Transaction<'a> {
             self.execute(&stmt, params).await?;
         }
         Ok(())
+    }
+}
+
+/// Query the underlying SQL database.
+///
+/// The results will reflect the state after the statements thus far added to this transaction have
+/// been applied, even though those effects have not been committed to the database yet.
+impl<'a> Query for Transaction<'a> {
+    fn client(&self) -> &Client {
+        self.client
+    }
+}
+
+#[async_trait]
+pub trait Query {
+    fn client(&self) -> &Client;
+
+    // Query the underlying SQL database.
+    async fn query<T, P>(
+        &self,
+        query: &T,
+        params: P,
+    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        Ok(self
+            .client()
+            .query_raw(query, params)
+            .await
+            .map_err(postgres_err)?
+            .map_err(postgres_err)
+            .boxed())
+    }
+
+    /// Query the underlying SQL database with no parameters.
+    async fn query_static<T>(&self, query: &T) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query::<T, [i64; 0]>(query, []).await
+    }
+
+    /// Query the underlying SQL database, returning exactly one result or failing.
+    async fn query_one<T, P>(&self, query: &T, params: P) -> QueryResult<Row>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        self.query_opt(query, params).await?.context(NotFoundSnafu)
+    }
+
+    /// Query the underlying SQL database with no parameters, returning exactly one result or
+    /// failing.
+    async fn query_one_static<T>(&self, query: &T) -> QueryResult<Row>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query_one::<T, [i64; 0]>(query, []).await
+    }
+
+    /// Query the underlying SQL database, returning zero or one results.
+    async fn query_opt<T, P>(&self, query: &T, params: P) -> QueryResult<Option<Row>>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        self.query(query, params).await?.try_next().await
+    }
+
+    /// Query the underlying SQL database with no parameters, returning zero or one results.
+    async fn query_opt_static<T>(&self, query: &T) -> QueryResult<Option<Row>>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query_opt::<T, [i64; 0]>(query, []).await
+    }
+}
+
+fn postgres_err(err: tokio_postgres::Error) -> QueryError {
+    QueryError::Error {
+        message: err.to_string(),
     }
 }
 
