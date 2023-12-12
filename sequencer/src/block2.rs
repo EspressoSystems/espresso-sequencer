@@ -8,6 +8,7 @@ use jf_primitives::{
     vid::{
         advz::payload_prover::SmallRangeProof,
         payload_prover::{PayloadProver, Statement},
+        LengthGetter,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -110,14 +111,15 @@ impl BlockPayload {
     }
 }
 
-// Returns the range `range_start+len..max(range_start,range_end)+len` or `None` on error.
-//
-// Lots of ugly type conversion and checked arithmetic.
-// Range end must be max(range_start,range_end) otherwise Rust will barf.
+/// Returns the byte range for a tx in the block payload bytes.
+///
+/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
+/// Lots of ugly type conversion and checked arithmetic.
 fn tx_payload_range(
     tx_table_range_start: &Option<TxTableEntry>,
     tx_table_range_end: &TxTableEntry,
     tx_table_len: &TxTableEntry,
+    block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
     let tx_bodies_offset = usize::try_from(tx_table_len.clone())
         .ok()?
@@ -129,7 +131,10 @@ fn tx_payload_range(
     let end = usize::try_from(tx_table_range_end.clone())
         .ok()?
         .checked_add(tx_bodies_offset)?;
-    Some(start..std::cmp::max(start, end))
+    let end = std::cmp::max(start, end);
+    let start = std::cmp::min(start, block_payload_byte_len);
+    let end = std::cmp::min(end, block_payload_byte_len);
+    Some(start..end)
 }
 
 impl QueryablePayload for BlockPayload {
@@ -202,6 +207,7 @@ impl QueryablePayload for BlockPayload {
             &tx_table_range_start,
             &tx_table_range_end,
             &self.get_tx_table_len()?,
+            self.payload.len(),
         )?;
 
         Some((
@@ -264,6 +270,9 @@ impl TxInclusionProof {
         vid_commit: &boilerplate::VidSchemeCommit,
         vid_common: &boilerplate::VidSchemeCommon,
     ) -> Option<Result<(), ()>> {
+        // TODO check vid_common against vid_commit.
+        // need something upstream to allow this.
+
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
         match &self.tx_payload_proof {
@@ -272,6 +281,7 @@ impl TxInclusionProof {
                     &self.tx_table_range_start,
                     &self.tx_table_range_end,
                     &self.tx_table_len,
+                    vid_common.get_payload_byte_len(),
                 )?;
                 if vid
                     .payload_verify(
