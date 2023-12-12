@@ -37,7 +37,7 @@ contract StakeTable_Test is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
-    uint256 constant INITIAL_BALANCE = 1_000;
+    uint256 constant INITIAL_BALANCE = 1_000_000_000;
     address exampleTokenCreator;
 
     function genClientWallet(address sender, uint8 seed)
@@ -72,22 +72,27 @@ contract StakeTable_Test is Test {
         );
     }
 
-    /// @dev  Helper function to simulate a successful registration
-    function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
+    function registerWithSeed(address sender, uint8 seed, uint64 depositAmount)
+        private
+        returns (BN254.G2Point memory, uint64)
+    {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator, 124);
+        ) = genClientWallet(sender, seed);
 
-        uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 5;
+        uint64 validUntilEpoch = 1000;
+
+        // Transfer some tokens to sender
+        vm.prank(exampleTokenCreator);
+        token.transfer(sender, depositAmount);
 
         // Prepare for the token transfer
-        vm.prank(exampleTokenCreator);
+        vm.prank(sender);
         token.approve(address(stakeTable), depositAmount);
 
-        vm.prank(exampleTokenCreator);
+        vm.prank(sender);
         bool res = stakeTable.register(
             blsVK,
             schnorrVK,
@@ -96,10 +101,14 @@ contract StakeTable_Test is Test {
             sig,
             validUntilEpoch
         );
-
         assertTrue(res);
 
         return (blsVK, depositAmount);
+    }
+
+    /// @dev  Helper function to simulate a successful registration
+    function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
+        return registerWithSeed(exampleTokenCreator, 34, 10);
     }
 
     function setUp() public {
@@ -587,43 +596,9 @@ contract StakeTable_Test is Test {
         return queueType;
     }
 
-    // TODO refactor with successfullRegistration function
-    function registerWithSeed(address sender, uint8 seed) private returns (BN254.G2Point memory) {
-        (
-            BN254.G2Point memory blsVK,
-            EdOnBN254.EdOnBN254Point memory schnorrVK,
-            BN254.G1Point memory sig
-        ) = genClientWallet(sender, seed);
-
-        // TODO make it random
-        uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 1000;
-
-        // Transfer some tokens to sender
-        vm.prank(exampleTokenCreator);
-        token.transfer(sender, depositAmount);
-
-        // Prepare for the token transfer
-        vm.prank(sender);
-        token.approve(address(stakeTable), depositAmount);
-
-        vm.prank(sender);
-        bool res = stakeTable.register(
-            blsVK,
-            schnorrVK,
-            depositAmount,
-            AbstractStakeTable.StakeType.Native,
-            sig,
-            validUntilEpoch
-        );
-        assertTrue(res);
-
-        return blsVK;
-    }
-
     /// @dev Test invariants about our queue logic holds during a random sequence of register,
     /// requestExit, and advanceEpoch operations
-    uint256 private constant ARRAY_SIZE = 10;
+    uint256 private constant ARRAY_SIZE = 20;
 
     function testFuzz_SequencesOfEvents(
         uint8[ARRAY_SIZE] memory events,
@@ -638,11 +613,13 @@ contract StakeTable_Test is Test {
             uint256 ev = bound(events[i], 0, 2);
 
             bool exitRequestSuccessful = false;
+            uint64 randDepositAmount = uint64(rands[i]);
 
             if (ev == 0) {
                 string memory addressLabel = string.concat("address", string(abi.encode(i)));
                 address sender = makeAddr(addressLabel);
-                BN254.G2Point memory blsVK = registerWithSeed(sender, uint8(i));
+                (BN254.G2Point memory blsVK,) =
+                    registerWithSeed(sender, uint8(i), randDepositAmount);
                 registeredKeys[i] = blsVK;
                 numRegistrations++;
 

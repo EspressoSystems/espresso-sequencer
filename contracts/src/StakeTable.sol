@@ -145,7 +145,6 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view override returns (uint64) {
-        // TODO what do this need for?
         return pendingRegistrationsInFirstAvailableRegistrationEpoch;
     }
 
@@ -178,7 +177,6 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExits() external view override returns (uint64) {
-        // TODO what do this need for?
         return pendingExitsInFirstAvailableExitEpoch;
     }
 
