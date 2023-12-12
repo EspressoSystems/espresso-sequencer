@@ -1,12 +1,10 @@
-use self::tx_table_entry::TxTableEntry;
+use self::{boilerplate::RangeProof, tx_table_entry::TxTableEntry};
 use crate::Transaction;
-use ark_bls12_381::Bls12_381;
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     vid::{
-        advz::payload_prover::SmallRangeProof,
         payload_prover::{PayloadProver, Statement},
         LengthGetter,
     },
@@ -101,7 +99,7 @@ impl BlockPayload {
     // Fetch the tx table length range proof from cache.
     // Build the proof if missing from cache.
     // Returns `None` if an error occurred.
-    fn get_tx_table_len_proof(&self, vid: &boilerplate::VidScheme) -> Option<&RangeProof> {
+    fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
         self.tx_table_len_proof
             .get_or_init(|| {
                 vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
@@ -238,10 +236,6 @@ impl QueryablePayload for BlockPayload {
 
 type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
 
-// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-type RangeProof =
-    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
@@ -262,14 +256,18 @@ impl TxInclusionProof {
     // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
     #[allow(dead_code)] // TODO temporary
     #[allow(clippy::too_many_arguments)]
-    fn verify(
+    fn verify<V>(
         &self,
         tx: &Transaction,
         tx_index: TxIndex,
-        vid: &boilerplate::VidScheme,
-        vid_commit: &boilerplate::VidSchemeCommit,
-        vid_common: &boilerplate::VidSchemeCommon,
-    ) -> Option<Result<(), ()>> {
+        vid: &V,
+        vid_commit: &V::Commit,
+        vid_common: &V::Common,
+    ) -> Option<Result<(), ()>>
+    where
+        V: PayloadProver<RangeProof>,
+        V::Common: LengthGetter,
+    {
         // TODO check vid_common against vid_commit.
         // need something upstream to allow this.
 
@@ -451,7 +449,14 @@ mod boilerplate {
     use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
     use commit::{Commitment, Committable};
-    use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
+    use jf_primitives::{
+        pcs::checked_fft_size,
+        vid::{
+            advz::{payload_prover::SmallRangeProof, Advz},
+            payload_prover::PayloadProver,
+            LengthGetter,
+        },
+    };
     use snafu::OptionExt;
     use std::fmt::Display;
 
@@ -501,8 +506,14 @@ mod boilerplate {
         }
     }
 
-    // TODO temporary
-    pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+    /// Opaque constructor to return an abstract [`PayloadProver`].
+    ///
+    /// Unfortunately, [`PayloadProver`] has a generic type param.
+    /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
+    /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
+    ///
+    /// TODO temporary VID constructor.
+    pub(super) fn test_vid_factory() -> impl PayloadProver<RangeProof, Common = impl LengthGetter> {
         let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
         let mut rng = jf_utils::test_rng();
@@ -511,12 +522,13 @@ mod boilerplate {
             checked_fft_size(payload_chunk_size - 1).unwrap(),
         )
         .unwrap();
-        Advz::<_, _>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+        Advz::<Bls12_381, sha2::Sha256>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
     }
 
-    pub(super) type VidScheme = Advz<Bls12_381, sha2::Sha256>;
-    pub(super) type VidSchemeCommit = <VidScheme as jf_primitives::vid::VidScheme>::Commit;
-    pub(super) type VidSchemeCommon = <VidScheme as jf_primitives::vid::VidScheme>::Common;
+    // TODO type alias needed only because nested impl Trait is not allowed
+    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+    pub(super) type RangeProof =
+        SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
 }
 
 #[cfg(test)]
