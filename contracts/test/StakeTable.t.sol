@@ -9,7 +9,7 @@ import "forge-std/Test.sol";
 
 using stdStorage for StdStorage;
 
-import { ERC20 } from "solmate/utils/SafeTransferLib.sol";
+import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
@@ -24,6 +24,12 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_Test is Test {
+    /// Enum to be able to distinguish between the two kind of queues
+    enum QueueType {
+        Registration,
+        Exit
+    }
+
     event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
     event Deposit(bytes32, uint256);
     event Exit(bytes32, uint64);
@@ -34,15 +40,16 @@ contract StakeTable_Test is Test {
     uint256 constant INITIAL_BALANCE = 1_000;
     address exampleTokenCreator;
 
-    function genClientWallet(address sender)
+    function genClientWallet(address sender, uint8 seed)
         private
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
         // Generate a BLS signature and other values using rust code
-        string[] memory cmds = new string[](3);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "gen-client-wallet";
         cmds[2] = vm.toString(sender);
+        cmds[3] = vm.toString(seed);
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -65,13 +72,13 @@ contract StakeTable_Test is Test {
         );
     }
 
+    /// @dev  Helper function to simulate a successful registration
     function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
-        /// Successful registration
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 124);
 
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
@@ -112,7 +119,7 @@ contract StakeTable_Test is Test {
         });
         lightClientContract = new LightClientTest(genesis,10);
         address lightClientAddress = address(lightClientContract);
-        stakeTable = new S(address(token),lightClientAddress);
+        stakeTable = new S(address(token),lightClientAddress,10);
     }
 
     /// `register` function
@@ -124,7 +131,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         uint64 curEpoch = stakeTable.currentEpoch();
         depositAmount = uint64(bound(depositAmount, 1, INITIAL_BALANCE));
@@ -147,7 +154,7 @@ contract StakeTable_Test is Test {
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
-            genClientWallet(exampleTokenCreator);
+            genClientWallet(exampleTokenCreator, 0);
 
         // Ensure the scalar is valid
         // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
@@ -180,7 +187,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         // Invalid next registration epoch
         uint64 validUntilEpoch = uint64(bound(rand, 0, currentEpoch - 1));
@@ -220,7 +227,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
@@ -258,7 +265,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
@@ -276,7 +283,7 @@ contract StakeTable_Test is Test {
 
         // A user with 0 balance cannot register either
         address newUser = makeAddr("New user with zero balance");
-        (blsVK, schnorrVK, sig) = genClientWallet(newUser);
+        (blsVK, schnorrVK, sig) = genClientWallet(newUser, 0);
 
         vm.prank(newUser);
         vm.expectRevert("TRANSFER_FROM_FAILED");
@@ -296,7 +303,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
@@ -536,39 +543,8 @@ contract StakeTable_Test is Test {
 
         assertEq(abi.encode(node), abi.encode(nullNode));
     }
-}
 
-contract Queue_Test is Test {
-    S public stakeTable;
-    ExampleToken public token;
-    LightClientTest public lightClientContract;
-    uint256 constant INITIAL_BALANCE = 1_000;
-    address exampleTokenCreator;
-
-    /// Enum to be able to distinguish between the two kind of queues
-    enum QueueType {
-        Registration,
-        Exit
-    }
-
-    function setUp() public {
-        exampleTokenCreator = makeAddr("tokenCreator");
-        vm.prank(exampleTokenCreator);
-        token = new ExampleToken(INITIAL_BALANCE);
-
-        LightClient.LightClientState memory genesis = LightClient.LightClientState({
-            viewNum: 0,
-            blockHeight: 0,
-            blockCommRoot: 0,
-            feeLedgerComm: 0,
-            stakeTableBlsKeyComm: 0,
-            stakeTableSchnorrKeyComm: 0,
-            stakeTableAmountComm: 0,
-            threshold: 0
-        });
-        lightClientContract = new LightClientTest(genesis,10);
-        stakeTable = new S(address(token),address(lightClientContract));
-    }
+    // Queue logic
 
     function getQueueParameters(QueueType queueType) public view returns (uint64, uint64) {
         if (queueType == QueueType.Registration) {
@@ -611,71 +587,109 @@ contract Queue_Test is Test {
         return queueType;
     }
 
-    //    function testFuzz_QueueIsEmpty(uint256 typeOfQueueInt, uint64 epochInTheFuture) external {
-    //        uint64 epoch;
-    //        uint64 queueSize;
-    //        SM.QueueType queueType;
-    //        queueType = asQueueType(typeOfQueueInt);
-    //        checkQueueParameters(queueType, 1, 0);
-    //
-    //        epochInTheFuture = uint64(bound(epochInTheFuture, 2, type(uint64).max - 1));
-    //        (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //        assertEq(epoch, 1);
-    //        checkQueueParameters(queueType, 1, 1);
-    //
-    //        // Moving forward in time. The queue is empty again
-    //        lightClientContract.setCurrentEpoch(epochInTheFuture);
-    //        (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //        assertEq(epoch, epochInTheFuture + 1);
-    //        checkQueueParameters(queueType, epoch, 1);
-    //    }
-    //
-    //    function testFuzz_QueueIsFilledUp(uint256 typeOfQueueInt, uint64 epochInTheFuture)
-    // external {
-    //        uint64 epoch;
-    //        uint64 queueSize;
-    //        SM.QueueType queueType;
-    //        queueType = asQueueType(typeOfQueueInt);
-    //        epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 2));
-    //        lightClientContract.setCurrentEpoch(epochInTheFuture);
-    //
-    //        // Fill up the queue
-    //        for (uint256 i = 0; i < stakeTable.MAX_CHURN_RATE(); i++) {
-    //            (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //            checkQueueParameters(queueType, epoch, uint64(i + 1));
-    //            assertEq(epoch, epochInTheFuture + 1);
-    //        }
-    //
-    //        // Check that after the queue is filled up a new one is created for the subsequent
-    // epoch
-    //        (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //        assertEq(epoch, epochInTheFuture + 2);
-    //        checkQueueParameters(queueType, epoch, 1);
-    //    }
-    //
-    //    function testFuzz_QueueIsPartiallyFilled(
-    //        uint256 typeOfQueueInt,
-    //        uint64 epochInTheFuture,
-    //        uint64 pendingRequests
-    //    ) external {
-    //        uint64 epoch;
-    //        uint64 queueSize;
-    //        SM.QueueType queueType;
-    //        queueType = asQueueType(typeOfQueueInt);
-    //        pendingRequests = uint64(bound(pendingRequests, 0, stakeTable.MAX_CHURN_RATE() - 1));
-    //        epochInTheFuture = uint64(bound(epochInTheFuture, 0, type(uint64).max - 1));
-    //        lightClientContract.setCurrentEpoch(epochInTheFuture);
-    //
-    //        // Fill up the queue partially
-    //        for (uint256 i = 0; i < pendingRequests; i++) {
-    //            (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //            checkQueueParameters(queueType, epoch, uint64(i + 1));
-    //            assertEq(epoch, epochInTheFuture + 1);
-    //        }
-    //
-    //        // Check that if we add another element in the queue the epoch stays the same
-    //        (epoch, queueSize) = stakeTable.nextEpoch(queueType);
-    //        assertEq(epoch, epochInTheFuture + 1);
-    //        checkQueueParameters(queueType, epoch, pendingRequests + 1);
-    //    }
+    // TODO refactor with successfullRegistration function
+    function registerWithSeed(address sender, uint8 seed) private returns (BN254.G2Point memory) {
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(sender, seed);
+
+        // TODO make it random
+        uint64 depositAmount = 10;
+        uint64 validUntilEpoch = 1000;
+
+        // Transfer some tokens to sender
+        vm.prank(exampleTokenCreator);
+        token.transfer(sender, depositAmount);
+
+        // Prepare for the token transfer
+        vm.prank(sender);
+        token.approve(address(stakeTable), depositAmount);
+
+        vm.prank(sender);
+        bool res = stakeTable.register(
+            blsVK,
+            schnorrVK,
+            depositAmount,
+            AbstractStakeTable.StakeType.Native,
+            sig,
+            validUntilEpoch
+        );
+        assertTrue(res);
+
+        return blsVK;
+    }
+
+    /// @dev Test invariants about our queue logic holds during a random sequence of register,
+    /// requestExit, and advanceEpoch operations
+    // TODO refactor size of arrays?
+    function testFuzz_SequencesOfEvents(uint8[10] memory events, uint8[10] memory rands) external {
+        BN254.G2Point[] memory registeredKeys = new BN254.G2Point[](10);
+
+        uint256 numRegistrations = 0;
+        uint256 numExits = 0;
+        for (uint256 i = 0; i < 10; i++) {
+            uint256 ev = bound(events[i], 0, 2);
+            if (ev == 0) {
+                string memory addressLabel = string.concat("address", string(abi.encode(i)));
+                address sender = makeAddr(addressLabel);
+                BN254.G2Point memory blsVK = registerWithSeed(sender, uint8(i));
+                registeredKeys[i] = blsVK;
+                numRegistrations++;
+            } else if (ev == 1) {
+                if (numRegistrations > 0) {
+                    uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
+                    bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
+                    (
+                        address sender,
+                        AbstractStakeTable.StakeType stakeType,
+                        uint64 balance,
+                        uint64 registerEpoch,
+                        uint64 exitEpoch,
+                    ) = stakeTable.nodes(hashNode);
+
+                    balance;
+                    registerEpoch;
+                    stakeType;
+                    exitEpoch;
+
+                    BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
+
+                    if (stakeTable.currentEpoch() >= registerEpoch + 1) {
+                        // Can exit
+                        vm.prank(sender);
+                        bool res = stakeTable.requestExit(blsVK);
+                        assertTrue(res);
+                        numExits++;
+                    } else {
+                        // Too early to exit
+                        vm.prank(sender);
+                        vm.expectRevert(S.PrematureExit.selector);
+                        bool res = stakeTable.requestExit(blsVK);
+                        assertFalse(res);
+                    }
+                }
+            } else {
+                // ev == 2
+                uint64 currentEpoch = lightClientContract.currentEpoch();
+                uint64 nextEpoch = currentEpoch + 1;
+                lightClientContract.setCurrentEpoch(nextEpoch);
+                assertEq(stakeTable.currentEpoch(), nextEpoch);
+            }
+        }
+        // then bound `events` so that each value is {0, 1, 2}
+        // stands for deposit, withdraw and advanceEpoch respectively
+
+        // keep track (in memory): `numDeposits`, `numExits`,
+
+        // go through the events, at the end of *each* step, check invariants
+        // when = 0, take the rands[i] as the random seed and use ffi and rust to generate keypairs
+        // and amounts to deposit
+        // when = 1, exit on the "bound(rands[i], 0, numDeposits - 1))-th" deposit
+        // when = 2, advancedEpoch
+
+        // invariants include: if relationship between `numDeposits`, ..`firstAvailableXX` and
+        // `pendingXX` satisfy an equation.
+    }
 }

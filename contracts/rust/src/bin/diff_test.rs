@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
@@ -12,6 +10,7 @@ use ark_std::{
     rand::{rngs::StdRng, Rng, SeedableRng},
     UniformRand,
 };
+
 use clap::{Parser, ValueEnum};
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
@@ -35,6 +34,7 @@ use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
+use std::str::FromStr;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -395,11 +395,16 @@ fn main() {
             println!("args: {:?}", cli.args);
         }
         Action::GenClientWallet => {
-            let mut rng = jf_utils::test_rng();
-
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=senderAddress");
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=senderAddress arg2=seed");
             }
+
+            // Use seed from cli to generate different bls keys
+            let seed_value: u8 = cli.args[1].parse::<u8>().unwrap();
+            let mut seed_bytes_length_32 = [0u8; 32];
+            seed_bytes_length_32[0] = seed_value;
+
+            let mut rng = StdRng::from_seed(seed_bytes_length_32);
 
             let sender_address = cli.args[0].parse::<Address>().unwrap();
             let sender_address_bytes = AbiEncode::encode(sender_address);

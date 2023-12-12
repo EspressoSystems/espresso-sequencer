@@ -61,11 +61,13 @@ contract StakeTable is AbstractStakeTable {
     uint64 public firstAvailableExitEpoch;
     uint64 public pendingExitsInFirstAvailableExitEpoch;
 
-    uint256 public constant MAX_CHURN_RATE = 20;
+    uint256 public maxChurnRate;
 
-    constructor(address _tokenAddress, address _lightClientAddress) {
+    constructor(address _tokenAddress, address _lightClientAddress, uint256 churnRate) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
+
+        maxChurnRate = churnRate;
 
         // A set of hardcoded stakers is defined for the first epoch.
         firstAvailableRegistrationEpoch = 1;
@@ -122,7 +124,7 @@ contract StakeTable is AbstractStakeTable {
         if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 1;
-        } else if (pendingRegistrationsInFirstAvailableRegistrationEpoch >= MAX_CHURN_RATE) {
+        } else if (pendingRegistrationsInFirstAvailableRegistrationEpoch >= maxChurnRate) {
             epoch = firstAvailableRegistrationEpoch + 1;
             queueSize = 1;
         } else {
@@ -156,7 +158,7 @@ contract StakeTable is AbstractStakeTable {
         if (firstAvailableExitEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
             queueSize = 1;
-        } else if (pendingExitsInFirstAvailableExitEpoch >= MAX_CHURN_RATE) {
+        } else if (pendingExitsInFirstAvailableExitEpoch >= maxChurnRate) {
             epoch = firstAvailableExitEpoch + 1;
             queueSize = 1;
         } else {
