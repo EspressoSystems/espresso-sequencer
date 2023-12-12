@@ -993,6 +993,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
+                self.output_event_stream.publish(Event{
+                    view_number: self.cur_view,
+                    event: EventType::ReplicaViewTimeout {
+                        view_number: self.cur_view,
+                    }
+                }).await;
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }

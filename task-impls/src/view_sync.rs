@@ -4,6 +4,7 @@ use crate::{
     vote::{spawn_vote_accumulator, AccumulatorInfo},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_std::task::JoinHandle;
 use either::Either;
 use futures::FutureExt;
 use hotshot_task::{
@@ -138,6 +139,8 @@ pub struct ViewSyncReplicaTaskState<
     pub finalized: bool,
     /// Whether we have already sent a view change event for `next_view`
     pub sent_view_change_event: bool,
+    /// Timeout task handle, when it expires we try the next relay
+    pub timeout_task: Option<JoinHandle<()>>,
     /// Our node id; for logging
     pub id: u64,
 
@@ -254,6 +257,7 @@ impl<
                         finalized: false,
                         sent_view_change_event: false,
                         phase: ViewSyncPhase::None,
+                        timeout_task: None,
                         membership: self.membership.clone(),
                         network: self.network.clone(),
                         public_key: self.public_key.clone(),
@@ -516,6 +520,7 @@ impl<
                         finalized: false,
                         sent_view_change_event: false,
                         phase: ViewSyncPhase::None,
+                        timeout_task: None,
                         membership: self.membership.clone(),
                         network: self.network.clone(),
                         public_key: self.public_key.clone(),
@@ -666,7 +671,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .await;
                 }
 
-                async_spawn({
+                if let Some(timeout_task) = self.timeout_task.take() {
+                    timeout_task.cancel().await;
+                }
+
+                self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
                     let phase = self.phase.clone();
                     async move {
@@ -680,7 +689,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             ))
                             .await;
                     }
-                });
+                }));
             }
 
             HotShotEvent::ViewSyncCommitCertificate2Recv(certificate) => {
@@ -737,7 +746,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .publish(HotShotEvent::ViewChange(self.next_view))
                     .await;
 
-                async_spawn({
+                if let Some(timeout_task) = self.timeout_task.take() {
+                    timeout_task.cancel().await;
+                }
+                self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
                     let phase = self.phase.clone();
                     async move {
@@ -751,7 +763,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             ))
                             .await;
                     }
-                });
+                }));
             }
 
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
@@ -788,6 +800,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.relay = certificate.get_data().relay;
                 }
 
+                if let Some(timeout_task) = self.timeout_task.take() {
+                    timeout_task.cancel().await;
+                }
+
                 self.event_stream
                     .publish(HotShotEvent::ViewChange(self.next_view))
                     .await;
@@ -817,7 +833,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .await;
                 }
 
-                async_spawn({
+                self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
@@ -830,7 +846,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             ))
                             .await;
                     }
-                });
+                }));
 
                 return (None, self);
             }
@@ -841,6 +857,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     && relay == self.relay
                     && last_seen_certificate == self.phase
                 {
+                    if let Some(timeout_task) = self.timeout_task.take() {
+                        timeout_task.cancel().await;
+                    }
                     self.relay += 1;
                     match self.phase {
                         ViewSyncPhase::None => {
@@ -906,7 +925,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         }
                     }
 
-                    async_spawn({
+                    self.timeout_task = Some(async_spawn({
                         let stream = self.event_stream.clone();
                         async move {
                             async_sleep(self.view_sync_timeout).await;
@@ -919,7 +938,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                 ))
                                 .await;
                         }
-                    });
+                    }));
 
                     return (None, self);
                 }
