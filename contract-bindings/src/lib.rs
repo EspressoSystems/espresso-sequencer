@@ -21,6 +21,5 @@ pub mod polynomial_eval;
 pub mod safe_transfer_lib;
 pub mod shared_types;
 pub mod stake_table;
-pub mod stake_table_mock;
 pub mod transcript;
 pub mod utils;

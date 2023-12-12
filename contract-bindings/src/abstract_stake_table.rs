@@ -126,6 +126,56 @@ pub mod abstract_stake_table {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("nextExitEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("nextExitEpoch"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::string::String::new(),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::string::String::new(),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("nextRegistrationEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("nextRegistrationEpoch",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::string::String::new(),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::string::String::new(),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("numPendingExit"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("numPendingExit"),
@@ -485,6 +535,20 @@ pub mod abstract_stake_table {
                 .method_hash([221, 46, 211, 236], (bls_vk,))
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `nextExitEpoch` (0x3b09c267) function
+        pub fn next_exit_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, (u64, u64)> {
+            self.0
+                .method_hash([59, 9, 194, 103], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `nextRegistrationEpoch` (0x2c530584) function
+        pub fn next_registration_epoch(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, (u64, u64)> {
+            self.0
+                .method_hash([44, 83, 5, 132], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `numPendingExit` (0xbf8248dd) function
         pub fn num_pending_exit(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
@@ -770,6 +834,36 @@ pub mod abstract_stake_table {
     pub struct LookupStakeCall {
         pub bls_vk: G2Point,
     }
+    ///Container type for all input parameters for the `nextExitEpoch` function with signature `nextExitEpoch()` and selector `0x3b09c267`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "nextExitEpoch", abi = "nextExitEpoch()")]
+    pub struct NextExitEpochCall;
+    ///Container type for all input parameters for the `nextRegistrationEpoch` function with signature `nextRegistrationEpoch()` and selector `0x2c530584`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "nextRegistrationEpoch", abi = "nextRegistrationEpoch()")]
+    pub struct NextRegistrationEpochCall;
     ///Container type for all input parameters for the `numPendingExit` function with signature `numPendingExit()` and selector `0xbf8248dd`
     #[derive(
         Clone,
@@ -925,6 +1019,8 @@ pub mod abstract_stake_table {
         Deposit(DepositCall),
         LookupNode(LookupNodeCall),
         LookupStake(LookupStakeCall),
+        NextExitEpoch(NextExitEpochCall),
+        NextRegistrationEpoch(NextRegistrationEpochCall),
         NumPendingExit(NumPendingExitCall),
         NumPendingRegistrations(NumPendingRegistrationsCall),
         Register(RegisterCall),
@@ -947,6 +1043,15 @@ pub mod abstract_stake_table {
             }
             if let Ok(decoded) = <LookupStakeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::LookupStake(decoded));
+            }
+            if let Ok(decoded) = <NextExitEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NextExitEpoch(decoded));
+            }
+            if let Ok(decoded) =
+                <NextRegistrationEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NextRegistrationEpoch(decoded));
             }
             if let Ok(decoded) =
                 <NumPendingExitCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -988,6 +1093,10 @@ pub mod abstract_stake_table {
                 Self::Deposit(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::LookupNode(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::LookupStake(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NextExitEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NextRegistrationEpoch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::NumPendingExit(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NumPendingRegistrations(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -1007,6 +1116,8 @@ pub mod abstract_stake_table {
                 Self::Deposit(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LookupNode(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LookupStake(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NextExitEpoch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NextRegistrationEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NumPendingExit(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NumPendingRegistrations(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Register(element) => ::core::fmt::Display::fmt(element, f),
@@ -1031,6 +1142,16 @@ pub mod abstract_stake_table {
     impl ::core::convert::From<LookupStakeCall> for AbstractStakeTableCalls {
         fn from(value: LookupStakeCall) -> Self {
             Self::LookupStake(value)
+        }
+    }
+    impl ::core::convert::From<NextExitEpochCall> for AbstractStakeTableCalls {
+        fn from(value: NextExitEpochCall) -> Self {
+            Self::NextExitEpoch(value)
+        }
+    }
+    impl ::core::convert::From<NextRegistrationEpochCall> for AbstractStakeTableCalls {
+        fn from(value: NextRegistrationEpochCall) -> Self {
+            Self::NextRegistrationEpoch(value)
         }
     }
     impl ::core::convert::From<NumPendingExitCall> for AbstractStakeTableCalls {
@@ -1115,6 +1236,34 @@ pub mod abstract_stake_table {
         Hash,
     )]
     pub struct LookupStakeReturn(pub u64);
+    ///Container type for all return fields from the `nextExitEpoch` function with signature `nextExitEpoch()` and selector `0x3b09c267`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct NextExitEpochReturn(pub u64, pub u64);
+    ///Container type for all return fields from the `nextRegistrationEpoch` function with signature `nextRegistrationEpoch()` and selector `0x2c530584`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct NextRegistrationEpochReturn(pub u64, pub u64);
     ///Container type for all return fields from the `numPendingExit` function with signature `numPendingExit()` and selector `0xbf8248dd`
     #[derive(
         Clone,
