@@ -272,14 +272,14 @@ impl TxInclusionProof {
 
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
+        let tx_payload_range = tx_payload_range(
+            &self.tx_table_range_start,
+            &self.tx_table_range_end,
+            &self.tx_table_len,
+            vid_common.get_payload_byte_len(),
+        )?;
         match &self.tx_payload_proof {
             Some(tx_payload_proof) => {
-                let tx_payload_range = tx_payload_range(
-                    &self.tx_table_range_start,
-                    &self.tx_table_range_end,
-                    &self.tx_table_len,
-                    vid_common.get_payload_byte_len(),
-                )?;
                 if vid
                     .payload_verify(
                         Statement {
@@ -297,9 +297,7 @@ impl TxInclusionProof {
                 }
             }
             None => {
-                // TODO check that tx_payload_range is empty!!! ...or that it's truncated by the payload len!
-                // Otherwise someone could verify that `tx_index`th tx is empty even if it's not!
-                if !tx.payload().is_empty() {
+                if !tx.payload().is_empty() || !tx_payload_range.is_empty() {
                     return None; // error: nonempty payload but no proof
                 }
             }
