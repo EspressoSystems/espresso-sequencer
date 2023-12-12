@@ -167,7 +167,7 @@ impl BlockHeader for Header {
         <Self::Payload as BlockPayload>::Metadata,
     ) {
         let (payload, transactions_root) = Payload::genesis();
-        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect());
+        let payload_commitment = vid_commitment(&payload.encode().unwrap().collect(), 1);
         let header = Self {
             // The genesis header needs to be completely deterministic, so we can't sample real
             // timestamps or L1 values.

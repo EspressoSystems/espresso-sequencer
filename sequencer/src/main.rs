@@ -29,6 +29,7 @@ async fn main() {
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
     };
+    let config_path = opt.config_path;
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -37,6 +38,9 @@ async fn main() {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
+            if let Some(query_sql) = modules.query_sql {
+                opt = opt.query_sql(query_sql);
+            }
             if let Some(query_fs) = modules.query_fs {
                 opt = opt.query_fs(query_fs);
             }
@@ -56,13 +60,30 @@ async fn main() {
             };
             let SequencerNode { handle, .. } = opt
                 .serve(move |metrics| {
-                    async move { init_node(network_params, &*metrics).await }.boxed()
+                    async move {
+                        init_node(
+                            network_params,
+                            &*metrics,
+                            config_path.as_ref().map(|path| path.as_ref()),
+                        )
+                        .await
+                    }
+                    .boxed()
                 })
                 .await
                 .expect("Failed to initialize API");
             (handle, query_api_port)
         }
-        None => (init_node(network_params, &NoMetrics).await.0, None),
+        None => (
+            init_node(
+                network_params,
+                &NoMetrics,
+                config_path.as_ref().map(|path| path.as_ref()),
+            )
+            .await
+            .0,
+            None,
+        ),
     };
     // Register a task to run consensus.
     tasks.push(
