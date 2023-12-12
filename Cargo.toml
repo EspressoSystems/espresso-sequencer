@@ -5,12 +5,12 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
