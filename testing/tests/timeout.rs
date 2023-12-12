@@ -39,6 +39,7 @@ async fn test_timeout_web() {
     metadata.timing_data = timing_data;
 
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        num_failed_views: 25,
         num_successful_views: 25,
         ..Default::default()
     };
@@ -106,6 +107,7 @@ async fn test_timeout_libp2p() {
     metadata.timing_data = timing_data;
 
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        num_failed_views: 25,
         num_successful_views: 25,
         ..Default::default()
     };

@@ -18,7 +18,6 @@ use hotshot_types::{
     traits::node_implementation::NodeType,
 };
 use snafu::Snafu;
-use tracing::error;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
@@ -31,28 +30,26 @@ use super::GlobalTestEvent;
 
 /// the status of a view
 #[derive(Debug, Clone)]
-pub enum ViewStatus {
+pub enum ViewStatus<TYPES: NodeType> {
     /// success
     Ok,
     /// failure
     Failed,
     /// safety violation
-    Err(OverallSafetyTaskErr),
+    Err(OverallSafetyTaskErr<TYPES>),
     /// in progress
     InProgress,
 }
 
 /// possible errors
 #[derive(Snafu, Debug, Clone)]
-pub enum OverallSafetyTaskErr {
+pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     /// inconsistent txn nums
     InconsistentTxnsNum { map: HashMap<u64, usize> },
     /// too many failed  views
     TooManyFailures {
-        /// expected number of failures
-        expected: usize,
-        /// actual number of failures
-        got: usize,
+        /// vec of failed views
+        failed_views: HashSet<TYPES::Time>,
     },
     /// not enough decides
     NotEnoughDecides {
@@ -97,7 +94,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub failed_nodes: HashMap<u64, Arc<HotShotError<TYPES>>>,
 
     /// whether or not the round succeeded (for a custom defn of succeeded)
-    pub status: ViewStatus,
+    pub status: ViewStatus<TYPES>,
 
     /// NOTE: technically a map is not needed
     /// left one anyway for ease of viewing
@@ -411,7 +408,7 @@ impl OverallSafetyPropertiesDescription {
                                     if state.ctx.successful_views.len() < num_successful_views {
                                         return (
                                             Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::NotEnoughDecides {
+                                                OverallSafetyTaskErr::<TYPES>::NotEnoughDecides {
                                                     got: state.ctx.successful_views.len(),
                                                     expected: num_successful_views,
                                                 },
@@ -425,9 +422,8 @@ impl OverallSafetyPropertiesDescription {
                                     {
                                         return (
                                             Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::TooManyFailures {
-                                                    got: state.ctx.failed_views.len(),
-                                                    expected: num_failed_rounds_total,
+                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                    failed_views: state.ctx.failed_views.clone(),
                                                 },
                                             ))),
                                             state,
@@ -528,9 +524,8 @@ impl OverallSafetyPropertiesDescription {
                                                     .await;
                                                 return (
                                                     Some(HotShotTaskCompleted::Error(Box::new(
-                                                                OverallSafetyTaskErr::TooManyFailures {
-                                                                    got: state.ctx.failed_views.len(),
-                                                                    expected: num_failed_rounds_total,
+                                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                                    failed_views: state.ctx.failed_views.clone(),
                                                                 },
                                                                 ))),
                                                                 state,
@@ -549,8 +544,7 @@ impl OverallSafetyPropertiesDescription {
                                         }
                                     }
                                 }
-                                else {
-                                    if view.check_if_failed(threshold, state.handles.len()) {
+                                else if view.check_if_failed(threshold, state.handles.len()) {
                                         view.status = ViewStatus::Failed;
                                         state.ctx.failed_views.insert(view_number);
                                         if state.ctx.failed_views.len() > self.num_failed_views {
@@ -560,9 +554,8 @@ impl OverallSafetyPropertiesDescription {
                                                 .await;
                                             return (
                                                 Some(HotShotTaskCompleted::Error(Box::new(
-                                                            OverallSafetyTaskErr::TooManyFailures {
-                                                                got: state.ctx.failed_views.len(),
-                                                                expected: num_failed_rounds_total,
+                                                            OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                                failed_views: state.ctx.failed_views.clone(),
                                                             },
                                                             ))),
                                                             state,
@@ -570,7 +563,6 @@ impl OverallSafetyPropertiesDescription {
                                         }
                                         return (None, state);
                                     }
-                                }
 
                             }
 
@@ -619,7 +611,7 @@ impl OverallSafetyPropertiesDescription {
 
 /// overall types for safety task
 pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
-    OverallSafetyTaskErr,
+    OverallSafetyTaskErr<TYPES>,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
     (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
