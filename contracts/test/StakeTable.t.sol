@@ -623,20 +623,34 @@ contract StakeTable_Test is Test {
 
     /// @dev Test invariants about our queue logic holds during a random sequence of register,
     /// requestExit, and advanceEpoch operations
-    // TODO refactor size of arrays?
-    function testFuzz_SequencesOfEvents(uint8[10] memory events, uint8[10] memory rands) external {
-        BN254.G2Point[] memory registeredKeys = new BN254.G2Point[](10);
+    uint256 private constant ARRAY_SIZE = 10;
 
-        uint256 numRegistrations = 0;
-        uint256 numExits = 0;
-        for (uint256 i = 0; i < 10; i++) {
+    function testFuzz_SequencesOfEvents(
+        uint8[ARRAY_SIZE] memory events,
+        uint8[ARRAY_SIZE] memory rands
+    ) external {
+        BN254.G2Point[] memory registeredKeys = new BN254.G2Point[](ARRAY_SIZE);
+
+        uint64 numRegistrations = 0;
+        uint64 numExits = 0;
+
+        for (uint256 i = 0; i < ARRAY_SIZE; i++) {
             uint256 ev = bound(events[i], 0, 2);
+
+            bool exitRequestSuccessful = false;
+
             if (ev == 0) {
                 string memory addressLabel = string.concat("address", string(abi.encode(i)));
                 address sender = makeAddr(addressLabel);
                 BN254.G2Point memory blsVK = registerWithSeed(sender, uint8(i));
                 registeredKeys[i] = blsVK;
                 numRegistrations++;
+
+                // Invariants specific to a successful registration
+                assertGe(
+                    stakeTable.firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1
+                );
+                assertGe(stakeTable.numPendingRegistrations(), 1);
             } else if (ev == 1) {
                 if (numRegistrations > 0) {
                     uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
@@ -650,9 +664,7 @@ contract StakeTable_Test is Test {
                     ) = stakeTable.nodes(hashNode);
 
                     balance;
-                    registerEpoch;
                     stakeType;
-                    exitEpoch;
 
                     BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
 
@@ -663,6 +675,13 @@ contract StakeTable_Test is Test {
                         bool res = stakeTable.requestExit(blsVK);
                         assertTrue(res);
                         numExits++;
+                        exitRequestSuccessful = true;
+
+                        // Invariants specific to a successful exit
+                        assertGe(
+                            stakeTable.firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1
+                        );
+                        assertGe(stakeTable.numPendingExits(), 1);
                     } else {
                         vm.prank(sender);
                         vm.expectRevert();
@@ -678,20 +697,11 @@ contract StakeTable_Test is Test {
                 assertEq(stakeTable.currentEpoch(), nextEpoch);
             }
 
-            // Check invariants
+            // Global invariants
+            assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
+            assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
+
+            assertLe(numExits, numRegistrations);
         }
-        // then bound `events` so that each value is {0, 1, 2}
-        // stands for deposit, withdraw and advanceEpoch respectively
-
-        // keep track (in memory): `numDeposits`, `numExits`,
-
-        // go through the events, at the end of *each* step, check invariants
-        // when = 0, take the rands[i] as the random seed and use ffi and rust to generate keypairs
-        // and amounts to deposit
-        // when = 1, exit on the "bound(rands[i], 0, numDeposits - 1))-th" deposit
-        // when = 2, advancedEpoch
-
-        // invariants include: if relationship between `numDeposits`, ..`firstAvailableXX` and
-        // `pendingXX` satisfy an equation.
     }
 }

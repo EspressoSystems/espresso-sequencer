@@ -88,7 +88,7 @@ abstract contract AbstractStakeTable {
     /// @notice Get the next available epoch for exit and queue size after new exit request
     function nextExitEpoch() external view virtual returns (uint64, uint64);
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExit() external view virtual returns (uint64);
+    function numPendingExits() external view virtual returns (uint64);
 
     // === Write APIs ===
 

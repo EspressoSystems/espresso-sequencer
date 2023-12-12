@@ -139,8 +139,8 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
-        firstAvailableExitEpoch = epoch;
-        pendingRegistrationsInFirstAvailableRegistrationEpoch = queueSize + 1;
+        firstAvailableRegistrationEpoch = epoch;
+        pendingRegistrationsInFirstAvailableRegistrationEpoch = queueSize;
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
@@ -173,11 +173,11 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableExitEpoch = epoch;
-        pendingExitsInFirstAvailableExitEpoch = queueSize + 1;
+        pendingExitsInFirstAvailableExitEpoch = queueSize;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExit() external view override returns (uint64) {
+    function numPendingExits() external view override returns (uint64) {
         // TODO what do this need for?
         return pendingExitsInFirstAvailableExitEpoch;
     }
