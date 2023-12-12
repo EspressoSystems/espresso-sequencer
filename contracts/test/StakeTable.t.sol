@@ -656,16 +656,16 @@ contract StakeTable_Test is Test {
 
                     BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
 
-                    if (stakeTable.currentEpoch() >= registerEpoch + 1) {
-                        // Can exit
+                    bool canExit =
+                        (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
+                    if (canExit) {
                         vm.prank(sender);
                         bool res = stakeTable.requestExit(blsVK);
                         assertTrue(res);
                         numExits++;
                     } else {
-                        // Too early to exit
                         vm.prank(sender);
-                        vm.expectRevert(S.PrematureExit.selector);
+                        vm.expectRevert();
                         bool res = stakeTable.requestExit(blsVK);
                         assertFalse(res);
                     }
@@ -677,6 +677,8 @@ contract StakeTable_Test is Test {
                 lightClientContract.setCurrentEpoch(nextEpoch);
                 assertEq(stakeTable.currentEpoch(), nextEpoch);
             }
+
+            // Check invariants
         }
         // then bound `events` so that each value is {0, 1, 2}
         // stands for deposit, withdraw and advanceEpoch respectively
