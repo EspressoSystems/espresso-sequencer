@@ -54,6 +54,13 @@ mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
+    /// Test the status API with custom options.
+    ///
+    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
+    /// By default, the options are the minimal required to run this test (configuring a port and
+    /// enabling the status API). `opt` may add additional functionality (e.g. adding a query module
+    /// to test a different initialization path) but should not remove or modify the existing
+    /// functionality (e.g. removing the status module or changing the port).
     pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
@@ -105,6 +112,13 @@ mod test_helpers {
         assert!(success_rate > 0.0, "{success_rate}");
     }
 
+    /// Test the submit API with custom options.
+    ///
+    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
+    /// By default, the options are the minimal required to run this test (configuring a port and
+    /// enabling the submit API). `opt` may add additional functionality (e.g. adding a query module
+    /// to test a different initialization path) but should not remove or modify the existing
+    /// functionality (e.g. removing the submit module or changing the port).
     pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
