@@ -122,7 +122,6 @@ async fn test_catchup_web() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_catchup_one_node() {
     use std::time::Duration;
 
@@ -182,7 +181,6 @@ async fn test_catchup_one_node() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_catchup_in_view_sync() {
     use std::time::Duration;
 
@@ -228,6 +226,7 @@ async fn test_catchup_in_view_sync() {
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         check_leaf: true,
+        num_failed_views: 2,
         ..Default::default()
     };
 
