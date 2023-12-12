@@ -3452,7 +3452,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.3 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.3)",
  "time 0.3.30",
  "tokio",
  "tracing",
@@ -3486,7 +3486,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.3 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.3)",
  "thiserror",
  "tide-disco",
  "tokio",
@@ -7266,7 +7266,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "snafu",
- "surf-disco",
+ "surf-disco 0.4.3 (git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.3-patch.1)",
  "tempfile",
  "tide-disco",
  "time 0.3.30",
@@ -7895,6 +7895,23 @@ dependencies = [
 name = "surf-disco"
 version = "0.4.3"
 source = "git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.3#44de23cb7d43893174b00e01148c7ccd100c6c26"
+dependencies = [
+ "async-std",
+ "async-tungstenite 0.15.0",
+ "bincode",
+ "derivative",
+ "futures",
+ "hex",
+ "serde",
+ "serde_json",
+ "surf",
+ "tide-disco",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.4.3"
+source = "git+https://github.com/EspressoSystems/surf-disco?tag=v0.4.3-patch.1#1406bf37da4824a26835afce0092b2b3f74b3dd9"
 dependencies = [
  "async-std",
  "async-tungstenite 0.15.0",
