@@ -6,7 +6,7 @@ use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     vid::{
         payload_prover::{PayloadProver, Statement},
-        LengthGetter,
+        CommitChecker, LengthGetter,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -266,10 +266,9 @@ impl TxInclusionProof {
     ) -> Option<Result<(), ()>>
     where
         V: PayloadProver<RangeProof>,
-        V::Common: LengthGetter,
+        V::Common: LengthGetter + CommitChecker<V>,
     {
-        // TODO check vid_common against vid_commit.
-        // need something upstream to allow this.
+        vid_common.is_consistent(vid_commit).ok()?;
 
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
@@ -451,11 +450,7 @@ mod boilerplate {
     use commit::{Commitment, Committable};
     use jf_primitives::{
         pcs::checked_fft_size,
-        vid::{
-            advz::{payload_prover::SmallRangeProof, Advz},
-            payload_prover::PayloadProver,
-            LengthGetter,
-        },
+        vid::advz::{payload_prover::SmallRangeProof, Advz},
     };
     use snafu::OptionExt;
     use std::fmt::Display;
@@ -506,14 +501,17 @@ mod boilerplate {
         }
     }
 
-    /// Opaque constructor to return an abstract [`PayloadProver`].
+    /// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
     ///
     /// Unfortunately, [`PayloadProver`] has a generic type param.
     /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
     /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
     ///
+    /// Also, [`CommitChecker`] has a type param that needs to be set to the return type of this function. Don't know whether that's possible. We could solve the problem if we were willing to make an upstream change to put [`CommitChecker`] as a trait bound on [`VidScheme::Common`].
+    ///
     /// TODO temporary VID constructor.
-    pub(super) fn test_vid_factory() -> impl PayloadProver<RangeProof, Common = impl LengthGetter> {
+    pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+        // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
         let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
         let mut rng = jf_utils::test_rng();
@@ -522,7 +520,7 @@ mod boilerplate {
             checked_fft_size(payload_chunk_size - 1).unwrap(),
         )
         .unwrap();
-        Advz::<Bls12_381, sha2::Sha256>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+        Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
     }
 
     // TODO type alias needed only because nested impl Trait is not allowed
