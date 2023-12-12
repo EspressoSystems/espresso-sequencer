@@ -994,11 +994,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
             HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata) => {
                 self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
-                // let high_qc = self.consensus.read().await.high_qc.clone();
-                // let leader_view = high_qc.get_view_number() + 1;
-                // if self.quorum_membership.get_leader(leader_view) == self.public_key {
-                //     self.publish_proposal_if_able(high_qc, leader_view, None).await;
-                // }
+                let high_qc = self.consensus.read().await.high_qc.clone();
+                let leader_view = high_qc.get_view_number() + 1;
+                if self.quorum_membership.get_leader(leader_view) == self.public_key {
+                    self.publish_proposal_if_able(high_qc, leader_view, None).await;
+                }
             }
             _ => {}
         }
@@ -1117,9 +1117,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .await;
             self.payload_commitment_and_metadata = None;
             return true;
-        } else {
-            warn!("Cannot propose because we don't have the VID payload commitment and metadata");
         }
+        warn!("Cannot propose because we don't have the VID payload commitment and metadata");
         debug!("Self block was None");
         false
     }
