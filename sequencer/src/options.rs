@@ -2,6 +2,7 @@ use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use std::collections::HashSet;
 use std::iter::once;
+use std::path::PathBuf;
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -56,6 +57,12 @@ pub struct Options {
         default_value = "http://localhost:8082"
     )]
     pub consensus_server_url: Url,
+
+    /// Path to save and load consensus configuration.
+    ///
+    /// Allows for rejoining the network on a complete state loss.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CONFIG_PATH")]
+    pub config_path: Option<PathBuf>,
 
     /// Add optional modules to the service.
     ///
