@@ -70,16 +70,14 @@ pub struct TestBlockPayload {
 }
 
 impl TestBlockPayload {
-    /// Create a genesis block payload with transaction bytes `vec![0]`, to be used for
+    /// Create a genesis block payload with bytes `vec![0]`, to be used for
     /// consensus task initiation.
     /// # Panics
     /// If the `VidScheme` construction fails.
     #[must_use]
     pub fn genesis() -> Self {
-        let txns: Vec<u8> = vec![0];
-        // It's impossible for `encode` to fail because the transaciton length is very small.
         TestBlockPayload {
-            transactions: vec![TestTransaction(txns)],
+            transactions: vec![],
         }
     }
 }

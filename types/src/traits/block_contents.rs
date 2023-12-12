@@ -98,6 +98,10 @@ pub fn vid_commitment(
 }
 
 /// Computes the (empty) genesis VID commitment
+/// The number of storage nodes does not do anything, unless in the future we add fake transactions
+/// to the genesis payload.
+/// 
+/// In that case, the payloads may mismatch and cause problems.
 #[must_use]
 pub fn genesis_vid_commitment() -> <VidScheme as VidSchemeTrait>::Commit {
     vid_commitment(&vec![], 8)

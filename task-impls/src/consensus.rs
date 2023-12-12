@@ -563,7 +563,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             event: EventType::Error { error: Arc::new(e) },
                         })
                         .await;
-                    return;
                 }
 
                 // Skip if both saftey and liveness checks fail.
@@ -613,11 +612,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                             if new_decide_reached {
                                 let mut leaf = leaf.clone();
-                                consensus
-                                    .metrics
-                                    .last_synced_block_height
-                                    .set(usize::try_from(leaf.get_height()).unwrap_or(0));
-
+                                if leaf.view_number == new_anchor_view {
+                                    consensus
+                                        .metrics
+                                        .last_synced_block_height
+                                        .set(usize::try_from(leaf.get_height()).unwrap_or(0));
+                                }
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
                                 if let Some(encoded_txns) =
