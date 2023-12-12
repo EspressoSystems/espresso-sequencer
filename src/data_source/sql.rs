@@ -184,6 +184,8 @@ pub struct Config {
     user: Option<String>,
     password: Option<String>,
     database: Option<String>,
+    schema: String,
+    reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
 }
@@ -196,6 +198,8 @@ impl Default for Config {
             user: None,
             password: None,
             database: None,
+            schema: "hotshot".into(),
+            reset: false,
             migrations: vec![],
             no_migrations: false,
         }
@@ -237,6 +241,28 @@ impl Config {
         self
     }
 
+    /// Set the name of the schema to use for queries.
+    ///
+    /// The default schema is named `hotshot` and is created via the default migrations.
+    pub fn schema(mut self, schema: impl Into<String>) -> Self {
+        self.schema = schema.into();
+        self
+    }
+
+    /// Reset the schema on connection.
+    ///
+    /// When this [`Config`] is used to [`connect`](Self::connect) a [`SqlDataSource`], if this
+    /// option is set, the relevant [`schema`](Self::schema) will first be dropped and then
+    /// recreated, yielding a completely fresh instance of the query service.
+    ///
+    /// This is a particularly useful capability for development and staging environments. Still, it
+    /// must be used with extreme caution, as using this will irrevocably delete any data pertaining
+    /// to the query service in the database.
+    pub fn reset_schema(mut self) -> Self {
+        self.reset = true;
+        self
+    }
+
     /// Add custom migrations to run when connecting to the database.
     pub fn migrations(mut self, migrations: impl IntoIterator<Item = Migration>) -> Self {
         self.migrations.extend(migrations);
@@ -269,6 +295,13 @@ impl Config {
 /// off-the-shelf DBMS adminstration tools. The one exception is migrations, which are handled
 /// transparently by the [`SqlDataSource`].
 ///
+/// ## Schema
+///
+/// All the objects created and used by [`SqlDataSource`] are grouped under a schema for easy
+/// management. By default, the schema is named `hotshot`, and is created the first time a
+/// [`SqlDataSource`] is constructed. The name of the schema can be configured by setting
+/// [`Config::schema`].
+///
 /// ## Initialization
 ///
 /// When creating a [`SqlDataSource`], the caller can use [`Config`] to specify the host, user, and
@@ -300,6 +333,15 @@ impl Config {
 ///     .password("password")
 /// # ;
 /// ```
+///
+/// ## Resetting
+///
+/// In general, resetting the database when necessary is left up to the adminstrator. However, for
+/// convenience, we do provide a [`reset_schema`](Config::reset_schema) option which can be used to
+/// wipe out existing state and create a fresh instance of the query service. This is particularly
+/// useful for development and staging environments. This function will permanently delete all
+/// tables associated with the schema used by this query service, but will not reset other schemas
+/// or database.
 ///
 /// ## Migrations
 ///
@@ -531,6 +573,19 @@ where
                 }
             }
         }));
+
+        // Create or connect to the schema for this query service.
+        if config.reset {
+            client
+                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", config.schema))
+                .await?;
+        }
+        client
+            .batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {}", config.schema))
+            .await?;
+        client
+            .batch_execute(&format!("SET search_path TO {}", config.schema))
+            .await?;
 
         // Get migrations and interleave with custom migrations, sorting by version number.
         validate_migrations(&mut config.migrations)?;
@@ -1421,6 +1476,17 @@ pub mod testing {
                 .user("postgres")
                 .password("password")
                 .port(tmp_db.port())
+                .connect()
+                .await
+                .unwrap()
+        }
+
+        async fn reset(tmp_db: &Self::Storage) -> Self {
+            Config::default()
+                .user("postgres")
+                .password("password")
+                .port(tmp_db.port())
+                .reset_schema()
                 .connect()
                 .await
                 .unwrap()

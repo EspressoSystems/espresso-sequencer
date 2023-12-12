@@ -248,6 +248,10 @@ mod impl_testable_data_source {
             Self::new(D::connect(storage).await, Default::default())
         }
 
+        async fn reset(storage: &Self::Storage) -> Self {
+            Self::new(D::reset(storage).await, Default::default())
+        }
+
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
             self.update(event).await.unwrap();
             self.commit().await.unwrap();

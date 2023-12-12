@@ -347,6 +347,46 @@ pub mod availability_tests {
             QueryError::NotFound
         ));
     }
+
+    #[async_std::test]
+    pub async fn test_reset<D: TestableDataSource>() {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let mut ds = D::connect(&storage).await;
+
+        // Mock up some consensus data.
+        let mut qc = QuorumCertificate::<MockTypes>::genesis();
+        let mut leaf = Leaf::<MockTypes>::genesis();
+        // Increment the block number, to distinguish this block from the genesis block, which
+        // already exists.
+        leaf.block_header.block_number += 1;
+        qc.data.leaf_commit = leaf.commit();
+
+        let block = BlockQueryData::new(leaf.clone(), qc.clone(), MockPayload::genesis()).unwrap();
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+
+        // Insert some data and check that we can read it back.
+        ds.insert_leaf(leaf.clone()).await.unwrap();
+        ds.insert_block(block.clone()).await.unwrap();
+        ds.commit().await.unwrap();
+
+        assert_eq!(ds.block_height().await.unwrap(), 2);
+        assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
+        assert_eq!(block, ds.get_block(1).await.unwrap());
+
+        // Reset and check that the changes are gone.
+        let ds = D::reset(&storage).await;
+        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert!(matches!(
+            ds.get_leaf(1).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+        assert!(matches!(
+            ds.get_block(1).await.unwrap_err(),
+            QueryError::NotFound
+        ));
+    }
 }
 
 /// Generic tests we can instantiate for all the status data sources.

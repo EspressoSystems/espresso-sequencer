@@ -103,6 +103,12 @@ mod impl_testable_data_source {
             }
         }
 
+        async fn reset(storage: &Self::Storage) -> Self {
+            Self {
+                metrics: storage.clone(),
+            }
+        }
+
         async fn handle_event(&mut self, _event: &Event<MockTypes>) {}
     }
 }

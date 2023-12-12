@@ -606,6 +606,10 @@ mod impl_testable_data_source {
             Self::open(storage.path()).await.unwrap()
         }
 
+        async fn reset(storage: &Self::Storage) -> Self {
+            Self::create(storage.path()).await.unwrap()
+        }
+
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
             self.update(event).await.unwrap();
             self.commit().await.unwrap();

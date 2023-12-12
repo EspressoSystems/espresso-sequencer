@@ -115,6 +115,7 @@ pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
 
     async fn create(node_id: usize) -> Self::Storage;
     async fn connect(storage: &Self::Storage) -> Self;
+    async fn reset(storage: &Self::Storage) -> Self;
     async fn handle_event(&mut self, event: &Event<MockTypes>);
 }
 
