@@ -36,7 +36,7 @@ impl TimeWindowQueryData {
     /// If the window is empty, this is the height of the block that ends the window.
     pub fn from(&self) -> Option<u64> {
         self.window
-            .last()
+            .first()
             .or(self.next.as_ref())
             .map(|header| header.height)
     }
