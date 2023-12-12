@@ -1112,6 +1112,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 .await;
             self.payload_commitment_and_metadata = None;
             return true;
+        } else {
+            warn!("Cannot propose because we don't have the VID payload commitment and metadata");
         }
         debug!("Self block was None");
         false
