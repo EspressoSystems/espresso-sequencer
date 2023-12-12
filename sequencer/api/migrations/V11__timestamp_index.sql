@@ -1,1 +1,1 @@
-CREATE INDEX header_timesteamp ON header (((data->'timestamp')::bigint));
+CREATE INDEX header_timestamp ON header (((data->'timestamp')::bigint));
