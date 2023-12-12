@@ -2,7 +2,6 @@ use hotshot_types::{
     traits::{election::ElectionConfig, signature_key::SignatureKey},
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
-use std::fs;
 use std::{
     env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -10,6 +9,7 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
+use std::{fs, path::Path};
 use surf_disco::Url;
 use thiserror::Error;
 use toml;
@@ -106,6 +106,7 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
     ///
     /// If a file path is provided, the function will first attempt to load the `NetworkConfig` from the file.
     /// If the file does not exist or cannot be read, the function will fall back to retrieving the `NetworkConfig` from the orchestrator.
+    /// In this case, if the path to the file does not exist, it will be created.
     /// The retrieved `NetworkConfig` is then saved back to the file for future use.
     ///
     /// If no file path is provided, the function will directly retrieve the `NetworkConfig` from the orchestrator.
@@ -138,11 +139,18 @@ impl<K: SignatureKey, E: ElectionConfig> NetworkConfig<K, E> {
                 Ok(config) => (config, NetworkConfigSource::File),
                 Err(e) => {
                     // fallback to orchestrator
-                    error!("{e}");
+                    error!("{e}, falling back to orchestrator");
 
                     let config = client.get_config(client.identity.clone()).await;
 
                     // save to file if we fell back
+                    // ensure the directory containing the config file exists
+                    if let Some(dir) = Path::new(&file).parent() {
+                        if let Err(e) = fs::create_dir_all(dir) {
+                            error!("Failed to recursively create path to config file: {e}")
+                        }
+                    }
+
                     if let Err(e) = config.to_file(file) {
                         error!("{e}");
                     };
