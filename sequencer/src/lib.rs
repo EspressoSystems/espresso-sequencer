@@ -45,7 +45,6 @@ use jf_primitives::merkle_tree::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::fs;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::time::Duration;
@@ -318,16 +317,7 @@ pub async fn init_node(
     match config_source {
         NetworkConfigSource::Orchestrator => {
             // If we are connecting for the first time and doing an orchestrated start, wait for
-            // other nodes to connect. But first, save the config to a file in case we later have to
-            // restart.
-            if let Some(path) = config_path {
-                // Ensure the directory containing the config file exists.
-                if let Some(dir) = Path::new(&path).parent() {
-                    fs::create_dir_all(dir).unwrap();
-                }
-                tracing::info!("writing consensus config to {path}");
-                config.to_file(path).unwrap();
-            }
+            // other nodes to connect.
             tracing::info!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(node_index)
