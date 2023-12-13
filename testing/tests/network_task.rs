@@ -35,23 +35,29 @@ async fn test_network_task() {
     // quorum membership for VID share distribution
     let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
 
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(0));
     let encoded_transactions = Vec::new();
     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit;
-    let signature =
+    let da_signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             api.private_key(),
             &encoded_transactions_hash,
         );
+    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
+    let payload_commitment = vid_disperse.commit;
+    let vid_signature =
+        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
+            api.private_key(),
+            payload_commitment.as_ref(),
+        );
+
     let da_proposal = Proposal {
         data: DAProposal {
             encoded_transactions: encoded_transactions.clone(),
             metadata: (),
             view_number: ViewNumber::new(2),
         },
-        signature,
+        signature: da_signature,
         _pd: PhantomData,
     };
     let quorum_proposal = build_quorum_proposal(&handle, priv_key, 2).await;
@@ -66,7 +72,7 @@ async fn test_network_task() {
     // https://github.com/EspressoSystems/jellyfish/issues/369
     let vid_proposal = Proposal {
         data: vid_disperse_inner.clone(),
-        signature: da_proposal.signature.clone(),
+        signature: vid_signature,
         _pd: PhantomData,
     };
 
@@ -75,6 +81,7 @@ async fn test_network_task() {
     let mut output = HashMap::new();
 
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
+    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::TransactionsSequenced(
         encoded_transactions.clone(),
         (),
@@ -90,7 +97,6 @@ async fn test_network_task() {
         quorum_proposal.clone(),
         pub_key,
     ));
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 2);
@@ -108,7 +114,7 @@ async fn test_network_task() {
     );
     output.insert(
         HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
-        1,
+        2, // 2 occurrences: 1 from `input`, 1 from the VID task
     );
     // Only one output from the input.
     // The consensus task will fail to send a second proposal, like the DA task does, due to the

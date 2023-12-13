@@ -13,13 +13,6 @@ use std::{
     hash::Hash,
 };
 
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of storage nodes for VID initiation.
-pub const NUM_STORAGE_NODES: usize = 8;
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of chunks for VID initiation.
-pub const NUM_CHUNKS: usize = 8;
-
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
