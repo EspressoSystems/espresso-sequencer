@@ -164,7 +164,6 @@ impl QueryablePayload for BlockPayload {
         //
         // TODO why isn't cargo fmt wrapping these comments?
 
-        tracing::info!("1");
         // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
             (TxTableEntry::byte_len(), None)
@@ -178,7 +177,6 @@ impl QueryablePayload for BlockPayload {
             )
         };
 
-        tracing::info!("2");
         // end
         let tx_table_range_proof_end = index_usize
             .checked_add(2)?
@@ -188,7 +186,6 @@ impl QueryablePayload for BlockPayload {
                 ..tx_table_range_proof_end,
         )?)?;
 
-        tracing::info!("3");
         // correctness proof for the tx payload range
         let tx_table_range_proof = vid
             .payload_proof(
@@ -197,7 +194,6 @@ impl QueryablePayload for BlockPayload {
             )
             .ok()?;
 
-        tracing::info!("4");
         let tx_payload_range = tx_payload_range(
             &tx_table_range_start,
             &tx_table_range_end,
@@ -210,10 +206,7 @@ impl QueryablePayload for BlockPayload {
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
             Transaction::new(
                 crate::VmId(0),
-                self.payload
-                    .get(tx_payload_range.clone())
-                    .expect("fail1")
-                    .to_vec(),
+                self.payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
                 tx_table_len: self.get_tx_table_len()?,
@@ -553,7 +546,7 @@ mod test {
         let num_test_cases = test_cases.len();
         for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
             tracing::info!(
-                "test block payload {} of {} with {} txs",
+                "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
                 tx_table_entries.len()
