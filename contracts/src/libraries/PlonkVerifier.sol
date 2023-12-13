@@ -298,8 +298,8 @@ library PlonkVerifier {
         Poly.EvalData memory evalData
     ) internal pure returns (uint256 res) {
         uint256 p = BN254.R_MOD;
-        uint256 lagrangeOneEval = evalData.lagrangeOne;
-        uint256 piEval = evalData.piEval;
+        uint256 lagrangeOneEval = BN254.ScalarField.unwrap(evalData.lagrangeOne);
+        uint256 piEval = BN254.ScalarField.unwrap(evalData.piEval);
         uint256 perm = 1;
 
         assembly {
@@ -842,7 +842,7 @@ library PlonkVerifier {
         // ============================================
 
         // first one is 1-zeta^n
-        scalars[15] = p - evalData.vanishEval;
+        scalars[15] = p - BN254.ScalarField.unwrap(evalData.vanishEval);
         bases[15] = proof.split0;
         assembly {
             // tmp = zeta^{n+2}

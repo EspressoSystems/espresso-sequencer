@@ -104,8 +104,8 @@ contract PolynomialEval_evalDataGen_Test is Test {
             abi.decode(result, (uint256, uint256, uint256));
 
         Poly.EvalData memory evalData = Poly.evalDataGen(domain, zeta, publicInput);
-        assertEq(vanishEval, evalData.vanishEval);
-        assertEq(lagrangeOne, evalData.lagrangeOne);
-        assertEq(piEval, evalData.piEval);
+        assertEq(vanishEval, BN254.ScalarField.unwrap(evalData.vanishEval));
+        assertEq(lagrangeOne, BN254.ScalarField.unwrap(evalData.lagrangeOne));
+        assertEq(piEval, BN254.ScalarField.unwrap(evalData.piEval));
     }
 }

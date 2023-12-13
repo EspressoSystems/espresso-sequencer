@@ -23,9 +23,9 @@ library PolynomialEval {
 
     /// @dev stores vanishing poly, lagrange at 1, and Public input poly
     struct EvalData {
-        uint256 vanishEval;
-        uint256 lagrangeOne;
-        uint256 piEval;
+        BN254.ScalarField vanishEval;
+        BN254.ScalarField lagrangeOne;
+        BN254.ScalarField piEval;
     }
 
     /// @dev Create a new Radix2EvalDomain with `domainSize` which should be power of 2.
@@ -103,12 +103,12 @@ library PolynomialEval {
 
     /// @dev Evaluate the lagrange polynomial at point `zeta` given the vanishing polynomial
     /// evaluation `vanish_eval`.
-    function evaluateLagrangeOne(EvalDomain memory self, uint256 zeta, uint256 vanishEval)
-        internal
-        view
-        returns (BN254.ScalarField res)
-    {
-        if (vanishEval == 0) {
+    function evaluateLagrangeOne(
+        EvalDomain memory self,
+        BN254.ScalarField zeta,
+        BN254.ScalarField vanishEval
+    ) internal view returns (BN254.ScalarField res) {
+        if (BN254.ScalarField.unwrap(vanishEval) == 0) {
             return BN254.ScalarField.wrap(0);
         }
 
@@ -254,9 +254,11 @@ library PolynomialEval {
         view
         returns (EvalData memory evalData)
     {
-        evalData.vanishEval = evaluateVanishingPoly(self, zeta);
+        evalData.vanishEval = BN254.ScalarField.wrap(evaluateVanishingPoly(self, zeta));
         evalData.lagrangeOne =
-            BN254.ScalarField.unwrap(evaluateLagrangeOne(self, zeta, evalData.vanishEval));
-        evalData.piEval = evaluatePiPoly(self, publicInput, zeta, evalData.vanishEval);
+            evaluateLagrangeOne(self, BN254.ScalarField.wrap(zeta), evalData.vanishEval);
+        evalData.piEval = BN254.ScalarField.wrap(
+            evaluatePiPoly(self, publicInput, zeta, BN254.ScalarField.unwrap(evalData.vanishEval))
+        );
     }
 }
