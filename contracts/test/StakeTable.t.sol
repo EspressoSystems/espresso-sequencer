@@ -110,9 +110,9 @@ contract StakeTable_Test is Test {
             stakeTableAmountComm: 0,
             threshold: 0
         });
-        lightClientContract = new LightClientTest(genesis,10);
+        lightClientContract = new LightClientTest(genesis, 10);
         address lightClientAddress = address(lightClientContract);
-        stakeTable = new S(address(token),lightClientAddress);
+        stakeTable = new S(address(token), lightClientAddress);
     }
 
     /// `register` function
