@@ -521,21 +521,21 @@ mod test {
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use helpers::*;
     use jf_primitives::vid::VidScheme;
-    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            vec![5, 13, 21],        // 3 non-empty txs
-            vec![0, 8, 16],         // 1 empty tx at the beginning
-            vec![5, 5, 13],         // 1 empty tx in the middle
-            vec![5, 13, 13],        // 1 empty tx at the end
-            vec![5],                // 1 nonempty tx
-            vec![0],                // 1 empty tx
-            vec![],                 // zero txs
-            vec![1000, 2000, 3000], // large payload
+            entries_from_lengths(&[5, 8, 8]),          // 3 non-empty txs
+            entries_from_lengths(&[0, 8, 8]),          // 1 empty tx at the beginning
+            entries_from_lengths(&[5, 0, 8]),          // 1 empty tx in the middle
+            entries_from_lengths(&[5, 8, 0]),          // 1 empty tx at the end
+            entries_from_lengths(&[5]),                // 1 nonempty tx
+            entries_from_lengths(&[0]),                // 1 empty tx
+            entries_from_lengths(&[]),                 // zero txs
+            entries_from_lengths(&[1000, 1000, 1000]), // large payload
         ];
 
         setup_logging();
@@ -604,7 +604,7 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
             for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index_usize).unwrap();
-                tracing::info!("tx index {}", index,);
+                // tracing::info!("tx index {}", index,);
 
                 // test `transaction_with_proof()`
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
@@ -650,18 +650,20 @@ mod test {
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, payload) in test_cases.into_iter().enumerate() {
+            let payload_byte_len = payload.len();
             let block = BlockPayload::from_bytes(payload);
             tracing::info!(
-                "test payload {} of {} with {} txs",
+                "test payload {} of {} with {} txs and byte length {}",
                 t + 1,
                 num_test_cases,
-                block.len()
+                block.len(),
+                payload_byte_len
             );
 
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
             for index in block.iter() {
-                tracing::info!("tx index {}", index,);
+                // tracing::info!("tx index {}", index,);
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
                 proof
                     .verify(
@@ -677,98 +679,144 @@ mod test {
         }
     }
 
-    fn tx_table(entries: &[usize]) -> Vec<u8> {
-        let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
-        tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
-        for entry in entries {
-            tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+    mod helpers {
+        use crate::block2::tx_table_entry::TxTableEntry;
+        use rand::RngCore;
+
+        pub fn tx_table(entries: &[usize]) -> Vec<u8> {
+            let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
+            tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
+            for entry in entries {
+                tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+            }
+            tx_table
         }
-        tx_table
-    }
 
-    fn random_tx_payloads_flat<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        random_tx_payloads_flat_truncated(entries, 0, rng)
-    }
-    fn random_tx_payloads_flat_truncated<R>(
-        entries: &[usize],
-        max_tx_payloads_byte_len: usize,
-        rng: &mut R,
-    ) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        // largest entry dictates size of tx bodies
-        let mut result = vec![
-            0;
-            std::cmp::min(
-                *entries.iter().max().unwrap_or(&0),
-                max_tx_payloads_byte_len
-            )
-        ];
-        rng.fill_bytes(&mut result);
-        result
-    }
+        pub fn entries_from_lengths(lengths: &[usize]) -> Vec<usize> {
+            lengths
+                .iter()
+                .scan(0, |sum, &len| {
+                    *sum += len;
+                    Some(*sum)
+                })
+                .collect()
+        }
 
-    fn extract_tx_payloads(entries: &[usize], tx_payloads_flat: &[u8]) -> Vec<Vec<u8>> {
-        let mut result = Vec::with_capacity(entries.len());
-        let mut start = 0;
-        for end in entries {
-            let end = std::cmp::min(*end, tx_payloads_flat.len());
-            let tx_payload = if start >= end {
-                Vec::new()
+        #[test]
+        fn tx_table_helpers() {
+            assert_eq!(vec![10, 20, 30], entries_from_lengths(&[10, 10, 10]));
+        }
+
+        pub fn random_tx_payloads_flat<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_tx_payloads_flat_truncated_inner(entries, None, rng)
+        }
+
+        #[allow(dead_code)]
+        pub fn random_tx_payloads_flat_truncated<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_tx_payloads_flat_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+        }
+
+        fn random_tx_payloads_flat_truncated_inner<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: Option<usize>,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            // largest entry dictates size of tx bodies
+            let tx_payloads_flat_byte_len = *entries.iter().max().unwrap_or(&0);
+
+            // enforce max length if present
+            let tx_payloads_flat_byte_len = if let Some(max) = max_tx_payloads_byte_len {
+                std::cmp::min(tx_payloads_flat_byte_len, max)
             } else {
-                tx_payloads_flat[start..end].to_vec()
+                tx_payloads_flat_byte_len
             };
-            start = end;
-            result.push(tx_payload);
+
+            let mut result = vec![0; tx_payloads_flat_byte_len];
+            rng.fill_bytes(&mut result);
+            result
         }
-        assert_eq!(result.len(), entries.len());
-        result
-    }
 
-    fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        random_payload_truncated(entries, 0, rng)
-    }
-    fn random_payload_truncated<R>(
-        entries: &[usize],
-        max_tx_payloads_byte_len: usize,
-        rng: &mut R,
-    ) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        let mut result = tx_table(entries);
-        result.extend(random_tx_payloads_flat_truncated(
-            entries,
-            max_tx_payloads_byte_len,
-            rng,
-        ));
-        result
-    }
+        pub fn extract_tx_payloads(entries: &[usize], tx_payloads_flat: &[u8]) -> Vec<Vec<u8>> {
+            let mut result = Vec::with_capacity(entries.len());
+            let mut start = 0;
+            for end in entries {
+                let end = std::cmp::min(*end, tx_payloads_flat.len());
+                let tx_payload = if start >= end {
+                    Vec::new()
+                } else {
+                    tx_payloads_flat[start..end].to_vec()
+                };
+                start = end;
+                result.push(tx_payload);
+            }
+            assert_eq!(result.len(), entries.len());
+            result
+        }
 
-    fn random_block_with_tx_table_len<R>(
-        tx_table_len: usize,
-        block_byte_len: usize,
-        rng: &mut R,
-    ) -> Vec<u8>
-    where
-        R: RngCore,
-    {
-        // TODO a future PR will support tx table size > block size
-        assert!(
-            tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
-            "tx table size exceeds block size"
-        );
-        let mut result = vec![0; block_byte_len];
-        rng.fill_bytes(&mut result);
-        result[..TxTableEntry::byte_len()]
-            .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
-        result
+        pub fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_payload_truncated_inner(entries, None, rng)
+        }
+        pub fn random_payload_truncated<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_payload_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+        }
+        fn random_payload_truncated_inner<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: Option<usize>,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            let mut result = tx_table(entries);
+            result.extend(random_tx_payloads_flat_truncated_inner(
+                entries,
+                max_tx_payloads_byte_len,
+                rng,
+            ));
+            result
+        }
+
+        pub fn random_block_with_tx_table_len<R>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            // TODO a future PR will support tx table size > block size
+            assert!(
+                tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
+                "tx table size exceeds block size"
+            );
+            let mut result = vec![0; block_byte_len];
+            rng.fill_bytes(&mut result);
+            result[..TxTableEntry::byte_len()]
+                .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
+            result
+        }
     }
 }
