@@ -535,13 +535,14 @@ mod test {
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            vec![5, 13, 21], // 3 non-empty txs
-            vec![0, 8, 16],  // 1 empty tx at the beginning
-            vec![5, 5, 13],  // 1 empty tx in the middle
-            vec![5, 13, 13], // 1 empty tx at the end
-            vec![5],         // 1 nonempty tx
-            vec![0],         // 1 empty tx
-            vec![],          // zero txs
+            vec![5, 13, 21],        // 3 non-empty txs
+            vec![0, 8, 16],         // 1 empty tx at the beginning
+            vec![5, 5, 13],         // 1 empty tx in the middle
+            vec![5, 13, 13],        // 1 empty tx at the end
+            vec![5],                // 1 nonempty tx
+            vec![0],                // 1 empty tx
+            vec![],                 // zero txs
+            vec![1000, 2000, 3000], // large payload
         ];
 
         setup_logging();
@@ -634,15 +635,12 @@ mod test {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
-            random_payload(&[10, 9, 20], &mut rng), // 1 negative-length tx
-            random_payload(&[10, 9, 5], &mut rng),  // 2 negative-length txs
-            {
-                // truncated tx payloads
-                let entries = [10, 20, 30]; // all positive-length txs
-                let mut tx_payloads_flat = random_tx_payloads_flat(&entries, &mut rng);
-                tx_payloads_flat.truncate(tx_payloads_flat.len() / 2);
-                [tx_table(&entries), tx_payloads_flat].concat()
-            },
+            random_payload(&[30, 10, 20], &mut rng), // 1 negative-length tx
+            random_payload(&[30, 20, 10], &mut rng), // 2 negative-length txs
+            random_payload_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
+            tx_table(&[10, 20, 30]),                 // 0-length tx payload
+            random_payload_truncated(&[30, 20, 10], 4, &mut rng), // negative-len txs, truncated tx payload
+            tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
         ];
 
         // TODO more test cases:
@@ -697,8 +695,18 @@ mod test {
     where
         R: RngCore,
     {
-        // lergest entry dictates size of tx bodies
-        let mut result = vec![0; *entries.iter().max().unwrap_or(&0)];
+        random_tx_payloads_flat_truncated(entries, 0, rng)
+    }
+    fn random_tx_payloads_flat_truncated<R>(
+        entries: &[usize],
+        num_bytes_to_trim: usize,
+        rng: &mut R,
+    ) -> Vec<u8>
+    where
+        R: RngCore,
+    {
+        // largest entry dictates size of tx bodies
+        let mut result = vec![0; *entries.iter().max().unwrap_or(&0) - num_bytes_to_trim];
         rng.fill_bytes(&mut result);
         result
     }
@@ -724,8 +732,22 @@ mod test {
     where
         R: RngCore,
     {
+        random_payload_truncated(entries, 0, rng)
+    }
+    fn random_payload_truncated<R>(
+        entries: &[usize],
+        num_bytes_to_trim: usize,
+        rng: &mut R,
+    ) -> Vec<u8>
+    where
+        R: RngCore,
+    {
         let mut result = tx_table(entries);
-        result.extend(random_tx_payloads_flat(entries, rng));
+        result.extend(random_tx_payloads_flat_truncated(
+            entries,
+            num_bytes_to_trim,
+            rng,
+        ));
         result
     }
 }
