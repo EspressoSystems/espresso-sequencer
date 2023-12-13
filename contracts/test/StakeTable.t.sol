@@ -46,27 +46,16 @@ contract StakeTable_Test is Test {
 
         bytes memory result = vm.ffi(cmds);
         (
-            uint256 blsSigX,
-            uint256 blsSigY,
-            uint256 blsVKx0,
-            uint256 blsVKx1,
-            uint256 blsVKy0,
-            uint256 blsVKy1,
+            BN254.G1Point memory blsSig,
+            BN254.G2Point memory blsVK,
             uint256 schnorrVKx,
             uint256 schnorrVKy
-        ) = abi.decode(
-            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
-        );
+        ) = abi.decode(result, (BN254.G1Point, BN254.G2Point, uint256, uint256));
 
         return (
-            BN254.G2Point(
-                BN254.BaseField.wrap(blsVKx0),
-                BN254.BaseField.wrap(blsVKx1),
-                BN254.BaseField.wrap(blsVKy0),
-                BN254.BaseField.wrap(blsVKy1)
-                ), // blsVK
+            blsVK,
             EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
-            BN254.G1Point(BN254.BaseField.wrap(blsSigX), BN254.BaseField.wrap(blsSigY)) // sig
+            blsSig
         );
     }
 

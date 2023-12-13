@@ -423,26 +423,18 @@ fn main() {
             let vk = key_pair.ver_key();
             let vk_g2_affine: G2Affine = vk.to_affine();
 
-            let pk_x_c0 = field_to_u256::<Fq>(vk_g2_affine.x.c0);
-            let pk_x_c1 = field_to_u256::<Fq>(vk_g2_affine.x.c1);
-            let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
-            let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
 
             // Sign the ethereum address with the BLS key
             let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
             let sig_affine_point = sig.sigma.into_affine();
-            let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
-            let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
 
             // TODO (Alex) Return ParsedG1Point and ParsedG2Point
             // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
-                sig_x,
-                sig_y,
-                pk_x_c0,
-                pk_x_c1,
-                pk_y_c0,
-                pk_y_c1,
+                sig_parsed,
+                vk_parsed,
                 schnorr_pk_x,
                 schnorr_pk_y,
                 sender_address,
