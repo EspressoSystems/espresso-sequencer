@@ -508,9 +508,6 @@ const COSET: [&str; 5] = [
 ];
 
 // H: G2Affine(x: Fp2, y:Fp2), x = x0 + u * x1, y = y0 + u * y1
-// TODO this comment should be removed right?
-// NOTE: extra careful with discrepancy with current version of BN254.G2Point
-// which assume Fp2 = x0 * u + x1 !
 const H: [&str; 4] = [
     "1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed", // x0
     "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2", // x1
