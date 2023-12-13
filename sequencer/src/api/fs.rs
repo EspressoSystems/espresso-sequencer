@@ -1,7 +1,7 @@
 use super::{
     data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Fs as Options,
 };
-use crate::{network, Node, SeqTypes};
+use crate::SeqTypes;
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{
@@ -17,19 +17,19 @@ pub struct Index {
     blocks_by_time: BTreeMap<u64, Vec<u64>>,
 }
 
-pub type DataSource<N> = ExtensibleDataSource<FileSystemDataSource<SeqTypes, Node<N>>, Index>;
+pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes>, Index>;
 
 #[async_trait]
-impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
+impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options) -> anyhow::Result<Self> {
         let storage_path = Path::new(&opt.storage_path);
         let data_source = {
             if opt.reset_store {
-                FileSystemDataSource::create(storage_path)?
+                FileSystemDataSource::create(storage_path).await?
             } else {
-                FileSystemDataSource::open(storage_path)?
+                FileSystemDataSource::open(storage_path).await?
             }
         };
         let mut index = Index::default();
@@ -93,12 +93,12 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
             ResourceId::Hash(h) => self.get_block(h).await?.height() as usize,
         };
 
-        let mut res = TimeWindowQueryData::new(first_block as u64);
+        let mut res = TimeWindowQueryData::default();
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
             let prev = self.get_block(first_block - 1).await?;
-            res.prev = Some(prev.block().header());
+            res.prev = Some(prev.header().clone());
         }
 
         // Add blocks to the window, starting from `first_block`, until we reach the end of the
@@ -106,8 +106,8 @@ impl<N: network::Type> SequencerDataSource<N> for DataSource<N> {
         let mut blocks = self.get_block_range(first_block..).await?;
         while let Some(block) = blocks.next().await {
             let block = block?;
-            let header = block.block().header();
-            if header.timestamp() >= end {
+            let header = block.header().clone();
+            if header.timestamp >= end {
                 res.next = Some(header);
                 break;
             }
@@ -123,7 +123,42 @@ fn index_block_by_time(
     block: &BlockQueryData<SeqTypes>,
 ) {
     blocks_by_time
-        .entry(block.block().timestamp())
+        .entry(block.header().timestamp)
         .or_default()
         .push(block.height());
+}
+
+#[cfg(test)]
+mod impl_testable_data_source {
+    use super::*;
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use tempfile::TempDir;
+
+    #[async_trait]
+    impl TestableSequencerDataSource for DataSource {
+        type Storage = TempDir;
+
+        async fn create_storage() -> Self::Storage {
+            TempDir::new().unwrap()
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            opt.query_fs(Options {
+                storage_path: storage.path().into(),
+                reset_store: true,
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod generic_tests {
+    use super::super::generic_tests;
+    use super::DataSource;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_generic_tests!(DataSource);
 }

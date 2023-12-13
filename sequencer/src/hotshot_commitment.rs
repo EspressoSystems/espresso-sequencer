@@ -4,17 +4,13 @@ use clap::Parser;
 use contract_bindings::hot_shot::{HotShot, Qc};
 use ethers::prelude::*;
 use futures::{future::try_join_all, stream::StreamExt};
-use hotshot_query_service::{
-    availability::{BlockHeaderQueryData, LeafQueryData},
-    Block, Deltas, Resolvable,
-};
-use hotshot_types::traits::node_implementation::NodeImplementation;
+use hotshot_query_service::availability::LeafQueryData;
 use sequencer_utils::{commitment_to_u256, connect_rpc, contract_send, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
 
-use crate::{network, Node, SeqTypes};
+use crate::{Header, SeqTypes};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -84,18 +80,12 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
             panic!("hotshot commitment task will exit");
         }
     };
-    sequence::<Node<network::Web>>(max, hotshot, contract).await;
+    sequence(max, hotshot, contract).await;
 }
 
-async fn sequence<I: NodeImplementation<SeqTypes>>(
-    max_blocks: u64,
-    hotshot: HotShotClient,
-    contract: HotShot<Signer>,
-) where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+async fn sequence(max_blocks: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
     loop {
-        if let Err(err) = sync_with_l1::<I>(max_blocks, &hotshot, &contract).await {
+        if let Err(err) = sync_with_l1(max_blocks, &hotshot, &contract).await {
             tracing::error!("error synchronizing with HotShot contract: {err}");
 
             // Wait a bit to avoid spam, then try again.
@@ -105,16 +95,16 @@ async fn sequence<I: NodeImplementation<SeqTypes>>(
 }
 
 #[async_trait]
-trait HotShotDataSource<I: NodeImplementation<SeqTypes>> {
+trait HotShotDataSource {
     type Error: Error + Send + Sync + 'static;
 
     async fn block_height(&self) -> Result<u64, Self::Error>;
     async fn wait_for_block_height(&self, height: u64) -> Result<(), Self::Error>;
-    async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes, I>, Self::Error>;
+    async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes>, Self::Error>;
 }
 
 #[async_trait]
-impl<I: NodeImplementation<SeqTypes>> HotShotDataSource<I> for HotShotClient {
+impl HotShotDataSource for HotShotClient {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {
@@ -123,28 +113,25 @@ impl<I: NodeImplementation<SeqTypes>> HotShotDataSource<I> for HotShotClient {
 
     async fn wait_for_block_height(&self, height: u64) -> Result<(), Self::Error> {
         let mut stream = self
-            .socket(&format!("availability/stream/block/headers/{height}"))
-            .subscribe::<BlockHeaderQueryData<SeqTypes>>()
+            .socket(&format!("availability/stream/headers/{height}"))
+            .subscribe::<Header>()
             .await?;
         stream.next().await;
         Ok(())
     }
 
-    async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes, I>, Self::Error> {
+    async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes>, Self::Error> {
         self.get(&format!("availability/leaf/{height}"))
             .send()
             .await
     }
 }
 
-async fn sync_with_l1<I: NodeImplementation<SeqTypes>>(
+async fn sync_with_l1(
     max_blocks: u64,
-    hotshot: &impl HotShotDataSource<I>,
+    hotshot: &impl HotShotDataSource,
     contract: &HotShot<Signer>,
-) -> Result<(), anyhow::Error>
-where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+) -> Result<(), anyhow::Error> {
     let contract_block_height = contract.block_height().call().await?.as_u64();
     let hotshot_block_height = loop {
         let height = hotshot.block_height().await?;
@@ -171,7 +158,7 @@ where
     tracing::info!("sending {} leaves to the contract", leaves.len());
 
     // Send the leaves to the contract.
-    let txn = build_sequence_batches_txn::<I, Signer>(contract, leaves);
+    let txn = build_sequence_batches_txn(contract, leaves);
     // If the transaction fails for any reason -- not mined, reverted, etc. -- just return the
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
@@ -183,13 +170,10 @@ where
     Ok(())
 }
 
-fn build_sequence_batches_txn<I: NodeImplementation<SeqTypes>, M: ethers::prelude::Middleware>(
+fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
     contract: &HotShot<M>,
-    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes, I>>,
-) -> ContractCall<M, ()>
-where
-    Deltas<SeqTypes, I>: Resolvable<Block<SeqTypes>>,
-{
+    leaves: impl IntoIterator<Item = LeafQueryData<SeqTypes>>,
+) -> ContractCall<M, ()> {
     let qcs = leaves
         .into_iter()
         .map(|leaf| Qc {
@@ -215,18 +199,14 @@ pub async fn connect_l1(opt: &CommitmentTaskOptions) -> Option<Arc<Signer>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Block, Leaf, Transaction};
+    use crate::Leaf;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use commit::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
-    use hotshot_types::{
-        certificate::QuorumCertificate,
-        data::{LeafType, ViewNumber},
-        traits::{block_contents::Block as _, election::SignedCertificate, state::ConsensusTime},
-    };
+    use hotshot_types::simple_certificate::QuorumCertificate;
     use sequencer_utils::test_utils::TestL1System;
     use sequencer_utils::AnvilOptions;
     use surf_disco::{Error, StatusCode};
@@ -235,11 +215,11 @@ mod test {
 
     #[derive(Clone, Debug, Default)]
     struct MockDataSource {
-        leaves: Vec<LeafQueryData<SeqTypes, Node<network::Memory>>>,
+        leaves: Vec<LeafQueryData<SeqTypes>>,
     }
 
     #[async_trait]
-    impl HotShotDataSource<Node<network::Memory>> for MockDataSource {
+    impl HotShotDataSource for MockDataSource {
         type Error = hotshot_query_service::Error;
 
         async fn block_height(&self) -> Result<u64, Self::Error> {
@@ -257,27 +237,18 @@ mod test {
             futures::future::pending().await
         }
 
-        async fn get_leaf(
-            &self,
-            height: u64,
-        ) -> Result<LeafQueryData<SeqTypes, Node<network::Memory>>, Self::Error> {
+        async fn get_leaf(&self, height: u64) -> Result<LeafQueryData<SeqTypes>, Self::Error> {
             self.leaves.get(height as usize).cloned().ok_or_else(|| {
                 Self::Error::catch_all(StatusCode::NotFound, format!("no leaf for height {height}"))
             })
         }
     }
 
-    fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes, Node<network::Memory>> {
-        let txn = Transaction::new(1.into(), vec![]);
-        let block = Block::new().add_transaction_raw(&txn).unwrap();
-
-        // Fake a leaf that sequences this block.
+    fn mock_leaf(height: u64) -> LeafQueryData<SeqTypes> {
+        let mut leaf = Leaf::genesis();
         let mut qc = QuorumCertificate::genesis();
-        let mut leaf = Leaf::new(ViewNumber::genesis(), qc.clone(), block, Default::default());
-        // Mimic the behavior of HotShot, where leaf heights are indexed starting from 1, since the
-        // 0-height genesis leaf is implicit.
-        leaf.height = height + 1;
-        qc.leaf_commitment = leaf.commit();
+        leaf.block_header.height = height;
+        qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }
 

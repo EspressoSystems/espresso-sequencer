@@ -8,7 +8,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, init_static, Block, NetworkParams, Options,
+    init_node, init_static, NetworkParams, Options,
 };
 
 #[async_std::main]
@@ -23,15 +23,13 @@ async fn main() {
     let modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
 
-    // Create genesis block.
-    let genesis = Block::genesis();
-
     let mut tasks = vec![];
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
     };
+    let config_path = opt.config_path;
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -40,11 +38,17 @@ async fn main() {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
+            if let Some(query_sql) = modules.query_sql {
+                opt = opt.query_sql(query_sql);
+            }
             if let Some(query_fs) = modules.query_fs {
                 opt = opt.query_fs(query_fs);
             }
             if let Some(submit) = modules.submit {
                 opt = opt.submit(submit);
+            }
+            if let Some(status) = modules.status {
+                opt = opt.status(status);
             }
 
             // Save the port if we are running a query API. This can be used later when starting the
@@ -54,18 +58,30 @@ async fn main() {
             } else {
                 None
             };
-            let init_handle =
-                Box::new(move |metrics| init_node(network_params, genesis, metrics).boxed());
             let SequencerNode { handle, .. } = opt
-                .serve(init_handle)
+                .serve(move |metrics| {
+                    async move {
+                        init_node(
+                            network_params,
+                            &*metrics,
+                            config_path.as_ref().map(|path| path.as_ref()),
+                        )
+                        .await
+                    }
+                    .boxed()
+                })
                 .await
                 .expect("Failed to initialize API");
             (handle, query_api_port)
         }
         None => (
-            init_node(network_params, genesis, Box::new(NoMetrics))
-                .await
-                .0,
+            init_node(
+                network_params,
+                &NoMetrics,
+                config_path.as_ref().map(|path| path.as_ref()),
+            )
+            .await
+            .0,
             None,
         ),
     };
