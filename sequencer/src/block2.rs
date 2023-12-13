@@ -4,10 +4,7 @@ use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{
-        payload_prover::{PayloadProver, Statement},
-        CommitChecker, LengthGetter,
-    },
+    vid::payload_prover::{PayloadProver, Statement},
 };
 use serde::{Deserialize, Serialize};
 use std::{ops::Range, sync::OnceLock};
@@ -266,9 +263,8 @@ impl TxInclusionProof {
     ) -> Option<Result<(), ()>>
     where
         V: PayloadProver<RangeProof>,
-        V::Common: LengthGetter + CommitChecker<V>,
     {
-        vid_common.is_consistent(vid_commit).ok()?;
+        V::is_consistent(vid_commit, vid_common).ok()?;
 
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
@@ -276,7 +272,7 @@ impl TxInclusionProof {
             &self.tx_table_range_start,
             &self.tx_table_range_end,
             &self.tx_table_len,
-            vid_common.get_payload_byte_len(),
+            V::get_payload_byte_len(vid_common),
         )?;
         match &self.tx_payload_proof {
             Some(tx_payload_proof) => {
@@ -504,8 +500,6 @@ mod boilerplate {
     /// Unfortunately, [`PayloadProver`] has a generic type param.
     /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
     /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
-    ///
-    /// Also, [`CommitChecker`] has a type param that needs to be set to the return type of this function. Don't know whether that's possible. We could solve the problem if we were willing to make an upstream change to put [`CommitChecker`] as a trait bound on [`VidScheme::Common`].
     ///
     /// TODO temporary VID constructor.
     pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {

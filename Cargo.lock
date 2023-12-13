@@ -4284,6 +4284,7 @@ dependencies = [
  "digest 0.10.7",
  "displaydoc",
  "espresso-systems-common 0.4.0",
+ "generic-array",
  "hashbrown 0.13.2",
  "itertools 0.10.5",
  "jf-relation",
