@@ -157,16 +157,16 @@ library PlonkVerifier {
         BN254.validateG1Point(proof.split4);
         BN254.validateG1Point(proof.zeta);
         BN254.validateG1Point(proof.zetaOmega);
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.wireEval0));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.wireEval1));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.wireEval2));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.wireEval3));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.wireEval4));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.sigmaEval0));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.sigmaEval1));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.sigmaEval2));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.sigmaEval3));
-        BN254.validateScalarField(BN254.ScalarField.wrap(proof.prodPermZetaOmegaEval));
+        BN254.validateScalarField(proof.wireEval0);
+        BN254.validateScalarField(proof.wireEval1);
+        BN254.validateScalarField(proof.wireEval2);
+        BN254.validateScalarField(proof.wireEval3);
+        BN254.validateScalarField(proof.wireEval4);
+        BN254.validateScalarField(proof.sigmaEval0);
+        BN254.validateScalarField(proof.sigmaEval1);
+        BN254.validateScalarField(proof.sigmaEval2);
+        BN254.validateScalarField(proof.sigmaEval3);
+        BN254.validateScalarField(proof.prodPermZetaOmegaEval);
     }
 
     function _preparePcsInfo(
@@ -745,10 +745,10 @@ library PlonkVerifier {
         // q_lc
         // ============
         // q_1...q_4
-        scalars[2] = proof.wireEval0;
-        scalars[3] = proof.wireEval1;
-        scalars[4] = proof.wireEval2;
-        scalars[5] = proof.wireEval3;
+        scalars[2] = BN254.ScalarField.unwrap(proof.wireEval0);
+        scalars[3] = BN254.ScalarField.unwrap(proof.wireEval1);
+        scalars[4] = BN254.ScalarField.unwrap(proof.wireEval2);
+        scalars[5] = BN254.ScalarField.unwrap(proof.wireEval3);
         bases[2] = verifyingKey.q1;
         bases[3] = verifyingKey.q2;
         bases[4] = verifyingKey.q3;
@@ -818,7 +818,7 @@ library PlonkVerifier {
         // q_o and q_c
         // ============
         // q_o
-        scalars[12] = p - proof.wireEval4;
+        scalars[12] = p - BN254.ScalarField.unwrap(proof.wireEval4);
         bases[12] = verifyingKey.qO;
         // q_c
         scalars[13] = 1;

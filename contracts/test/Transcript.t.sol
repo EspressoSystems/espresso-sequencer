@@ -57,7 +57,7 @@ contract Transcript_appendFieldElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendFieldElement(fieldElement);
+        transcript.appendFieldElement(BN254.ScalarField.wrap(fieldElement));
         assertEq(updated.transcript, transcript.transcript);
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);

@@ -33,19 +33,19 @@ interface IPlonkVerifier {
         // i.e., batch_proof.shifted_opening_proof
         BN254.G1Point zetaOmega; // 0x180
         // wire poly eval at `zeta`
-        uint256 wireEval0; // 0x1A0
-        uint256 wireEval1; // 0x1C0
-        uint256 wireEval2; // 0x1E0
-        uint256 wireEval3; // 0x200
-        uint256 wireEval4; // 0x220
+        BN254.ScalarField wireEval0; // 0x1A0
+        BN254.ScalarField wireEval1; // 0x1C0
+        BN254.ScalarField wireEval2; // 0x1E0
+        BN254.ScalarField wireEval3; // 0x200
+        BN254.ScalarField wireEval4; // 0x220
         // extended permutation (sigma) poly eval at `zeta`
         // last (sigmaEval4) is saved by Maller Optimization
-        uint256 sigmaEval0; // 0x240
-        uint256 sigmaEval1; // 0x260
-        uint256 sigmaEval2; // 0x280
-        uint256 sigmaEval3; // 0x2A0
+        BN254.ScalarField sigmaEval0; // 0x240
+        BN254.ScalarField sigmaEval1; // 0x260
+        BN254.ScalarField sigmaEval2; // 0x280
+        BN254.ScalarField sigmaEval3; // 0x2A0
         // product permutation poly eval at `zeta * \omega`
-        uint256 prodPermZetaOmegaEval; // 0x2C0
+        BN254.ScalarField prodPermZetaOmegaEval; // 0x2C0
     }
 
     // The verifying key for Plonk proofs.
