@@ -109,6 +109,8 @@ async fn test_with_failures_half_f() {
         node_changes: vec![(5, dead_nodes)],
     };
     metadata.overall_safety_properties.num_failed_views = 6;
+    // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+    metadata.overall_safety_properties.num_successful_views = 22;
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()

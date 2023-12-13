@@ -1016,10 +1016,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
         if self.quorum_membership.get_leader(view) != self.public_key {
-            error!(
-                "Somehow we formed a QC but are not the leader for the next view {:?}",
-                view
-            );
+            // This is expected for view 1, so skipping the logging.
+            if view != TYPES::Time::new(1) {
+                error!(
+                    "Somehow we formed a QC but are not the leader for the next view {:?}",
+                    view
+                );
+            }
             return false;
         }
 
