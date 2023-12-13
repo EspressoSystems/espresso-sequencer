@@ -671,7 +671,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let phase = self.phase.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        debug!("Vote sending timed out in ViewSyncCertificateRecv");
+                        info!("Vote sending timed out in ViewSyncCertificateRecv");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -742,7 +742,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let phase = self.phase.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        debug!("Vote sending timed out in ViewSyncCertificateRecv");
+                        info!("Vote sending timed out in ViewSyncCertificateRecv");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -821,7 +821,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let stream = self.event_stream.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        debug!("Vote sending timed out in ViewSyncTrigger");
+                        info!("Vote sending timed out in ViewSyncTrigger");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -910,7 +910,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         let stream = self.event_stream.clone();
                         async move {
                             async_sleep(self.view_sync_timeout).await;
-                            debug!("Vote sending timed out in ViewSyncTimeout");
+                            info!("Vote sending timed out in ViewSyncTimeout");
                             stream
                                 .publish(HotShotEvent::ViewSyncTimeout(
                                     TYPES::Time::new(*self.next_view),
