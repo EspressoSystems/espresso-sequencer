@@ -375,6 +375,8 @@ pub mod availability_tests {
         assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
         assert_eq!(block, ds.get_block(1).await.unwrap());
 
+        drop(ds);
+
         // Reset and check that the changes are gone.
         let ds = D::reset(&storage).await;
         assert_eq!(ds.block_height().await.unwrap(), 1);
