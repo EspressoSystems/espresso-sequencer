@@ -342,7 +342,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             );
             // cancel the old timeout task
             if let Some(timeout_task) = self.timeout_task.take() {
+                #[cfg(async_executor_impl = "async-std")]
                 timeout_task.cancel().await;
+                #[cfg(async_executor_impl = "tokio")]
+                timeout_task.abort();
             }
 
             // Remove old certs, we won't vote on past views

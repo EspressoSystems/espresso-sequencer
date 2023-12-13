@@ -4,7 +4,6 @@ use crate::{
     vote::{spawn_vote_accumulator, AccumulatorInfo},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_std::task::JoinHandle;
 use either::Either;
 use futures::FutureExt;
 use hotshot_task::{
@@ -22,6 +21,8 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
 
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use hotshot_task::global_registry::GlobalRegistry;
 use hotshot_types::{
     message::GeneralConsensusMessage,
@@ -35,7 +36,10 @@ use hotshot_types::{
 };
 use snafu::Snafu;
 use std::{collections::HashMap, sync::Arc, time::Duration};
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument};
+
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
 pub enum ViewSyncPhase {
@@ -672,7 +676,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {
+                    #[cfg(async_executor_impl = "async-std")]
                     timeout_task.cancel().await;
+                    #[cfg(async_executor_impl = "tokio")]
+                    timeout_task.abort();
                 }
 
                 self.timeout_task = Some(async_spawn({
@@ -747,7 +754,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 if let Some(timeout_task) = self.timeout_task.take() {
+                    #[cfg(async_executor_impl = "async-std")]
                     timeout_task.cancel().await;
+                    #[cfg(async_executor_impl = "tokio")]
+                    timeout_task.abort();
                 }
                 self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
@@ -801,7 +811,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {
+                    #[cfg(async_executor_impl = "async-std")]
                     timeout_task.cancel().await;
+                    #[cfg(async_executor_impl = "tokio")]
+                    timeout_task.abort();
                 }
 
                 self.event_stream
@@ -858,7 +871,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     && last_seen_certificate == self.phase
                 {
                     if let Some(timeout_task) = self.timeout_task.take() {
+                        #[cfg(async_executor_impl = "async-std")]
                         timeout_task.cancel().await;
+                        #[cfg(async_executor_impl = "tokio")]
+                        timeout_task.abort();
                     }
                     self.relay += 1;
                     match self.phase {
