@@ -108,11 +108,11 @@ contract StakeTable_Test is Test {
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
             blockHeight: 0,
-            blockCommRoot: 0,
-            feeLedgerComm: 0,
-            stakeTableBlsKeyComm: 0,
-            stakeTableSchnorrKeyComm: 0,
-            stakeTableAmountComm: 0,
+            blockCommRoot: BN254.ScalarField.wrap(0),
+            feeLedgerComm: BN254.ScalarField.wrap(0),
+            stakeTableBlsKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableAmountComm: BN254.ScalarField.wrap(0),
             threshold: 0
         });
         lightClientContract = new LightClientTest(genesis,10);
