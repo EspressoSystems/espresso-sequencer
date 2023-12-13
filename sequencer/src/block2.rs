@@ -636,6 +636,8 @@ mod test {
             tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
             random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
             random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
+            random_block_with_tx_table_len(5, 100, &mut rng), // random payload except tx table len
+            random_block_with_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
         ];
 
         // TODO more test cases:
@@ -747,6 +749,26 @@ mod test {
             max_tx_payloads_byte_len,
             rng,
         ));
+        result
+    }
+
+    fn random_block_with_tx_table_len<R>(
+        tx_table_len: usize,
+        block_byte_len: usize,
+        rng: &mut R,
+    ) -> Vec<u8>
+    where
+        R: RngCore,
+    {
+        // TODO a future PR will support tx table size > block size
+        assert!(
+            tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
+            "tx table size exceeds block size"
+        );
+        let mut result = vec![0; block_byte_len];
+        rng.fill_bytes(&mut result);
+        result[..TxTableEntry::byte_len()]
+            .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
         result
     }
 }
