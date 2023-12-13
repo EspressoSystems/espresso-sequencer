@@ -3838,7 +3838,6 @@ dependencies = [
  "ark-poly",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
- "async-compatibility-layer",
  "async-std",
  "clap",
  "contract-bindings",
@@ -3847,7 +3846,6 @@ dependencies = [
  "digest 0.10.7",
  "ethers",
  "ethers-providers",
- "ethers-solc",
  "hex",
  "itertools 0.12.0",
  "jf-plonk",
@@ -5750,11 +5748,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nll"
-version = "1.0.0"
-source = "git+https://github.com/EspressoSystems/nll#8e7926789f8eb464cbbbb1858ba4292a6ec6d900"
-
-[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7474,7 +7467,6 @@ dependencies = [
  "jf-primitives",
  "jf-utils",
  "lazy_static",
- "nll",
  "portpicker",
  "rand 0.8.5",
  "sequencer-utils",
