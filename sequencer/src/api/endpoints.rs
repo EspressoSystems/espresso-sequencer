@@ -23,22 +23,22 @@ pub struct NamespaceProofQueryData {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeWindowQueryData {
-    pub from: u64,
     pub window: Vec<Header>,
     pub prev: Option<Header>,
     pub next: Option<Header>,
 }
 
 impl TimeWindowQueryData {
-    pub fn new(from: u64) -> Self {
-        Self {
-            from,
-            window: vec![],
-            prev: None,
-            next: None,
-        }
+    /// The block height of the block that starts the window.
+    ///
+    /// If the window is empty, this is the height of the block that ends the window.
+    pub fn from(&self) -> Option<u64> {
+        self.window
+            .first()
+            .or(self.next.as_ref())
+            .map(|header| header.height)
     }
 }
 
@@ -68,16 +68,6 @@ where
                 proof,
                 header: block.header().clone(),
             })
-        }
-        .boxed()
-    })?
-    .get("getheader", |req, state| {
-        async move {
-            let height: usize = req.integer_param("height")?;
-            let block = state.get_block(height).await.context(QueryBlockSnafu {
-                resource: height.to_string(),
-            })?;
-            Ok(block.header().clone())
         }
         .boxed()
     })?

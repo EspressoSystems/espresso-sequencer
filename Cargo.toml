@@ -5,6 +5,13 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "0034ca55e1ebb9fb9cae4dfc3941cd5ebf1637ab" }
+
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", features = [
   "test-apis",
   "test-srs",
@@ -17,3 +24,6 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features =
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish" }
+
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.3-patch.2" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.3" }

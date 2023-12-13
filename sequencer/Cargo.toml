@@ -9,7 +9,9 @@ edition = "2021"
 testing = ["hotshot-testing"]
 
 [dev-dependencies]
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main", features = ["testing"] }
+hotshot-testing = { workspace = true }
 portpicker = "0.1.1"
 rand = "0.8.5"
 serde_json = "1.0"
@@ -34,15 +36,20 @@ derive_more = "0.99.17"
 ethers = { version = "2.0", features = ["ws"] }
 ethers-contract-derive = "2.0.10"
 futures = "0.3"
+include_dir = "0.7"
 lazy_static = "1.4"
+serde_json = "1.0"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 time = "0.3"
+tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
+	"with-serde_json-1",
+] }
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-signature-key = { workspace = true }
+hotshot-types = { workspace = true }
+hotshot-web-server = { workspace = true }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
@@ -53,8 +60,8 @@ rand = "0.8.5"
 sequencer-utils = { path = "../utils" }
 serde = { version = "1.0.192", features = ["derive"] }
 snafu = "0.7.4"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.3" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.3" }
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
 toml = "0.8"
 tracing = "0.1"
 typenum = { version = "1.15.0", default-features = false, features = [
@@ -63,4 +70,4 @@ typenum = { version = "1.15.0", default-features = false, features = [
 url = "2.3"
 
 # Dependencies for feature `testing`
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main", optional = true }
+hotshot-testing = { workspace = true, optional = true }

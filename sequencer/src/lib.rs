@@ -24,6 +24,10 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
+use hotshot_orchestrator::{
+    client::{OrchestratorClient, ValidatorArgs},
+    config::{NetworkConfig, NetworkConfigSource},
+};
 use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -33,7 +37,7 @@ use hotshot_types::{
         network::CommunicationChannel,
         node_implementation::{ChannelMaps, NodeType},
     },
-    HotShotConfig,
+    HotShotConfig, ValidatorConfig,
 };
 
 use jf_primitives::merkle_tree::{
@@ -42,6 +46,7 @@ use jf_primitives::merkle_tree::{
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::net::Ipv4Addr;
+use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 use std::{marker::PhantomData, net::IpAddr};
@@ -58,8 +63,6 @@ pub use options::Options;
 pub use state::State;
 pub use transaction::Transaction;
 pub use vm::{Vm, VmId, VmTransaction};
-
-use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
 
 // Supports 1K transactions
 pub const MAX_NMT_DEPTH: usize = 10;
@@ -262,33 +265,33 @@ pub struct NetworkParams {
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
+    config_path: Option<&Path>,
 ) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
     // Orchestrator client
+    let config_path = config_path.map(|path| path.display().to_string());
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         public_ip: None,
+        network_config_file: config_path.clone(),
     };
-    let orchestrator_client = OrchestratorClient::connect_to_orchestrator(validator_args).await;
-
     // This "public" IP only applies to libp2p network configurations, so we can supply any value here
     let public_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let orchestrator_client = OrchestratorClient::new(validator_args, public_ip.to_string()).await;
 
-    let node_index: u16 = orchestrator_client
-        .identify_with_orchestrator(public_ip.to_string())
-        .await;
-
-    let config = orchestrator_client
-        .get_config_from_orchestrator::<SeqTypes>(node_index)
-        .await;
+    let (mut config, config_source) =
+        NetworkConfig::from_file_or_orchestrator(&orchestrator_client, config_path.clone()).await;
+    let node_index = config.node_index;
 
     // Generate public keys and this node's private keys.
     //
     // These are deterministic keys suitable *only* for testing and demo purposes.
+    config.config.my_own_validator_config =
+        ValidatorConfig::<PubKey>::generated_from_seed_indexed(config.seed, node_index, 1);
+    let priv_key = config.config.my_own_validator_config.private_key.clone();
     let num_nodes = config.config.total_nodes.get();
-    let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..num_nodes)
-        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64))
-        .unzip();
-    let priv_key = priv_keys[node_index as usize].clone();
+    let pub_keys = (0..num_nodes)
+        .map(|i| PubKey::generated_from_seed_indexed(config.seed, i as u64).0)
+        .collect::<Vec<_>>();
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
@@ -311,10 +314,21 @@ pub async fn init_node(
         _pd: Default::default(),
     };
 
-    // Wait for other nodes to connect.
-    orchestrator_client
-        .wait_for_all_nodes_ready(node_index.into())
-        .await;
+    match config_source {
+        NetworkConfigSource::Orchestrator => {
+            // If we are connecting for the first time and doing an orchestrated start, wait for
+            // other nodes to connect.
+            tracing::info!("waiting for orchestrated start");
+            orchestrator_client
+                .wait_for_all_nodes_ready(node_index)
+                .await;
+        }
+        NetworkConfigSource::File => {
+            // If we are loading from a file, the network is already running and we are doing a
+            // restart.
+            tracing::info!("rejoining existing network");
+        }
+    }
 
     // The web server network doesn't have any metrics. By creating and dropping a
     // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
@@ -333,7 +347,7 @@ pub async fn init_node(
             metrics,
         )
         .await,
-        node_index.into(),
+        node_index,
     )
 }
 
@@ -355,6 +369,12 @@ pub mod testing {
 
     pub async fn init_hotshot_handles() -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>>
     {
+        init_hotshot_handles_with_metrics(&NoMetrics).await
+    }
+
+    pub async fn init_hotshot_handles_with_metrics(
+        metrics: &dyn Metrics,
+    ) -> Vec<SystemContextHandle<SeqTypes, Node<network::Memory>>> {
         setup_logging();
         setup_backtrace();
 
@@ -396,6 +416,8 @@ pub mod testing {
 
         // Create HotShot instances.
         for node_id in 0..num_nodes {
+            let metrics = if node_id == 0 { metrics } else { &NoMetrics };
+
             let mut config = config.clone();
             config.my_own_validator_config = ValidatorConfig {
                 public_key: pub_keys[node_id],
@@ -406,7 +428,7 @@ pub mod testing {
 
             let network = Arc::new(MemoryNetwork::new(
                 pub_keys[node_id],
-                NetworkingMetricsValue::new(&NoMetrics),
+                NetworkingMetricsValue::new(metrics),
                 master_map.clone(),
                 None,
             ));
@@ -423,7 +445,7 @@ pub mod testing {
                 priv_keys[node_id].clone(),
                 networks,
                 config,
-                &NoMetrics,
+                metrics,
             )
             .await;
 

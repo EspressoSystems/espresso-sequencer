@@ -113,7 +113,7 @@ impl HotShotDataSource for HotShotClient {
 
     async fn wait_for_block_height(&self, height: u64) -> Result<(), Self::Error> {
         let mut stream = self
-            .socket(&format!("availability/stream/block/headers/{height}"))
+            .socket(&format!("availability/stream/headers/{height}"))
             .subscribe::<Header>()
             .await?;
         stream.next().await;

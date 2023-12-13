@@ -93,7 +93,7 @@ impl SequencerDataSource for DataSource {
             ResourceId::Hash(h) => self.get_block(h).await?.height() as usize,
         };
 
-        let mut res = TimeWindowQueryData::new(first_block as u64);
+        let mut res = TimeWindowQueryData::default();
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
@@ -126,4 +126,39 @@ fn index_block_by_time(
         .entry(block.header().timestamp)
         .or_default()
         .push(block.height());
+}
+
+#[cfg(test)]
+mod impl_testable_data_source {
+    use super::*;
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use tempfile::TempDir;
+
+    #[async_trait]
+    impl TestableSequencerDataSource for DataSource {
+        type Storage = TempDir;
+
+        async fn create_storage() -> Self::Storage {
+            TempDir::new().unwrap()
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            opt.query_fs(Options {
+                storage_path: storage.path().into(),
+                reset_store: true,
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod generic_tests {
+    use super::super::generic_tests;
+    use super::DataSource;
+
+    // For some reason this is the only way to import the macro defined in another module of this
+    // crate.
+    use crate::*;
+
+    instantiate_generic_tests!(DataSource);
 }

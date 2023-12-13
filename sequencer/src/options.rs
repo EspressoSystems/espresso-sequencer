@@ -2,6 +2,7 @@ use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use std::collections::HashSet;
 use std::iter::once;
+use std::path::PathBuf;
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -57,6 +58,12 @@ pub struct Options {
     )]
     pub consensus_server_url: Url,
 
+    /// Path to save and load consensus configuration.
+    ///
+    /// Allows for rejoining the network on a complete state loss.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CONFIG_PATH")]
+    pub config_path: Option<PathBuf>,
+
     /// Add optional modules to the service.
     ///
     /// Modules are added by specifying the name of the module followed by it's arguments, as in
@@ -105,11 +112,15 @@ impl ModuleArgs {
             )?;
             match module {
                 SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
-                SequencerModule::Query(m) => curr = m.add(&mut modules.query_fs, &mut provided)?,
+                SequencerModule::Query(m) => curr = m.add(&mut modules.query_sql, &mut provided)?,
+                SequencerModule::QuerySql(m) => {
+                    curr = m.add(&mut modules.query_sql, &mut provided)?
+                }
                 SequencerModule::QueryFs(m) => {
                     curr = m.add(&mut modules.query_fs, &mut provided)?
                 }
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
+                SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::CommitmentTask(m) => {
                     curr = m.add(&mut modules.commitment_task, &mut provided)?
                 }
@@ -138,8 +149,10 @@ macro_rules! module {
 }
 
 module!("http", api::options::Http);
+module!("query-sql", api::options::Sql, requires: "http");
 module!("query-fs", api::options::Fs, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
+module!("status", api::options::Status, requires: "http");
 module!("commitment-task", CommitmentTaskOptions);
 
 #[derive(Clone, Debug, Args)]
@@ -188,23 +201,33 @@ enum SequencerModule {
     /// * query: add query service endpoints
     /// * submit: add transaction submission endpoints
     Http(Module<api::options::Http>),
-    /// Alias for query-fs.
-    Query(Module<api::options::Fs>),
-    /// Run the query service API module, backed by the file system.
+    /// Alias for query-sql.
+    Query(Module<api::options::Sql>),
+    /// Run the query service API module, backed by a Postgres database.
     ///
     /// This modules requires the http module to be started.
+    QuerySql(Module<api::options::Sql>),
+    /// Run the query service API module, backed by the file system.
+    ///
+    /// This module requires the http module to be started.
     QueryFs(Module<api::options::Fs>),
     /// Run the transaction submission API module.
     ///
-    /// This modules requires the http module to be started.
+    /// This module requires the http module to be started.
     Submit(Module<api::options::Submit>),
+    /// Run the status API module.
+    ///
+    /// This module requires the http module to be started.
+    Status(Module<api::options::Status>),
     CommitmentTask(Module<CommitmentTaskOptions>),
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Modules {
     pub http: Option<api::options::Http>,
+    pub query_sql: Option<api::options::Sql>,
     pub query_fs: Option<api::options::Fs>,
     pub submit: Option<api::options::Submit>,
+    pub status: Option<api::options::Status>,
     pub commitment_task: Option<CommitmentTaskOptions>,
 }
