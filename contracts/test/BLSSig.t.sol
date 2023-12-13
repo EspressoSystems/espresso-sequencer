@@ -30,7 +30,6 @@ contract BLSSig_Test is Test {
     }
 
     function testFuzz_BLS_hashes_computation(bytes memory input) external {
-
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-bls-hashes";
