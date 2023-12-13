@@ -631,7 +631,7 @@ mod test {
     }
 
     #[test]
-    fn malformed_payloads() {
+    fn negative_len_txs_and_truncated_tx_payload() {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
@@ -639,13 +639,13 @@ mod test {
             random_payload(&[30, 20, 10], &mut rng), // 2 negative-length txs
             random_payload_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
             tx_table(&[10, 20, 30]),                 // 0-length tx payload
-            random_payload_truncated(&[30, 20, 10], 4, &mut rng), // negative-len txs, truncated tx payload
+            random_payload_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
             tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
+            random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
         ];
 
         // TODO more test cases:
-        // - overflow u32
-        // - txs off the end of the payload
         // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
         // - payload <4 bytes
 
@@ -699,14 +699,20 @@ mod test {
     }
     fn random_tx_payloads_flat_truncated<R>(
         entries: &[usize],
-        num_bytes_to_trim: usize,
+        max_tx_payloads_byte_len: usize,
         rng: &mut R,
     ) -> Vec<u8>
     where
         R: RngCore,
     {
         // largest entry dictates size of tx bodies
-        let mut result = vec![0; *entries.iter().max().unwrap_or(&0) - num_bytes_to_trim];
+        let mut result = vec![
+            0;
+            std::cmp::min(
+                *entries.iter().max().unwrap_or(&0),
+                max_tx_payloads_byte_len
+            )
+        ];
         rng.fill_bytes(&mut result);
         result
     }
@@ -736,7 +742,7 @@ mod test {
     }
     fn random_payload_truncated<R>(
         entries: &[usize],
-        num_bytes_to_trim: usize,
+        max_tx_payloads_byte_len: usize,
         rng: &mut R,
     ) -> Vec<u8>
     where
@@ -745,7 +751,7 @@ mod test {
         let mut result = tx_table(entries);
         result.extend(random_tx_payloads_flat_truncated(
             entries,
-            num_bytes_to_trim,
+            max_tx_payloads_byte_len,
             rng,
         ));
         result
