@@ -90,16 +90,6 @@ pub fn vid_commitment(
     vid.commit_only(encoded_transactions).unwrap()
 }
 
-/// Computes the (empty) genesis VID commitment
-/// The number of storage nodes does not do anything, unless in the future we add fake transactions
-/// to the genesis payload.
-///
-/// In that case, the payloads may mismatch and cause problems.
-#[must_use]
-pub fn genesis_vid_commitment() -> <VidScheme as VidSchemeTrait>::Commit {
-    vid_commitment(&vec![], 8)
-}
-
 /// Header of a block, which commits to a [`BlockPayload`].
 pub trait BlockHeader:
     Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned + Committable

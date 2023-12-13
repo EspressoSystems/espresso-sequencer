@@ -111,16 +111,13 @@ mod test {
     use super::*;
     use commit::Committable;
     use hotshot_testing::{
-        block_types::{TestBlockHeader, TestBlockPayload},
+        block_types::{genesis_vid_commitment, TestBlockHeader, TestBlockPayload},
         node_types::TestTypes,
     };
     use hotshot_types::{
         data::{fake_commitment, genesis_proposer_id, Leaf},
         simple_certificate::QuorumCertificate,
-        traits::{
-            block_contents::genesis_vid_commitment, node_implementation::NodeType,
-            state::ConsensusTime,
-        },
+        traits::{node_implementation::NodeType, state::ConsensusTime},
     };
     use std::marker::PhantomData;
     use tracing::instrument;
