@@ -61,6 +61,7 @@ async fn test_with_failures_one() {
         node_changes: vec![(5, dead_nodes)],
     };
     metadata.overall_safety_properties.num_failed_views = 2;
+    metadata.overall_safety_properties.num_successful_views = 25;
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
