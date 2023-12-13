@@ -94,19 +94,25 @@ pub fn handle_event<TYPES: NodeType>(
     std::option::Option<HotShotTaskCompleted>,
     TestHarnessState<TYPES>,
 ) {
-    assert!(
-        state.expected_output.contains_key(&event),
-        "Got an unexpected event: {event:?}",
-    );
-    let num_expected = state.expected_output.get_mut(&event).unwrap();
-    if *num_expected == 1 {
-        state.expected_output.remove(&event);
-    } else {
-        *num_expected -= 1;
+    // Skip the output check if we are not expecting any output, to avoid the failure in case the
+    // shutdown signal arrives later than the new event.
+    if !state.expected_output.is_empty() {
+        assert!(
+            state.expected_output.contains_key(&event),
+            "Got an unexpected event: {event:?}",
+        );
+
+        let num_expected = state.expected_output.get_mut(&event).unwrap();
+        if *num_expected == 1 {
+            state.expected_output.remove(&event);
+        } else {
+            *num_expected -= 1;
+        }
+
+        if state.expected_output.is_empty() {
+            return (Some(HotShotTaskCompleted::ShutDown), state);
+        }
     }
 
-    if state.expected_output.is_empty() {
-        return (Some(HotShotTaskCompleted::ShutDown), state);
-    }
     (None, state)
 }
