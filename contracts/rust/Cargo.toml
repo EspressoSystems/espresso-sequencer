@@ -14,6 +14,9 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-std = { version = "0.4", default-features = false }
+async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
+    "logging-utils",
+] }
 async-std = "1.12.0"
 clap = { version = "^4.4", features = ["derive"] }
 contract-bindings = { path = "../../contract-bindings" }
@@ -22,6 +25,7 @@ diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
+ethers-solc = "2.0.4"
 hex = "0.4.3"
 itertools = "0.12.0"
 jf-plonk = { workspace = true }
