@@ -218,7 +218,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 

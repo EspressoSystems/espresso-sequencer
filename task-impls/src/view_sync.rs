@@ -34,7 +34,7 @@ use hotshot_types::{
 };
 use snafu::Snafu;
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 #[derive(PartialEq, PartialOrd, Clone, Debug, Eq, Hash)]
 /// Phases of view sync
 pub enum ViewSyncPhase {
@@ -620,7 +620,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Ignore certificate if it is for an older round
                 if certificate.get_view_number() < self.next_view {
-                    error!("We're already in a higher round");
+                    warn!("We're already in a higher round");
 
                     return (None, self);
                 }
@@ -671,7 +671,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let phase = self.phase.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        error!("Vote sending timed out in ViewSyncCertificateRecv");
+                        info!("Vote sending timed out in ViewSyncCertificateRecv");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -688,7 +688,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Ignore certificate if it is for an older round
                 if certificate.get_view_number() < self.next_view {
-                    error!("We're already in a higher round");
+                    warn!("We're already in a higher round");
 
                     return (None, self);
                 }
@@ -742,7 +742,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let phase = self.phase.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        error!("Vote sending timed out in ViewSyncCertificateRecv");
+                        info!("Vote sending timed out in ViewSyncCertificateRecv");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -759,7 +759,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 // Ignore certificate if it is for an older round
                 if certificate.get_view_number() < self.next_view {
-                    error!("We're already in a higher round");
+                    warn!("We're already in a higher round");
 
                     return (None, self);
                 }
@@ -821,7 +821,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let stream = self.event_stream.clone();
                     async move {
                         async_sleep(self.view_sync_timeout).await;
-                        error!("Vote sending timed out in ViewSyncTrigger");
+                        info!("Vote sending timed out in ViewSyncTrigger");
                         stream
                             .publish(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*self.next_view),
@@ -910,7 +910,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         let stream = self.event_stream.clone();
                         async move {
                             async_sleep(self.view_sync_timeout).await;
-                            error!("Vote sending timed out in ViewSyncTimeout");
+                            info!("Vote sending timed out in ViewSyncTimeout");
                             stream
                                 .publish(HotShotEvent::ViewSyncTimeout(
                                     TYPES::Time::new(*self.next_view),

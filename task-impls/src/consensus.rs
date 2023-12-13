@@ -871,7 +871,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
-                        warn!("Wasn't able to publish proposal");
+                        debug!(
+                            "Wasn't able to publish proposal when QC was formed, still may publish"
+                        );
                     }
                 }
             }
@@ -906,7 +908,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                info!("VID disperse data is not more than one view older.");
+                debug!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // Check whether the sender is the right leader for this view
@@ -1122,8 +1124,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.payload_commitment_and_metadata = None;
             return true;
         }
-        warn!("Cannot propose because we don't have the VID payload commitment and metadata");
-        debug!("Self block was None");
+        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
         false
     }
 }

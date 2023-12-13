@@ -27,7 +27,7 @@ use hotshot_task::event_stream::EventStream;
 use snafu::Snafu;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 
 #[derive(Snafu, Debug)]
 /// Error type for consensus tasks
@@ -133,7 +133,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 
