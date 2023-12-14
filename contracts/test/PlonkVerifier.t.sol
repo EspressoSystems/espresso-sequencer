@@ -588,21 +588,18 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         uint256[] memory publicInput,
         bytes memory extraTranscriptInitMsg
     ) external {
-        BN254.ScalarField[] memory publicInputSanitizedScalarField =
-            sanitizeScalarFields(publicInput);
-        uint256[] memory publicInputSanitized =
-            utils.convertScalarFieldArraytoU256Array(publicInputSanitizedScalarField);
+        BN254.ScalarField[] memory publicInputScalarField = sanitizeScalarFields(publicInput);
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
 
         V.PcsInfo memory info =
-            V._preparePcsInfo(vk, publicInputSanitizedScalarField, proof, extraTranscriptInitMsg);
+            V._preparePcsInfo(vk, publicInputScalarField, proof, extraTranscriptInitMsg);
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-pcs-info";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInputSanitized));
+        cmds[3] = vm.toString(abi.encode(publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
         cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
 
@@ -651,7 +648,7 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
         cmds[0] = "diff-test";
         cmds[1] = "plonk-compute-chal";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInputScalarField));
+        cmds[3] = vm.toString(abi.encode(publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
         cmds[5] = vm.toString(abi.encode(extraTranscriptInitMsg));
 
@@ -680,9 +677,7 @@ contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
         uint256[30] memory scalars
     ) external {
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        BN254.ScalarField linPolyConstantSanitizedScalarField = sanitizeScalarField(linPolyConstant);
-        uint256 linPolyConstantSanitized =
-            BN254.ScalarField.unwrap(linPolyConstantSanitizedScalarField);
+        BN254.ScalarField linPolyConstantScalarField = sanitizeScalarField(linPolyConstant);
         BN254.ScalarField[] memory commScalars = sanitizeScalarFields(copyCommScalars(scalars));
         uint256[] memory commScalarsU256 = utils.convertScalarFieldArraytoU256Array(commScalars);
 
@@ -690,13 +685,13 @@ contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-eval";
         cmds[2] = vm.toString(abi.encode(proof));
-        cmds[3] = vm.toString(bytes32(linPolyConstantSanitized));
+        cmds[3] = vm.toString(bytes32(BN254.ScalarField.unwrap(linPolyConstantScalarField)));
         cmds[4] = vm.toString(abi.encode(commScalarsU256));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 eval) = abi.decode(result, (uint256));
 
-        assertEq(eval, V._prepareEvaluations(linPolyConstantSanitized, proof, commScalarsU256));
+        assertEq(eval, V._prepareEvaluations(linPolyConstant, proof, commScalarsU256));
     }
 }
 
