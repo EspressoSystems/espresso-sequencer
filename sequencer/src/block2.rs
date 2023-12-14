@@ -602,7 +602,9 @@ mod test {
 
             // tests for individual txs
             let disperse_data = vid.disperse(&block.payload).unwrap();
+            let mut block_iter = block.iter(); // test iterator correctness
             for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
+                assert!(block_iter.next().is_some());
                 let index = TxIndex::try_from(index_usize).unwrap();
                 // tracing::info!("tx index {}", index,);
 
@@ -620,6 +622,7 @@ mod test {
                     .unwrap()
                     .unwrap();
             }
+            assert!(block_iter.next().is_none());
         }
     }
 
@@ -662,6 +665,7 @@ mod test {
 
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
+            let mut tx_count = 0; // test iterator correctness
             for index in block.iter() {
                 // tracing::info!("tx index {}", index,);
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
@@ -675,7 +679,9 @@ mod test {
                     )
                     .unwrap()
                     .unwrap();
+                tx_count += 1;
             }
+            assert_eq!(tx_count, block.len());
         }
     }
 
