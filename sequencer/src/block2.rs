@@ -647,16 +647,22 @@ mod test {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
+            // negative-length txs
             TestCase::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
             TestCase::from_entries(&[30, 20, 10], &mut rng), // 2 negative-length txs
+            // truncated payload
             TestCase::from_entries_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
-            TestCase::from_entries_no_payload(&[10, 20, 30]), // 0-length tx payload
+            TestCase::from_entries_no_payload(&[10, 20, 30]),              // 0-length tx payload
+            TestCase::from_entries_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            // negative-length txs AND truncated payload
             TestCase::from_entries_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
             TestCase::from_entries_no_payload(&[30, 20, 10]), // negative-len txs, 0-len tx payload
-            TestCase::from_entries_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
             TestCase::from_entries_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
-            TestCase::from_tx_table_len(5, 100, &mut rng), // random payload except tx table len
-            TestCase::from_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
+            // random payload, tx table not truncated
+            TestCase::from_tx_table_len_checked(5, 100, &mut rng), // random payload except tx table len
+            TestCase::from_tx_table_len_checked(25, 1000, &mut rng), // random payload except tx table len
+            // tx table truncated
+            TestCase::from_tx_table_len(100, 40, &mut rng),
         ];
 
         // TODO more test cases:
@@ -703,9 +709,6 @@ mod test {
         }
     }
 
-    #[test]
-    fn fully_general_truncated_tx_table() {}
-
     mod helpers {
         use crate::block2::tx_table_entry::TxTableEntry;
         use rand::RngCore;
@@ -737,7 +740,7 @@ mod test {
                     num_txs: entries.len(),
                 }
             }
-            pub fn from_tx_table_len<R: RngCore>(
+            pub fn from_tx_table_len_checked<R: RngCore>(
                 tx_table_len: usize,
                 block_byte_len: usize,
                 rng: &mut R,
@@ -746,9 +749,19 @@ mod test {
                     tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
                     "tx table size exceeds block size"
                 );
+                Self::from_tx_table_len(tx_table_len, block_byte_len, rng)
+            }
+            pub fn from_tx_table_len<R: RngCore>(
+                tx_table_len: usize,
+                block_byte_len: usize,
+                rng: &mut R,
+            ) -> Self {
                 Self {
                     payload: random_block_with_tx_table_len(tx_table_len, block_byte_len, rng),
-                    num_txs: tx_table_len,
+                    num_txs: std::cmp::min(
+                        tx_table_len,
+                        block_byte_len / TxTableEntry::byte_len() - 1,
+                    ),
                 }
             }
         }
