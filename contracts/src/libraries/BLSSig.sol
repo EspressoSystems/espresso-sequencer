@@ -143,7 +143,7 @@ library BLSSig {
     /// https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd8f9e70577a/primitives/src/signatures/bls_over_bn254.rs#L318
     /// @param input message to be hashed
     /// @return group element in G_1
-    function hashToCurve(bytes memory input) internal view returns (uint256, uint256) {
+    function hashToCurve(bytes memory input) internal view returns (BN254.G1Point memory) {
         uint256 x = hashToField(input);
 
         uint256 p = BN254.P_MOD;
@@ -156,19 +156,19 @@ library BLSSig {
         Y = addmod(Y, b, p);
 
         // Check Y is a quadratic residue
-        uint256 y;
+        BN254.BaseField y;
         bool isQr;
-        (isQr, y) = BN254.quadraticResidue(Y);
+        (isQr, y) = BN254.quadraticResidue(BN254.BaseField.wrap(Y));
 
         while (!isQr) {
             x = addmod(x, 1, p);
             Y = mulmod(x, x, p);
             Y = mulmod(Y, x, p);
             Y = addmod(Y, b, p);
-            (isQr, y) = BN254.quadraticResidue(Y);
+            (isQr, y) = BN254.quadraticResidue(BN254.BaseField.wrap(Y));
         }
 
-        return (x, y);
+        return BN254.G1Point(BN254.BaseField.wrap(x), y);
     }
 
     /// @dev Verify a bls signature. Reverts if the signature is invalid
@@ -191,8 +191,7 @@ library BLSSig {
 
         bytes memory input = bytes.concat(message, csidSuffix);
 
-        (uint256 x, uint256 y) = hashToCurve(input);
-        BN254.G1Point memory hash = BN254.G1Point(x, y);
+        BN254.G1Point memory hash = hashToCurve(input);
 
         if (!BN254.pairingProd2(hash, pk, BN254.negate(sig), BN254.P2())) {
             revert BLSSigVerificationFailed();

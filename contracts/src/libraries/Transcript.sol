@@ -19,8 +19,13 @@ library Transcript {
         self.transcript = abi.encodePacked(self.transcript, message);
     }
 
-    function appendFieldElement(TranscriptData memory self, uint256 fieldElement) internal pure {
-        appendMessage(self, abi.encodePacked(Utils.reverseEndianness(fieldElement)));
+    function appendFieldElement(TranscriptData memory self, BN254.ScalarField fieldElement)
+        internal
+        pure
+    {
+        appendMessage(
+            self, abi.encodePacked(Utils.reverseEndianness(BN254.ScalarField.unwrap(fieldElement)))
+        );
     }
 
     function appendGroupElement(TranscriptData memory self, BN254.G1Point memory comm)
@@ -35,7 +40,7 @@ library Transcript {
     // Transcript APIs
     // ================================
     function appendChallenge(TranscriptData memory self, uint256 challenge) internal pure {
-        appendFieldElement(self, challenge);
+        appendFieldElement(self, BN254.ScalarField.wrap(challenge));
     }
 
     function appendCommitments(TranscriptData memory self, BN254.G1Point[] memory comms)
@@ -98,11 +103,31 @@ library Transcript {
         // =====================
         // Currently, K is hardcoded, and there are 5 of them since
         // # wire types == 5
-        appendFieldElement(self, 0x1); // k0 = 1
-        appendFieldElement(self, 0x2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a); // k1
-        appendFieldElement(self, 0x1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025); // k2
-        appendFieldElement(self, 0x2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a); // k3
-        appendFieldElement(self, 0x2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881); // k4
+        appendFieldElement(self, BN254.ScalarField.wrap(0x1)); // k0 = 1
+        appendFieldElement(
+            self,
+            BN254.ScalarField.wrap(
+                0x2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a
+            )
+        ); // k1
+        appendFieldElement(
+            self,
+            BN254.ScalarField.wrap(
+                0x1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025
+            )
+        ); // k2
+        appendFieldElement(
+            self,
+            BN254.ScalarField.wrap(
+                0x2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a
+            )
+        ); // k3
+        appendFieldElement(
+            self,
+            BN254.ScalarField.wrap(
+                0x2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881
+            )
+        ); // k4
 
         // selectors
         appendGroupElement(self, verifyingKey.q1);
@@ -128,7 +153,7 @@ library Transcript {
 
         // public inputs
         for (uint256 i = 0; i < publicInput.length; i++) {
-            appendFieldElement(self, publicInput[i]);
+            appendFieldElement(self, BN254.ScalarField.wrap(publicInput[i]));
         }
     }
 

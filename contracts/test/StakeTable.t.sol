@@ -53,22 +53,16 @@ contract StakeTable_Test is Test {
 
         bytes memory result = vm.ffi(cmds);
         (
-            uint256 blsSigX,
-            uint256 blsSigY,
-            uint256 blsVKx0,
-            uint256 blsVKx1,
-            uint256 blsVKy0,
-            uint256 blsVKy1,
+            BN254.G1Point memory blsSig,
+            BN254.G2Point memory blsVK,
             uint256 schnorrVKx,
             uint256 schnorrVKy
-        ) = abi.decode(
-            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
-        );
+        ) = abi.decode(result, (BN254.G1Point, BN254.G2Point, uint256, uint256));
 
         return (
-            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK
+            blsVK,
             EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
-            BN254.G1Point(blsSigX, blsSigY) // sig
+            blsSig
         );
     }
 
@@ -126,11 +120,11 @@ contract StakeTable_Test is Test {
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
             blockHeight: 0,
-            blockCommRoot: 0,
-            feeLedgerComm: 0,
-            stakeTableBlsKeyComm: 0,
-            stakeTableSchnorrKeyComm: 0,
-            stakeTableAmountComm: 0,
+            blockCommRoot: BN254.ScalarField.wrap(0),
+            feeLedgerComm: BN254.ScalarField.wrap(0),
+            stakeTableBlsKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableAmountComm: BN254.ScalarField.wrap(0),
             threshold: 0
         });
         lightClientContract = new LightClientTest(genesis, 10);
@@ -165,7 +159,7 @@ contract StakeTable_Test is Test {
         );
     }
 
-    function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
+    function testFuzz_RevertWhen_InvalidBLSSig(uint256 _scalar) external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
@@ -174,7 +168,7 @@ contract StakeTable_Test is Test {
 
         // Ensure the scalar is valid
         // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
-        scalar = bound(scalar, 1, BN254.R_MOD - 1);
+        BN254.ScalarField scalar = BN254.ScalarField.wrap(bound(_scalar, 1, BN254.R_MOD - 1));
         BN254.validateScalarField(scalar);
         BN254.G1Point memory badSig = BN254.scalarMul(BN254.P1(), scalar);
         BN254.validateG1Point(badSig);
