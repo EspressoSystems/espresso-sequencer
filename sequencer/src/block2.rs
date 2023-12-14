@@ -1,14 +1,10 @@
-use self::tx_table_entry::TxTableEntry;
+use self::{boilerplate::RangeProof, tx_table_entry::TxTableEntry};
 use crate::Transaction;
-use ark_bls12_381::Bls12_381;
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    vid::{
-        advz::payload_prover::SmallRangeProof,
-        payload_prover::{PayloadProver, Statement},
-    },
+    vid::payload_prover::{PayloadProver, Statement},
 };
 use serde::{Deserialize, Serialize};
 use std::{ops::Range, sync::OnceLock};
@@ -100,7 +96,7 @@ impl BlockPayload {
     // Fetch the tx table length range proof from cache.
     // Build the proof if missing from cache.
     // Returns `None` if an error occurred.
-    fn get_tx_table_len_proof(&self, vid: &boilerplate::VidScheme) -> Option<&RangeProof> {
+    fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
         self.tx_table_len_proof
             .get_or_init(|| {
                 vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
@@ -110,26 +106,30 @@ impl BlockPayload {
     }
 }
 
-// Returns the range `range_start+len..range_end+len` or `None` on error.
-//
-// Lots of ugly type conversion and checked arithmetic.
+/// Returns the byte range for a tx in the block payload bytes.
+///
+/// Ensures that the returned range is valid (start <= end) and within bounds for `block_payload_byte_len`.
+/// Lots of ugly type conversion and checked arithmetic.
 fn tx_payload_range(
     tx_table_range_start: &Option<TxTableEntry>,
     tx_table_range_end: &TxTableEntry,
     tx_table_len: &TxTableEntry,
+    block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
     let tx_bodies_offset = usize::try_from(tx_table_len.clone())
         .ok()?
         .checked_add(1)?
         .checked_mul(TxTableEntry::byte_len())?;
-    Some(
-        usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
-            .ok()?
-            .checked_add(tx_bodies_offset)?
-            ..usize::try_from(tx_table_range_end.clone())
-                .ok()?
-                .checked_add(tx_bodies_offset)?,
-    )
+    let start = usize::try_from(tx_table_range_start.clone().unwrap_or(TxTableEntry::zero()))
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = usize::try_from(tx_table_range_end.clone())
+        .ok()?
+        .checked_add(tx_bodies_offset)?;
+    let end = std::cmp::max(start, end);
+    let start = std::cmp::min(start, block_payload_byte_len);
+    let end = std::cmp::min(end, block_payload_byte_len);
+    Some(start..end)
 }
 
 impl QueryablePayload for BlockPayload {
@@ -161,6 +161,8 @@ impl QueryablePayload for BlockPayload {
         // This correctness proof requires a range of its own, which we read into `tx_table_range_proof_[start|end]`.
         //
         // Edge case--the first transaction: tx payload range `start` is implicitly 0 and we do not include this item in the correctness proof.
+        //
+        // TODO why isn't cargo fmt wrapping these comments?
 
         // start
         let (tx_table_range_proof_start, tx_table_range_start) = if index_usize == 0 {
@@ -196,6 +198,7 @@ impl QueryablePayload for BlockPayload {
             &tx_table_range_start,
             &tx_table_range_end,
             &self.get_tx_table_len()?,
+            self.payload.len(),
         )?;
 
         Some((
@@ -223,10 +226,6 @@ impl QueryablePayload for BlockPayload {
 
 type TxIndex = <BlockPayload as QueryablePayload>::TransactionIndex;
 
-// TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
-type RangeProof =
-    SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxInclusionProof {
     tx_table_len: TxTableEntry,
@@ -247,23 +246,29 @@ impl TxInclusionProof {
     // - Use of `Result<(),()>` pattern to enable use of `?` for concise abort-on-failure.
     #[allow(dead_code)] // TODO temporary
     #[allow(clippy::too_many_arguments)]
-    fn verify(
+    fn verify<V>(
         &self,
         tx: &Transaction,
         tx_index: TxIndex,
-        vid: &boilerplate::VidScheme,
-        vid_commit: &boilerplate::VidSchemeCommit,
-        vid_common: &boilerplate::VidSchemeCommon,
-    ) -> Option<Result<(), ()>> {
+        vid: &V,
+        vid_commit: &V::Commit,
+        vid_common: &V::Common,
+    ) -> Option<Result<(), ()>>
+    where
+        V: PayloadProver<RangeProof>,
+    {
+        V::is_consistent(vid_commit, vid_common).ok()?;
+
         // Verify proof for tx payload.
         // Proof is `None` if and only if tx has zero length.
+        let tx_payload_range = tx_payload_range(
+            &self.tx_table_range_start,
+            &self.tx_table_range_end,
+            &self.tx_table_len,
+            V::get_payload_byte_len(vid_common),
+        )?;
         match &self.tx_payload_proof {
             Some(tx_payload_proof) => {
-                let tx_payload_range = tx_payload_range(
-                    &self.tx_table_range_start,
-                    &self.tx_table_range_end,
-                    &self.tx_table_len,
-                )?;
                 if vid
                     .payload_verify(
                         Statement {
@@ -281,7 +286,7 @@ impl TxInclusionProof {
                 }
             }
             None => {
-                if !tx.payload().is_empty() {
+                if !tx.payload().is_empty() || !tx_payload_range.is_empty() {
                     return None; // error: nonempty payload but no proof
                 }
             }
@@ -430,7 +435,10 @@ mod boilerplate {
     use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
     use commit::{Commitment, Committable};
-    use jf_primitives::{pcs::checked_fft_size, vid::advz::Advz};
+    use jf_primitives::{
+        pcs::checked_fft_size,
+        vid::advz::{payload_prover::SmallRangeProof, Advz},
+    };
     use snafu::OptionExt;
     use std::fmt::Display;
 
@@ -480,8 +488,15 @@ mod boilerplate {
         }
     }
 
-    // TODO temporary
+    /// Opaque (not really though) constructor to return an abstract [`PayloadProver`].
+    ///
+    /// Unfortunately, [`PayloadProver`] has a generic type param.
+    /// I'd like to return `impl PayloadProver<impl Foo>` but "nested `impl Trait` is not allowed":
+    /// <https://github.com/rust-lang/rust/issues/57979#issuecomment-459387604>
+    ///
+    /// TODO temporary VID constructor.
     pub(super) fn test_vid_factory() -> Advz<Bls12_381, sha2::Sha256> {
+        // -> impl PayloadProver<RangeProof, Common = impl LengthGetter + CommitChecker<Self>> {
         let (payload_chunk_size, num_storage_nodes) = (8, 10);
 
         let mut rng = jf_utils::test_rng();
@@ -490,12 +505,13 @@ mod boilerplate {
             checked_fft_size(payload_chunk_size - 1).unwrap(),
         )
         .unwrap();
-        Advz::<_, _>::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
+        Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap()
     }
 
-    pub(super) type VidScheme = Advz<Bls12_381, sha2::Sha256>;
-    pub(super) type VidSchemeCommit = <VidScheme as jf_primitives::vid::VidScheme>::Commit;
-    pub(super) type VidSchemeCommon = <VidScheme as jf_primitives::vid::VidScheme>::Common;
+    // TODO type alias needed only because nested impl Trait is not allowed
+    // TODO upstream type aliases: https://github.com/EspressoSystems/jellyfish/issues/423
+    pub(super) type RangeProof =
+        SmallRangeProof<<UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Proof>;
 }
 
 #[cfg(test)]
@@ -505,54 +521,47 @@ mod test {
         TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use helpers::*;
     use jf_primitives::vid::VidScheme;
 
     #[test]
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            // 3 non-empty txs
-            vec![
-                vec![0, 1, 2, 3, 4],
-                vec![5, 6, 7, 8, 9, 10, 11, 12],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx at the beginning
-            vec![
-                vec![],
-                vec![5, 6, 7, 8, 9, 10, 11, 12],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx in the middle
-            vec![
-                vec![0, 1, 2, 3, 4],
-                vec![],
-                vec![13, 14, 15, 16, 17, 18, 19, 20],
-            ],
-            // 1 empty tx at the end
-            vec![vec![0, 1, 2, 3, 4], vec![5, 6, 7, 8, 9, 10, 11, 12], vec![]],
-            // 1 nonempty tx
-            vec![vec![0, 1, 2, 3, 4]],
-            // 1 empty tx
-            vec![vec![]],
-            // zero txs
-            vec![],
+            entries_from_lengths(&[5, 8, 8]),          // 3 non-empty txs
+            entries_from_lengths(&[0, 8, 8]),          // 1 empty tx at the beginning
+            entries_from_lengths(&[5, 0, 8]),          // 1 empty tx in the middle
+            entries_from_lengths(&[5, 8, 0]),          // 1 empty tx at the end
+            entries_from_lengths(&[5]),                // 1 nonempty tx
+            entries_from_lengths(&[0]),                // 1 empty tx
+            entries_from_lengths(&[]),                 // zero txs
+            entries_from_lengths(&[1000, 1000, 1000]), // large payload
         ];
 
         setup_logging();
         setup_backtrace();
+        let mut rng = jf_utils::test_rng();
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, tx_bodies) in test_cases.into_iter().enumerate() {
+        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
             tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                tx_bodies.len()
+                tx_table_entries.len()
             );
 
             // prepare things as a function of the test case
+            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
+            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
+            assert_eq!(
+                // enforce well-formed test case
+                tx_payloads_flat,
+                tx_bodies.iter().flatten().cloned().collect::<Vec<_>>(),
+                "test block payload {} is malformed",
+                t + 1
+            );
             let txs = tx_bodies
                 .iter()
                 .cloned()
@@ -588,7 +597,6 @@ mod test {
             assert_eq!(tx_table, tx_offsets);
 
             // test block payload body
-            let tx_payloads_flat: Vec<u8> = tx_bodies.iter().flatten().cloned().collect();
             assert_eq!(payload, tx_payloads_flat);
             assert_eq!(tx_bodies.len(), block.len());
 
@@ -596,7 +604,7 @@ mod test {
             let disperse_data = vid.disperse(&block.payload).unwrap();
             for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
                 let index = TxIndex::try_from(index_usize).unwrap();
-                tracing::info!("tx index {}", index,);
+                // tracing::info!("tx index {}", index,);
 
                 // test `transaction_with_proof()`
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
@@ -612,6 +620,203 @@ mod test {
                     .unwrap()
                     .unwrap();
             }
+        }
+    }
+
+    #[test]
+    fn negative_len_txs_and_truncated_tx_payload() {
+        // play with this
+        let mut rng = jf_utils::test_rng();
+        let test_cases = vec![
+            random_payload(&[30, 10, 20], &mut rng), // 1 negative-length tx
+            random_payload(&[30, 20, 10], &mut rng), // 2 negative-length txs
+            random_payload_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
+            tx_table(&[10, 20, 30]),                 // 0-length tx payload
+            random_payload_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
+            tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
+            random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
+            random_block_with_tx_table_len(5, 100, &mut rng), // random payload except tx table len
+            random_block_with_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
+        ];
+
+        // TODO more test cases:
+        // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
+        // - payload <4 bytes
+
+        setup_logging();
+        setup_backtrace();
+
+        let vid = test_vid_factory();
+        let num_test_cases = test_cases.len();
+        for (t, payload) in test_cases.into_iter().enumerate() {
+            let payload_byte_len = payload.len();
+            let block = BlockPayload::from_bytes(payload);
+            tracing::info!(
+                "test payload {} of {} with {} txs and byte length {}",
+                t + 1,
+                num_test_cases,
+                block.len(),
+                payload_byte_len
+            );
+
+            let disperse_data = vid.disperse(&block.payload).unwrap();
+
+            for index in block.iter() {
+                // tracing::info!("tx index {}", index,);
+                let (tx, proof) = block.transaction_with_proof(&index).unwrap();
+                proof
+                    .verify(
+                        &tx,
+                        index,
+                        &vid,
+                        &disperse_data.commit,
+                        &disperse_data.common,
+                    )
+                    .unwrap()
+                    .unwrap();
+            }
+        }
+    }
+
+    mod helpers {
+        use crate::block2::tx_table_entry::TxTableEntry;
+        use rand::RngCore;
+
+        pub fn tx_table(entries: &[usize]) -> Vec<u8> {
+            let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
+            tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
+            for entry in entries {
+                tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
+            }
+            tx_table
+        }
+
+        pub fn entries_from_lengths(lengths: &[usize]) -> Vec<usize> {
+            lengths
+                .iter()
+                .scan(0, |sum, &len| {
+                    *sum += len;
+                    Some(*sum)
+                })
+                .collect()
+        }
+
+        #[test]
+        fn tx_table_helpers() {
+            assert_eq!(vec![10, 20, 30], entries_from_lengths(&[10, 10, 10]));
+        }
+
+        pub fn random_tx_payloads_flat<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_tx_payloads_flat_truncated_inner(entries, None, rng)
+        }
+
+        #[allow(dead_code)]
+        pub fn random_tx_payloads_flat_truncated<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_tx_payloads_flat_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+        }
+
+        fn random_tx_payloads_flat_truncated_inner<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: Option<usize>,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            // largest entry dictates size of tx bodies
+            let tx_payloads_flat_byte_len = *entries.iter().max().unwrap_or(&0);
+
+            // enforce max length if present
+            let tx_payloads_flat_byte_len = if let Some(max) = max_tx_payloads_byte_len {
+                std::cmp::min(tx_payloads_flat_byte_len, max)
+            } else {
+                tx_payloads_flat_byte_len
+            };
+
+            let mut result = vec![0; tx_payloads_flat_byte_len];
+            rng.fill_bytes(&mut result);
+            result
+        }
+
+        pub fn extract_tx_payloads(entries: &[usize], tx_payloads_flat: &[u8]) -> Vec<Vec<u8>> {
+            let mut result = Vec::with_capacity(entries.len());
+            let mut start = 0;
+            for end in entries {
+                let end = std::cmp::min(*end, tx_payloads_flat.len());
+                let tx_payload = if start >= end {
+                    Vec::new()
+                } else {
+                    tx_payloads_flat[start..end].to_vec()
+                };
+                start = end;
+                result.push(tx_payload);
+            }
+            assert_eq!(result.len(), entries.len());
+            result
+        }
+
+        pub fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_payload_truncated_inner(entries, None, rng)
+        }
+        pub fn random_payload_truncated<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            random_payload_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+        }
+        fn random_payload_truncated_inner<R>(
+            entries: &[usize],
+            max_tx_payloads_byte_len: Option<usize>,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            let mut result = tx_table(entries);
+            result.extend(random_tx_payloads_flat_truncated_inner(
+                entries,
+                max_tx_payloads_byte_len,
+                rng,
+            ));
+            result
+        }
+
+        pub fn random_block_with_tx_table_len<R>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Vec<u8>
+        where
+            R: RngCore,
+        {
+            // TODO a future PR will support tx table size > block size
+            assert!(
+                tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
+                "tx table size exceeds block size"
+            );
+            let mut result = vec![0; block_byte_len];
+            rng.fill_bytes(&mut result);
+            result[..TxTableEntry::byte_len()]
+                .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
+            result
         }
     }
 }
