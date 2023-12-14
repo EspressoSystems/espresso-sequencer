@@ -373,6 +373,8 @@ mod tx_table_entry {
     type TxTableEntryWord = u32;
 
     impl TxTableEntry {
+        pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
+
         pub const fn checked_add(self, rhs: Self) -> Option<Self> {
             // `?` is not allowed in a `const fn` https://github.com/rust-lang/rust/issues/74935
             // Some(Self(self.0.checked_add(rhs.0)?))
@@ -652,7 +654,7 @@ mod test {
     }
 
     #[test]
-    fn negative_len_txs_and_truncated_tx_payload() {
+    fn malformed_payloads() {
         use helpers::TestCase;
 
         // play with this
@@ -669,15 +671,17 @@ mod test {
             TestCase::from_entries_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
             TestCase::from_entries_no_payload(&[30, 20, 10]), // negative-len txs, 0-len tx payload
             TestCase::from_entries_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
-            // random payload, tx table not truncated
-            TestCase::from_tx_table_len_checked(5, 100, &mut rng), // random payload except tx table len
-            TestCase::from_tx_table_len_checked(25, 1000, &mut rng), // random payload except tx table len
-            // tx table truncated
+            // tx table fits inside payload
+            TestCase::from_tx_table_len_checked(5, 100, &mut rng),
+            TestCase::from_tx_table_len_checked(25, 1000, &mut rng),
+            // tx table too large for payload
             TestCase::from_tx_table_len(100, 40, &mut rng),
+            TestCase::from_tx_table_len(TxTableEntry::MAX.try_into().unwrap(), 100, &mut rng), // huge tx table length
         ];
 
         // TODO more test cases:
-        // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
+        // - this will break for extremely large payloads
+        //   - should we hard-code an upper limit so arithmetic never overflows?
         // - payload <4 bytes
 
         setup_logging();
@@ -774,7 +778,7 @@ mod test {
                     payload: random_block_with_tx_table_len(tx_table_len, block_byte_len, rng),
                     num_txs: std::cmp::min(
                         tx_table_len,
-                        block_byte_len / TxTableEntry::byte_len() - 1,
+                        (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1),
                     ),
                 }
             }
