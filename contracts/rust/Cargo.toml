@@ -24,11 +24,14 @@ contract-bindings = { path = "../../contract-bindings" }
 crs = { git = "https://github.com/alxiong/crs", rev = "4f320d819514a50138dd114440b3b3e30e83a081" }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
+ethereum-types = { version = "^0.14", features = ["impl-serde"] }
 ethers = { version = "2.0.4" }
 ethers-providers = "2.0.4"
 ethers-solc = "2.0.4"
 hex = "0.4.3"
+hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
+hotshot-types = { workspace = true }
 itertools = "0.10.3"
 jf-plonk = { workspace = true }
 jf-primitives = { workspace = true }
