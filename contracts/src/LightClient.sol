@@ -108,7 +108,7 @@ contract LightClient {
         // check plonk proof
         // TODO: (alex) replace the vk with the correct one
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
-        BN254.ScalarField[] memory publicInput = preparePublicInput(newState, isNewEpoch);
+        uint256[] memory publicInput = preparePublicInput(newState, isNewEpoch);
         PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
 
         // upon successful verification, update state.
@@ -133,20 +133,20 @@ contract LightClient {
     function preparePublicInput(LightClientState memory state, bool isNewEpoch)
         internal
         view
-        returns (BN254.ScalarField[] memory)
+        returns (uint256[] memory)
     {
-        BN254.ScalarField[] memory publicInput = new BN254.ScalarField[](8);
-        publicInput[0] = BN254.ScalarField.wrap(uint256(state.viewNum));
-        publicInput[1] = BN254.ScalarField.wrap(uint256(state.blockHeight));
-        publicInput[2] = state.blockCommRoot;
-        publicInput[3] = state.feeLedgerComm;
-        publicInput[4] = state.stakeTableBlsKeyComm;
-        publicInput[5] = state.stakeTableSchnorrKeyComm;
-        publicInput[6] = state.stakeTableAmountComm;
+        uint256[] memory publicInput = new uint256[](8);
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(state.feeLedgerComm);
+        publicInput[4] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
         if (isNewEpoch) {
-            publicInput[7] = BN254.ScalarField.wrap(state.threshold);
+            publicInput[7] = state.threshold;
         } else {
-            publicInput[7] = BN254.ScalarField.wrap(finalizedState.threshold);
+            publicInput[7] = finalizedState.threshold;
         }
         return publicInput;
     }

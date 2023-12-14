@@ -135,7 +135,7 @@ library PolynomialEval {
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
-        BN254.ScalarField[] memory pi,
+        uint256[] memory pi,
         uint256 zeta,
         uint256 vanishEval
     ) internal view returns (uint256 res) {
@@ -249,11 +249,11 @@ library PolynomialEval {
     }
 
     /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(
-        EvalDomain memory self,
-        uint256 zeta,
-        BN254.ScalarField[] memory publicInput
-    ) internal view returns (EvalData memory evalData) {
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+        internal
+        view
+        returns (EvalData memory evalData)
+    {
         evalData.vanishEval = BN254.ScalarField.wrap(evaluateVanishingPoly(self, zeta));
         evalData.lagrangeOne =
             evaluateLagrangeOne(self, BN254.ScalarField.wrap(zeta), evalData.vanishEval);

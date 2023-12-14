@@ -9,7 +9,6 @@ import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
 import { VkTest } from "./mocks/Transfer1In2Out24DepthVk.sol";
-import { utils } from "../test/PlonkVerifier.t.sol";
 
 // Target contract
 import { Transcript as T } from "../src/libraries/Transcript.sol";
@@ -161,7 +160,7 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendVkAndPubInput(vk, utils.convertU256ArrayToScalarFieldArray(publicInput));
+        transcript.appendVkAndPubInput(vk, publicInput);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
         assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");

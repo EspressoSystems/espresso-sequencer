@@ -77,7 +77,7 @@ library Transcript {
     function appendVkAndPubInput(
         TranscriptData memory self,
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        BN254.ScalarField[] memory publicInput
+        uint256[] memory publicInput
     ) internal pure {
         uint32 sizeInBits = 254;
 
@@ -153,7 +153,7 @@ library Transcript {
 
         // public inputs
         for (uint256 i = 0; i < publicInput.length; i++) {
-            appendFieldElement(self, publicInput[i]);
+            appendFieldElement(self, BN254.ScalarField.wrap(publicInput[i]));
         }
     }
 

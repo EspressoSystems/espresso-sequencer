@@ -10,7 +10,6 @@ import { BN254 } from "bn254/BN254.sol";
 
 // Target contract
 import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
-import { utils } from "../test/PlonkVerifier.t.sol";
 
 contract PolynomialEval_newEvalDomain_Test is Test {
     /// @dev diff-test with Rust when `domainSize` is in {2^14, 2^15, 2^16, 2^17, 2^5}
@@ -104,8 +103,7 @@ contract PolynomialEval_evalDataGen_Test is Test {
         (uint256 vanishEval, uint256 lagrangeOne, uint256 piEval) =
             abi.decode(result, (uint256, uint256, uint256));
 
-        Poly.EvalData memory evalData =
-            Poly.evalDataGen(domain, zeta, utils.convertU256ArrayToScalarFieldArray(publicInput));
+        Poly.EvalData memory evalData = Poly.evalDataGen(domain, zeta, publicInput);
         assertEq(vanishEval, BN254.ScalarField.unwrap(evalData.vanishEval));
         assertEq(lagrangeOne, BN254.ScalarField.unwrap(evalData.lagrangeOne));
         assertEq(piEval, BN254.ScalarField.unwrap(evalData.piEval));

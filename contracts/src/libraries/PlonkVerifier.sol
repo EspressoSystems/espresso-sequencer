@@ -6,7 +6,6 @@ import { BN254 } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "./PolynomialEval.sol";
 import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 import { Transcript } from "./Transcript.sol";
-import { utils } from "../../test/PlonkVerifier.t.sol"; // TODO ugly
 
 /* solhint-disable no-inline-assembly */
 
@@ -92,13 +91,13 @@ library PlonkVerifier {
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        BN254.ScalarField[] memory publicInput,
+        uint256[] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof,
         bytes memory extraTranscriptInitMsg
     ) external view returns (bool) {
         _validateProof(proof);
         for (uint256 i = 0; i < publicInput.length; i++) {
-            BN254.validateScalarField(publicInput[i]);
+            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
         PcsInfo[] memory pcsInfos = new PcsInfo[](1);
         pcsInfos[0] = _preparePcsInfo(verifyingKey, publicInput, proof, extraTranscriptInitMsg);
@@ -134,10 +133,7 @@ library PlonkVerifier {
             }
             // prepare pcs info
             pcsInfos[i] = _preparePcsInfo(
-                verifyingKeys[i],
-                utils.convertU256ArrayToScalarFieldArray(publicInputs[i]),
-                proofs[i],
-                extraTranscriptInitMsgs[i]
+                verifyingKeys[i], publicInputs[i], proofs[i], extraTranscriptInitMsgs[i]
             );
         }
 
@@ -175,7 +171,7 @@ library PlonkVerifier {
 
     function _preparePcsInfo(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        BN254.ScalarField[] memory publicInput,
+        uint256[] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof,
         bytes memory extraTranscriptInitMsg
     ) internal view returns (PcsInfo memory res) {
@@ -210,7 +206,7 @@ library PlonkVerifier {
 
     function _computeChallenges(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        BN254.ScalarField[] memory publicInput,
+        uint256[] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof,
         bytes memory extraTranscriptInitMsg
     ) internal pure returns (Challenges memory res) {
