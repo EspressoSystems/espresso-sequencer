@@ -509,6 +509,11 @@ impl<
                             subscribe_view,
                         ))
                         .await;
+                    // Also subscribe to the latest view for the same reason. The GC will remove the above poll
+                    // in the case that one doesn't resolve but this one does.
+                    self.network
+                        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+                        .await;
 
                     self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
