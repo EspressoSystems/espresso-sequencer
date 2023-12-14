@@ -25,7 +25,6 @@ use hotshot_types::{
     },
 };
 use hotshot_web_server::{self, config};
-use rand::random;
 use serde::{Deserialize, Serialize};
 use surf_disco::Url;
 
@@ -1130,7 +1129,10 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
     ) -> Box<dyn Fn(u64) -> Self + 'static> {
         let (server_shutdown_sender, server_shutdown) = oneshot();
         let sender = Arc::new(server_shutdown_sender);
-        let port = random::<u16>();
+
+        // pick random, unused port
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+
         let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
         info!("Launching web server on port {port}");
         // Start web server

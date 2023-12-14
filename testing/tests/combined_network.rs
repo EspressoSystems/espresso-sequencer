@@ -1,8 +1,5 @@
 use std::time::Duration;
 
-#[cfg(async_executor_impl = "async-std")]
-use hotshot_constants::ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME;
-
 use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     node_types::{CombinedImpl, TestTypes},
@@ -48,10 +45,6 @@ async fn test_combined_network() {
         .launch()
         .run_test()
         .await;
-
-    // async_std needs time to spin down the handler
-    #[cfg(async_executor_impl = "async-std")]
-    async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
 
 // A run where the webserver crashes part-way through
@@ -102,10 +95,6 @@ async fn test_combined_network_webserver_crash() {
         .launch()
         .run_test()
         .await;
-
-    // async_std needs time to spin down the handler
-    #[cfg(async_executor_impl = "async-std")]
-    async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
 
 // A run where the webserver crashes partway through
@@ -162,10 +151,6 @@ async fn test_combined_network_reup() {
         .launch()
         .run_test()
         .await;
-
-    // async_std needs time to spin down the handler
-    #[cfg(async_executor_impl = "async-std")]
-    async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
 
 // A run where half of the nodes disconnect from the webserver
@@ -216,10 +201,6 @@ async fn test_combined_network_half_dc() {
         .launch()
         .run_test()
         .await;
-
-    // async_std needs time to spin down the handler
-    #[cfg(async_executor_impl = "async-std")]
-    async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
 
 fn generate_random_node_changes(
@@ -293,8 +274,4 @@ async fn test_stress_combined_network_fuzzy() {
         .launch()
         .run_test()
         .await;
-
-    // async_std needs time to spin down the handler
-    #[cfg(async_executor_impl = "async-std")]
-    async_std::task::sleep(Duration::from_secs(ASYNC_STD_LIBP2P_LISTENER_SPINDOWN_TIME)).await;
 }
