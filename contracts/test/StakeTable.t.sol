@@ -9,7 +9,7 @@ import "forge-std/Test.sol";
 
 using stdStorage for StdStorage;
 
-import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
@@ -72,7 +72,7 @@ contract StakeTable_Test is Test {
         );
     }
 
-    function registerWithSeed(address sender, uint8 seed, uint64 depositAmount)
+    function registerWithSeed(address sender, uint8 seed, uint64 depositAmount, bool expectRevert)
         private
         returns (BN254.G2Point memory, uint64)
     {
@@ -93,6 +93,9 @@ contract StakeTable_Test is Test {
         token.approve(address(stakeTable), depositAmount);
 
         vm.prank(sender);
+        if (expectRevert) {
+            vm.expectRevert(S.NodeAlreadyRegistered.selector);
+        }
         bool res = stakeTable.register(
             blsVK,
             schnorrVK,
@@ -101,14 +104,18 @@ contract StakeTable_Test is Test {
             sig,
             validUntilEpoch
         );
-        assertTrue(res);
+        if (!expectRevert) {
+            assertTrue(res);
+        } else {
+            assertFalse(res);
+        }
 
         return (blsVK, depositAmount);
     }
 
     /// @dev  Helper function to simulate a successful registration
     function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
-        return registerWithSeed(exampleTokenCreator, 34, 10);
+        return registerWithSeed(exampleTokenCreator, 34, 10, false);
     }
 
     function setUp() public {
@@ -596,15 +603,53 @@ contract StakeTable_Test is Test {
         return queueType;
     }
 
-    /// @dev Test invariants about our queue logic holds during a random sequence of register,
-    /// requestExit, and advanceEpoch operations
     uint256 private constant ARRAY_SIZE = 20;
 
+    /// Helper function to handle registrations in testFuzz_SequencesOfEvents
+    /// This function was extracted to make sol-lint happy by reducing cyclotomic complexity
+    function handleRegistrations(
+        uint256 i,
+        uint8[ARRAY_SIZE] memory rands,
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
+        bool[ARRAY_SIZE] memory isKeyActive
+    ) private returns (bool) {
+        address sender = makeAddr(string(abi.encode(i)));
+        uint64 randDepositAmount = uint64(rands[i]);
+
+        // Check if the seed has already been used. In this case the registration will fail.
+        bool seedUsed = false;
+        for (uint256 j = 0; j < i; j++) {
+            if ((rands[i] == rands[j]) && (isKeyActive[j])) {
+                seedUsed = true;
+                break;
+            }
+        }
+
+        if (seedUsed) {
+            registerWithSeed(sender, rands[i], randDepositAmount, true);
+            return false;
+        } else {
+            (BN254.G2Point memory blsVK,) =
+                registerWithSeed(sender, rands[i], randDepositAmount, false);
+            registeredKeys[i] = blsVK;
+            isKeyActive[i] = true;
+            // Invariants specific to a successful registration
+            assertGe(stakeTable.firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(stakeTable.numPendingRegistrations(), 1);
+            return true;
+        }
+    }
+
+    ///@dev Test invariants about our queue logic holds during a random sequence of register,
+    /// requestExit, and advanceEpoch operations
     function testFuzz_SequencesOfEvents(
         uint8[ARRAY_SIZE] memory events,
         uint8[ARRAY_SIZE] memory rands
     ) external {
-        BN254.G2Point[] memory registeredKeys = new BN254.G2Point[](ARRAY_SIZE);
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys;
+
+        // Tracks the indices corresponding to an active key
+        bool[ARRAY_SIZE] memory isKeyActive;
 
         uint64 numRegistrations = 0;
         uint64 numExits = 0;
@@ -613,60 +658,52 @@ contract StakeTable_Test is Test {
             uint256 ev = bound(events[i], 0, 2);
 
             bool exitRequestSuccessful = false;
-            uint64 randDepositAmount = uint64(rands[i]);
 
             if (ev == 0) {
-                string memory addressLabel = string.concat("address", string(abi.encode(i)));
-                address sender = makeAddr(addressLabel);
-                (BN254.G2Point memory blsVK,) =
-                    registerWithSeed(sender, uint8(i), randDepositAmount);
-                registeredKeys[i] = blsVK;
-                numRegistrations++;
-
-                // Invariants specific to a successful registration
-                assertGe(
-                    stakeTable.firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1
-                );
-                assertGe(stakeTable.numPendingRegistrations(), 1);
+                // Registrations
+                bool res = handleRegistrations(i, rands, registeredKeys, isKeyActive);
+                if (res) {
+                    numRegistrations++;
+                }
             } else if (ev == 1) {
-                if (numRegistrations > 0) {
-                    uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
-                    bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
-                    (
-                        address sender,
-                        AbstractStakeTable.StakeType stakeType,
-                        uint64 balance,
-                        uint64 registerEpoch,
-                        uint64 exitEpoch,
-                    ) = stakeTable.nodes(hashNode);
+                // Exits
+                if (numRegistrations == 0) {
+                    break;
+                }
+                uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
+                bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
+                (
+                    address sender,
+                    AbstractStakeTable.StakeType stakeType,
+                    uint64 balance,
+                    uint64 registerEpoch,
+                    uint64 exitEpoch,
+                ) = stakeTable.nodes(hashNode);
 
-                    balance;
-                    stakeType;
+                balance;
+                stakeType;
 
-                    BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
+                BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
 
-                    bool canExit =
-                        (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
-                    if (canExit) {
-                        vm.prank(sender);
-                        bool res = stakeTable.requestExit(blsVK);
-                        assertTrue(res);
-                        numExits++;
-                        exitRequestSuccessful = true;
+                bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
+                if (canExit) {
+                    vm.prank(sender);
+                    bool res = stakeTable.requestExit(blsVK);
+                    assertTrue(res);
+                    numExits++;
+                    exitRequestSuccessful = true;
 
-                        // Invariants specific to a successful exit
-                        assertGe(
-                            stakeTable.firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1
-                        );
-                        assertGe(stakeTable.numPendingExits(), 1);
-                    } else {
-                        vm.prank(sender);
-                        vm.expectRevert();
-                        bool res = stakeTable.requestExit(blsVK);
-                        assertFalse(res);
-                    }
+                    // Invariants specific to a successful exit
+                    assertGe(stakeTable.firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+                    assertGe(stakeTable.numPendingExits(), 1);
+                } else {
+                    vm.prank(sender);
+                    vm.expectRevert();
+                    bool res = stakeTable.requestExit(blsVK);
+                    assertFalse(res);
                 }
             } else {
+                // Advance epoch
                 // ev == 2
                 uint64 currentEpoch = lightClientContract.currentEpoch();
                 uint64 nextEpoch = currentEpoch + 1;
@@ -677,7 +714,6 @@ contract StakeTable_Test is Test {
             // Global invariants
             assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
             assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
-
             assertLe(numExits, numRegistrations);
         }
     }
