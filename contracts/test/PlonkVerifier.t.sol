@@ -23,22 +23,72 @@ import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
 // Target contract
 import { PlonkVerifier as V } from "../src/libraries/PlonkVerifier.sol";
 
+// Library Definition
+// TODO merge with CommonTest below?
+library utils {
+    function convertU256ArrayToScalarFieldArray(uint256[] memory a)
+        public
+        pure
+        returns (BN254.ScalarField[] memory)
+    {
+        BN254.ScalarField[] memory b = new BN254.ScalarField[](a.length);
+        for (uint256 i = 0; i < a.length; i++) {
+            b[i] = BN254.ScalarField.wrap(a[i]);
+        }
+        return b;
+    }
+
+    function convertU256ArrayToScalarFieldArray2D(uint256[][] memory a)
+        public
+        pure
+        returns (BN254.ScalarField[][] memory)
+    {
+        uint256 l = a.length;
+        BN254.ScalarField[][] memory b = new BN254.ScalarField[][](l);
+        for (uint256 i = 0; i < l; i++) {
+            for (uint256 j = 0; j < a[i].length; j++) {
+                b[i] = new BN254.ScalarField[](a[i].length);
+                b[i][j] = BN254.ScalarField.wrap(a[i][j]);
+            }
+        }
+
+        return b;
+    }
+
+    function convertScalarFieldArraytoU256Array(BN254.ScalarField[] memory a)
+        public
+        pure
+        returns (uint256[] memory)
+    {
+        uint256[] memory b = new uint256[](a.length);
+        for (uint256 i = 0; i < a.length; i++) {
+            b[i] = BN254.ScalarField.unwrap(a[i]);
+        }
+        return b;
+    }
+}
+
 /// @dev Common helpers/utils for PlonkVerifier tests
 contract PlonkVerifierCommonTest is Test {
     /// @dev Sanitize a single value to be valid scalar field Bn254::Fr.
-    function sanitizeScalarField(uint256 a) public view returns (uint256) {
+    function sanitizeScalarField(uint256 a) public view returns (BN254.ScalarField) {
         a = bound(a, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(a));
-        return a;
+        return BN254.ScalarField.wrap(a);
     }
 
     /// @dev Sanitize all values in `a` to be valid scalar fields Bn254::Fr.
     /// This is helpful to sanitize fuzzer-generated random `uint[]` values.
-    function sanitizeScalarFields(uint256[] memory a) public view returns (uint256[] memory) {
+    function sanitizeScalarFields(uint256[] memory a)
+        public
+        view
+        returns (BN254.ScalarField[] memory)
+    {
+        BN254.ScalarField[] memory b = new BN254.ScalarField[](a.length);
         for (uint256 i = 0; i < a.length; i++) {
-            a[i] = sanitizeScalarField(a[i]);
+            b[i] = sanitizeScalarField(a[i]);
         }
-        return a;
+        return b;
     }
 
     /// @dev Sanitize dummy verifyingKey such that it matches with the length of publicInput,
@@ -77,30 +127,30 @@ contract PlonkVerifierCommonTest is Test {
     /// @dev helper function to generate some dummy but format-valid arguments for
     /// `prepareOpeningProof` step. The verifyingKey should be fixed/loaded from library,
     /// proof should be generated via `dummyProof()`, other inputs are from fuzzers.
-    function dummyArgsForOpeningProof(
-        uint64 seed,
-        uint256[] memory publicInput,
-        bytes memory extraTranscriptInitMsg
-    )
-        public
-        returns (
-            IPlonkVerifier.VerifyingKey memory,
-            IPlonkVerifier.PlonkProof memory,
-            V.Challenges memory,
-            Poly.EvalData memory
-        )
-    {
-        IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
-        IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        V.Challenges memory chal =
-            V._computeChallenges(vk, publicInput, proof, extraTranscriptInitMsg);
+    // function dummyArgsForOpeningProof(
+    //     uint64 seed,
+    //     uint256[] memory publicInput,
+    //     bytes memory extraTranscriptInitMsg
+    // )
+    //     public
+    //     returns (
+    //         IPlonkVerifier.VerifyingKey memory,
+    //         IPlonkVerifier.PlonkProof memory,
+    //         V.Challenges memory,
+    //         Poly.EvalData memory
+    //     )
+    // {
+    //     IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
+    //     IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
+    //     V.Challenges memory chal =
+    //         V._computeChallenges(vk, publicInput, proof, extraTranscriptInitMsg);
 
-        Poly.EvalDomain memory domain = Poly.newEvalDomain(vk.domainSize);
-        // pre-compute evaluation data
-        Poly.EvalData memory evalData = Poly.evalDataGen(domain, chal.zeta, publicInput);
+    //     Poly.EvalDomain memory domain = Poly.newEvalDomain(vk.domainSize);
+    //     // pre-compute evaluation data
+    //     Poly.EvalData memory evalData = Poly.evalDataGen(domain, chal.zeta, publicInput);
 
-        return (vk, proof, chal, evalData);
-    }
+    //     return (vk, proof, chal, evalData);
+    // }
 
     /// Thin wrapper to ensure two G1 points are the same
     function assertEqG1Point(BN254.G1Point memory a, BN254.G1Point memory b) public {
@@ -163,7 +213,14 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         );
 
         vm.resumeGasMetering();
-        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+        assert(
+            V.verify(
+                verifyingKeys[0],
+                utils.convertU256ArrayToScalarFieldArray(publicInputs[0]),
+                proofs[0],
+                extraTranscriptInitMsgs[0]
+            )
+        );
     }
 
     /// @dev Test when bad verifying key is supplied, the verification should fail
@@ -206,17 +263,25 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             mstore(badPointRef, badPoint)
         }
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], extraTranscriptInitMsgs[0]));
+        assert(
+            !V.verify(
+                verifyingKeys[0],
+                utils.convertU256ArrayToScalarFieldArray(publicInputs[0]),
+                proofs[0],
+                extraTranscriptInitMsgs[0]
+            )
+        );
     }
 
     /// @dev Test when bad public input is supplied, the verification should fail
     /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
     function testFuzz_badPublicInput_fails(uint256[3] calldata randPublicInput) external {
-        uint256[] memory badPublicInput = new uint256[](3);
-        badPublicInput[0] = randPublicInput[0];
-        badPublicInput[1] = randPublicInput[1];
-        badPublicInput[2] = randPublicInput[2];
-        badPublicInput = sanitizeScalarFields(badPublicInput);
+        BN254.ScalarField[] memory badPublicInput = new BN254.ScalarField[](3);
+        uint256[] memory input = new uint256[](3);
+        input[0] = randPublicInput[0];
+        input[1] = randPublicInput[1];
+        input[2] = randPublicInput[2];
+        badPublicInput = sanitizeScalarFields(input);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -259,7 +324,14 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof, extraTranscriptInitMsgs[0]));
+        assert(
+            !V.verify(
+                verifyingKeys[0],
+                utils.convertU256ArrayToScalarFieldArray(publicInputs[0]),
+                badProof,
+                extraTranscriptInitMsgs[0]
+            )
+        );
     }
 
     /// @dev Test when bad extraTranscriptInitMsg is supplied, the verification should fail
@@ -281,7 +353,14 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0], badMsg));
+        assert(
+            !V.verify(
+                verifyingKeys[0],
+                utils.convertU256ArrayToScalarFieldArray(publicInputs[0]),
+                proofs[0],
+                badMsg
+            )
+        );
     }
 }
 
@@ -370,11 +449,12 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
     /// @dev Test when bad public inputs are supplied, the verification should fail
     /// We know our `gen_circuit_for_test` in `diff_test.rs` has only 3 public inputs
     function testFuzz_badPublicInputs_fails(uint256[3] calldata randPublicInput) external {
-        uint256[] memory badPublicInput = new uint256[](3);
-        badPublicInput[0] = randPublicInput[0];
-        badPublicInput[1] = randPublicInput[1];
-        badPublicInput[2] = randPublicInput[2];
-        badPublicInput = sanitizeScalarFields(badPublicInput);
+        BN254.ScalarField[] memory badPublicInput = new BN254.ScalarField[](3);
+        uint256[] memory input = new uint256[](3);
+        input[0] = randPublicInput[0];
+        input[1] = randPublicInput[1];
+        input[2] = randPublicInput[2];
+        badPublicInput = sanitizeScalarFields(input);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -392,7 +472,7 @@ contract PlonkVerifier_batchVerify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        publicInputs[0] = badPublicInput;
+        publicInputs[0] = utils.convertScalarFieldArraytoU256Array(badPublicInput);
         assert(!V.batchVerify(verifyingKeys, publicInputs, proofs, extraTranscriptInitMsgs));
     }
 
@@ -508,11 +588,12 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
         uint256[] memory publicInput,
         bytes memory extraTranscriptInitMsg
     ) external {
-        publicInput = sanitizeScalarFields(publicInput);
+        BN254.ScalarField[] memory publicInputScalarField = sanitizeScalarFields(publicInput);
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
 
-        V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof, extraTranscriptInitMsg);
+        V.PcsInfo memory info =
+            V._preparePcsInfo(vk, publicInputScalarField, proof, extraTranscriptInitMsg);
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -561,7 +642,7 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     ) external {
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        publicInput = sanitizeScalarFields(publicInput);
+        BN254.ScalarField[] memory publicInputScalarField = sanitizeScalarFields(publicInput);
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -574,7 +655,8 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
         bytes memory result = vm.ffi(cmds);
         (V.Challenges memory chal) = abi.decode(result, (V.Challenges));
 
-        V.Challenges memory c = V._computeChallenges(vk, publicInput, proof, extraTranscriptInitMsg);
+        V.Challenges memory c =
+            V._computeChallenges(vk, publicInputScalarField, proof, extraTranscriptInitMsg);
         assertEq(chal.alpha, c.alpha);
         assertEq(chal.alpha2, c.alpha2);
         assertEq(chal.alpha3, c.alpha3);
@@ -595,20 +677,21 @@ contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
         uint256[30] memory scalars
     ) external {
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        linPolyConstant = sanitizeScalarField(linPolyConstant);
-        uint256[] memory commScalars = sanitizeScalarFields(copyCommScalars(scalars));
+        BN254.ScalarField linPolyConstantScalarField = sanitizeScalarField(linPolyConstant);
+        BN254.ScalarField[] memory commScalars = sanitizeScalarFields(copyCommScalars(scalars));
+        uint256[] memory commScalarsU256 = utils.convertScalarFieldArraytoU256Array(commScalars);
 
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-eval";
         cmds[2] = vm.toString(abi.encode(proof));
-        cmds[3] = vm.toString(bytes32(linPolyConstant));
-        cmds[4] = vm.toString(abi.encode(commScalars));
+        cmds[3] = vm.toString(bytes32(BN254.ScalarField.unwrap(linPolyConstantScalarField)));
+        cmds[4] = vm.toString(abi.encode(commScalarsU256));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 eval) = abi.decode(result, (uint256));
 
-        assertEq(eval, V._prepareEvaluations(linPolyConstant, proof, commScalars));
+        assertEq(eval, V._prepareEvaluations(linPolyConstant, proof, commScalarsU256));
     }
 }
 
