@@ -5,9 +5,9 @@ use std::{
 
 use commit::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
-    data::{BlockError, VidCommitment},
+    data::{BlockError, VidCommitment, VidScheme, VidSchemeTrait},
     traits::{
-        block_contents::{genesis_vid_commitment, BlockHeader, Transaction},
+        block_contents::{vid_commitment, BlockHeader, Transaction},
         state::TestableBlock,
         BlockPayload,
     },
@@ -155,6 +155,16 @@ impl BlockPayload for TestBlockPayload {
             .map(commit::Committable::commit)
             .collect()
     }
+}
+
+/// Computes the (empty) genesis VID commitment
+/// The number of storage nodes does not do anything, unless in the future we add fake transactions
+/// to the genesis payload.
+///
+/// In that case, the payloads may mismatch and cause problems.
+#[must_use]
+pub fn genesis_vid_commitment() -> <VidScheme as VidSchemeTrait>::Commit {
+    vid_commitment(&vec![], 8)
 }
 
 /// A [`BlockHeader`] that commits to [`TestBlockPayload`].

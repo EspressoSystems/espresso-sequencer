@@ -13,13 +13,6 @@ use std::{
     hash::Hash,
 };
 
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of storage nodes for VID initiation.
-pub const NUM_STORAGE_NODES: usize = 8;
-// TODO <https://github.com/EspressoSystems/HotShot/issues/1693>
-/// Number of chunks for VID initiation.
-pub const NUM_CHUNKS: usize = 8;
-
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
@@ -95,16 +88,6 @@ pub fn vid_commitment(
 
     let vid = VidScheme::new(num_chunks, num_storage_nodes, srs).unwrap();
     vid.commit_only(encoded_transactions).unwrap()
-}
-
-/// Computes the (empty) genesis VID commitment
-/// The number of storage nodes does not do anything, unless in the future we add fake transactions
-/// to the genesis payload.
-///
-/// In that case, the payloads may mismatch and cause problems.
-#[must_use]
-pub fn genesis_vid_commitment() -> <VidScheme as VidSchemeTrait>::Commit {
-    vid_commitment(&vec![], 8)
 }
 
 /// Header of a block, which commits to a [`BlockPayload`].

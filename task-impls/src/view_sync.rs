@@ -888,6 +888,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     if let Some(timeout_task) = self.timeout_task.take() {
                         cancel_task(timeout_task).await;
                     }
+                    // Keep tyring to get a more recent proposal to catch up to
+                    self.network
+                        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+                        .await;
                     self.relay += 1;
                     match self.phase {
                         ViewSyncPhase::None => {
