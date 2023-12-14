@@ -500,9 +500,9 @@ impl<
                     let subscribe_view = if self.membership.get_leader(TYPES::Time::new(next_view))
                         == self.public_key
                     {
-                        next_view
-                    } else {
                         next_view + 1
+                    } else {
+                        next_view
                     };
                     // Subscribe to the next view just in case there is progress being made
                     self.network
