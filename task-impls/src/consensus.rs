@@ -419,7 +419,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!(
-                    "Receved Quorum Propsoal for view {}",
+                    "Receved Quorum Proposal for view {}",
                     *proposal.data.view_number
                 );
 
@@ -845,6 +845,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("QC Formed event happened!");
 
                 if let either::Right(qc) = cert.clone() {
+                    // cancel poll for votes
+                    self.quorum_network
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
+
                     debug!(
                         "Attempting to publish proposal after forming a TC for view {}",
                         *qc.view_number
@@ -866,6 +873,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let mut consensus = self.consensus.write().await;
                     consensus.high_qc = qc.clone();
 
+                    // cancel poll for votes
+                    self.quorum_network
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
+
                     drop(consensus);
                     debug!(
                         "Attempting to publish proposal after forming a QC for view {}",
@@ -876,7 +890,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
-                        warn!("Wasn't able to publish proposal");
+                        debug!(
+                            "Wasn't able to publish proposal when QC was formed, still may publish"
+                        );
                     }
                 }
             }
@@ -886,6 +902,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForDAC(*view))
+                    .await;
+
+                self.committee_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
 
                 self.da_certs.insert(view, cert);
@@ -911,7 +931,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                info!("VID disperse data is not more than one view older.");
+                debug!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // Check whether the sender is the right leader for this view
@@ -980,6 +1000,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
+                // cancel poll for votes
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
+                    .await;
+
+                // cancel poll for proposal
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(*view))
+                    .await;
+
                 let vote = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
@@ -1025,10 +1055,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
         if self.quorum_membership.get_leader(view) != self.public_key {
-            error!(
-                "Somehow we formed a QC but are not the leader for the next view {:?}",
-                view
-            );
+            // This is expected for view 1, so skipping the logging.
+            if view != TYPES::Time::new(1) {
+                error!(
+                    "Somehow we formed a QC but are not the leader for the next view {:?}",
+                    view
+                );
+            }
             return false;
         }
 
@@ -1130,8 +1163,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.payload_commitment_and_metadata = None;
             return true;
         }
-        warn!("Cannot propose because we don't have the VID payload commitment and metadata");
-        debug!("Self block was None");
+        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
         false
     }
 }
