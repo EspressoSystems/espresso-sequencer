@@ -528,15 +528,28 @@ mod test {
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            entries_from_lengths(&[5, 8, 8]),          // 3 non-empty txs
-            entries_from_lengths(&[0, 8, 8]),          // 1 empty tx at the beginning
-            entries_from_lengths(&[5, 0, 8]),          // 1 empty tx in the middle
-            entries_from_lengths(&[5, 8, 0]),          // 1 empty tx at the end
-            entries_from_lengths(&[5]),                // 1 nonempty tx
-            entries_from_lengths(&[0]),                // 1 empty tx
-            entries_from_lengths(&[]),                 // zero txs
-            entries_from_lengths(&[1000, 1000, 1000]), // large payload
+            TestCase::from_tx_lengths(&[5, 8, 8]), // 3 non-empty txs
+            TestCase::from_tx_lengths(&[0, 8, 8]), // 1 empty tx at the beginning
+            TestCase::from_tx_lengths(&[5, 0, 8]), // 1 empty tx in the middle
+            TestCase::from_tx_lengths(&[5, 8, 0]), // 1 empty tx at the end
+            TestCase::from_tx_lengths(&[5]),       // 1 nonempty tx
+            TestCase::from_tx_lengths(&[0]),       // 1 empty tx
+            TestCase::from_tx_lengths(&[]),        // zero txs
+            TestCase::from_tx_lengths(&[1000, 1000, 1000]), // large payload
         ];
+
+        struct TestCase {
+            entries: Vec<usize>,
+            num_txs: usize,
+        }
+        impl TestCase {
+            fn from_tx_lengths(lengths: &[usize]) -> Self {
+                Self {
+                    entries: entries_from_lengths(lengths),
+                    num_txs: lengths.len(),
+                }
+            }
+        }
 
         setup_logging();
         setup_backtrace();
@@ -544,17 +557,18 @@ mod test {
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
+        for (t, test_case) in test_cases.into_iter().enumerate() {
             tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                tx_table_entries.len()
+                test_case.num_txs,
             );
 
             // prepare things as a function of the test case
-            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
-            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
+            let tx_payloads_flat = random_tx_payloads_flat(&test_case.entries, &mut rng);
+            let tx_bodies = extract_tx_payloads(&test_case.entries, &tx_payloads_flat);
+            assert_eq!(tx_bodies.len(), test_case.num_txs);
             assert_eq!(
                 // enforce well-formed test case
                 tx_payloads_flat,
@@ -631,17 +645,51 @@ mod test {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
-            random_payload(&[30, 10, 20], &mut rng), // 1 negative-length tx
-            random_payload(&[30, 20, 10], &mut rng), // 2 negative-length txs
-            random_payload_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
-            tx_table(&[10, 20, 30]),                 // 0-length tx payload
-            random_payload_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
-            tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
-            random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
-            random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
-            random_block_with_tx_table_len(5, 100, &mut rng), // random payload except tx table len
-            random_block_with_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
+            TestCase {
+                payload: random_payload(&[30, 10, 20], &mut rng),
+                num_txs: 3,
+            }, // 1 negative-length tx
+            TestCase {
+                payload: random_payload(&[30, 20, 10], &mut rng),
+                num_txs: 3,
+            }, // 2 negative-length txs
+            TestCase {
+                payload: random_payload_truncated(&[10, 20, 30], 15, &mut rng),
+                num_txs: 3,
+            }, // truncated tx payload
+            TestCase {
+                payload: tx_table(&[10, 20, 30]),
+                num_txs: 3,
+            }, // 0-length tx payload
+            TestCase {
+                payload: random_payload_truncated(&[30, 20, 10], 15, &mut rng),
+                num_txs: 3,
+            }, // negative-len txs, truncated tx payload
+            TestCase {
+                payload: tx_table(&[30, 20, 10]),
+                num_txs: 3,
+            }, // negative-len txs, 0-len tx payload
+            TestCase {
+                payload: random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng),
+                num_txs: 3,
+            }, // large tx truncated
+            TestCase {
+                payload: random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng),
+                num_txs: 3,
+            }, // negative-len tx, large tx truncated
+            TestCase {
+                payload: random_block_with_tx_table_len(5, 100, &mut rng),
+                num_txs: 5,
+            }, // random payload except tx table len
+            TestCase {
+                payload: random_block_with_tx_table_len(25, 1000, &mut rng),
+                num_txs: 25,
+            }, // random payload except tx table len
         ];
+        struct TestCase {
+            payload: Vec<u8>,
+            num_txs: usize,
+        }
 
         // TODO more test cases:
         // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
@@ -652,16 +700,18 @@ mod test {
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, payload) in test_cases.into_iter().enumerate() {
-            let payload_byte_len = payload.len();
-            let block = BlockPayload::from_bytes(payload);
+        for (t, test_case) in test_cases.into_iter().enumerate() {
+            let payload_byte_len = test_case.payload.len();
             tracing::info!(
                 "test payload {} of {} with {} txs and byte length {}",
                 t + 1,
                 num_test_cases,
-                block.len(),
+                test_case.num_txs,
                 payload_byte_len
             );
+
+            let block = BlockPayload::from_bytes(test_case.payload);
+            assert_eq!(block.len(), test_case.num_txs);
 
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
