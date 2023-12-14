@@ -476,11 +476,12 @@ impl<
                     self.num_timeouts_tracked, *view_number
                 );
 
-                if self.num_timeouts_tracked > 3 {
+                if self.num_timeouts_tracked >= 3 {
                     error!("Too many consecutive timeouts!  This shouldn't happen");
                 }
 
-                if self.num_timeouts_tracked > 2 {
+                if self.num_timeouts_tracked >= 2 {
+                    error!("Starting view sync protocol for view {}", *view_number + 1);
                     // Start polling for view sync certificates
                     self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncCertificate(
@@ -743,6 +744,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish(HotShotEvent::ViewSyncFinalizeVoteSend(vote))
                         .await;
                 }
+
+                error!(
+                    "View sync protocol has received view sync evidence to update the view to {}",
+                    *self.next_view
+                );
+
                 self.event_stream
                     .publish(HotShotEvent::ViewChange(self.next_view))
                     .await;
