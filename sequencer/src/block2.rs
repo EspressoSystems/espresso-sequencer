@@ -116,6 +116,8 @@ fn tx_payload_range(
     tx_table_len: &TxTableEntry,
     block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
+    // TODO allow arbitrary tx_table_len
+    // eg: if overflow then just return a 0-length tx
     let tx_bodies_offset = usize::try_from(tx_table_len.clone())
         .ok()?
         .checked_add(1)?
@@ -138,11 +140,20 @@ impl QueryablePayload for BlockPayload {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self) -> usize {
-        self.get_tx_table_len_as().unwrap_or(0)
+        // The number of txs in a block is defined as the minimum of:
+        // (1) the number of txs indicated in the tx table
+        // (2) the number of tx table entries that could fit into the payload
+        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
+        //
+        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
+        std::cmp::min(
+            self.get_tx_table_len_as().unwrap_or(0),
+            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
+        )
     }
 
     fn iter(&self) -> Self::Iter<'_> {
-        0..self.get_tx_table_len_as().unwrap_or(0)
+        0..self.len().try_into().unwrap_or(0)
     }
 
     fn transaction_with_proof(
@@ -150,7 +161,7 @@ impl QueryablePayload for BlockPayload {
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let index_usize = usize::try_from(*index).ok()?;
-        if index_usize >= self.get_tx_table_len_as()? {
+        if index_usize >= self.len() {
             return None; // error: index out of bounds
         }
 
@@ -689,7 +700,7 @@ mod test {
 
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
-            let mut tx_count = 0; // test iterator correctness
+            let mut tx_count: <BlockPayload as QueryablePayload>::TransactionIndex = 0; // test iterator correctness
             for index in block.iter() {
                 // tracing::info!("tx index {}", index,);
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
@@ -705,7 +716,10 @@ mod test {
                     .unwrap();
                 tx_count += 1;
             }
-            assert_eq!(tx_count, block.len());
+            assert_eq!(test_case.num_txs, usize::try_from(tx_count).unwrap());
+
+            // test: cannot make a proof for txs outside the tx table
+            assert!(block.transaction_with_proof(&tx_count).is_none());
         }
     }
 
