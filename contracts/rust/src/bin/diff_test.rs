@@ -9,7 +9,10 @@ use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
-use hotshot_contract::jf_helpers::*;
+use hotshot_contract::{
+    jf_helpers::*,
+    light_client::{MockLedger, MockSystemParam},
+};
 use itertools::multiunzip;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;
@@ -70,6 +73,8 @@ enum Action {
     TestOnly,
     /// Generate Client Wallet
     GenClientWallet,
+    /// Get mock genesis light client state
+    MockGenesis,
 }
 
 #[allow(clippy::type_complexity)]
@@ -428,6 +433,19 @@ fn main() {
                 schnorr_pk_y,
                 sender_address,
             );
+            println!("{}", res.encode_hex());
+        }
+        Action::MockGenesis => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numBlockPerEpoch");
+            }
+
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let pp = MockSystemParam::init(block_per_epoch);
+            let num_validators = 200;
+            let ledger = MockLedger::init(pp, num_validators);
+
+            let res = (ledger.get_state(),);
             println!("{}", res.encode_hex());
         }
     };

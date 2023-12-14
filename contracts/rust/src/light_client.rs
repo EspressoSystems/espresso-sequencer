@@ -98,6 +98,12 @@ impl MockLedger {
         if (self.state.block_height + 1) % (self.pp.blk_per_epoch as usize) == 0 {
             self.epoch += 1;
             self.st.advance();
+            self.threshold = self
+                .st
+                .total_stake(SnapshotVersion::LastEpochStart)
+                .unwrap()
+                * 2
+                / 3;
         }
 
         let new_root = self.new_dummy_comm();
@@ -234,6 +240,23 @@ impl MockLedger {
         (pi, proof)
     }
 
+    /// Returns the `LightClientState` for solidity
+    pub fn get_state(&self) -> ParsedLightClientState {
+        // The ugly conversion due to slight difference of `LightClientState` in solidity containing `threshold`
+        let pi = vec![
+            u256_to_field(self.threshold),
+            F::from(self.state.view_number as u64),
+            F::from(self.state.block_height as u64),
+            self.state.block_comm_root,
+            self.state.fee_ledger_comm,
+            self.state.stake_table_comm.0,
+            self.state.stake_table_comm.1,
+            self.state.stake_table_comm.2,
+        ];
+        let pi: PublicInput<F> = pi.into();
+        pi.into()
+    }
+
     // return a dummy commitment value
     fn new_dummy_comm(&mut self) -> F {
         F::rand(&mut self.rng)
@@ -279,6 +302,7 @@ pub(crate) fn stake_table_for_testing(
     st
 }
 
+/// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec)]
 pub struct ParsedLightClientState {
     view_num: u64,

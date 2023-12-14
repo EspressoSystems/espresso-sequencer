@@ -5,9 +5,7 @@ pragma solidity ^0.8.0;
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
-
-// TODO: replace these, for now WIP and test only
-import { VkTest } from "../test/stubs/Transfer1In2Out24DepthVk.sol";
+import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
@@ -107,7 +105,7 @@ contract LightClient {
 
         // check plonk proof
         // TODO: (alex) replace the vk with the correct one
-        IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
+        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[] memory publicInput = preparePublicInput(newState, isNewEpoch);
         PlonkVerifier.verify(vk, publicInput, proof, bytes(""));
 
