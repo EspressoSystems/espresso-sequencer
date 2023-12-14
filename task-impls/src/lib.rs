@@ -37,3 +37,6 @@ pub mod vid;
 
 /// Generic task for collecting votes
 pub mod vote;
+
+/// Helper functions used by any task
+mod helpers;

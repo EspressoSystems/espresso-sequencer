@@ -1,6 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 use crate::{
     events::HotShotEvent,
+    helpers::cancel_task,
     vote::{spawn_vote_accumulator, AccumulatorInfo},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -676,10 +677,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {
-                    #[cfg(async_executor_impl = "async-std")]
-                    timeout_task.cancel().await;
-                    #[cfg(async_executor_impl = "tokio")]
-                    timeout_task.abort();
+                    cancel_task(timeout_task).await;
                 }
 
                 self.timeout_task = Some(async_spawn({
@@ -754,10 +752,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 if let Some(timeout_task) = self.timeout_task.take() {
-                    #[cfg(async_executor_impl = "async-std")]
-                    timeout_task.cancel().await;
-                    #[cfg(async_executor_impl = "tokio")]
-                    timeout_task.abort();
+                    cancel_task(timeout_task).await;
                 }
                 self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
@@ -811,10 +806,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {
-                    #[cfg(async_executor_impl = "async-std")]
-                    timeout_task.cancel().await;
-                    #[cfg(async_executor_impl = "tokio")]
-                    timeout_task.abort();
+                    cancel_task(timeout_task).await;
                 }
 
                 self.event_stream
@@ -871,10 +863,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     && last_seen_certificate == self.phase
                 {
                     if let Some(timeout_task) = self.timeout_task.take() {
-                        #[cfg(async_executor_impl = "async-std")]
-                        timeout_task.cancel().await;
-                        #[cfg(async_executor_impl = "tokio")]
-                        timeout_task.abort();
+                        cancel_task(timeout_task).await;
                     }
                     self.relay += 1;
                     match self.phase {

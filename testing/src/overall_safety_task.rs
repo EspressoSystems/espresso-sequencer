@@ -233,10 +233,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     }
 
     pub fn check_if_failed(&mut self, threshold: usize, total_num_nodes: usize) -> bool {
-        let num_decided = self.success_nodes.len();
         let num_failed = self.failed_nodes.len();
-        let remaining_nodes = total_num_nodes - (num_decided + num_failed);
-        remaining_nodes + num_decided >= threshold
+        total_num_nodes - num_failed >= threshold
     }
     /// determines whether or not the round passes
     /// also do a safety check
