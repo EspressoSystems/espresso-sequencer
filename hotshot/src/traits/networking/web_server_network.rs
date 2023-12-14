@@ -139,6 +139,9 @@ struct Inner<TYPES: NodeType> {
     /// Task map for transactions
     txn_task_map:
         Arc<RwLock<BTreeMap<u64, UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task polling for current propsal
+    current_proposal_task:
+        Arc<RwLock<Option<UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
 }
 
 impl<TYPES: NodeType> Inner<TYPES> {
@@ -502,6 +505,7 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             view_sync_cert_task_map: Arc::default(),
             view_sync_vote_task_map: Arc::default(),
             txn_task_map: Arc::default(),
+            current_proposal_task: Arc::default(),
         });
 
         inner.connected.store(true, Ordering::Relaxed);
@@ -848,23 +852,29 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                 }
             }
             ConsensusIntentEvent::PollForCurrentProposal => {
-                // create new task
-                let (_, receiver) = unbounded();
+                let mut proposal_task = self.inner.current_proposal_task.write().await;
+                if proposal_task.is_none() {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    *proposal_task = Some(sender);
 
-                async_spawn({
-                    let inner_clone = self.inner.clone();
-                    async move {
-                        if let Err(e) = inner_clone
-                            .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
-                            .await
-                        {
-                            warn!(
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
+                                .await
+                            {
+                                warn!(
                                 "Background receive proposal polling encountered an error: {:?}",
                                 e
                             );
+                            }
+                            let mut proposal_task = inner_clone.current_proposal_task.write().await;
+                            *proposal_task = None;
                         }
-                    }
-                });
+                    });
+                }
             }
             ConsensusIntentEvent::PollForVotes(view_number) => {
                 let mut task_map = self.inner.vote_task_map.write().await;
