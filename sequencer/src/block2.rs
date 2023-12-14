@@ -523,6 +523,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use jf_primitives::vid::VidScheme;
+    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
@@ -645,50 +646,58 @@ mod test {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
-            TestCase {
-                payload: random_payload(&[30, 10, 20], &mut rng),
-                num_txs: 3,
-            }, // 1 negative-length tx
-            TestCase {
-                payload: random_payload(&[30, 20, 10], &mut rng),
-                num_txs: 3,
-            }, // 2 negative-length txs
-            TestCase {
-                payload: random_payload_truncated(&[10, 20, 30], 15, &mut rng),
-                num_txs: 3,
-            }, // truncated tx payload
-            TestCase {
-                payload: tx_table(&[10, 20, 30]),
-                num_txs: 3,
-            }, // 0-length tx payload
-            TestCase {
-                payload: random_payload_truncated(&[30, 20, 10], 15, &mut rng),
-                num_txs: 3,
-            }, // negative-len txs, truncated tx payload
-            TestCase {
-                payload: tx_table(&[30, 20, 10]),
-                num_txs: 3,
-            }, // negative-len txs, 0-len tx payload
-            TestCase {
-                payload: random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng),
-                num_txs: 3,
-            }, // large tx truncated
-            TestCase {
-                payload: random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng),
-                num_txs: 3,
-            }, // negative-len tx, large tx truncated
-            TestCase {
-                payload: random_block_with_tx_table_len(5, 100, &mut rng),
-                num_txs: 5,
-            }, // random payload except tx table len
-            TestCase {
-                payload: random_block_with_tx_table_len(25, 1000, &mut rng),
-                num_txs: 25,
-            }, // random payload except tx table len
+            TestCase::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
+            TestCase::from_entries(&[30, 20, 10], &mut rng), // 2 negative-length txs
+            TestCase::from_entries_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
+            TestCase::from_entries_no_payload(&[10, 20, 30]), // 0-length tx payload
+            TestCase::from_entries_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
+            TestCase::from_entries_no_payload(&[30, 20, 10]), // negative-len txs, 0-len tx payload
+            TestCase::from_entries_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            TestCase::from_entries_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
+            TestCase::from_tx_table_len(5, 100, &mut rng), // random payload except tx table len
+            TestCase::from_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
         ];
         struct TestCase {
             payload: Vec<u8>,
             num_txs: usize,
+        }
+        impl TestCase {
+            fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
+                Self {
+                    payload: random_payload(entries, rng),
+                    num_txs: entries.len(),
+                }
+            }
+            fn from_entries_truncated<R: RngCore>(
+                entries: &[usize],
+                txs_byte_len: usize,
+                rng: &mut R,
+            ) -> Self {
+                Self {
+                    payload: random_payload_truncated(entries, txs_byte_len, rng),
+                    num_txs: entries.len(),
+                }
+            }
+            fn from_entries_no_payload(entries: &[usize]) -> Self {
+                Self {
+                    payload: tx_table(entries),
+                    num_txs: entries.len(),
+                }
+            }
+            fn from_tx_table_len<R: RngCore>(
+                tx_table_len: usize,
+                block_byte_len: usize,
+                rng: &mut R,
+            ) -> Self {
+                assert!(
+                    tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
+                    "tx table size exceeds block size"
+                );
+                Self {
+                    payload: random_block_with_tx_table_len(tx_table_len, block_byte_len, rng),
+                    num_txs: tx_table_len,
+                }
+            }
         }
 
         // TODO more test cases:
@@ -863,11 +872,6 @@ mod test {
         where
             R: RngCore,
         {
-            // TODO a future PR will support tx table size > block size
-            assert!(
-                tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
-                "tx table size exceeds block size"
-            );
             let mut result = vec![0; block_byte_len];
             rng.fill_bytes(&mut result);
             result[..TxTableEntry::byte_len()]
