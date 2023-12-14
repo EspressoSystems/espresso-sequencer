@@ -2,10 +2,10 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
-use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
-use ark_ff::{BigInteger, Fp2, MontFp, PrimeField};
+use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
+use ark_ff::{Fp2, MontFp, PrimeField};
 use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::{
@@ -13,6 +13,7 @@ use ark_std::{
     UniformRand,
 };
 use clap::{Parser, ValueEnum};
+use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point, ParsedG2Point};
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
@@ -30,11 +31,12 @@ use jf_plonk::{
 use jf_primitives::constants::CS_ID_BLS_BN254;
 use jf_primitives::pcs::prelude::{Commitment, UnivariateUniversalParams};
 use jf_primitives::signatures::bls_over_bn254::KeyPair as BLSKeyPair;
-use jf_primitives::signatures::bls_over_bn254::Signature;
+use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, Signature};
 use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use num_bigint::BigUint;
 use num_traits::Num;
+use sha3::Keccak256;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -83,6 +85,10 @@ enum Action {
     TestOnly,
     /// Generate Client Wallet
     GenClientWallet,
+    /// Generate BLS keys and a signature
+    GenBLSSig,
+    /// Generate internal hash values for the BLS signature scheme
+    GenBLSHashes,
 }
 
 #[allow(clippy::type_complexity)]
@@ -417,30 +423,64 @@ fn main() {
             let vk = key_pair.ver_key();
             let vk_g2_affine: G2Affine = vk.to_affine();
 
-            let pk_x_c0 = field_to_u256::<Fq>(vk_g2_affine.x.c0);
-            let pk_x_c1 = field_to_u256::<Fq>(vk_g2_affine.x.c1);
-            let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
-            let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
 
             // Sign the ethereum address with the BLS key
             let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
             let sig_affine_point = sig.sigma.into_affine();
-            let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
-            let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
 
             // TODO (Alex) Return ParsedG1Point and ParsedG2Point
             // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
-                sig_x,
-                sig_y,
-                pk_x_c0,
-                pk_x_c1,
-                pk_y_c0,
-                pk_y_c1,
+                sig_parsed,
+                vk_parsed,
                 schnorr_pk_x,
                 schnorr_pk_y,
                 sender_address,
             );
+            println!("{}", res.encode_hex());
+        }
+        Action::GenBLSSig => {
+            let mut rng = jf_utils::test_rng();
+
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=message");
+            }
+            let message_bytes = cli.args[0].parse::<Bytes>().unwrap();
+
+            // Generate the BLS ver key
+            let key_pair = BLSKeyPair::generate(&mut rng);
+            let vk = key_pair.ver_key();
+            let vk_g2_affine: G2Affine = vk.to_affine();
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
+
+            // Sign the message
+            let sig: Signature = key_pair.sign(&message_bytes, CS_ID_BLS_BN254);
+            let sig_affine_point = sig.sigma.into_affine();
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
+
+            let res = (vk_parsed, sig_parsed);
+            println!("{}", res.encode_hex());
+        }
+        Action::GenBLSHashes => {
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=message");
+            }
+
+            // Same as in the hash_to_curve function
+            // See https://github.com/EspressoSystems/jellyfish/blob/6c2c08f4e966fd1d454d48bcf30bd41a952f9f76/primitives/src/signatures/bls_over_bn254.rs#L310
+            let hasher_init = &[1u8];
+            let hasher = <DefaultFieldHasher<Keccak256> as HashToField<Fq>>::new(hasher_init);
+
+            let message_bytes = cli.args[0].parse::<Bytes>().unwrap();
+
+            let field_elem: Fq = hasher.hash_to_field(&message_bytes, 1)[0];
+            let fq_u256 = field_to_u256::<Fq>(field_elem);
+            let hash_to_curve_elem: G1Affine = hash_to_curve::<Keccak256>(&message_bytes).into();
+            let hash_to_curve_elem_parsed: ParsedG1Point = hash_to_curve_elem.into();
+
+            let res = (fq_u256, hash_to_curve_elem_parsed);
             println!("{}", res.encode_hex());
         }
     };
@@ -460,8 +500,6 @@ const COSET: [&str; 5] = [
 ];
 
 // H: G2Affine(x: Fp2, y:Fp2), x = x0 + u * x1, y = y0 + u * y1
-// NOTE: extra careful with discrepancy with current version of BN254.G2Point
-// which assume Fp2 = x0 * u + x1 !
 const H: [&str; 4] = [
     "1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed", // x0
     "198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2", // x1
@@ -526,19 +564,6 @@ fn open_key() -> OpenKey<Bn254> {
     }
 }
 
-fn field_to_u256<F: PrimeField>(f: F) -> U256 {
-    if F::MODULUS_BIT_SIZE > 256 {
-        panic!("Shouldn't convert a >256-bit field to U256");
-    }
-    U256::from_little_endian(&f.into_bigint().to_bytes_le())
-}
-
-fn u256_to_field<F: PrimeField>(x: U256) -> F {
-    let mut bytes = [0u8; 32];
-    x.to_little_endian(&mut bytes);
-    F::from_le_bytes_mod_order(&bytes)
-}
-
 /// an intermediate representation of the transcript parsed from abi.encode(transcript) from Solidity.
 #[derive(Clone, EthAbiType, EthAbiCodec)]
 struct ParsedTranscript {
@@ -573,67 +598,6 @@ impl From<ParsedTranscript> for SolidityTranscript {
         state[..32].copy_from_slice(&t.state[0].to_fixed_bytes());
         state[32..].copy_from_slice(&t.state[1].to_fixed_bytes());
         Self::from_internal(t.transcript.to_vec(), state)
-    }
-}
-
-/// an intermediate representation of `BN254.G1Point` in solidity.
-#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
-struct ParsedG1Point {
-    x: U256,
-    y: U256,
-}
-
-// this is convention from BN256 precompile
-impl Default for ParsedG1Point {
-    fn default() -> Self {
-        Self {
-            x: U256::from(0),
-            y: U256::from(0),
-        }
-    }
-}
-
-impl FromStr for ParsedG1Point {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
-    }
-}
-
-impl<P: SWCurveConfig> From<Affine<P>> for ParsedG1Point
-where
-    P::BaseField: PrimeField,
-{
-    fn from(p: Affine<P>) -> Self {
-        if p.is_zero() {
-            // this convention is from the BN precompile
-            Self {
-                x: U256::from(0),
-                y: U256::from(0),
-            }
-        } else {
-            Self {
-                x: field_to_u256::<P::BaseField>(*p.x().unwrap()),
-                y: field_to_u256::<P::BaseField>(*p.y().unwrap()),
-            }
-        }
-    }
-}
-
-impl<P: SWCurveConfig> From<ParsedG1Point> for Affine<P>
-where
-    P::BaseField: PrimeField,
-{
-    fn from(p: ParsedG1Point) -> Self {
-        if p == ParsedG1Point::default() {
-            Self::default()
-        } else {
-            Self::new(
-                u256_to_field::<P::BaseField>(p.x),
-                u256_to_field::<P::BaseField>(p.y),
-            )
-        }
     }
 }
 
