@@ -555,43 +555,6 @@ contract StakeTable_Test is Test {
 
     // Queue logic
 
-    function getQueueParameters(QueueType queueType) public view returns (uint64, uint64) {
-        if (queueType == QueueType.Registration) {
-            return (
-                stakeTable._firstAvailableRegistrationEpoch(), stakeTable._numPendingRegistrations()
-            );
-        } else {
-            return (stakeTable._firstAvailableExitEpoch(), stakeTable._numPendingExits());
-        }
-    }
-
-    /// @dev Helper function to check the queue parameters depending on the queue type
-    function checkQueueParameters(
-        QueueType queueType,
-        uint64 expectedFirstAvailableEpoch,
-        uint64 expectedPendingRequests
-    ) private {
-        (uint64 v, uint64 w) = getQueueParameters(queueType);
-
-        assertEq(v, expectedFirstAvailableEpoch);
-        assertEq(w, expectedPendingRequests);
-    }
-
-    /// @dev Helper function to be able to fuzz with the type of queue
-    function asQueueType(uint256 n) private view returns (QueueType) {
-        QueueType queueType;
-        uint256 typeOfQueueInt = bound(n, 0, 1);
-        if (typeOfQueueInt == 0) {
-            queueType = QueueType.Registration;
-        } else if (typeOfQueueInt == 1) {
-            queueType = QueueType.Exit;
-        } else {
-            revert("Queue type not supported");
-        }
-
-        return queueType;
-    }
-
     uint256 private constant ARRAY_SIZE = 20;
 
     /// Helper function to handle registrations in testFuzz_SequencesOfEvents
