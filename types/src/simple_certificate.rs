@@ -94,7 +94,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHHOLD: Threshhold<TYPES
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
             membership.get_committee_qc_stake_table(),
-            U256::from(membership.success_threshold().get()),
+            U256::from(Self::threshold(membership)),
         );
         <TYPES::SignatureKey as SignatureKey>::check(
             &real_qc_pp,
