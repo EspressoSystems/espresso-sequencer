@@ -555,6 +555,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use jf_primitives::vid::VidScheme;
+    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
@@ -598,7 +599,7 @@ mod test {
             );
 
             // prepare things as a function of the test case
-            let tx_payloads_flat = tx_payloads_only(&test_case.entries, &mut rng);
+            let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&test_case.entries), &mut rng);
             let tx_bodies = extract_tx_payloads(&test_case.entries, &tx_payloads_flat);
             assert_eq!(tx_bodies.len(), test_case.num_txs);
             assert_eq!(
@@ -674,8 +675,6 @@ mod test {
 
     #[test]
     fn malformed_payloads() {
-        use helpers::TestCase;
-
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
@@ -707,7 +706,7 @@ mod test {
             TestCase::from_tx_table_len_unchecked(1, 3, &mut rng), // 3-byte payload too small to store tx table len
             TestCase::from_tx_table_len_unchecked(1000, 3, &mut rng), // 3-byte payload, large number of txs
             TestCase::from_tx_table_len_unchecked(0, 3, &mut rng),    // 3-byte payload, 0 txs
-            TestCase::from_tx_table_len_unchecked(6, 0, &mut rng),    // 0-byte payload, FAIL
+            TestCase::from_tx_table_len_unchecked(6, 0, &mut rng),    // 0-byte payload
         ];
 
         // TODO more test cases:
@@ -759,128 +758,130 @@ mod test {
         }
     }
 
+    struct TestCase {
+        payload: Vec<u8>,
+        num_txs: usize,
+    }
+    impl TestCase {
+        /// Return a well-formed random block whose tx table is derived from `lengths`.
+        #[allow(dead_code)]
+        fn from_lengths<R: RngCore>(lengths: &[usize], rng: &mut R) -> Self {
+            Self::from_entries(&entries_from_lengths(lengths), rng)
+        }
+
+        /// Return a random block whose tx table is derived from `entries`.
+        ///
+        /// If `entries` is well-formed then the result is well-formed.
+        fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
+            Self {
+                payload: [
+                    tx_table(entries),
+                    random_bytes(tx_bodies_byte_len(entries), rng),
+                ]
+                .concat(),
+                num_txs: entries.len(),
+            }
+        }
+
+        /// Like `from_entries` except the tx bodies byte length is `body_len`.
+        ///
+        /// Panics if `body_len` would not actually decrese the block size.
+        fn with_trimmed_body<R: RngCore>(entries: &[usize], body_len: usize, rng: &mut R) -> Self {
+            assert!(
+                body_len < tx_bodies_byte_len(entries),
+                "body_len too large to trim the body"
+            );
+            Self {
+                payload: [tx_table(entries), random_bytes(body_len, rng)].concat(),
+                num_txs: entries.len(),
+            }
+        }
+
+        /// Like `from_entries` except the byte length of the block is `block_byte_len`.
+        ///
+        /// Panics if `block_byte_len` would truncate the tx table.
+        /// If you want to truncate the tx table then use `with_total_len_unchecked`.
+        ///
+        /// If `block_byte_len` would increase block size then new space is filled with random bytes.
+        fn with_total_len<R: RngCore>(
+            entries: &[usize],
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            assert!(
+                tx_table_byte_len(entries) <= block_byte_len,
+                "tx table size {} for entries {:?} exceeds block_byte_len {}",
+                tx_table_byte_len(entries),
+                entries,
+                block_byte_len
+            );
+            Self::with_total_len_unchecked(entries, block_byte_len, rng)
+        }
+
+        /// Like `with_total_len` except `block_byte_len` may truncate the tx table.
+        fn with_total_len_unchecked<R: RngCore>(
+            entries: &[usize],
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            let mut payload = tx_table(entries);
+            let num_txs = if block_byte_len > payload.len() {
+                payload.extend(random_bytes(block_byte_len - payload.len(), rng));
+                entries.len()
+            } else {
+                payload.truncate(block_byte_len);
+                (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1)
+            };
+            Self { payload, num_txs }
+        }
+
+        /// Return a random block whose tx table indicates `tx_table_len` txs and whose total byte length is `block_byte_len`.
+        ///
+        /// Every byte of the block is random except the tx table header.
+        ///
+        /// Panics if `txs_byte_len` would truncate the tx table.
+        /// If you want to truncate the tx table then use `with_total_len_unchecked`.
+        fn from_tx_table_len<R: RngCore>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            let tx_table_byte_len = (tx_table_len + 1) * TxTableEntry::byte_len();
+            assert!(
+                tx_table_byte_len <= block_byte_len,
+                "tx table size {} exceeds block size {}",
+                tx_table_byte_len,
+                block_byte_len
+            );
+            Self::from_tx_table_len_unchecked(tx_table_len, block_byte_len, rng)
+        }
+
+        /// Like `from_tx_table_len` except `block_byte_len` may truncate the tx table.
+        fn from_tx_table_len_unchecked<R: RngCore>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            // accommodate extremely small block payload
+            let header_byte_len = std::cmp::min(TxTableEntry::byte_len(), block_byte_len);
+            let mut payload = vec![0; block_byte_len];
+            rng.fill_bytes(&mut payload);
+            payload[..header_byte_len].copy_from_slice(
+                &TxTableEntry::from_usize(tx_table_len).to_bytes()[..header_byte_len],
+            );
+            Self {
+                payload,
+                num_txs: std::cmp::min(
+                    tx_table_len,
+                    (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1),
+                ),
+            }
+        }
+    }
+
     mod helpers {
         use crate::block2::tx_table_entry::TxTableEntry;
         use rand::RngCore;
-
-        pub struct TestCase {
-            pub payload: Vec<u8>,
-            pub num_txs: usize,
-        }
-        impl TestCase {
-            /// Return a random block whose tx table is derived from `entries`.
-            ///
-            /// If `entries` is well-formed then the result is well-formed.
-            pub fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
-                Self {
-                    payload: [
-                        tx_table(entries),
-                        random_bytes(tx_bodies_byte_len(entries), rng),
-                    ]
-                    .concat(),
-                    num_txs: entries.len(),
-                }
-            }
-
-            /// Like `from_entries` except the tx bodies byte length is `body_len`.
-            ///
-            /// Panics if `body_len` would not actually decrese the block size.
-            pub fn with_trimmed_body<R: RngCore>(
-                entries: &[usize],
-                body_len: usize,
-                rng: &mut R,
-            ) -> Self {
-                assert!(
-                    body_len < tx_bodies_byte_len(entries),
-                    "body_len too large to trim the body"
-                );
-                Self {
-                    payload: [tx_table(entries), random_bytes(body_len, rng)].concat(),
-                    num_txs: entries.len(),
-                }
-            }
-
-            /// Like `from_entries` except the byte length of the block is `block_byte_len`.
-            ///
-            /// Panics if `block_byte_len` would truncate the tx table.
-            /// If you want to truncate the tx table then use `with_total_len_unchecked`.
-            ///
-            /// If `block_byte_len` would increase block size then new space is filled with random bytes.
-            pub fn with_total_len<R: RngCore>(
-                entries: &[usize],
-                block_byte_len: usize,
-                rng: &mut R,
-            ) -> Self {
-                assert!(
-                    tx_table_byte_len(entries) <= block_byte_len,
-                    "tx table size {} for entries {:?} exceeds block_byte_len {}",
-                    tx_table_byte_len(entries),
-                    entries,
-                    block_byte_len
-                );
-                Self::with_total_len_unchecked(entries, block_byte_len, rng)
-            }
-
-            /// Like `with_total_len` except `block_byte_len` may truncate the tx table.
-            pub fn with_total_len_unchecked<R: RngCore>(
-                entries: &[usize],
-                block_byte_len: usize,
-                rng: &mut R,
-            ) -> Self {
-                let mut payload = tx_table(entries);
-                let num_txs = if block_byte_len > payload.len() {
-                    payload.extend(random_bytes(block_byte_len - payload.len(), rng));
-                    entries.len()
-                } else {
-                    payload.truncate(block_byte_len);
-                    (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1)
-                };
-                Self { payload, num_txs }
-            }
-
-            /// Return a random block whose tx table indicates `tx_table_len` txs and whose total byte length is `block_byte_len`.
-            ///
-            /// Every byte of the block is random except the tx table header.
-            ///
-            /// Panics if `txs_byte_len` would truncate the tx table.
-            /// If you want to truncate the tx table then use `with_total_len_unchecked`.
-            pub fn from_tx_table_len<R: RngCore>(
-                tx_table_len: usize,
-                block_byte_len: usize,
-                rng: &mut R,
-            ) -> Self {
-                let tx_table_byte_len = (tx_table_len + 1) * TxTableEntry::byte_len();
-                assert!(
-                    tx_table_byte_len <= block_byte_len,
-                    "tx table size {} exceeds block size {}",
-                    tx_table_byte_len,
-                    block_byte_len
-                );
-                Self::from_tx_table_len_unchecked(tx_table_len, block_byte_len, rng)
-            }
-
-            /// Like `from_tx_table_len` except `block_byte_len` may truncate the tx table.
-            pub fn from_tx_table_len_unchecked<R: RngCore>(
-                tx_table_len: usize,
-                block_byte_len: usize,
-                rng: &mut R,
-            ) -> Self {
-                // accommodate extremely small block payload
-                let header_byte_len = std::cmp::min(TxTableEntry::byte_len(), block_byte_len);
-                let mut payload = vec![0; block_byte_len];
-                rng.fill_bytes(&mut payload);
-                payload[..header_byte_len].copy_from_slice(
-                    &TxTableEntry::from_usize(tx_table_len).to_bytes()[..header_byte_len],
-                );
-                Self {
-                    payload,
-                    num_txs: std::cmp::min(
-                        tx_table_len,
-                        (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1),
-                    ),
-                }
-            }
-        }
 
         pub fn tx_table(entries: &[usize]) -> Vec<u8> {
             let tx_table_byte_len = tx_table_byte_len(entries);
@@ -927,48 +928,6 @@ mod test {
             result
         }
 
-        // TODO delete me?
-        pub fn tx_payloads_only<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            let mut result = vec![0; *entries.iter().max().unwrap_or(&0)];
-            rng.fill_bytes(&mut result);
-            result
-        }
-
-        #[allow(dead_code)]
-        pub fn random_tx_payloads_flat_with_fixed_len<R>(
-            entries: &[usize],
-            tx_payloads_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_tx_payloads_flat_with_fixed_len_inner(entries, Some(tx_payloads_byte_len), rng)
-        }
-
-        fn random_tx_payloads_flat_with_fixed_len_inner<R>(
-            entries: &[usize],
-            tx_payloads_byte_len: Option<usize>,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            let tx_payloads_flat_byte_len = if let Some(len) = tx_payloads_byte_len {
-                len // use given length if present
-            } else {
-                // largest entry dictates size of tx bodies
-                *entries.iter().max().unwrap_or(&0)
-            };
-
-            let mut result = vec![0; tx_payloads_flat_byte_len];
-            rng.fill_bytes(&mut result);
-            result
-        }
-
         pub fn extract_tx_payloads(entries: &[usize], tx_payloads_flat: &[u8]) -> Vec<Vec<u8>> {
             let mut result = Vec::with_capacity(entries.len());
             let mut start = 0;
@@ -983,59 +942,6 @@ mod test {
                 result.push(tx_payload);
             }
             assert_eq!(result.len(), entries.len());
-            result
-        }
-
-        pub fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_payload_with_fixed_len_inner(entries, None, rng)
-        }
-        pub fn random_payload_with_fixed_len<R>(
-            entries: &[usize],
-            payload_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_payload_with_fixed_len_inner(entries, Some(payload_byte_len), rng)
-        }
-        fn random_payload_with_fixed_len_inner<R>(
-            entries: &[usize],
-            payloads_byte_len: Option<usize>,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            let mut result = tx_table(entries);
-            let tx_table_byte_len = result.len();
-            result.extend(random_tx_payloads_flat_with_fixed_len_inner(
-                entries,
-                payloads_byte_len.map(|len| len.saturating_sub(tx_table_byte_len)),
-                rng,
-            ));
-            result
-        }
-
-        pub fn random_block_with_tx_table_len<R>(
-            tx_table_len: usize,
-            block_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            // accommodate extremely small block payload
-            let entry_byte_len = std::cmp::min(TxTableEntry::byte_len(), block_byte_len);
-
-            let mut result = vec![0; block_byte_len];
-            rng.fill_bytes(&mut result);
-            result[..entry_byte_len].copy_from_slice(
-                &TxTableEntry::from_usize(tx_table_len).to_bytes()[..entry_byte_len],
-            );
             result
         }
     }
