@@ -588,6 +588,7 @@ contract StakeTable_Test is Test {
 
             // Invariants
 
+            // When we do not skip epochs, the queues of every epoch are filled up.
             if (!skipEpochs) {
                 assertEq(
                     nextRegistrationEpochBefore, numRegistrations / stakeTable.maxChurnRate() + 1
@@ -595,6 +596,8 @@ contract StakeTable_Test is Test {
                 assertEq(pendingRegistrationsBefore, numRegistrations % stakeTable.maxChurnRate());
             }
 
+            // Here we check that the queue state is updated in a consistent manner with the output
+            // of nextExitEpoch.
             assertEq(stakeTable._firstAvailableRegistrationEpoch(), nextRegistrationEpochBefore);
             assertEq(stakeTable.numPendingRegistrations(), pendingRegistrationsBefore + 1);
 
@@ -635,10 +638,14 @@ contract StakeTable_Test is Test {
             assertTrue(res);
 
             // Invariants
+
+            // When we do not skip epochs, the queues of every epoch are filled up.
             if (!skipEpochs) {
                 assertEq(nextExitEpochBefore, numExits / stakeTable.maxChurnRate() + 1);
                 assertEq(pendingExitsBefore, numExits % stakeTable.maxChurnRate());
             }
+            // Here we check that the queue state is updated in a consistent manner with the output
+            // of nextExitEpoch.
             assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
             assertGe(stakeTable.numPendingExits(), 1);
         } else {
@@ -661,6 +668,14 @@ contract StakeTable_Test is Test {
 
     ///@dev Test invariants about our queue logic holds during a random sequence of register,
     /// requestExit, and advanceEpoch operations
+    /// @param events this array is used to sample 3 kinds of events: 0 for a registration, 1 for an
+    /// exit request and 2 for advancing an epoch.
+    /// @param rands this array contains random values that are used as a seed for generating the
+    /// BLS key pair and sampling random deposit amounts.
+    /// @param skipEpochs this boolean flag allows to decide whether we want to advance epochs
+    /// (event
+    /// 2) or not. By allowing not advancing epoch we can capture more of the behaviour of the
+    /// queues.
     function testFuzz_SequencesOfEvents(
         uint8[ARRAY_SIZE] memory events,
         uint8[ARRAY_SIZE] memory rands,
