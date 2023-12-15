@@ -67,9 +67,9 @@ contract StakeTable is AbstractStakeTable {
     /// queue size!)
     uint64 public _numPendingExits;
 
-    uint256 public maxChurnRate;
+    uint64 public maxChurnRate;
 
-    constructor(address _tokenAddress, address _lightClientAddress, uint256 churnRate) {
+    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 

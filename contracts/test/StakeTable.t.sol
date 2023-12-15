@@ -586,6 +586,54 @@ contract StakeTable_Test is Test {
         }
     }
 
+    /// Helper function to handle exit requests in testFuzz_SequencesOfEvents
+    function handleExit(
+        uint256 i,
+        uint8[ARRAY_SIZE] memory rands,
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
+        uint64 numRegistrations
+    ) private returns (bool) {
+        uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
+        bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
+        (
+            address sender,
+            AbstractStakeTable.StakeType stakeType,
+            uint64 balance,
+            uint64 registerEpoch,
+            uint64 exitEpoch,
+        ) = stakeTable.nodes(hashNode);
+
+        balance;
+        stakeType;
+
+        BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
+
+        bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
+        if (canExit) {
+            vm.prank(sender);
+            bool res = stakeTable.requestExit(blsVK);
+            assertTrue(res);
+            // Invariants specific to a successful exit
+            assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(stakeTable.numPendingExits(), 1);
+        } else {
+            vm.prank(sender);
+            vm.expectRevert();
+            bool res = stakeTable.requestExit(blsVK);
+            assertFalse(res);
+        }
+
+        return canExit;
+    }
+
+    /// Helper function to handle epoch increments in testFuzz_SequencesOfEvents
+    function handleAdvanceEpoch() private {
+        uint64 currentEpoch = lightClientContract.currentEpoch();
+        uint64 nextEpoch = currentEpoch + 1;
+        lightClientContract.setCurrentEpoch(nextEpoch);
+        assertEq(stakeTable.currentEpoch(), nextEpoch);
+    }
+
     ///@dev Test invariants about our queue logic holds during a random sequence of register,
     /// requestExit, and advanceEpoch operations
     function testFuzz_SequencesOfEvents(
@@ -603,8 +651,6 @@ contract StakeTable_Test is Test {
         for (uint256 i = 0; i < ARRAY_SIZE; i++) {
             uint256 ev = bound(events[i], 0, 2);
 
-            bool exitRequestSuccessful = false;
-
             if (ev == 0) {
                 // Registrations
                 bool res = handleRegistrations(i, rands, registeredKeys, isKeyActive);
@@ -616,45 +662,14 @@ contract StakeTable_Test is Test {
                 if (numRegistrations == 0) {
                     continue;
                 }
-                uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
-                bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
-                (
-                    address sender,
-                    AbstractStakeTable.StakeType stakeType,
-                    uint64 balance,
-                    uint64 registerEpoch,
-                    uint64 exitEpoch,
-                ) = stakeTable.nodes(hashNode);
-
-                balance;
-                stakeType;
-
-                BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
-
-                bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
-                if (canExit) {
-                    vm.prank(sender);
-                    bool res = stakeTable.requestExit(blsVK);
-                    assertTrue(res);
+                bool res = handleExit(i, rands, registeredKeys, numRegistrations);
+                if (res) {
                     numExits++;
-                    exitRequestSuccessful = true;
-
-                    // Invariants specific to a successful exit
-                    assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
-                    assertGe(stakeTable.numPendingExits(), 1);
-                } else {
-                    vm.prank(sender);
-                    vm.expectRevert();
-                    bool res = stakeTable.requestExit(blsVK);
-                    assertFalse(res);
                 }
             } else {
                 // Advance epoch
                 // ev == 2
-                uint64 currentEpoch = lightClientContract.currentEpoch();
-                uint64 nextEpoch = currentEpoch + 1;
-                lightClientContract.setCurrentEpoch(nextEpoch);
-                assertEq(stakeTable.currentEpoch(), nextEpoch);
+                handleAdvanceEpoch();
             }
 
             // Global invariants
