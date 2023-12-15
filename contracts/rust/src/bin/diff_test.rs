@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
@@ -12,6 +10,8 @@ use ark_std::{
     rand::{rngs::StdRng, Rng, SeedableRng},
     UniformRand,
 };
+use std::str::FromStr;
+
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point, ParsedG2Point};
 use ethers::{
@@ -401,11 +401,14 @@ fn main() {
             println!("args: {:?}", cli.args);
         }
         Action::GenClientWallet => {
-            let mut rng = jf_utils::test_rng();
-
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=senderAddress");
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=senderAddress arg2=seed");
             }
+
+            // Use seed from cli to generate different bls keys
+            let seed_value: u8 = cli.args[1].parse::<u8>().unwrap();
+            let seed = [seed_value; 32];
+            let mut rng = StdRng::from_seed(seed);
 
             let sender_address = cli.args[0].parse::<Address>().unwrap();
             let sender_address_bytes = AbiEncode::encode(sender_address);
@@ -430,8 +433,6 @@ fn main() {
             let sig_affine_point = sig.sigma.into_affine();
             let sig_parsed: ParsedG1Point = sig_affine_point.into();
 
-            // TODO (Alex) Return ParsedG1Point and ParsedG2Point
-            // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
                 sig_parsed,
                 vk_parsed,
