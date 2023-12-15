@@ -332,7 +332,7 @@ contract StakeTable_Test is Test {
         node.registerEpoch = 1;
 
         // Check event is emitted after calling successfully `register`
-        vm.expectEmit(false, false, false, true, address(stakeTable));
+        vm.expectEmit(true, true, true, true, address(stakeTable));
         emit Registered(
             stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
