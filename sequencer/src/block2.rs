@@ -111,9 +111,6 @@ impl BlockPayload {
     fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
         self.tx_table_len_proof
             .get_or_init(|| {
-                // TODO(817): this call fails if self.payload is empty. Wat do? Options:
-                // 1. Disallow empty payloads at construction. Thus, Self::from_bytes() must become fallible.
-                // 2. Change jellyfish to allow payload proof for empty range.
                 vid.payload_proof(&self.payload, self.tx_table_len_range())
                     .ok()
             })
@@ -131,7 +128,7 @@ fn tx_payload_range(
     tx_table_len: &TxTableEntry,
     block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
-    // TODO allow arbitrary tx_table_len
+    // TODO(817) allow arbitrary tx_table_len
     // eg: if overflow then just return a 0-length tx
     let tx_bodies_offset = usize::try_from(tx_table_len.clone())
         .ok()?
@@ -697,7 +694,7 @@ mod test {
             TestCase::from_tx_table_len_unchecked(6, 0, &mut rng),    // 0-byte payload
         ];
 
-        // TODO more test cases:
+        // TODO(817) more test cases:
         // - this will break for extremely large payloads
         //   - should we hard-code an upper limit so arithmetic never overflows?
 
