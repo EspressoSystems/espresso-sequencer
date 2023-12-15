@@ -80,17 +80,29 @@ impl BlockPayload {
         }
     }
 
-    // Return length of the tx table
-    // == number of txs in the payload
-    // == the first `TxTableEntry` word of `self.payload`.
-    fn get_tx_table_len(&self) -> Option<TxTableEntry> {
-        TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)
+    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
+    ///
+    /// Typically `r` is `0..TxTableEntry::byte_len()`.
+    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
+    fn tx_table_len_range(&self) -> Range<usize> {
+        0..std::cmp::min(TxTableEntry::byte_len(), self.payload.len())
+    }
+
+    /// Return length of the tx table, read from the payload bytes.
+    ///
+    /// This quantity equals number of txs in the payload.
+    fn get_tx_table_len(&self) -> TxTableEntry {
+        let tx_table_len_range = self.tx_table_len_range();
+        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+        entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.payload[tx_table_len_range]);
+
+        TxTableEntry::from_bytes_array(entry_bytes)
     }
     fn get_tx_table_len_as<T>(&self) -> Option<T>
     where
         TxTableEntry: TryInto<T>,
     {
-        self.get_tx_table_len()?.try_into().ok()
+        self.get_tx_table_len().try_into().ok()
     }
 
     // Fetch the tx table length range proof from cache.
@@ -99,7 +111,10 @@ impl BlockPayload {
     fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
         self.tx_table_len_proof
             .get_or_init(|| {
-                vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
+                // TODO(817): this call fails if self.payload is empty. Wat do? Options:
+                // 1. Disallow empty payloads at construction. Thus, Self::from_bytes() must become fallible.
+                // 2. Change jellyfish to allow payload proof for empty range.
+                vid.payload_proof(&self.payload, self.tx_table_len_range())
                     .ok()
             })
             .as_ref()
@@ -208,7 +223,7 @@ impl QueryablePayload for BlockPayload {
         let tx_payload_range = tx_payload_range(
             &tx_table_range_start,
             &tx_table_range_end,
-            &self.get_tx_table_len()?,
+            &self.get_tx_table_len(),
             self.payload.len(),
         )?;
 
@@ -220,7 +235,7 @@ impl QueryablePayload for BlockPayload {
                 self.payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
-                tx_table_len: self.get_tx_table_len()?,
+                tx_table_len: self.get_tx_table_len(),
                 tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
                 tx_table_range_start,
                 tx_table_range_end,
@@ -396,6 +411,10 @@ mod tx_table_entry {
             Some(Self(TxTableEntryWord::from_le_bytes(
                 bytes.try_into().ok()?,
             )))
+        }
+        /// Infallible constructor.
+        pub fn from_bytes_array(bytes: [u8; TxTableEntry::byte_len()]) -> Self {
+            Self(TxTableEntryWord::from_le_bytes(bytes))
         }
         pub const fn byte_len() -> usize {
             size_of::<TxTableEntryWord>()
@@ -677,6 +696,10 @@ mod test {
             // tx table too large for payload
             TestCase::from_tx_table_len(100, 40, &mut rng),
             TestCase::from_tx_table_len(TxTableEntry::MAX.try_into().unwrap(), 100, &mut rng), // huge tx table length
+            // extremely small payload
+            TestCase::from_tx_table_len(1, 3, &mut rng), // 3-byte payload too small to store tx table len
+            TestCase::from_tx_table_len(1000, 3, &mut rng), // 3-byte payload, large number of txs
+            TestCase::from_tx_table_len(0, 3, &mut rng), // 3-byte payload, 0 txs
         ];
 
         // TODO more test cases:
@@ -908,10 +931,14 @@ mod test {
         where
             R: RngCore,
         {
+            // accommodate extremely small block payload
+            let entry_byte_len = std::cmp::min(TxTableEntry::byte_len(), block_byte_len);
+
             let mut result = vec![0; block_byte_len];
             rng.fill_bytes(&mut result);
-            result[..TxTableEntry::byte_len()]
-                .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
+            result[..entry_byte_len].copy_from_slice(
+                &TxTableEntry::from_usize(tx_table_len).to_bytes()[..entry_byte_len],
+            );
             result
         }
     }
