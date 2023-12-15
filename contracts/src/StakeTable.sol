@@ -121,20 +121,20 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    /// @notice Get the next available epoch and queue size in that epoch after new registration
+    /// @notice Get the next available epoch and queue size in that epoch
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
 
         if (_firstAvailableRegistrationEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
-            queueSize = 1;
+            queueSize = 0;
         } else if (_numPendingRegistrations >= maxChurnRate) {
             epoch = _firstAvailableRegistrationEpoch + 1;
-            queueSize = 1;
+            queueSize = 0;
         } else {
             epoch = _firstAvailableRegistrationEpoch;
-            queueSize = _numPendingRegistrations + 1;
+            queueSize = _numPendingRegistrations;
         }
         return (epoch, queueSize);
     }
@@ -145,7 +145,7 @@ contract StakeTable is AbstractStakeTable {
     // the queue)
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
         _firstAvailableRegistrationEpoch = epoch;
-        _numPendingRegistrations = queueSize;
+        _numPendingRegistrations = queueSize + 1;
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
@@ -153,21 +153,20 @@ contract StakeTable is AbstractStakeTable {
         return _numPendingRegistrations;
     }
 
-    /// @notice Get the next available epoch for exit and queue size in that epoch after a new exit
-    /// request
+    /// @notice Get the next available epoch for exit and queue size in that epoch
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
 
         if (_firstAvailableExitEpoch < currentEpoch() + 1) {
             epoch = currentEpoch() + 1;
-            queueSize = 1;
+            queueSize = 0;
         } else if (_numPendingExits >= maxChurnRate) {
             epoch = _firstAvailableExitEpoch + 1;
-            queueSize = 1;
+            queueSize = 0;
         } else {
             epoch = _firstAvailableExitEpoch;
-            queueSize = _numPendingExits + 1;
+            queueSize = _numPendingExits;
         }
         return (epoch, queueSize);
     }
@@ -177,7 +176,7 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         _firstAvailableExitEpoch = epoch;
-        _numPendingExits = queueSize;
+        _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
