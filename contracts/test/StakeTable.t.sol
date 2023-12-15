@@ -559,14 +559,10 @@ contract StakeTable_Test is Test {
     function getQueueParameters(QueueType queueType) public view returns (uint64, uint64) {
         if (queueType == QueueType.Registration) {
             return (
-                stakeTable.firstAvailableRegistrationEpoch(),
-                stakeTable.pendingRegistrationsInFirstAvailableRegistrationEpoch()
+                stakeTable._firstAvailableRegistrationEpoch(), stakeTable._numPendingRegistrations()
             );
         } else {
-            return (
-                stakeTable.firstAvailableExitEpoch(),
-                stakeTable.pendingExitsInFirstAvailableExitEpoch()
-            );
+            return (stakeTable._firstAvailableExitEpoch(), stakeTable._numPendingExits());
         }
     }
 
@@ -628,7 +624,7 @@ contract StakeTable_Test is Test {
             registeredKeys[i] = blsVK;
             isKeyActive[i] = true;
             // Invariants specific to a successful registration
-            assertGe(stakeTable.firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(stakeTable._firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1);
             assertGe(stakeTable.numPendingRegistrations(), 1);
             return true;
         }
@@ -688,7 +684,7 @@ contract StakeTable_Test is Test {
                     exitRequestSuccessful = true;
 
                     // Invariants specific to a successful exit
-                    assertGe(stakeTable.firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+                    assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
                     assertGe(stakeTable.numPendingExits(), 1);
                 } else {
                     vm.prank(sender);
