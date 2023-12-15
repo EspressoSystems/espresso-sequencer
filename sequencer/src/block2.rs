@@ -683,13 +683,13 @@ mod test {
             TestCase::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
             TestCase::from_entries(&[30, 20, 10], &mut rng), // 2 negative-length txs
             // truncated payload
-            TestCase::from_entries_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
-            TestCase::from_entries_no_payload(&[10, 20, 30]),              // 0-length tx payload
-            TestCase::from_entries_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            TestCase::from_entries_with_fixed_len(&[10, 20, 30], 15, &mut rng), // truncated tx payload
+            TestCase::from_entries_no_payload(&[10, 20, 30]), // 0-length tx payload
+            TestCase::from_entries_with_fixed_len(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
             // negative-length txs AND truncated payload
-            TestCase::from_entries_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
+            TestCase::from_entries_with_fixed_len(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
             TestCase::from_entries_no_payload(&[30, 20, 10]), // negative-len txs, 0-len tx payload
-            TestCase::from_entries_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
+            TestCase::from_entries_with_fixed_len(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
             // tx table fits inside payload
             TestCase::from_tx_table_len_checked(5, 100, &mut rng),
             TestCase::from_tx_table_len_checked(25, 1000, &mut rng),
@@ -765,13 +765,13 @@ mod test {
                     num_txs: entries.len(),
                 }
             }
-            pub fn from_entries_truncated<R: RngCore>(
+            pub fn from_entries_with_fixed_len<R: RngCore>(
                 entries: &[usize],
                 txs_byte_len: usize,
                 rng: &mut R,
             ) -> Self {
                 Self {
-                    payload: random_payload_truncated(entries, txs_byte_len, rng),
+                    payload: random_payload_with_fixed_len(entries, txs_byte_len, rng),
                     num_txs: entries.len(),
                 }
             }
@@ -835,37 +835,34 @@ mod test {
         where
             R: RngCore,
         {
-            random_tx_payloads_flat_truncated_inner(entries, None, rng)
+            random_tx_payloads_flat_with_fixed_len_inner(entries, None, rng)
         }
 
         #[allow(dead_code)]
-        pub fn random_tx_payloads_flat_truncated<R>(
+        pub fn random_tx_payloads_flat_with_fixed_len<R>(
             entries: &[usize],
-            max_tx_payloads_byte_len: usize,
+            tx_payloads_byte_len: usize,
             rng: &mut R,
         ) -> Vec<u8>
         where
             R: RngCore,
         {
-            random_tx_payloads_flat_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+            random_tx_payloads_flat_with_fixed_len_inner(entries, Some(tx_payloads_byte_len), rng)
         }
 
-        fn random_tx_payloads_flat_truncated_inner<R>(
+        fn random_tx_payloads_flat_with_fixed_len_inner<R>(
             entries: &[usize],
-            max_tx_payloads_byte_len: Option<usize>,
+            tx_payloads_byte_len: Option<usize>,
             rng: &mut R,
         ) -> Vec<u8>
         where
             R: RngCore,
         {
-            // largest entry dictates size of tx bodies
-            let tx_payloads_flat_byte_len = *entries.iter().max().unwrap_or(&0);
-
-            // enforce max length if present
-            let tx_payloads_flat_byte_len = if let Some(max) = max_tx_payloads_byte_len {
-                std::cmp::min(tx_payloads_flat_byte_len, max)
+            let tx_payloads_flat_byte_len = if let Some(len) = tx_payloads_byte_len {
+                len // use given length if present
             } else {
-                tx_payloads_flat_byte_len
+                // largest entry dictates size of tx bodies
+                *entries.iter().max().unwrap_or(&0)
             };
 
             let mut result = vec![0; tx_payloads_flat_byte_len];
@@ -894,30 +891,31 @@ mod test {
         where
             R: RngCore,
         {
-            random_payload_truncated_inner(entries, None, rng)
+            random_payload_with_fixed_len_inner(entries, None, rng)
         }
-        pub fn random_payload_truncated<R>(
+        pub fn random_payload_with_fixed_len<R>(
             entries: &[usize],
-            max_tx_payloads_byte_len: usize,
+            payload_byte_len: usize,
             rng: &mut R,
         ) -> Vec<u8>
         where
             R: RngCore,
         {
-            random_payload_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
+            random_payload_with_fixed_len_inner(entries, Some(payload_byte_len), rng)
         }
-        fn random_payload_truncated_inner<R>(
+        fn random_payload_with_fixed_len_inner<R>(
             entries: &[usize],
-            max_tx_payloads_byte_len: Option<usize>,
+            payloads_byte_len: Option<usize>,
             rng: &mut R,
         ) -> Vec<u8>
         where
             R: RngCore,
         {
             let mut result = tx_table(entries);
-            result.extend(random_tx_payloads_flat_truncated_inner(
+            let tx_table_byte_len = result.len();
+            result.extend(random_tx_payloads_flat_with_fixed_len_inner(
                 entries,
-                max_tx_payloads_byte_len,
+                payloads_byte_len.map(|len| len.saturating_sub(tx_table_byte_len)),
                 rng,
             ));
             result
