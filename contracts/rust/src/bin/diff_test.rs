@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
@@ -12,6 +10,7 @@ use ark_std::{
     rand::{rngs::StdRng, Rng, SeedableRng},
     UniformRand,
 };
+use std::str::FromStr;
 
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point, ParsedG2Point};
