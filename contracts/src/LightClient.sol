@@ -64,7 +64,15 @@ contract LightClient {
     error InvalidArgs();
 
     constructor(LightClientState memory genesis, uint32 numBlockPerEpoch) {
-        if (genesis.viewNum != 0 || genesis.blockHeight != 0) {
+        // stake table commitments and threshold cannot be zero, othrewise it's impossible to
+        // generate valid proof to move finalized state forward.
+        // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
+        // feeLedgerComm can be zero, if we optionally support fee ledger yet.
+        if (
+            genesis.viewNum != 0 || genesis.blockHeight != 0 || genesis.stakeTableBlsKeyComm == 0
+                || genesis.stakeTableSchnorrKeyComm == 0 || genesis.stakeTableAmountComm == 0
+                || genesis.threshold == 0 || numBlockPerEpoch == 0
+        ) {
             revert InvalidArgs();
         }
 
@@ -72,7 +80,9 @@ contract LightClient {
         finalizedState = genesis;
         currentEpoch = 0;
         BLOCKS_PER_EPOCH = numBlockPerEpoch;
-        // TODO: (alex) initialized stake table or at least store its contract address ref here
+        bytes32 initStakeTableComm = computeStakeTableComm(genesis);
+        votingStakeTableCommitment = initStakeTableComm;
+        frozenStakeTableCommitment = initStakeTableComm;
     }
 
     // === State Modifying APIs ===
@@ -150,16 +160,20 @@ contract LightClient {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() private {
-        bytes32 newStakeTableComm = keccak256(
-            abi.encodePacked(
-                finalizedState.stakeTableBlsKeyComm,
-                finalizedState.stakeTableSchnorrKeyComm,
-                finalizedState.stakeTableAmountComm
-            )
-        );
-
+        bytes32 newStakeTableComm = computeStakeTableComm(finalizedState);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
         currentEpoch += 1;
+    }
+
+    /// @notice Given the light client state, compute the short commitment of the stake table
+    function computeStakeTableComm(LightClientState memory state) public pure returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                state.stakeTableBlsKeyComm,
+                state.stakeTableSchnorrKeyComm,
+                state.stakeTableAmountComm
+            )
+        );
     }
 }

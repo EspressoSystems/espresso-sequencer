@@ -445,7 +445,8 @@ fn main() {
             let num_validators = 200;
             let ledger = MockLedger::init(pp, num_validators);
 
-            let res = (ledger.get_state(),);
+            let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
+            let res = (ledger.get_state(), voting_st_comm, frozen_st_comm);
             println!("{}", res.encode_hex());
         }
     };

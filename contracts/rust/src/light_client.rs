@@ -6,10 +6,11 @@ use ark_std::rand::{CryptoRng, Rng, RngCore};
 use ark_std::str::FromStr;
 use ark_std::UniformRand;
 use diff_test_bn254::{field_to_u256, u256_to_field};
+use ethers::{abi, utils};
 use ethers::{
-    abi::AbiDecode,
+    abi::{AbiDecode, Token},
     prelude::{AbiError, EthAbiCodec, EthAbiType},
-    types::U256,
+    types::{H256, U256},
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::StakeTable;
@@ -255,6 +256,33 @@ impl MockLedger {
         ];
         let pi: PublicInput<F> = pi.into();
         pi.into()
+    }
+
+    /// Returns the (bytes32 votingStakeTableComm, bytes32 frozenStakeTableComm) used in contract
+    pub fn get_stake_table_comms(&self) -> (H256, H256) {
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            self.st.commitment(SnapshotVersion::EpochStart).unwrap();
+        let frozen_st_comm = utils::keccak256(
+            abi::encode_packed(&[
+                Token::Uint(field_to_u256(bls_key_comm)),
+                Token::Uint(field_to_u256(schnorr_key_comm)),
+                Token::Uint(field_to_u256(amount_comm)),
+            ])
+            .unwrap(),
+        );
+
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            self.st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        let voting_st_comm = utils::keccak256(
+            abi::encode_packed(&[
+                Token::Uint(field_to_u256(bls_key_comm)),
+                Token::Uint(field_to_u256(schnorr_key_comm)),
+                Token::Uint(field_to_u256(amount_comm)),
+            ])
+            .unwrap(),
+        );
+
+        (voting_st_comm.into(), frozen_st_comm.into())
     }
 
     // return a dummy commitment value

@@ -59,6 +59,39 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("computeStakeTableComm"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("computeStakeTableComm",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("state"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "struct LightClient.LightClientState",
+                                ),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::Pure,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("currentEpoch"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("currentEpoch"),
@@ -445,6 +478,15 @@ pub mod light_client {
                 .method_hash([31, 58, 220, 15], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `computeStakeTableComm` (0xaa922732) function
+        pub fn compute_stake_table_comm(
+            &self,
+            state: LightClientState,
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash([170, 146, 39, 50], (state,))
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `currentEpoch` (0x76671808) function
         pub fn current_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
@@ -726,6 +768,26 @@ pub mod light_client {
     )]
     #[ethcall(name = "BLOCKS_PER_EPOCH", abi = "BLOCKS_PER_EPOCH()")]
     pub struct BlocksPerEpochCall;
+    ///Container type for all input parameters for the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "computeStakeTableComm",
+        abi = "computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))"
+    )]
+    pub struct ComputeStakeTableCommCall {
+        pub state: LightClientState,
+    }
     ///Container type for all input parameters for the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
     #[derive(
         Clone,
@@ -827,6 +889,7 @@ pub mod light_client {
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientCalls {
         BlocksPerEpoch(BlocksPerEpochCall),
+        ComputeStakeTableComm(ComputeStakeTableCommCall),
         CurrentEpoch(CurrentEpochCall),
         FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
@@ -843,6 +906,11 @@ pub mod light_client {
                 <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::BlocksPerEpoch(decoded));
+            }
+            if let Ok(decoded) =
+                <ComputeStakeTableCommCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::ComputeStakeTableComm(decoded));
             }
             if let Ok(decoded) = <CurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -879,6 +947,9 @@ pub mod light_client {
         fn encode(self) -> Vec<u8> {
             match self {
                 Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::ComputeStakeTableComm(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::FrozenStakeTableCommitment(element) => {
@@ -896,6 +967,7 @@ pub mod light_client {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
@@ -908,6 +980,11 @@ pub mod light_client {
     impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
         fn from(value: BlocksPerEpochCall) -> Self {
             Self::BlocksPerEpoch(value)
+        }
+    }
+    impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientCalls {
+        fn from(value: ComputeStakeTableCommCall) -> Self {
+            Self::ComputeStakeTableComm(value)
         }
     }
     impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
@@ -954,6 +1031,20 @@ pub mod light_client {
         Hash,
     )]
     pub struct BlocksPerEpochReturn(pub u32);
+    ///Container type for all return fields from the `computeStakeTableComm` function with signature `computeStakeTableComm((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0xaa922732`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct ComputeStakeTableCommReturn(pub [u8; 32]);
     ///Container type for all return fields from the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
     #[derive(
         Clone,
