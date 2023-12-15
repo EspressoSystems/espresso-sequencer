@@ -577,6 +577,9 @@ contract StakeTable_Test is Test {
             registerWithSeed(sender, rands[i], randDepositAmount, true);
             return false;
         } else {
+            (uint64 nextRegistrationEpochBefore, uint64 pendingRegistrationsBefore) =
+                stakeTable.nextRegistrationEpoch();
+
             (BN254.G2Point memory blsVK,) =
                 registerWithSeed(sender, rands[i], randDepositAmount, false);
 
@@ -584,18 +587,16 @@ contract StakeTable_Test is Test {
             isKeyActive[i] = true;
 
             // Invariants
-            (uint64 nextRegistrationEpoch, uint64 pendingRegistrations) =
-                stakeTable.nextRegistrationEpoch();
 
             if (!skipEpochs) {
                 assertEq(
-                    nextRegistrationEpoch, (numRegistrations + 1) / stakeTable.maxChurnRate() + 1
+                    nextRegistrationEpochBefore, numRegistrations / stakeTable.maxChurnRate() + 1
                 );
-                assertEq(pendingRegistrations, (numRegistrations + 1) % stakeTable.maxChurnRate());
+                assertEq(pendingRegistrationsBefore, numRegistrations % stakeTable.maxChurnRate());
             }
 
-            assertGe(stakeTable._firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1);
-            assertGe(stakeTable.numPendingRegistrations(), 1);
+            assertEq(stakeTable._firstAvailableRegistrationEpoch(), nextRegistrationEpochBefore);
+            assertEq(stakeTable.numPendingRegistrations(), pendingRegistrationsBefore + 1);
 
             return true;
         }
