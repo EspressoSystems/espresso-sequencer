@@ -553,7 +553,7 @@ contract StakeTable_Test is Test {
 
     /// Helper function to handle registrations in testFuzz_SequencesOfEvents
     /// This function was extracted to make sol-lint happy by reducing cyclotomic complexity
-    function handleRegistrations(
+    function handleRegistration(
         uint256 i,
         uint8[ARRAY_SIZE] memory rands,
         BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
@@ -608,17 +608,18 @@ contract StakeTable_Test is Test {
         uint8[ARRAY_SIZE] memory rands,
         BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
         bool skipEpochs,
-        uint64 numRegistrations
+        uint64 numRegistrations,
+        uint64 numExits
     ) private returns (bool) {
         uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
-        bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
+
         (
             address sender,
             AbstractStakeTable.StakeType stakeType,
             uint64 balance,
             uint64 registerEpoch,
             uint64 exitEpoch,
-        ) = stakeTable.nodes(hashNode);
+        ) = stakeTable.nodes(stakeTable._hashBlsKey(registeredKeys[indexRegistration]));
 
         balance;
         stakeType;
@@ -627,19 +628,19 @@ contract StakeTable_Test is Test {
 
         bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
         if (canExit) {
-            uint64 queueSizeBefore = stakeTable.numPendingExits();
+            (uint64 nextExitEpochBefore, uint64 pendingExitsBefore) = stakeTable.nextExitEpoch();
             vm.prank(sender);
             bool res = stakeTable.requestExit(blsVK);
-            uint64 queueSizeAfter = stakeTable.numPendingExits();
+
             assertTrue(res);
 
             // Invariants
+            if (!skipEpochs) {
+                assertEq(nextExitEpochBefore, numExits / stakeTable.maxChurnRate() + 1);
+                assertEq(pendingExitsBefore, numExits % stakeTable.maxChurnRate());
+            }
             assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
             assertGe(stakeTable.numPendingExits(), 1);
-
-            if (!skipEpochs) {
-                assertEq(queueSizeAfter, queueSizeBefore + 1 % stakeTable.maxChurnRate());
-            }
         } else {
             vm.prank(sender);
             vm.expectRevert();
@@ -678,7 +679,7 @@ contract StakeTable_Test is Test {
 
             if (ev == 0) {
                 // Registrations
-                bool res = handleRegistrations(
+                bool res = handleRegistration(
                     i, rands, registeredKeys, isKeyActive, skipEpochs, numRegistrations
                 );
                 if (res) {
@@ -690,7 +691,8 @@ contract StakeTable_Test is Test {
                     continue;
                 }
 
-                bool res = handleExit(i, rands, registeredKeys, skipEpochs, numRegistrations);
+                bool res =
+                    handleExit(i, rands, registeredKeys, skipEpochs, numRegistrations, numExits);
                 if (res) {
                     numExits++;
                 }
