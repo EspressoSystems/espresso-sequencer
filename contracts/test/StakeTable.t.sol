@@ -24,12 +24,6 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_Test is Test {
-    /// Enum to be able to distinguish between the two kind of queues
-    enum QueueType {
-        Registration,
-        Exit
-    }
-
     event Registered(bytes32, uint64, AbstractStakeTable.StakeType, uint256);
     event Deposit(bytes32, uint256);
     event Exit(bytes32, uint64);
