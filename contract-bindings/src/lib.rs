@@ -4,12 +4,9 @@
 //! Do not manually edit these files.
 //! These files may be overwritten by the codegen system at any time.
 pub mod abstract_stake_table;
-pub mod bls_helper;
 pub mod bls_sig;
 pub mod bn254;
-pub mod bn256g2;
 pub mod bytes_lib;
-pub mod deploy_hot_shot;
 pub mod ed_on_bn254;
 pub mod erc20;
 pub mod example_token;
