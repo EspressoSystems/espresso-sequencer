@@ -115,8 +115,7 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    /// @notice Get the next available epoch for new registration.
-    /// @return Number of the epoch when the user can register and size of the queue in that epoch.
+    /// @notice Get the next available epoch and queue size in that epoch after new registration
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
@@ -148,8 +147,8 @@ contract StakeTable is AbstractStakeTable {
         return pendingRegistrationsInFirstAvailableRegistrationEpoch;
     }
 
-    /// @notice Get the next available epoch for exit
-    // @param queueSize current size of the exit queue (after insertion of new element in the queue)
+    /// @notice Get the next available epoch for exit and queue size in that epoch after a new exit
+    /// request
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
