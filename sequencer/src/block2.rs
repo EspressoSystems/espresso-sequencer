@@ -561,28 +561,15 @@ mod test {
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            CorrectnessTestCase::from_tx_lengths(&[5, 8, 8]), // 3 non-empty txs
-            CorrectnessTestCase::from_tx_lengths(&[0, 8, 8]), // 1 empty tx at the beginning
-            CorrectnessTestCase::from_tx_lengths(&[5, 0, 8]), // 1 empty tx in the middle
-            CorrectnessTestCase::from_tx_lengths(&[5, 8, 0]), // 1 empty tx at the end
-            CorrectnessTestCase::from_tx_lengths(&[5]),       // 1 nonempty tx
-            CorrectnessTestCase::from_tx_lengths(&[0]),       // 1 empty tx
-            CorrectnessTestCase::from_tx_lengths(&[]),        // zero txs
-            CorrectnessTestCase::from_tx_lengths(&[1000, 1000, 1000]), // large payload
+            vec![5, 8, 8],          // 3 non-empty txs
+            vec![0, 8, 8],          // 1 empty tx at the beginning
+            vec![5, 0, 8],          // 1 empty tx in the middle
+            vec![5, 8, 0],          // 1 empty tx at the end
+            vec![5],                // 1 nonempty tx
+            vec![0],                // 1 empty tx
+            vec![],                 // zero txs
+            vec![1000, 1000, 1000], // large payload
         ];
-
-        struct CorrectnessTestCase {
-            entries: Vec<usize>,
-            num_txs: usize,
-        }
-        impl CorrectnessTestCase {
-            fn from_tx_lengths(lengths: &[usize]) -> Self {
-                Self {
-                    entries: entries_from_lengths(lengths),
-                    num_txs: lengths.len(),
-                }
-            }
-        }
 
         setup_logging();
         setup_backtrace();
@@ -590,18 +577,19 @@ mod test {
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, test_case) in test_cases.into_iter().enumerate() {
+        for (t, lengths) in test_cases.into_iter().enumerate() {
             tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                test_case.num_txs,
+                lengths.len(),
             );
 
             // prepare things as a function of the test case
-            let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&test_case.entries), &mut rng);
-            let tx_bodies = extract_tx_payloads(&test_case.entries, &tx_payloads_flat);
-            assert_eq!(tx_bodies.len(), test_case.num_txs);
+            let entries = entries_from_lengths(&lengths);
+            let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&entries), &mut rng);
+            let tx_bodies = extract_tx_payloads(&entries, &tx_payloads_flat);
+            assert_eq!(tx_bodies.len(), entries.len());
             assert_eq!(
                 // enforce well-formed test case
                 tx_payloads_flat,
@@ -712,7 +700,6 @@ mod test {
         // TODO more test cases:
         // - this will break for extremely large payloads
         //   - should we hard-code an upper limit so arithmetic never overflows?
-        // - payload <4 bytes
 
         setup_logging();
         setup_backtrace();
