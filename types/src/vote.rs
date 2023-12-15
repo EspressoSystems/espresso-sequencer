@@ -14,6 +14,7 @@ use hotshot_utils::bincode::bincode_opts;
 use tracing::error;
 
 use crate::{
+    simple_certificate::Threshhold,
     simple_vote::Voteable,
     traits::{
         election::Membership,
@@ -52,6 +53,9 @@ The votes all must be over the `Commitment` associated type.
 pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
+
+    /// Threshold Functions
+    type Threshhold: Threshhold<TYPES>;
 
     /// Build a certificate from the data commitment and the quorum of signers
     fn create_signed_certificate(

@@ -901,7 +901,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .await;
                     self.relay += 1;
                     match self.phase {
-                        ViewSyncPhase::None => {
+                        ViewSyncPhase::None | ViewSyncPhase::PreCommit | ViewSyncPhase::Commit => {
                             let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
                                 ViewSyncPreCommitData {
                                     relay: self.relay,
@@ -917,44 +917,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             if let GeneralConsensusMessage::ViewSyncPreCommitVote(vote) = message {
                                 self.event_stream
                                     .publish(HotShotEvent::ViewSyncPreCommitVoteSend(vote))
-                                    .await;
-                            }
-                        }
-                        ViewSyncPhase::PreCommit => {
-                            let vote = ViewSyncCommitVote::<TYPES>::create_signed_vote(
-                                ViewSyncCommitData {
-                                    relay: self.relay,
-                                    round: self.next_view,
-                                },
-                                self.next_view,
-                                &self.public_key,
-                                &self.private_key,
-                            );
-                            let message =
-                                GeneralConsensusMessage::<TYPES>::ViewSyncCommitVote(vote);
-
-                            if let GeneralConsensusMessage::ViewSyncCommitVote(vote) = message {
-                                self.event_stream
-                                    .publish(HotShotEvent::ViewSyncCommitVoteSend(vote))
-                                    .await;
-                            }
-                        }
-                        ViewSyncPhase::Commit => {
-                            let vote = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
-                                ViewSyncFinalizeData {
-                                    relay: self.relay,
-                                    round: self.next_view,
-                                },
-                                self.next_view,
-                                &self.public_key,
-                                &self.private_key,
-                            );
-                            let message =
-                                GeneralConsensusMessage::<TYPES>::ViewSyncFinalizeVote(vote);
-
-                            if let GeneralConsensusMessage::ViewSyncFinalizeVote(vote) = message {
-                                self.event_stream
-                                    .publish(HotShotEvent::ViewSyncFinalizeVoteSend(vote))
                                     .await;
                             }
                         }
