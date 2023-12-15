@@ -614,7 +614,7 @@ contract StakeTable_Test is Test {
             } else if (ev == 1) {
                 // Exits
                 if (numRegistrations == 0) {
-                    break;
+                    continue;
                 }
                 uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
                 bytes32 hashNode = stakeTable._hashBlsKey(registeredKeys[indexRegistration]);
