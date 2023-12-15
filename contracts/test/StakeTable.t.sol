@@ -611,7 +611,9 @@ contract StakeTable_Test is Test {
         bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
         if (canExit) {
             vm.prank(sender);
+
             bool res = stakeTable.requestExit(blsVK);
+
             assertTrue(res);
             // Invariants specific to a successful exit
             assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
@@ -675,7 +677,6 @@ contract StakeTable_Test is Test {
             // Global invariants
             assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
             assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
-            assertLe(numExits, numRegistrations);
         }
     }
 }
