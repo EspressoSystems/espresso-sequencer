@@ -30,6 +30,15 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
+use hotshot_types::vote::Certificate;
+use bitvec::bitvec;
+use hotshot_types::simple_vote::QuorumVote;
+use hotshot_types::simple_vote::QuorumData;
+use hotshot_types::vote::Vote;
+use hotshot_utils::bincode::bincode_opts;
+use bincode::Options;
+use tracing::error;
+
 pub async fn build_system_handle(
     node_id: u64,
 ) -> (
@@ -102,9 +111,86 @@ pub async fn build_system_handle(
     .expect("Could not init hotshot")
 }
 
+pub fn build_assembled_sig<
+    TYPES: NodeType<SignatureKey = BLSPubKey>, 
+    VOTE: Vote<TYPES>, 
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>
+    >(
+    leaf: Leaf<TYPES>, 
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>, 
+    view: TYPES::Time
+) -> <TYPES::SignatureKey as SignatureKey>::QCType {
+
+    // Assemble QC
+    let stake_table = handle.get_committee_qc_stake_table();
+    let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
+        <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+            stake_table.clone(),
+            handle.get_threshold(),
+        );
+    let total_nodes = stake_table.len();
+    let signers = bitvec![1; total_nodes];
+    let mut sig_lists = Vec::new();
+
+    // calculate vote
+    for node_id in 0..total_nodes {
+        let (private_key, public_key) = key_pair_for_id(node_id.try_into().unwrap());
+        let vote = QuorumVote::<TYPES>::create_signed_vote(
+            QuorumData {
+                leaf_commit: leaf.commit(),
+            },
+            view,
+            &public_key,
+            &private_key,
+        );
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
+                bincode_opts()
+                    .deserialize(&vote.get_signature().0)
+                    .expect("Deserialization on the signature shouldn't be able to fail.");
+        sig_lists.push(original_signature);
+    }
+
+    let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+        &real_qc_pp,
+        signers.as_bitslice(),
+        &sig_lists[..], 
+    );
+
+    real_qc_sig    
+}
+
+pub fn build_qc<
+    TYPES: NodeType,
+    VOTE: Vote<TYPES, Commitment = QuorumData<TYPES>>, 
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>
+    >(
+    real_qc_sig: <TYPES::SignatureKey as SignatureKey>::QCType, 
+    leaf: Leaf<TYPES>, 
+    view: TYPES::Time, 
+    public_key: &TYPES::SignatureKey, 
+    private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
+) -> CERT {
+    let vote = QuorumVote::<TYPES>::create_signed_vote(
+        QuorumData {
+            leaf_commit: leaf.commit(),
+        },
+        view,
+        public_key,
+        private_key,
+    );
+    let cert = CERT::create_signed_certificate(
+        vote.get_data_commitment(),
+        vote.get_data().clone(),
+        real_qc_sig,
+        vote.get_view_number(),
+    );
+    cert
+}
+
 async fn build_quorum_proposal_and_signature(
     handle: &SystemContextHandle<TestTypes, MemoryImpl>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
+    public_key: &BLSPubKey,
     view: u64,
 ) -> (QuorumProposal<TestTypes>, EncodedSignature) {
     let consensus_lock = handle.get_consensus();
@@ -123,13 +209,14 @@ async fn build_quorum_proposal_and_signature(
         panic!("Failed to find high QC parent.");
     };
     let parent_leaf = leaf.clone();
+    error!("parent_leaf's view = {:?}", parent_leaf.view_number);
 
     // every event input is seen on the event stream in the output.
     let block = <TestBlockPayload as TestableBlock>::genesis();
     let payload_commitment = vid_commitment(&block.encode().unwrap().collect());
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
     let leaf = Leaf {
-        view_number: ViewNumber::new(view),
+        view_number: ViewNumber::new(1),
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
         block_header: block_header.clone(),
@@ -140,12 +227,39 @@ async fn build_quorum_proposal_and_signature(
     };
     let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
     let proposal = QuorumProposal::<TestTypes> {
-        block_header,
-        view_number: ViewNumber::new(view),
+        block_header: block_header.clone(),
+        view_number: ViewNumber::new(1),
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
-        proposer_id: leaf.proposer_id,
+        proposer_id: leaf.proposer_id.clone(),
     };
+
+    if view == 2 {
+        let created_assembled_sig = 
+            build_assembled_sig::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(leaf.clone(), handle, ViewNumber::new(1));
+        let created_qc = build_qc::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(created_assembled_sig, leaf.clone(), ViewNumber::new(1), public_key, private_key);
+        let parent_leaf = leaf.clone();
+        let leaf_view2 = Leaf {
+            view_number: ViewNumber::new(2),
+            justify_qc: created_qc.clone(), 
+            parent_commitment: parent_leaf.commit(),
+            block_header: block_header.clone(),
+            block_payload: None,
+            rejected: vec![],
+            timestamp: 0,
+            proposer_id: api.public_key().to_bytes(),
+        };
+        let signature_view2 = <BLSPubKey as SignatureKey>::sign(private_key, leaf_view2.commit().as_ref());
+        let proposal_view2 = QuorumProposal::<TestTypes> {
+            block_header,
+            view_number: ViewNumber::new(2),
+            justify_qc: created_qc,
+            timeout_certificate: None,
+            proposer_id: leaf_view2.proposer_id,
+        };
+        error!("Have you really entered view 2?");
+        return (proposal_view2, signature_view2)
+    }
 
     (proposal, signature)
 }
@@ -155,8 +269,9 @@ pub async fn build_quorum_proposal(
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
     view: u64,
 ) -> Proposal<TestTypes, QuorumProposal<TestTypes>> {
+    let public_key = &BLSPubKey::from_private(private_key);
     let (proposal, signature) =
-        build_quorum_proposal_and_signature(handle, private_key, view).await;
+        build_quorum_proposal_and_signature(handle, private_key, public_key, view).await;
     Proposal {
         data: proposal,
         signature,

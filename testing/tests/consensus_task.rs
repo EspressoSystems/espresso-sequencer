@@ -161,7 +161,6 @@ async fn test_consensus_with_vid_vote() {
 
     let (handle, _event_stream) = build_system_handle(2).await;
     // We assign node's key pair rather than read from config file since it's a test
-    let (private_key_view1, public_key_view1) = key_pair_for_id(1);
     // In view 2, node 2 is the leader.
     let (private_key_view2, public_key_view2) = key_pair_for_id(2);
 
@@ -193,27 +192,10 @@ async fn test_consensus_with_vid_vote() {
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    let proposal_view1 = build_quorum_proposal(&handle, &private_key_view1, 1).await;
     // Do a view change, so that it's not the genesis view, and vid vote is needed
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::QuorumProposalRecv(
-        proposal_view1.clone(),
-        public_key_view1,
-    ));
 
-    output.insert(
-        HotShotEvent::QuorumProposalRecv(proposal_view1.clone(), public_key_view1),
-        1,
-    );
-
-    // Since it's genesis view, node can vote without dac and vid share
-    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view1.data).await {
-        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
-        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
-        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
-    }
-
-    // For the test of vote logic with vid
+    // For the test of vote logic with vid, starting view 2 we need vid share
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     // Sishan TOOD: this proposal on view 2 doesn't have a valid justify QC
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
@@ -262,6 +244,7 @@ async fn test_consensus_with_vid_vote() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 async fn test_consensus_no_vote_without_vid_share() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;

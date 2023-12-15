@@ -20,12 +20,15 @@ use hotshot_types::{
     event::EventType,
     message::{MessageKind, SequencingMessage},
     traits::{
-        election::Membership, node_implementation::NodeType, state::ConsensusTime, storage::Storage,
+         node_implementation::NodeType, state::ConsensusTime, storage::Storage,
     },
 };
 use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
 use std::sync::Arc;
 use tracing::error;
+use hotshot_types::traits::election::Membership;
+use ethereum_types::U256;
+use hotshot_types::traits::signature_key::SignatureKey;
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
@@ -198,6 +201,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     }
 
     // Below is for testing only:
+    
+    /// Gets the current membership of the [`HotShot`] instance
+    #[cfg(feature = "hotshot-testing")]
+    pub fn get_committee_qc_stake_table(&self) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry>{
+        self.hotshot
+        .inner
+        .memberships
+        .quorum_membership.get_committee_qc_stake_table()
+    }
+
+    /// Gets the threshold of current membership of the [`HotShot`] instance
+    #[cfg(feature = "hotshot-testing")]
+    pub fn get_threshold(&self) -> U256 {
+        U256::from(self.hotshot.inner.memberships.quorum_membership.success_threshold().get())
+    }
+    
 
     /// Wrapper for `HotShotConsensusApi`'s `get_leader` function
     #[allow(clippy::unused_async)] // async for API compatibility reasons
