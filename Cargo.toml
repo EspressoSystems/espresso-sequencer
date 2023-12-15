@@ -42,15 +42,15 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.8"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "96d27f7d12e6f668513c26b46d966f23dcaf20ad" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "96d27f7d12e6f668513c26b46d966f23dcaf20ad" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "96d27f7d12e6f668513c26b46d966f23dcaf20ad" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "96d27f7d12e6f668513c26b46d966f23dcaf20ad" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "5bda483f18e71614ce03bd6fffcbef2681bb2c97" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "5bda483f18e71614ce03bd6fffcbef2681bb2c97" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "5bda483f18e71614ce03bd6fffcbef2681bb2c97" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "5bda483f18e71614ce03bd6fffcbef2681bb2c97" }
 itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.3" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.4" }
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
@@ -71,7 +71,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "96d27f7d12e6f668513c26b46d966f23dcaf20ad", optional = true }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "5bda483f18e71614ce03bd6fffcbef2681bb2c97", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.1", optional = true }
@@ -93,5 +93,5 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.1"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.3" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.4" }
 tempdir = "0.3"
