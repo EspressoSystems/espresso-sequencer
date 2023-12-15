@@ -24,7 +24,7 @@ use commit::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{cmp::Ordering, time::Duration};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -32,6 +32,18 @@ pub struct L1BlockInfo {
     pub number: u64,
     pub timestamp: U256,
     pub hash: H256,
+}
+
+impl PartialOrd for L1BlockInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for L1BlockInfo {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.number.cmp(&other.number)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
