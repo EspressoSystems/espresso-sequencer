@@ -53,13 +53,15 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    /// Registration queue
-    uint64 public firstAvailableRegistrationEpoch;
-    uint64 public pendingRegistrationsInFirstAvailableRegistrationEpoch;
+    /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to get the correct epoch
+    uint64 private _firstAvailableRegistrationEpoch;
+    /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the total pending queue size!)
+    uint64 private _numPendingRegistrations;
 
-    /// Exit queue
-    uint64 public firstAvailableExitEpoch;
-    uint64 public pendingExitsInFirstAvailableExitEpoch;
+    /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct epoch
+    uint64 private _firstAvailableExitEpoch;
+    /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending queue size!)
+    uint64 private _numPendingExits;
 
     uint256 public maxChurnRate;
 
