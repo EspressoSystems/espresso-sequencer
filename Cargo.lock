@@ -7478,6 +7478,7 @@ dependencies = [
  "hotshot-types",
  "hotshot-web-server",
  "include_dir",
+ "itertools 0.12.0",
  "jf-primitives",
  "jf-utils",
  "lazy_static",
