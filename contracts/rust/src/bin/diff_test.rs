@@ -408,10 +408,8 @@ fn main() {
 
             // Use seed from cli to generate different bls keys
             let seed_value: u8 = cli.args[1].parse::<u8>().unwrap();
-            let mut seed_bytes_length_32 = [0u8; 32];
-            seed_bytes_length_32[0] = seed_value;
-
-            let mut rng = StdRng::from_seed(seed_bytes_length_32);
+            let seed = [seed_value; 32];
+            let mut rng = StdRng::from_seed(seed);
 
             let sender_address = cli.args[0].parse::<Address>().unwrap();
             let sender_address_bytes = AbiEncode::encode(sender_address);
@@ -436,8 +434,6 @@ fn main() {
             let sig_affine_point = sig.sigma.into_affine();
             let sig_parsed: ParsedG1Point = sig_affine_point.into();
 
-            // TODO (Alex) Return ParsedG1Point and ParsedG2Point
-            // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
                 sig_parsed,
                 vk_parsed,
