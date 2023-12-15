@@ -557,7 +557,9 @@ contract StakeTable_Test is Test {
         uint256 i,
         uint8[ARRAY_SIZE] memory rands,
         BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
-        bool[ARRAY_SIZE] memory isKeyActive
+        bool[ARRAY_SIZE] memory isKeyActive,
+        bool skipEpochs,
+        uint64 numRegistrations
     ) private returns (bool) {
         address sender = makeAddr(string(abi.encode(i)));
         uint64 randDepositAmount = uint64(rands[i]);
@@ -577,11 +579,24 @@ contract StakeTable_Test is Test {
         } else {
             (BN254.G2Point memory blsVK,) =
                 registerWithSeed(sender, rands[i], randDepositAmount, false);
+
             registeredKeys[i] = blsVK;
             isKeyActive[i] = true;
-            // Invariants specific to a successful registration
+
+            // Invariants
+            (uint64 nextRegistrationEpoch, uint64 pendingRegistrations) =
+                stakeTable.nextRegistrationEpoch();
+
+            if (!skipEpochs) {
+                assertEq(
+                    nextRegistrationEpoch, (numRegistrations + 1) / stakeTable.maxChurnRate() + 1
+                );
+                assertEq(pendingRegistrations, (numRegistrations + 1) % stakeTable.maxChurnRate());
+            }
+
             assertGe(stakeTable._firstAvailableRegistrationEpoch(), stakeTable.currentEpoch() + 1);
             assertGe(stakeTable.numPendingRegistrations(), 1);
+
             return true;
         }
     }
@@ -591,6 +606,7 @@ contract StakeTable_Test is Test {
         uint256 i,
         uint8[ARRAY_SIZE] memory rands,
         BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
+        bool skipEpochs,
         uint64 numRegistrations
     ) private returns (bool) {
         uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
@@ -610,14 +626,19 @@ contract StakeTable_Test is Test {
 
         bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
         if (canExit) {
+            uint64 queueSizeBefore = stakeTable.numPendingExits();
             vm.prank(sender);
-
             bool res = stakeTable.requestExit(blsVK);
-
+            uint64 queueSizeAfter = stakeTable.numPendingExits();
             assertTrue(res);
-            // Invariants specific to a successful exit
+
+            // Invariants
             assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
             assertGe(stakeTable.numPendingExits(), 1);
+
+            if (!skipEpochs) {
+                assertEq(queueSizeAfter, queueSizeBefore + 1 % stakeTable.maxChurnRate());
+            }
         } else {
             vm.prank(sender);
             vm.expectRevert();
@@ -640,7 +661,8 @@ contract StakeTable_Test is Test {
     /// requestExit, and advanceEpoch operations
     function testFuzz_SequencesOfEvents(
         uint8[ARRAY_SIZE] memory events,
-        uint8[ARRAY_SIZE] memory rands
+        uint8[ARRAY_SIZE] memory rands,
+        bool skipEpochs
     ) external {
         BN254.G2Point[ARRAY_SIZE] memory registeredKeys;
 
@@ -655,7 +677,9 @@ contract StakeTable_Test is Test {
 
             if (ev == 0) {
                 // Registrations
-                bool res = handleRegistrations(i, rands, registeredKeys, isKeyActive);
+                bool res = handleRegistrations(
+                    i, rands, registeredKeys, isKeyActive, skipEpochs, numRegistrations
+                );
                 if (res) {
                     numRegistrations++;
                 }
@@ -664,14 +688,17 @@ contract StakeTable_Test is Test {
                 if (numRegistrations == 0) {
                     continue;
                 }
-                bool res = handleExit(i, rands, registeredKeys, numRegistrations);
+
+                bool res = handleExit(i, rands, registeredKeys, skipEpochs, numRegistrations);
                 if (res) {
                     numExits++;
                 }
             } else {
                 // Advance epoch
                 // ev == 2
-                handleAdvanceEpoch();
+                if (skipEpochs) {
+                    handleAdvanceEpoch();
+                }
             }
 
             // Global invariants
