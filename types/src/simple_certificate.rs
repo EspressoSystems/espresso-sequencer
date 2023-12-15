@@ -155,8 +155,6 @@ pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>, 
 pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData, SuccessThreshold>;
 /// Type alias for a Timeout certificate over a view number
 pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>, SuccessThreshold>;
-
-// TODO ED Update this to use the correct threshold instead of the default `success_threshold`
 /// Type alias for a `ViewSyncPreCommit` certificate over a view number
 pub type ViewSyncPreCommitCertificate2<TYPES> =
     SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>, OneHonestThreshold>;
