@@ -4,7 +4,7 @@ default:
 demo *args:
     docker compose up {{args}}
 
-just demo-native:
+demo-native:
     cargo build --release
     scripts/demo-native
 
