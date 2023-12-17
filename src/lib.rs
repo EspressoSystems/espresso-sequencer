@@ -30,6 +30,7 @@
 //! use hotshot_query_service::{
 //!     availability,
 //!     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+//!     node,
 //!     status::UpdateStatusData,
 //!     status, Error
 //! };
@@ -54,6 +55,8 @@
 //! // Create API modules.
 //! let availability_api = availability::define_api(&Default::default())
 //!     .map_err(Error::internal)?;
+//! let node_api = node::define_api(&Default::default())
+//!     .map_err(Error::internal)?;
 //! let status_api = status::define_api(&Default::default())
 //!     .map_err(Error::internal)?;
 //!
@@ -62,6 +65,8 @@
 //! let mut app = App::<_, Error>::with_state(data_source.clone());
 //! app
 //!     .register_module("availability", availability_api)
+//!     .map_err(Error::internal)?
+//!     .register_module("node", node_api)
 //!     .map_err(Error::internal)?
 //!     .register_module("status", status_api)
 //!     .map_err(Error::internal)?;
@@ -238,16 +243,16 @@
 //! Composing the modules provided by this crate with other, unrelated modules to create a unified
 //! service is fairly simple, as most of the complexity is handled by [tide_disco], which already
 //! provides a mechanism for composing several modules into a single application. In principle, all
-//! you need to do is register the [availability] and [status] APIs provided by this crate with a
-//! [tide_disco::App], and then register your own API modules with the same app.
+//! you need to do is register the [availability], [node], and [status] APIs provided by this crate
+//! with a [tide_disco::App], and then register your own API modules with the same app.
 //!
 //! The one wrinkle is that all modules within a [tide_disco] app must share the same state type. It
-//! is for this reason that the modules provided by this crate are generic on the state type -- both
-//! [availability::define_api] and [status::define_api] can work with any state type, provided that
-//! type implements the corresponding data source traits. The data sources provided by this crate
-//! implement both of these traits, but if you want to use a custom state type that includes state
-//! for other modules, you will need to implement these traits for your custom type. The basic
-//! pattern looks like this:
+//! is for this reason that the modules provided by this crate are generic on the state type --
+//! [availability::define_api], [node::define_api], and [status::define_api] can all work with any
+//! state type, provided that type implements the corresponding data source traits. The data sources
+//! provided by this crate implement these traits, but if you want to use a custom state type that
+//! includes state for other modules, you will need to implement these traits for your custom type.
+//! The basic pattern looks like this:
 //!
 //! ```
 //! # use async_trait::async_trait;
@@ -258,6 +263,7 @@
 //! #   TransactionIndex,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
+//! # use hotshot_query_service::node::NodeDataSource;
 //! # use hotshot_query_service::status::StatusDataSource;
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
@@ -304,10 +310,28 @@
 //! #   async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_proposals(&self, id: &EncodedPublicKey, limit: Option<usize>) -> QueryResult<Vec<LeafQueryData<AppTypes>>> { todo!() }
-//! #   async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> { todo!() }
 //! #   async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> { todo!() }
 //! #   async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> { todo!() }
+//! }
+//!
+//! // Implement data source trait for node API by delegating to the underlying data source.
+//! #[async_trait]
+//! impl<D: NodeDataSource<AppTypes> + Send + Sync> NodeDataSource<AppTypes> for AppState<D> {
+//!     async fn block_height(&self) -> QueryResult<usize> {
+//!         self.hotshot_qs.block_height().await
+//!     }
+//!
+//!     async fn get_proposals(
+//!         &self,
+//!         id: &EncodedPublicKey,
+//!         limit: Option<usize>,
+//!     ) -> QueryResult<Vec<LeafQueryData<AppTypes>>> {
+//!         self.hotshot_qs.get_proposals(id, limit).await
+//!     }
+//!
+//!     async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+//!         self.hotshot_qs.count_proposals(id).await
+//!     }
 //! }
 //!
 //! // Implement data source trait for status API by delegating to the underlying data source.
@@ -326,23 +350,25 @@
 //! ```
 //!
 //! In the future, we may provide derive macros for
-//! [AvailabilityDataSource](availability::AvailabilityDataSource) and
-//! [StatusDataSource](status::StatusDataSource) to eliminate the boilerplate of implementing them
-//! for a custom type that has an existing implementation as one of its fields.
+//! [AvailabilityDataSource](availability::AvailabilityDataSource),
+//! [NodeDataSource](node::NodeDataSource), and [StatusDataSource](status::StatusDataSource) to
+//! eliminate the boilerplate of implementing them for a custom type that has an existing
+//! implementation as one of its fields.
 //!
 //! Once you have created your `AppState` type aggregating the state for each API module, you can
 //! initialize the state as normal, instantiating `D` with a concrete implementation of a data
 //! source and initializing `hotshot_qs` as you normally would that data source.
 //!
-//! _However_, this only works if you want the persistent storage for the availability and status
+//! _However_, this only works if you want the persistent storage for the availability and node
 //! modules (managed by `hotshot_qs`) to be independent of the persistent storage for other modules.
 //! You may well want to synchronize the storage for all modules together, so that updates to the
 //! entire application state can be done atomically. This is particularly relevant if one of your
 //! application-specific modules updates its storage based on a stream of HotShot leaves. Since the
-//! availability module also updates with each new leaf, you probably want these two modules to stay
-//! in sync. The data source implementations provided by this crate provide means by which you can
-//! add additional data to the same persistent store and synchronize the entire store together.
-//! Refer to the documentation for you specific data source for information on how to achieve this.
+//! availability and node modules also update with each new leaf, you probably want all of these
+//! modules to stay in sync. The data source implementations provided by this crate provide means by
+//! which you can add additional data to the same persistent store and synchronize the entire store
+//! together. Refer to the documentation for you specific data source for information on how to
+//! achieve this.
 //!
 
 mod api;
@@ -350,6 +376,7 @@ pub mod availability;
 pub mod data_source;
 mod error;
 pub mod metrics;
+pub mod node;
 mod resolvable;
 pub mod status;
 pub mod testing;
@@ -409,6 +436,8 @@ pub struct Options {
     #[clap(flatten)]
     pub availability: availability::Options,
     #[clap(flatten)]
+    pub node: node::Options,
+    #[clap(flatten)]
     pub status: status::Options,
     #[clap(short, long, default_value = "8080")]
     pub port: u16,
@@ -423,6 +452,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
 where
     Payload<Types>: availability::QueryablePayload,
     D: availability::AvailabilityDataSource<Types>
+        + node::NodeDataSource<Types>
         + status::StatusDataSource
         + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
@@ -433,12 +463,15 @@ where
     // Create API modules.
     let availability_api =
         availability::define_api(&options.availability).map_err(Error::internal)?;
+    let node_api = node::define_api(&options.node).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status).map_err(Error::internal)?;
 
     // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
     let data_source = Arc::new(RwLock::new(data_source));
     let mut app = App::<_, Error>::with_state(data_source.clone());
     app.register_module("availability", availability_api)
+        .map_err(Error::internal)?
+        .register_module("node", node_api)
         .map_err(Error::internal)?
         .register_module("status", status_api)
         .map_err(Error::internal)?;
@@ -473,8 +506,12 @@ mod test {
             TransactionHash, TransactionIndex,
         },
         metrics::PrometheusMetrics,
+        node::NodeDataSource,
         status::StatusDataSource,
-        testing::{consensus::MockDataSource, mocks::MockTypes},
+        testing::{
+            consensus::MockDataSource,
+            mocks::{MockHeader, MockTypes},
+        },
     };
     use async_std::{sync::RwLock, task::spawn};
     use async_trait::async_trait;
@@ -547,6 +584,20 @@ mod test {
         ) -> QueryResult<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
             self.hotshot_qs.get_block_with_transaction(hash).await
         }
+        async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
+            self.hotshot_qs.subscribe_leaves(height).await
+        }
+        async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
+            self.hotshot_qs.subscribe_blocks(height).await
+        }
+    }
+
+    // Imiplement data source trait for node API.
+    #[async_trait]
+    impl NodeDataSource<MockTypes> for CompositeState {
+        async fn block_height(&self) -> QueryResult<usize> {
+            StatusDataSource::block_height(self).await
+        }
         async fn get_proposals(
             &self,
             proposer: &EncodedPublicKey,
@@ -557,21 +608,14 @@ mod test {
         async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
             self.hotshot_qs.count_proposals(proposer).await
         }
-        async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
-            self.hotshot_qs.subscribe_leaves(height).await
-        }
-        async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
-            self.hotshot_qs.subscribe_blocks(height).await
-        }
     }
 
     // Implement data source trait for status API.
     #[async_trait]
     impl StatusDataSource for CompositeState {
         async fn block_height(&self) -> QueryResult<usize> {
-            self.hotshot_qs.block_height().await
+            StatusDataSource::block_height(&self.hotshot_qs).await
         }
-
         fn metrics(&self) -> &PrometheusMetrics {
             self.hotshot_qs.metrics()
         }
@@ -608,6 +652,8 @@ mod test {
             "availability",
             availability::define_api(&Default::default()).unwrap(),
         )
+        .unwrap()
+        .register_module("node", node::define_api(&Default::default()).unwrap())
         .unwrap()
         .register_module("status", status::define_api(&Default::default()).unwrap())
         .unwrap()
@@ -646,7 +692,7 @@ mod test {
         // Check that we can still access the built-in modules.
         assert_eq!(
             client
-                .get::<u64>("status/latest_block_height")
+                .get::<u64>("status/block-height")
                 .send()
                 .await
                 .unwrap(),
@@ -655,10 +701,19 @@ mod test {
         let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
-                .get::<u64>(&format!("availability/proposals/{}/count", key.to_bytes()))
+                .get::<u64>(&format!("node/proposals/{}/count", key.to_bytes()))
                 .send()
                 .await
                 .unwrap(),
+            0
+        );
+        assert_eq!(
+            client
+                .get::<MockHeader>("availability/header/0")
+                .send()
+                .await
+                .unwrap()
+                .block_number,
             0
         );
     }

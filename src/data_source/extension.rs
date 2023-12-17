@@ -17,6 +17,7 @@ use crate::{
         TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
+    node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
     Payload, QueryResult,
 };
@@ -172,16 +173,6 @@ where
     ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
         self.data_source.get_block_with_transaction(hash).await
     }
-    async fn get_proposals(
-        &self,
-        proposer: &EncodedPublicKey,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        self.data_source.get_proposals(proposer, limit).await
-    }
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
-        self.data_source.count_proposals(proposer).await
-    }
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
         self.data_source.subscribe_leaves(height).await
     }
@@ -205,6 +196,42 @@ where
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
         self.data_source.insert_block(block).await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types> NodeDataSource<Types> for ExtensibleDataSource<D, U>
+where
+    D: NodeDataSource<Types> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        self.data_source.block_height().await
+    }
+    async fn get_proposals(
+        &self,
+        proposer: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
+        self.data_source.get_proposals(proposer, limit).await
+    }
+    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        self.data_source.count_proposals(proposer).await
+    }
+}
+
+#[async_trait]
+impl<D, U, Types> UpdateNodeData<Types> for ExtensibleDataSource<D, U>
+where
+    D: UpdateNodeData<Types> + Send + Sync,
+    U: Send + Sync,
+    Types: NodeType,
+{
+    type Error = D::Error;
+
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+        self.data_source.insert_leaf(leaf).await
     }
 }
 

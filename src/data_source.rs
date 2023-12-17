@@ -48,7 +48,10 @@ pub use update::{UpdateDataSource, VersionedDataSource};
 #[espresso_macros::generic_tests]
 pub mod availability_tests {
     use crate::{
-        availability::{payload_size, BlockQueryData, LeafQueryData, QueryablePayload},
+        availability::{
+            payload_size, BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
+        },
+        node::NodeDataSource,
         testing::{
             consensus::MockNetwork,
             mocks::{mock_transaction, MockPayload, MockTypes, TestableDataSource},
@@ -255,7 +258,9 @@ pub mod availability_tests {
         // change during the test.
         let (ds, block_height) = loop {
             let ds = ds.read().await;
-            let block_height = ds.block_height().await.unwrap();
+            let block_height = NodeDataSource::<MockTypes>::block_height(&*ds)
+                .await
+                .unwrap();
             if block_height >= 3 {
                 break (ds, block_height as u64);
             }
@@ -328,16 +333,28 @@ pub mod availability_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
+        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
+            .await
+            .unwrap();
         ds.insert_block(block.clone()).await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 2);
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            2
+        );
         assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
         assert_eq!(block, ds.get_block(1).await.unwrap());
 
         // Revert the changes.
         ds.revert().await;
-        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            1
+        );
         assert!(matches!(
             ds.get_leaf(1).await.unwrap_err(),
             QueryError::NotFound
@@ -367,11 +384,18 @@ pub mod availability_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
+        UpdateAvailabilityData::<MockTypes>::insert_leaf(&mut ds, leaf.clone())
+            .await
+            .unwrap();
         ds.insert_block(block.clone()).await.unwrap();
         ds.commit().await.unwrap();
 
-        assert_eq!(ds.block_height().await.unwrap(), 2);
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            2
+        );
         assert_eq!(leaf, ds.get_leaf(1).await.unwrap());
         assert_eq!(block, ds.get_block(1).await.unwrap());
 
@@ -379,7 +403,12 @@ pub mod availability_tests {
 
         // Reset and check that the changes are gone.
         let ds = D::reset(&storage).await;
-        assert_eq!(ds.block_height().await.unwrap(), 1);
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            1
+        );
         assert!(matches!(
             ds.get_leaf(1).await.unwrap_err(),
             QueryError::NotFound

@@ -19,6 +19,7 @@ use crate::{
         ResourceId, TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
+    node::{NodeDataSource, UpdateNodeData},
     status::StatusDataSource,
     Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
 };
@@ -634,8 +635,9 @@ where
     }
 
     async fn insert_genesis(&mut self) -> Result<(), Error> {
-        if self.block_height().await? == 0 {
-            self.insert_leaf(LeafQueryData::genesis()).await?;
+        if StatusDataSource::block_height(self).await? == 0 {
+            UpdateAvailabilityData::<Types>::insert_leaf(self, LeafQueryData::genesis()).await?;
+            UpdateNodeData::<Types>::insert_leaf(self, LeafQueryData::genesis()).await?;
             self.insert_block(BlockQueryData::genesis()).await?;
             self.commit().await?;
         }
@@ -842,36 +844,6 @@ where
         Ok((block, index))
     }
 
-    async fn get_proposals(
-        &self,
-        proposer: &EncodedPublicKey,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
-        if let Some(limit) = limit {
-            // If there is a limit on the number of leaves to return, we want to return the most
-            // recent leaves, so order by descending height.
-            query = format!("{query} ORDER BY height DESC limit {limit}");
-        }
-        let rows = self.query(&query, &[&proposer.to_string()]).await?;
-        let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
-
-        if limit.is_some() {
-            // If there was a limit, we selected the leaves in descending order to get the most
-            // recent leaves. Now reverse them to put them back in chronological order.
-            leaves.reverse();
-        }
-
-        Ok(leaves)
-    }
-
-    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
-        let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
-        let row = self.query_one(query, &[&proposer.to_string()]).await?;
-        let count: i64 = row.get(0);
-        Ok(count as usize)
-    }
-
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
         // Fetch leaves above `height` which have already been produced.
         let current_leaves = self.get_leaf_range(height..).await?;
@@ -1005,6 +977,60 @@ where
         tx.execute_many(stmts).await?;
 
         self.block_stream.push(block);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<Types> NodeDataSource<Types> for SqlDataSource<Types>
+where
+    Types: NodeType,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        StatusDataSource::block_height(self).await
+    }
+
+    async fn get_proposals(
+        &self,
+        proposer: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
+        let mut query = "SELECT leaf, qc FROM leaf WHERE proposer = $1".to_owned();
+        if let Some(limit) = limit {
+            // If there is a limit on the number of leaves to return, we want to return the most
+            // recent leaves, so order by descending height.
+            query = format!("{query} ORDER BY height DESC limit {limit}");
+        }
+        let rows = self.query(&query, &[&proposer.to_string()]).await?;
+        let mut leaves: Vec<_> = rows.map(|res| parse_leaf(res?)).try_collect().await?;
+
+        if limit.is_some() {
+            // If there was a limit, we selected the leaves in descending order to get the most
+            // recent leaves. Now reverse them to put them back in chronological order.
+            leaves.reverse();
+        }
+
+        Ok(leaves)
+    }
+
+    async fn count_proposals(&self, proposer: &EncodedPublicKey) -> QueryResult<usize> {
+        let query = "SELECT count(*) FROM leaf WHERE proposer = $1";
+        let row = self.query_one(query, &[&proposer.to_string()]).await?;
+        let count: i64 = row.get(0);
+        Ok(count as usize)
+    }
+}
+
+#[async_trait]
+impl<Types> UpdateNodeData<Types> for SqlDataSource<Types>
+where
+    Types: NodeType,
+{
+    type Error = QueryError;
+
+    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+        // The node data source borrows data that is populated by the availability source, so
+        // there's nothing more to do here.
         Ok(())
     }
 }

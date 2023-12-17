@@ -12,6 +12,7 @@
 
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
 use crate::availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData};
+use crate::node::UpdateNodeData;
 use crate::status::UpdateStatusData;
 use async_trait::async_trait;
 use hotshot::types::{Event, EventType};
@@ -30,7 +31,9 @@ use std::iter::once;
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>:
-    UpdateAvailabilityData<Types> + UpdateStatusData
+    UpdateAvailabilityData<Types>
+    + UpdateNodeData<Types, Error = <Self as UpdateAvailabilityData<Types>>::Error>
+    + UpdateStatusData
 {
     /// Update query state based on a new consensus event.
     ///
@@ -43,14 +46,24 @@ pub trait UpdateDataSource<Types: NodeType>:
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error>;
+    async fn update(
+        &mut self,
+        event: &Event<Types>,
+    ) -> Result<(), <Self as UpdateAvailabilityData<Types>>::Error>;
 }
 
 #[async_trait]
-impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send>
-    UpdateDataSource<Types> for T
+impl<Types: NodeType, T> UpdateDataSource<Types> for T
+where
+    T: UpdateAvailabilityData<Types>
+        + UpdateNodeData<Types, Error = <Self as UpdateAvailabilityData<Types>>::Error>
+        + UpdateStatusData
+        + Send,
 {
-    async fn update(&mut self, event: &Event<Types>) -> Result<(), Self::Error> {
+    async fn update(
+        &mut self,
+        event: &Event<Types>,
+    ) -> Result<(), <Self as UpdateAvailabilityData<Types>>::Error> {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())
@@ -66,10 +79,10 @@ impl<Types: NodeType, T: UpdateAvailabilityData<Types> + UpdateStatusData + Send
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
-                self.insert_leaf(
-                    LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf"),
-                )
-                .await?;
+                let leaf_data =
+                    LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
+                UpdateAvailabilityData::insert_leaf(self, leaf_data.clone()).await?;
+                UpdateNodeData::insert_leaf(self, leaf_data).await?;
 
                 if let Some(block) = leaf.get_block_payload() {
                     // For the same reason, this will not panic either.

@@ -14,7 +14,7 @@ use crate::{api::load_api, Payload, QueryError, QueryResult};
 use clap::Args;
 use derive_more::From;
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::EncodedPublicKey};
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::fmt::Display;
@@ -77,12 +77,6 @@ pub enum Error {
         source: QueryError,
         resource: String,
     },
-    #[snafu(display("error fetching proposals by {proposer}: {source}"))]
-    #[from(ignore)]
-    QueryProposals {
-        source: QueryError,
-        proposer: EncodedPublicKey,
-    },
     #[snafu(display("transaction index {index} out of range for block {height}"))]
     #[from(ignore)]
     InvalidTransactionIndex {
@@ -122,8 +116,7 @@ impl Error {
             | Self::StreamLeaf { source, .. }
             | Self::QueryBlock { source, .. }
             | Self::StreamBlock { source, .. }
-            | Self::QueryTransaction { source, .. }
-            | Self::QueryProposals { source, .. } => source.status(),
+            | Self::QueryTransaction { source, .. } => source.status(),
             Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
             Self::LeafStream { .. } | Self::BlockStream { .. } => StatusCode::InternalServerError,
             Self::Custom { status, .. } => *status,
@@ -143,7 +136,7 @@ where
         options.extensions.clone(),
     )?;
     api.with_version("0.0.1".parse().unwrap())
-        .get("getleaf", |req, state| {
+        .get("get_leaf", |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
                     Some(height) => ResourceId::Number(height),
@@ -155,7 +148,7 @@ where
             }
             .boxed()
         })?
-        .stream("streamleaves", |req, state| {
+        .stream("stream_leaves", |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
@@ -177,7 +170,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("getheader", |req, state| {
+        .get("get_header", |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
                     Some(height) => ResourceId::Number(height),
@@ -194,7 +187,7 @@ where
             }
             .boxed()
         })?
-        .stream("streamheaders", |req, state| {
+        .stream("stream_headers", |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
@@ -219,7 +212,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("getblock", |req, state| {
+        .get("get_block", |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
                     Some(height) => ResourceId::Number(height),
@@ -231,7 +224,7 @@ where
             }
             .boxed()
         })?
-        .stream("streamblocks", |req, state| {
+        .stream("stream_blocks", |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
@@ -253,7 +246,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("gettransaction", |req, state| {
+        .get("get_transaction", |req, state| {
             async move {
                 let (block, index) = match req.opt_blob_param("hash")? {
                     Some(hash) => state.get_block_with_transaction(hash).await.context(
@@ -285,27 +278,6 @@ where
                     .unwrap())
             }
             .boxed()
-        })?
-        .get("countproposals", |req, state| {
-            async move {
-                let proposer = req.blob_param("proposer_id")?;
-                state
-                    .count_proposals(&proposer)
-                    .await
-                    .context(QueryProposalsSnafu { proposer })
-            }
-            .boxed()
-        })?
-        .get("getproposals", |req, state| {
-            async move {
-                let proposer = req.blob_param("proposer_id")?;
-                let limit = req.opt_integer_param("count")?;
-                state
-                    .get_proposals(&proposer, limit)
-                    .await
-                    .context(QueryProposalsSnafu { proposer })
-            }
-            .boxed()
         })?;
     Ok(api)
 }
@@ -332,7 +304,7 @@ mod test {
         data_source::{ExtensibleDataSource, FileSystemDataSource},
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{mock_transaction, MockTypes},
+            mocks::{mock_transaction, MockHeader, MockTypes},
             setup_test,
         },
         Error, Header,
@@ -340,8 +312,6 @@ mod test {
     use async_std::{sync::RwLock, task::spawn};
     use commit::Committable;
     use futures::FutureExt;
-    use hotshot::types::SignatureKey;
-    use hotshot_signature_key::bn254::BLSPubKey;
     use portpicker::pick_unused_port;
     use std::collections::HashSet;
     use std::time::Duration;
@@ -431,50 +401,6 @@ mod test {
                     .send()
                     .await
                     .unwrap()
-            );
-
-            // Check that this block is included as a proposal by the proposer listed in the leaf.
-            let proposals: Vec<LeafQueryData<MockTypes>> = client
-                .get(&format!("proposals/{}", leaf.proposer()))
-                .send()
-                .await
-                .unwrap();
-            assert!(proposals.contains(&leaf));
-            // Check the `proposals/limit` and `proposals/count` features.
-            assert!(
-                client
-                    .get::<u64>(&format!("proposals/{}/count", leaf.proposer()))
-                    .send()
-                    .await
-                    .unwrap()
-                    >= proposals.len() as u64
-            );
-            // For the limit queries, we just check the count. We don't know exactly which blocks to
-            // expect in the response, since it returns the most recent `count` blocks which may
-            // include new empty blocks committed since we started checking.
-            assert_eq!(
-                client
-                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
-                        "proposals/{}/limit/1",
-                        leaf.proposer()
-                    ))
-                    .send()
-                    .await
-                    .unwrap()
-                    .len(),
-                1
-            );
-            assert_eq!(
-                client
-                    .get::<Vec<LeafQueryData<MockTypes>>>(&format!(
-                        "proposals/{}/limit/0",
-                        leaf.proposer()
-                    ))
-                    .send()
-                    .await
-                    .unwrap()
-                    .len(),
-                0
             );
 
             // Check that looking up each transaction in the block various ways returns the correct
@@ -650,13 +576,13 @@ mod test {
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 42);
 
         // Ensure we can still access the built-in functionality.
-        let (key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
         assert_eq!(
             client
-                .get::<u64>(&format!("proposals/{}/count", key.to_bytes()))
+                .get::<MockHeader>("header/0")
                 .send()
                 .await
-                .unwrap(),
+                .unwrap()
+                .block_number,
             0
         );
     }

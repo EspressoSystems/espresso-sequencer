@@ -27,6 +27,7 @@ use crate::{
         },
     },
     metrics::PrometheusMetrics,
+    node::{NodeDataSource, UpdateNodeData},
     status::data_source::StatusDataSource,
     MissingSnafu, NotFoundSnafu, Payload, QueryResult,
 };
@@ -309,14 +310,14 @@ where
     }
 
     async fn insert_genesis(&mut self) -> Result<(), PersistenceError> {
-        let block_height =
-            self.block_height()
-                .await
-                .map_err(|err| PersistenceError::OtherLoad {
-                    inner: Box::new(err),
-                })?;
+        let block_height = StatusDataSource::block_height(self).await.map_err(|err| {
+            PersistenceError::OtherLoad {
+                inner: Box::new(err),
+            }
+        })?;
         if block_height == 0 {
-            self.insert_leaf(LeafQueryData::genesis()).await?;
+            UpdateAvailabilityData::<Types>::insert_leaf(self, LeafQueryData::genesis()).await?;
+            UpdateNodeData::<Types>::insert_leaf(self, LeafQueryData::genesis()).await?;
             self.insert_block(BlockQueryData::genesis()).await?;
             self.commit().await?;
         }
@@ -468,34 +469,6 @@ where
         Ok((block, ix.clone()))
     }
 
-    async fn get_proposals(
-        &self,
-        id: &EncodedPublicKey,
-        limit: Option<usize>,
-    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
-        let all_ids = self
-            .index_by_proposer_id
-            .get(id)
-            .cloned()
-            .unwrap_or_default();
-        let start_from = match limit {
-            Some(count) => all_ids.len().saturating_sub(count),
-            None => 0,
-        };
-        stream::iter(all_ids)
-            .skip(start_from)
-            .then(|height| self.get_leaf(height as usize))
-            .try_collect()
-            .await
-    }
-
-    async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
-        Ok(match self.index_by_proposer_id.get(id) {
-            Some(ids) => ids.len(),
-            None => 0,
-        })
-    }
-
     async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
         Ok(self
             .leaf_storage
@@ -531,10 +504,6 @@ where
             leaf.block_hash(),
             leaf.height(),
         );
-        self.index_by_proposer_id
-            .entry(leaf.proposer())
-            .or_default()
-            .push(leaf.height());
         Ok(())
     }
 
@@ -567,6 +536,60 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
         Entry::Vacant(e) => {
             e.insert(pos);
         }
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType> NodeDataSource<Types> for FileSystemDataSource<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        StatusDataSource::block_height(self).await
+    }
+
+    async fn get_proposals(
+        &self,
+        id: &EncodedPublicKey,
+        limit: Option<usize>,
+    ) -> QueryResult<Vec<LeafQueryData<Types>>> {
+        let all_ids = self
+            .index_by_proposer_id
+            .get(id)
+            .cloned()
+            .unwrap_or_default();
+        let start_from = match limit {
+            Some(count) => all_ids.len().saturating_sub(count),
+            None => 0,
+        };
+        stream::iter(all_ids)
+            .skip(start_from)
+            .then(|height| self.get_leaf(height as usize))
+            .try_collect()
+            .await
+    }
+
+    async fn count_proposals(&self, id: &EncodedPublicKey) -> QueryResult<usize> {
+        Ok(match self.index_by_proposer_id.get(id) {
+            Some(ids) => ids.len(),
+            None => 0,
+        })
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType> UpdateNodeData<Types> for FileSystemDataSource<Types>
+where
+    Payload<Types>: QueryablePayload,
+{
+    type Error = PersistenceError;
+
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+        self.index_by_proposer_id
+            .entry(leaf.proposer())
+            .or_default()
+            .push(leaf.height());
+        Ok(())
     }
 }
 

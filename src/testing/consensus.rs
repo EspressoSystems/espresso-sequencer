@@ -29,7 +29,10 @@ use hotshot_signature_key::bn254::{BLSPrivKey, BLSPubKey};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
-    traits::{election::Membership, signature_key::SignatureKey},
+    traits::{
+        election::Membership,
+        signature_key::{EncodedPublicKey, SignatureKey},
+    },
     ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
@@ -43,6 +46,7 @@ struct MockNode<D: DataSourceLifeCycle> {
 
 pub struct MockNetwork<D: DataSourceLifeCycle> {
     nodes: Vec<MockNode<D>>,
+    pub_keys: Vec<BLSPubKey>,
 }
 
 // MockNetwork can be used with any DataSourceLifeCycle, but it's nice to have a default with a
@@ -157,7 +161,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         )
         .await;
 
-        Self { nodes }
+        Self { nodes, pub_keys }
     }
 }
 
@@ -168,6 +172,14 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
     pub async fn submit_transaction(&self, tx: MockTransaction) {
         self.handle().submit_transaction(tx).await.unwrap();
+    }
+
+    pub fn num_nodes(&self) -> usize {
+        self.pub_keys.len()
+    }
+
+    pub fn proposer(&self, i: usize) -> EncodedPublicKey {
+        self.pub_keys[i].to_bytes()
     }
 
     pub fn data_source(&self) -> Arc<RwLock<D>> {

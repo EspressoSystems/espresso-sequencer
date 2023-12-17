@@ -11,18 +11,32 @@
 # see <https://www.gnu.org/licenses/>.
 
 [meta]
-NAME = "hotshot-status"
-DESCRIPTION = "Snapshots of consensus related state"
 FORMAT_VERSION = "0.1.0"
+NAME = "hotshot-status"
+DESCRIPTION = """
+Node-specific state and uncommitted data.
 
-[route.latest_block_height]
-PATH = ["/latest_block_height"]
+Unlike the availability and node APIs, which deal only with committed data (albeit with different
+consistency properties), the status API offers a glimpse into internal consensus state and
+uncommitted data. Here you can find low-level information about a particular node, such as consensus
+and networking metrics. You can also find information about pending blocks and transactions in the
+mempool.
+
+The status API is intended to be a lightweight way to inspect the activities and health of a
+consensus node. It is the only API that can be run without any persistent storage, and its memory
+overhead is also very low. As a consequence, it only serves two types of data:
+* snapshots of the state right now, with no way to query historical snapshots
+* summary statistics
+"""
+
+[route.block_height]
+PATH = ["/block-height"]
 DOC = """
 Get the height of the latest committed block.
 """
 
 [route.mempool_info]
-PATH = ["/mempool_info"]
+PATH = ["/mempool-info"]
 DOC = """
 Get information about the mempool.
 
@@ -36,7 +50,7 @@ Returns
 """
 
 [route.success_rate]
-PATH = ["/success_rate"]
+PATH = ["/success-rate"]
 DOC = """
 Get the view success rate.
 
