@@ -26,7 +26,11 @@ use hotshot_types::{
     },
 };
 use hotshot_web_server::{self, config};
+use lru::LruCache;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use surf_disco::Url;
 
 use hotshot_types::traits::network::ViewMessage;
@@ -51,6 +55,15 @@ impl<TYPES: NodeType> WebCommChannel<TYPES> {
     pub fn new(network: Arc<WebServerNetwork<TYPES>>) -> Self {
         Self(network)
     }
+}
+
+/// # Note
+///
+/// This function uses `DefaultHasher` instead of cryptographic hash functions like SHA-256 because of an `AsRef` requirement.
+fn hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
 
 /// The web server network state
@@ -205,9 +218,10 @@ struct Inner<TYPES: NodeType> {
     view_sync_vote_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
     /// Task map for transactions
     txn_task_map: Arc<RwLock<TaskMap<TYPES::SignatureKey>>>,
-    /// Task polling for current propsal
-    current_proposal_task:
-        Arc<RwLock<Option<UnboundedSender<ConsensusIntentEvent<TYPES::SignatureKey>>>>>,
+    /// Task polling for latest quorum propsal
+    latest_quorum_proposal_task: Arc<RwLock<Option<TaskChannel<TYPES::SignatureKey>>>>,
+    /// Task polling for latest view sync proposal
+    latest_view_sync_proposal_task: Arc<RwLock<Option<TaskChannel<TYPES::SignatureKey>>>>,
 }
 
 impl<TYPES: NodeType> Inner<TYPES> {
@@ -221,6 +235,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
     ) -> Result<(), NetworkError> {
         let mut vote_index = 0;
         let mut tx_index = 0;
+        let mut seen_proposals = LruCache::new(NonZeroUsize::new(100).unwrap());
 
         if message_purpose == MessagePurpose::Data {
             tx_index = *self.tx_index.read().await;
@@ -230,7 +245,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
         while self.running.load(Ordering::Relaxed) {
             let endpoint = match message_purpose {
                 MessagePurpose::Proposal => config::get_proposal_route(view_number),
-                MessagePurpose::CurrentProposal => config::get_recent_proposal_route(),
+                MessagePurpose::LatestQuorumProposal => config::get_latest_quorum_proposal_route(),
+                MessagePurpose::LatestViewSyncProposal => {
+                    config::get_latest_view_sync_proposal_route()
+                }
                 MessagePurpose::Vote => config::get_vote_route(view_number, vote_index),
                 MessagePurpose::Data => config::get_transactions_route(tx_index),
                 MessagePurpose::Internal => unimplemented!(),
@@ -292,7 +310,7 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 //     }
                                 // }
                             }
-                            MessagePurpose::CurrentProposal => {
+                            MessagePurpose::LatestQuorumProposal => {
                                 // Only pushing the first proposal since we will soon only be allowing 1 proposal per view
                                 self.broadcast_poll_queue
                                     .write()
@@ -300,6 +318,20 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                     .push(deserialized_messages[0].clone());
 
                                 return Ok(());
+                            }
+                            MessagePurpose::LatestViewSyncProposal => {
+                                let mut broadcast_poll_queue =
+                                    self.broadcast_poll_queue.write().await;
+
+                                for cert in &deserialized_messages {
+                                    let hash = hash(&cert);
+                                    if seen_proposals.put(hash, ()).is_none() {
+                                        broadcast_poll_queue.push(cert.clone());
+                                    }
+                                }
+
+                                // additional sleep to reduce load on web server
+                                async_sleep(Duration::from_millis(300)).await;
                             }
                             MessagePurpose::Vote => {
                                 // error!(
@@ -374,7 +406,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 // TODO ED Need to add vote indexing to web server for view sync certs
                                 for cert in &deserialized_messages {
                                     vote_index += 1;
-                                    broadcast_poll_queue.push(cert.clone());
+                                    let hash = hash(cert);
+                                    if seen_proposals.put(hash, ()).is_none() {
+                                        broadcast_poll_queue.push(cert.clone());
+                                    }
                                 }
                             }
 
@@ -418,6 +453,10 @@ impl<TYPES: NodeType> Inner<TYPES> {
                                 debug!("Shutting down polling task for view {}", event_view);
                                 return Ok(());
                             }
+                        }
+
+                        ConsensusIntentEvent::CancelPollForLatestViewSyncProposal => {
+                            return Ok(());
                         }
 
                         _ => {
@@ -499,7 +538,7 @@ pub struct SendMsg<M: NetworkMsg> {
 }
 
 /// A message being received from the web server
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct RecvMsg<M: NetworkMsg> {
     /// The optional message being received
@@ -571,7 +610,8 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             view_sync_cert_task_map: Arc::default(),
             view_sync_vote_task_map: Arc::default(),
             txn_task_map: Arc::default(),
-            current_proposal_task: Arc::default(),
+            latest_quorum_proposal_task: Arc::default(),
+            latest_view_sync_proposal_task: Arc::default(),
         });
 
         inner.connected.store(true, Ordering::Relaxed);
@@ -593,7 +633,9 @@ impl<TYPES: NodeType + 'static> WebServerNetwork<TYPES> {
             MessagePurpose::Proposal => config::post_proposal_route(*view_number),
             MessagePurpose::Vote => config::post_vote_route(*view_number),
             MessagePurpose::Data => config::post_transactions_route(),
-            MessagePurpose::Internal | MessagePurpose::CurrentProposal => {
+            MessagePurpose::Internal
+            | MessagePurpose::LatestQuorumProposal
+            | MessagePurpose::LatestViewSyncProposal => {
                 return Err(WebServerNetworkError::EndpointError)
             }
             MessagePurpose::ViewSyncProposal => {
@@ -907,8 +949,8 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                     .prune_tasks(view_number, ConsensusIntentEvent::CancelPollForVIDDisperse)
                     .await;
             }
-            ConsensusIntentEvent::PollForCurrentProposal => {
-                let mut proposal_task = self.inner.current_proposal_task.write().await;
+            ConsensusIntentEvent::PollForLatestQuorumProposal => {
+                let mut proposal_task = self.inner.latest_quorum_proposal_task.write().await;
                 if proposal_task.is_none() {
                     // create new task
                     let (sender, receiver) = unbounded();
@@ -918,7 +960,7 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                         let inner_clone = self.inner.clone();
                         async move {
                             if let Err(e) = inner_clone
-                                .poll_web_server(receiver, MessagePurpose::CurrentProposal, 1)
+                                .poll_web_server(receiver, MessagePurpose::LatestQuorumProposal, 1)
                                 .await
                             {
                                 warn!(
@@ -926,8 +968,40 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                                 e
                             );
                             }
-                            let mut proposal_task = inner_clone.current_proposal_task.write().await;
+                            let mut proposal_task =
+                                inner_clone.latest_quorum_proposal_task.write().await;
                             *proposal_task = None;
+                        }
+                    });
+                }
+            }
+            ConsensusIntentEvent::PollForLatestViewSyncProposal => {
+                let mut latest_view_sync_proposal_task =
+                    self.inner.latest_view_sync_proposal_task.write().await;
+                if latest_view_sync_proposal_task.is_none() {
+                    // create new task
+                    let (sender, receiver) = unbounded();
+                    *latest_view_sync_proposal_task = Some(sender);
+
+                    async_spawn({
+                        let inner_clone = self.inner.clone();
+                        async move {
+                            if let Err(e) = inner_clone
+                                .poll_web_server(
+                                    receiver,
+                                    MessagePurpose::LatestViewSyncProposal,
+                                    1,
+                                )
+                                .await
+                            {
+                                warn!(
+                                "Background receive proposal polling encountered an error: {:?}",
+                                e
+                            );
+                            }
+                            let mut latest_view_sync_proposal_task =
+                                inner_clone.latest_view_sync_proposal_task.write().await;
+                            *latest_view_sync_proposal_task = None;
                         }
                     });
                 }
@@ -1001,6 +1075,17 @@ impl<TYPES: NodeType + 'static> ConnectedNetwork<Message<TYPES>, TYPES::Signatur
                     // If task already exited we expect an error
                     let _res = sender
                         .send(ConsensusIntentEvent::CancelPollForVotes(view_number))
+                        .await;
+                }
+            }
+
+            ConsensusIntentEvent::CancelPollForLatestViewSyncProposal => {
+                let mut latest_view_sync_proposal_task =
+                    self.inner.latest_view_sync_proposal_task.write().await;
+
+                if let Some(thing) = latest_view_sync_proposal_task.take() {
+                    let _res = thing
+                        .send(ConsensusIntentEvent::CancelPollForLatestViewSyncProposal)
                         .await;
                 }
             }
