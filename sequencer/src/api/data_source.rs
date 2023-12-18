@@ -49,6 +49,7 @@ pub(crate) trait SubmitDataSource<N: network::Type> {
 
 pub(super) trait StateSignatureDataSource {
     fn get_signature(&self, block_height: u64) -> anyhow::Result<StateSignature>;
+}
 
 #[cfg(test)]
 pub(crate) mod testing {

@@ -140,7 +140,7 @@ mod test_helpers {
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
@@ -405,7 +405,7 @@ mod test {
 
         let options = Options::from(options::Http { port });
         options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
