@@ -1,8 +1,12 @@
 use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use cld::ClDuration;
+use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
 use std::path::PathBuf;
+use std::str::FromStr;
+use std::time::Duration;
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -64,6 +68,17 @@ pub struct Options {
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_CONFIG_PATH")]
     pub config_path: Option<PathBuf>,
 
+    /// The amount of time to wait between each request to the HotShot
+    /// consensus or DA web servers during polling.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL",
+        default_value = "100ms",
+        value_parser = parse_duration
+    )]
+    pub webserver_poll_interval: Duration,
+
     /// Add optional modules to the service.
     ///
     /// Modules are added by specifying the name of the module followed by it's arguments, as in
@@ -85,6 +100,19 @@ impl Options {
     pub fn modules(&self) -> Modules {
         ModuleArgs(self.modules.clone()).parse()
     }
+}
+
+#[derive(Clone, Debug, Snafu)]
+struct ParseDurationError {
+    reason: String,
+}
+
+fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+    ClDuration::from_str(s)
+        .map(Duration::from)
+        .map_err(|err| ParseDurationError {
+            reason: err.to_string(),
+        })
 }
 
 #[derive(Clone, Debug)]
