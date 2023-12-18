@@ -42,10 +42,10 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.8"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9" }
-hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
+hotshot-utils = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
 itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
@@ -71,7 +71,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9", optional = true }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.1", optional = true }
