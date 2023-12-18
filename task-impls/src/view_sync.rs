@@ -134,8 +134,6 @@ pub struct ViewSyncReplicaTaskState<
     pub current_view: TYPES::Time,
     /// Round HotShot wishes to be in
     pub next_view: TYPES::Time,
-    /// The last seen phase of the view sync protocol
-    pub phase: ViewSyncPhase,
     /// The relay index we are currently on
     pub relay: u64,
     /// Whether we have seen a finalized certificate
@@ -214,7 +212,6 @@ impl<
                         relay: 0,
                         finalized: false,
                         sent_view_change_event: false,
-                        phase: ViewSyncPhase::None,
                         timeout_task: None,
                         membership: self.membership.clone(),
                         network: self.network.clone(),
@@ -514,7 +511,6 @@ impl<
                         relay: 0,
                         finalized: false,
                         sent_view_change_event: false,
-                        phase: ViewSyncPhase::None,
                         timeout_task: None,
                         membership: self.membership.clone(),
                         network: self.network.clone(),
@@ -638,8 +634,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return (Some(HotShotTaskCompleted::ShutDown), self);
                 }
 
-                self.phase = last_seen_certificate;
-
                 if certificate.get_data().relay > self.relay {
                     self.relay = certificate.get_data().relay;
                 }
@@ -667,7 +661,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
-                    let phase = self.phase.clone();
+                    let phase = last_seen_certificate;
                     async move {
                         async_sleep(self.view_sync_timeout).await;
                         info!("Vote sending timed out in ViewSyncPreCommitCertificateRecv, Relay = {}", self.relay);
@@ -705,8 +699,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return (Some(HotShotTaskCompleted::ShutDown), self);
                 }
 
-                self.phase = last_seen_certificate;
-
                 if certificate.get_data().relay > self.relay {
                     self.relay = certificate.get_data().relay;
                 }
@@ -742,7 +734,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
                 self.timeout_task = Some(async_spawn({
                     let stream = self.event_stream.clone();
-                    let phase = self.phase.clone();
+                    let phase = last_seen_certificate;
                     async move {
                         async_sleep(self.view_sync_timeout).await;
                         info!(
@@ -761,8 +753,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             }
 
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
-                let last_seen_certificate = ViewSyncPhase::Finalize;
-
                 // Ignore certificate if it is for an older round
                 if certificate.get_view_number() < self.next_view {
                     warn!("We're already in a higher round");
@@ -796,8 +786,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         *certificate.view_number,
                     ))
                     .await;
-
-                self.phase = last_seen_certificate;
 
                 if certificate.get_data().relay > self.relay {
                     self.relay = certificate.get_data().relay;
@@ -856,10 +844,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             HotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
                 // Shouldn't ever receive a timeout for a relay higher than ours
-                if TYPES::Time::new(*round) == self.next_view
-                    && relay == self.relay
-                    && last_seen_certificate == self.phase
-                {
+                if TYPES::Time::new(*round) == self.next_view && relay == self.relay {
                     if let Some(timeout_task) = self.timeout_task.take() {
                         cancel_task(timeout_task).await;
                     }
@@ -868,7 +853,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
                         .await;
                     self.relay += 1;
-                    match self.phase {
+                    match last_seen_certificate {
                         ViewSyncPhase::None | ViewSyncPhase::PreCommit | ViewSyncPhase::Commit => {
                             let vote = ViewSyncPreCommitVote::<TYPES>::create_signed_vote(
                                 ViewSyncPreCommitData {
