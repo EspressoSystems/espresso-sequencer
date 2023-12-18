@@ -5,9 +5,10 @@ use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 
 mod data_source;
-mod endpoints;
+pub mod endpoints;
 pub mod fs;
 pub mod options;
+pub mod sql;
 mod update;
 
 use hotshot_types::light_client::StateKeyPair;
@@ -39,125 +40,30 @@ impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
 }
 
 #[cfg(test)]
-mod test {
+mod test_helpers {
     use super::*;
     use crate::{
         testing::{
             init_hotshot_handles, init_hotshot_handles_with_metrics, wait_for_decide_on_handle,
         },
-        Header, Transaction, VmId,
+        Transaction, VmId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
-    use commit::Committable;
-    use endpoints::TimeWindowQueryData;
     use futures::FutureExt;
-    use hotshot_query_service::availability::BlockQueryData;
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
-    use tempfile::TempDir;
-    use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+    use tide_disco::error::ServerError;
 
-    #[async_std::test]
-    async fn test_healthcheck() {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
-
-        let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-
-        let options = Options::from(options::Http { port });
-        options
-            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
-            .await
-            .unwrap();
-
-        client.connect(None).await;
-        let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
-        assert_eq!(health.status, HealthStatus::Available);
-    }
-
-    #[async_std::test]
-    async fn submit_test_with_query_module() {
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
-        submit_test_helper(Some(options::Fs {
-            storage_path,
-            reset_store: true,
-        }))
-        .await
-    }
-
-    #[async_std::test]
-    async fn submit_test_without_query_module() {
-        submit_test_helper(None).await
-    }
-
-    async fn submit_test_helper(query_opt: Option<options::Fs>) {
-        setup_logging();
-        setup_backtrace();
-
-        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
-
-        let port = pick_unused_port().expect("No ports free");
-
-        let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError> = Client::new(url);
-
-        // Get list of HotShot handles, take the first one, and submit a transaction to it
-        let handles = init_hotshot_handles().await;
-        for handle in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
-
-        let mut options = Options::from(options::Http { port }).submit(Default::default());
-        if let Some(query) = query_opt {
-            options = options.query_fs(query);
-        }
-        let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
-            .await
-            .unwrap();
-        let mut events = handle.get_event_stream(Default::default()).await.0;
-
-        client.connect(None).await;
-
-        client
-            .post::<()>("submit/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
-
-        // Wait for a Decide event containing transaction matching the one we sent
-        wait_for_decide_on_handle(&mut events, &txn).await.unwrap()
-    }
-
-    #[async_std::test]
-    async fn status_test_with_query_module() {
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
-        status_test_helper(Some(options::Fs {
-            storage_path,
-            reset_store: true,
-        }))
-        .await
-    }
-
-    #[async_std::test]
-    async fn status_test_without_query_module() {
-        status_test_helper(None).await
-    }
-
-    async fn status_test_helper(query_opt: Option<options::Fs>) {
+    /// Test the status API with custom options.
+    ///
+    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
+    /// By default, the options are the minimal required to run this test (configuring a port and
+    /// enabling the status API). `opt` may add additional functionality (e.g. adding a query module
+    /// to test a different initialization path) but should not remove or modify the existing
+    /// functionality (e.g. removing the status module or changing the port).
+    pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
 
@@ -176,10 +82,7 @@ mod test {
             .boxed()
         };
 
-        let mut options = Options::from(options::Http { port }).status(Default::default());
-        if let Some(query) = query_opt {
-            options = options.query_fs(query);
-        }
+        let options = opt(Options::from(options::Http { port }).status(Default::default()));
         options.serve(init_handle).await.unwrap();
         client.connect(None).await;
 
@@ -211,30 +114,104 @@ mod test {
         assert!(success_rate > 0.0, "{success_rate}");
     }
 
-    #[async_std::test]
-    async fn test_timestamp_window() {
+    /// Test the submit API with custom options.
+    ///
+    /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
+    /// By default, the options are the minimal required to run this test (configuring a port and
+    /// enabling the submit API). `opt` may add additional functionality (e.g. adding a query module
+    /// to test a different initialization path) but should not remove or modify the existing
+    /// functionality (e.g. removing the submit module or changing the port).
+    pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
 
-        // Start sequencer.
+        let txn = Transaction::new(VmId(0), vec![1, 2, 3, 4]);
+
+        let port = pick_unused_port().expect("No ports free");
+
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        // Get list of HotShot handles, take the first one, and submit a transaction to it
         let handles = init_hotshot_handles().await;
         for handle in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
 
-        // Start query service.
-        let port = pick_unused_port().expect("No ports free");
-        let tmp_dir = TempDir::new().unwrap();
-        let storage_path = tmp_dir.path().join("tmp_storage");
-        Options::from(options::Http { port })
-            .query_fs(options::Fs {
-                storage_path,
-                reset_store: true,
-            })
-            .status(Default::default())
-            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
+        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
+        let SequencerNode { mut handle, .. } = options
+            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
             .await
             .unwrap();
+        let mut events = handle.get_event_stream(Default::default()).await.0;
+
+        client.connect(None).await;
+
+        client
+            .post::<()>("submit/submit")
+            .body_json(&txn)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        // Wait for a Decide event containing transaction matching the one we sent
+        wait_for_decide_on_handle(&mut events, &txn).await.unwrap()
+    }
+}
+
+#[cfg(test)]
+#[espresso_macros::generic_tests]
+mod generic_tests {
+    use super::*;
+    use crate::{testing::init_hotshot_handles, Header};
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_std::task::sleep;
+    use commit::Committable;
+    use data_source::testing::TestableSequencerDataSource;
+    use endpoints::TimeWindowQueryData;
+    use futures::FutureExt;
+    use hotshot_query_service::availability::BlockQueryData;
+    use portpicker::pick_unused_port;
+    use std::time::Duration;
+    use surf_disco::Client;
+    use test_helpers::{status_test_helper, submit_test_helper};
+    use tide_disco::error::ServerError;
+
+    #[async_std::test]
+    pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        submit_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn status_test_with_query_module<D: TestableSequencerDataSource>() {
+        let storage = D::create_storage().await;
+        status_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub(crate) async fn test_timestamp_window<D: TestableSequencerDataSource>() {
+        setup_logging();
+        setup_backtrace();
+
+        // Create sequencer network.
+        let handles = init_hotshot_handles().await;
+
+        // Start query service.
+        let port = pick_unused_port().expect("No ports free");
+        let storage = D::create_storage().await;
+        let handle = handles[0].clone();
+        D::options(&storage, options::Http { port }.into())
+            .status(Default::default())
+            .serve(|_| async move { (handle, 0, Default::default()) }.boxed())
+            .await
+            .unwrap();
+
+        // Start consensus.
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
 
         // Connect client.
         let client: Client<ServerError> =
@@ -248,13 +225,16 @@ mod test {
             let num_blocks = test_blocks.iter().flatten().count();
 
             // Wait for the next block to be sequenced.
-            while client
-                .get::<usize>("status/latest_block_height")
-                .send()
-                .await
-                .unwrap()
-                < num_blocks + 1
-            {
+            loop {
+                let block_height = client
+                    .get::<usize>("status/latest_block_height")
+                    .send()
+                    .await
+                    .unwrap();
+                if block_height > num_blocks {
+                    break;
+                }
+                tracing::info!("waiting for block {num_blocks}, current height {block_height}");
                 sleep(Duration::from_secs(1)).await;
             }
 
@@ -285,7 +265,7 @@ mod test {
                 }
             } else {
                 // `prev` can only be `None` if the first block in the window is the genesis block.
-                assert_eq!(res.from, 0);
+                assert_eq!(res.from().unwrap(), 0);
             };
             for header in &res.window {
                 assert!(start <= header.timestamp);
@@ -335,7 +315,7 @@ mod test {
 
         // Case 2: no `next`, end of window is after the most recently sequenced block.
         let start = test_blocks[2][0].timestamp;
-        let end = u64::MAX;
+        let end = test_blocks[2].last().unwrap().timestamp + 1;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
         // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
@@ -372,7 +352,7 @@ mod test {
             .await
             .unwrap();
         check_invariants(&more2, start, end, false);
-        assert_eq!(more2.from, more.from);
+        assert_eq!(more2.from().unwrap(), more.from().unwrap());
         assert_eq!(more2.prev, more.prev);
         assert_eq!(more2.next, more.next);
         assert_eq!(more2.window[..more.window.len()], more.window);
@@ -389,11 +369,58 @@ mod test {
         client
             .get::<TimeWindowQueryData>(&format!(
                 "availability/headers/window/{}/{}",
-                u64::MAX - 1,
-                u64::MAX
+                test_blocks[2].last().unwrap().timestamp + 1,
+                test_blocks[2].last().unwrap().timestamp + 2
             ))
             .send()
             .await
             .unwrap_err();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::testing::init_hotshot_handles;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use futures::FutureExt;
+    use portpicker::pick_unused_port;
+    use surf_disco::Client;
+    use test_helpers::{status_test_helper, submit_test_helper};
+    use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+
+    #[async_std::test]
+    async fn test_healthcheck() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError> = Client::new(url);
+
+        let handles = init_hotshot_handles().await;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        let options = Options::from(options::Http { port });
+        options
+            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .await
+            .unwrap();
+
+        client.connect(None).await;
+        let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
+        assert_eq!(health.status, HealthStatus::Available);
+    }
+
+    #[async_std::test]
+    async fn status_test_without_query_module() {
+        status_test_helper(|opt| opt).await
+    }
+
+    #[async_std::test]
+    async fn submit_test_without_query_module() {
+        submit_test_helper(|opt| opt).await
     }
 }

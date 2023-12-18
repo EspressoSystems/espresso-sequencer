@@ -47,21 +47,41 @@ contract StakeTable is AbstractStakeTable {
     /// Total restaked stake locked for the latest stake table (HEAD).
     uint256 public totalRestakedStake;
 
-    /// Size of the registration queue for the next available epoch.
-    uint64 public numRegistrations;
-
-    /// Size of the exit queue for the next available epoch.
-    uint64 public numPendingExits;
-
     /// Address of the native token contract.
     address public tokenAddress;
 
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    constructor(address _tokenAddress, address _lightClientAddress) {
+    /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
+    /// get the correct epoch
+    uint64 public _firstAvailableRegistrationEpoch;
+    /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
+    /// total pending queue size!)
+    uint64 public _numPendingRegistrations;
+
+    /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
+    /// epoch
+    uint64 public _firstAvailableExitEpoch;
+    /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
+    /// queue size!)
+    uint64 public _numPendingExits;
+
+    uint64 public maxChurnRate;
+
+    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
+
+        maxChurnRate = churnRate;
+
+        // A set of hardcoded stakers is defined for the first epoch.
+        _firstAvailableRegistrationEpoch = 1;
+        _numPendingRegistrations = 0;
+
+        // It is not possible to exit during the first epoch.
+        _firstAvailableExitEpoch = 1;
+        _numPendingExits = 0;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -101,27 +121,67 @@ contract StakeTable is AbstractStakeTable {
         return nodes[_hashBlsKey(blsVK)];
     }
 
-    /// @notice Get the next available epoch for new registration.
-    /// @return Number of the epoch when the user can register.
-    function nextRegistrationEpoch() external view override returns (uint64) {
-        // TODO implement queue logic
-        return currentEpoch() + 1;
+    /// @notice Get the next available epoch and queue size in that epoch
+    function nextRegistrationEpoch() external view override returns (uint64, uint64) {
+        uint64 epoch;
+        uint64 queueSize;
+
+        if (_firstAvailableRegistrationEpoch < currentEpoch() + 1) {
+            epoch = currentEpoch() + 1;
+            queueSize = 0;
+        } else if (_numPendingRegistrations >= maxChurnRate) {
+            epoch = _firstAvailableRegistrationEpoch + 1;
+            queueSize = 0;
+        } else {
+            epoch = _firstAvailableRegistrationEpoch;
+            queueSize = _numPendingRegistrations;
+        }
+        return (epoch, queueSize);
+    }
+
+    // @notice Update the registration queue
+    // @param epoch next available registration epoch
+    // @param queueSize current size of the registration queue (after insertion of new element in
+    // the queue)
+    function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
+        _firstAvailableRegistrationEpoch = epoch;
+        _numPendingRegistrations = queueSize + 1;
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view override returns (uint64) {
-        return numRegistrations;
+        return _numPendingRegistrations;
     }
 
-    /// @notice Get the next available epoch for exit
-    function nextExitEpoch() external view override returns (uint64) {
-        //TODO
-        return currentEpoch() + 1;
+    /// @notice Get the next available epoch for exit and queue size in that epoch
+    function nextExitEpoch() external view override returns (uint64, uint64) {
+        uint64 epoch;
+        uint64 queueSize;
+
+        if (_firstAvailableExitEpoch < currentEpoch() + 1) {
+            epoch = currentEpoch() + 1;
+            queueSize = 0;
+        } else if (_numPendingExits >= maxChurnRate) {
+            epoch = _firstAvailableExitEpoch + 1;
+            queueSize = 0;
+        } else {
+            epoch = _firstAvailableExitEpoch;
+            queueSize = _numPendingExits;
+        }
+        return (epoch, queueSize);
+    }
+
+    // @notice Update the exit queue
+    // @param epoch next available exit epoch
+    // @param queueSize current size of the exit queue (after insertion of new element in the queue)
+    function appendExitQueue(uint64 epoch, uint64 queueSize) private {
+        _firstAvailableExitEpoch = epoch;
+        _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExit() external view override returns (uint64) {
-        return numPendingExits;
+    function numPendingExits() external view override returns (uint64) {
+        return _numPendingExits;
     }
 
     /// @notice Defines the exit escrow period for a node.
@@ -183,10 +243,11 @@ contract StakeTable is AbstractStakeTable {
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        uint64 registerEpoch = this.nextRegistrationEpoch();
+        (uint64 registerEpoch, uint64 queueSize) = this.nextRegistrationEpoch();
         if (registerEpoch > validUntilEpoch) {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
+        appendRegistrationQueue(registerEpoch, queueSize);
 
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
@@ -281,10 +342,12 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        uint64 nextEpoch = this.nextExitEpoch();
-        nodes[key].exitEpoch = nextEpoch;
+        (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
+        nodes[key].exitEpoch = exitEpoch;
 
-        emit Exit(key, nextEpoch);
+        appendExitQueue(exitEpoch, queueSize);
+
+        emit Exit(key, exitEpoch);
 
         return true;
     }

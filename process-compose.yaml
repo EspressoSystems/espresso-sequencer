@@ -36,7 +36,7 @@ processes:
         condition: service_healthy
 
   sequencer0:
-    command: sequencer -- http -- query -- submit
+    command: sequencer -- http -- query-fs -- status -- submit
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
@@ -47,7 +47,7 @@ processes:
         condition: service_healthy
 
   sequencer1:
-    command: sequencer -- http -- query
+    command: sequencer -- http -- query-fs -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
@@ -58,7 +58,7 @@ processes:
         condition: service_healthy
 
   sequencer2:
-    command: sequencer -- http -- query
+    command: sequencer -- http -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
@@ -69,7 +69,7 @@ processes:
         condition: service_healthy
 
   sequencer3:
-    command: sequencer -- http -- query
+    command: sequencer -- http -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
@@ -80,7 +80,7 @@ processes:
         condition: service_healthy
 
   sequencer4:
-    command: sequencer -- http
+    command: sequencer -- http -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4

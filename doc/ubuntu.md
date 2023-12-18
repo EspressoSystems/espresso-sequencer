@@ -33,4 +33,3 @@
     cargo build --release --bin diff-test
     export PATH=$PWD/target/release:$PATH
     forge test -v
-

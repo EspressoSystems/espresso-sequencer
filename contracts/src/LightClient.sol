@@ -46,11 +46,11 @@ contract LightClient {
     struct LightClientState {
         uint64 viewNum;
         uint64 blockHeight;
-        uint256 blockCommRoot;
-        uint256 feeLedgerComm;
-        uint256 stakeTableBlsKeyComm;
-        uint256 stakeTableSchnorrKeyComm;
-        uint256 stakeTableAmountComm;
+        BN254.ScalarField blockCommRoot;
+        BN254.ScalarField feeLedgerComm;
+        BN254.ScalarField stakeTableBlsKeyComm;
+        BN254.ScalarField stakeTableSchnorrKeyComm;
+        BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
     }
 
@@ -120,7 +120,9 @@ contract LightClient {
         }
 
         finalizedState = newState;
-        emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        emit NewState(
+            newState.viewNum, newState.blockHeight, BN254.ScalarField.unwrap(newState.blockCommRoot)
+        );
     }
 
     // === Pure or View-only APIs ===
@@ -136,11 +138,11 @@ contract LightClient {
         uint256[] memory publicInput = new uint256[](8);
         publicInput[0] = uint256(state.viewNum);
         publicInput[1] = uint256(state.blockHeight);
-        publicInput[2] = state.blockCommRoot;
-        publicInput[3] = state.feeLedgerComm;
-        publicInput[4] = state.stakeTableBlsKeyComm;
-        publicInput[5] = state.stakeTableSchnorrKeyComm;
-        publicInput[6] = state.stakeTableAmountComm;
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(state.feeLedgerComm);
+        publicInput[4] = BN254.ScalarField.unwrap(state.stakeTableBlsKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(state.stakeTableSchnorrKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(state.stakeTableAmountComm);
         if (isNewEpoch) {
             publicInput[7] = state.threshold;
         } else {

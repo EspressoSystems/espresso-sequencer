@@ -15,7 +15,7 @@ use hotshot_types::light_client::StateSignature;
 /// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
 /// provided sequencer-specific endpoints.
 #[async_trait]
-pub(super) trait SequencerDataSource:
+pub(crate) trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
@@ -43,10 +43,23 @@ pub(super) trait SequencerDataSource:
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
-pub(super) trait SubmitDataSource<N: network::Type> {
+pub(crate) trait SubmitDataSource<N: network::Type> {
     fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
 pub(super) trait StateSignatureDataSource {
     fn get_signature(&self, block_height: u64) -> anyhow::Result<StateSignature>;
+
+#[cfg(test)]
+pub(crate) mod testing {
+    use super::super::Options;
+    use super::*;
+
+    #[async_trait]
+    pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
+        type Storage;
+
+        async fn create_storage() -> Self::Storage;
+        fn options(storage: &Self::Storage, opt: Options) -> Options;
+    }
 }

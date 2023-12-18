@@ -81,14 +81,14 @@ abstract contract AbstractStakeTable {
 
     // === Queuing Stats ===
 
-    /// @notice Get the next available epoch for new registration
-    function nextRegistrationEpoch() external view virtual returns (uint64);
+    /// @notice Get the next available epoch and queue size in that epoch
+    function nextRegistrationEpoch() external view virtual returns (uint64, uint64);
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view virtual returns (uint64);
-    /// @notice Get the next available epoch for exit
-    function nextExitEpoch() external view virtual returns (uint64);
+    /// @notice Get the next available epoch for exit and queue size in that epoch
+    function nextExitEpoch() external view virtual returns (uint64, uint64);
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExit() external view virtual returns (uint64);
+    function numPendingExits() external view virtual returns (uint64);
 
     // === Write APIs ===
 

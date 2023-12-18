@@ -31,56 +31,59 @@ contract StakeTable_Test is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
-    uint256 constant INITIAL_BALANCE = 1_000;
+    uint256 constant INITIAL_BALANCE = 1_000_000_000;
     address exampleTokenCreator;
 
-    function genClientWallet(address sender)
+    function genClientWallet(address sender, uint8 seed)
         private
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
         // Generate a BLS signature and other values using rust code
-        string[] memory cmds = new string[](3);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "gen-client-wallet";
         cmds[2] = vm.toString(sender);
+        cmds[3] = vm.toString(seed);
 
         bytes memory result = vm.ffi(cmds);
         (
-            uint256 blsSigX,
-            uint256 blsSigY,
-            uint256 blsVKx0,
-            uint256 blsVKx1,
-            uint256 blsVKy0,
-            uint256 blsVKy1,
+            BN254.G1Point memory blsSig,
+            BN254.G2Point memory blsVK,
             uint256 schnorrVKx,
             uint256 schnorrVKy
-        ) = abi.decode(
-            result, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
-        );
+        ) = abi.decode(result, (BN254.G1Point, BN254.G2Point, uint256, uint256));
 
         return (
-            BN254.G2Point(blsVKx1, blsVKx0, blsVKy1, blsVKy0), // blsVK
+            blsVK,
             EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
-            BN254.G1Point(blsSigX, blsSigY) // sig
+            blsSig
         );
     }
 
-    function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
-        /// Successful registration
+    function registerWithSeed(address sender, uint8 seed, uint64 depositAmount, bool expectRevert)
+        private
+        returns (BN254.G2Point memory, uint64)
+    {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(sender, seed);
 
-        uint64 depositAmount = 10;
-        uint64 validUntilEpoch = 5;
+        uint64 validUntilEpoch = 1000;
+
+        // Transfer some tokens to sender
+        vm.prank(exampleTokenCreator);
+        token.transfer(sender, depositAmount);
 
         // Prepare for the token transfer
-        vm.prank(exampleTokenCreator);
+        vm.prank(sender);
         token.approve(address(stakeTable), depositAmount);
 
-        vm.prank(exampleTokenCreator);
+        vm.prank(sender);
+        if (expectRevert) {
+            vm.expectRevert(S.NodeAlreadyRegistered.selector);
+        }
         bool res = stakeTable.register(
             blsVK,
             schnorrVK,
@@ -89,10 +92,18 @@ contract StakeTable_Test is Test {
             sig,
             validUntilEpoch
         );
-
-        assertTrue(res);
+        if (!expectRevert) {
+            assertTrue(res);
+        } else {
+            assertFalse(res);
+        }
 
         return (blsVK, depositAmount);
+    }
+
+    /// @dev  Helper function to simulate a successful registration
+    function runSuccessfulRegistration() private returns (BN254.G2Point memory, uint256) {
+        return registerWithSeed(exampleTokenCreator, 34, 10, false);
     }
 
     function setUp() public {
@@ -103,16 +114,15 @@ contract StakeTable_Test is Test {
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
             blockHeight: 0,
-            blockCommRoot: 0,
-            feeLedgerComm: 0,
-            stakeTableBlsKeyComm: 0,
-            stakeTableSchnorrKeyComm: 0,
-            stakeTableAmountComm: 0,
+            blockCommRoot: BN254.ScalarField.wrap(0),
+            feeLedgerComm: BN254.ScalarField.wrap(0),
+            stakeTableBlsKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(0),
+            stakeTableAmountComm: BN254.ScalarField.wrap(0),
             threshold: 0
         });
-        lightClientContract = new LightClientTest(genesis,10);
-        address lightClientAddress = address(lightClientContract);
-        stakeTable = new S(address(token),lightClientAddress);
+        lightClientContract = new LightClientTest(genesis, 10);
+        stakeTable = new S(address(token), address(lightClientContract), 10);
     }
 
     /// `register` function
@@ -124,7 +134,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         uint64 curEpoch = stakeTable.currentEpoch();
         depositAmount = uint64(bound(depositAmount, 1, INITIAL_BALANCE));
@@ -142,16 +152,16 @@ contract StakeTable_Test is Test {
         );
     }
 
-    function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
+    function testFuzz_RevertWhen_InvalidBLSSig(uint256 _scalar) external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
-            genClientWallet(exampleTokenCreator);
+            genClientWallet(exampleTokenCreator, 0);
 
         // Ensure the scalar is valid
         // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
-        scalar = bound(scalar, 1, BN254.R_MOD - 1);
+        BN254.ScalarField scalar = BN254.ScalarField.wrap(bound(_scalar, 1, BN254.R_MOD - 1));
         BN254.validateScalarField(scalar);
         BN254.G1Point memory badSig = BN254.scalarMul(BN254.P1(), scalar);
         BN254.validateG1Point(badSig);
@@ -180,7 +190,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         // Invalid next registration epoch
         uint64 validUntilEpoch = uint64(bound(rand, 0, currentEpoch - 1));
@@ -220,7 +230,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
@@ -258,7 +268,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
@@ -276,7 +286,7 @@ contract StakeTable_Test is Test {
 
         // A user with 0 balance cannot register either
         address newUser = makeAddr("New user with zero balance");
-        (blsVK, schnorrVK, sig) = genClientWallet(newUser);
+        (blsVK, schnorrVK, sig) = genClientWallet(newUser, 0);
 
         vm.prank(newUser);
         vm.expectRevert("TRANSFER_FROM_FAILED");
@@ -296,7 +306,7 @@ contract StakeTable_Test is Test {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, 0);
 
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 5;
@@ -322,7 +332,7 @@ contract StakeTable_Test is Test {
         node.registerEpoch = 1;
 
         // Check event is emitted after calling successfully `register`
-        vm.expectEmit(false, false, false, true, address(stakeTable));
+        vm.expectEmit(true, true, true, true, address(stakeTable));
         emit Registered(
             stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.stakeType, node.balance
         );
@@ -535,5 +545,183 @@ contract StakeTable_Test is Test {
         );
 
         assertEq(abi.encode(node), abi.encode(nullNode));
+    }
+
+    // Queue logic
+
+    uint256 private constant ARRAY_SIZE = 20;
+
+    /// Helper function to handle registrations in testFuzz_SequencesOfEvents
+    /// This function was extracted to make sol-lint happy by reducing cyclotomic complexity
+    function handleRegistration(
+        uint256 i,
+        uint8[ARRAY_SIZE] memory rands,
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
+        bool[ARRAY_SIZE] memory isKeyActive,
+        bool skipEpochs,
+        uint64 numRegistrations
+    ) private returns (bool) {
+        address sender = makeAddr(string(abi.encode(i)));
+        uint64 randDepositAmount = uint64(rands[i]);
+
+        // Check if the seed has already been used. In this case the registration will fail.
+        bool seedUsed = false;
+        for (uint256 j = 0; j < i; j++) {
+            if ((rands[i] == rands[j]) && (isKeyActive[j])) {
+                seedUsed = true;
+                break;
+            }
+        }
+
+        if (seedUsed) {
+            registerWithSeed(sender, rands[i], randDepositAmount, true);
+            return false;
+        } else {
+            (uint64 nextRegistrationEpochBefore, uint64 pendingRegistrationsBefore) =
+                stakeTable.nextRegistrationEpoch();
+
+            (BN254.G2Point memory blsVK,) =
+                registerWithSeed(sender, rands[i], randDepositAmount, false);
+
+            registeredKeys[i] = blsVK;
+            isKeyActive[i] = true;
+
+            // Invariants
+
+            // When we do not skip epochs, the queues of every epoch are filled up.
+            if (!skipEpochs) {
+                assertEq(
+                    nextRegistrationEpochBefore, numRegistrations / stakeTable.maxChurnRate() + 1
+                );
+                assertEq(pendingRegistrationsBefore, numRegistrations % stakeTable.maxChurnRate());
+            }
+
+            // Here we check that the queue state is updated in a consistent manner with the output
+            // of nextExitEpoch.
+            assertEq(stakeTable._firstAvailableRegistrationEpoch(), nextRegistrationEpochBefore);
+            assertEq(stakeTable.numPendingRegistrations(), pendingRegistrationsBefore + 1);
+
+            return true;
+        }
+    }
+
+    /// Helper function to handle exit requests in testFuzz_SequencesOfEvents
+    function handleExit(
+        uint256 i,
+        uint8[ARRAY_SIZE] memory rands,
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys,
+        bool skipEpochs,
+        uint64 numRegistrations,
+        uint64 numExits
+    ) private returns (bool) {
+        uint256 indexRegistration = bound(rands[i], 0, numRegistrations - 1);
+
+        (
+            address sender,
+            AbstractStakeTable.StakeType stakeType,
+            uint64 balance,
+            uint64 registerEpoch,
+            uint64 exitEpoch,
+        ) = stakeTable.nodes(stakeTable._hashBlsKey(registeredKeys[indexRegistration]));
+
+        balance;
+        stakeType;
+
+        BN254.G2Point memory blsVK = registeredKeys[indexRegistration];
+
+        bool canExit = (stakeTable.currentEpoch() >= registerEpoch + 1) && (exitEpoch == 0);
+        if (canExit) {
+            (uint64 nextExitEpochBefore, uint64 pendingExitsBefore) = stakeTable.nextExitEpoch();
+            vm.prank(sender);
+            bool res = stakeTable.requestExit(blsVK);
+
+            assertTrue(res);
+
+            // Invariants
+
+            // When we do not skip epochs, the queues of every epoch are filled up.
+            if (!skipEpochs) {
+                assertEq(nextExitEpochBefore, numExits / stakeTable.maxChurnRate() + 1);
+                assertEq(pendingExitsBefore, numExits % stakeTable.maxChurnRate());
+            }
+            // Here we check that the queue state is updated in a consistent manner with the output
+            // of nextExitEpoch.
+            assertGe(stakeTable._firstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(stakeTable.numPendingExits(), 1);
+        } else {
+            vm.prank(sender);
+            vm.expectRevert();
+            bool res = stakeTable.requestExit(blsVK);
+            assertFalse(res);
+        }
+
+        return canExit;
+    }
+
+    /// Helper function to handle epoch increments in testFuzz_SequencesOfEvents
+    function handleAdvanceEpoch() private {
+        uint64 currentEpoch = lightClientContract.currentEpoch();
+        uint64 nextEpoch = currentEpoch + 1;
+        lightClientContract.setCurrentEpoch(nextEpoch);
+        assertEq(stakeTable.currentEpoch(), nextEpoch);
+    }
+
+    ///@dev Test invariants about our queue logic holds during a random sequence of register,
+    /// requestExit, and advanceEpoch operations
+    /// @param events this array is used to sample 3 kinds of events: 0 for a registration, 1 for an
+    /// exit request and 2 for advancing an epoch.
+    /// @param rands this array contains random values that are used as a seed for generating the
+    /// BLS key pair and sampling random deposit amounts.
+    /// @param skipEpochs this boolean flag allows to decide whether we want to advance epochs
+    /// (event
+    /// 2) or not. By allowing not advancing epoch we can capture more of the behaviour of the
+    /// queues.
+    function testFuzz_SequencesOfEvents(
+        uint8[ARRAY_SIZE] memory events,
+        uint8[ARRAY_SIZE] memory rands,
+        bool skipEpochs
+    ) external {
+        BN254.G2Point[ARRAY_SIZE] memory registeredKeys;
+
+        // Tracks the indices corresponding to an active key
+        bool[ARRAY_SIZE] memory isKeyActive;
+
+        uint64 numRegistrations = 0;
+        uint64 numExits = 0;
+
+        for (uint256 i = 0; i < ARRAY_SIZE; i++) {
+            uint256 ev = bound(events[i], 0, 2);
+
+            if (ev == 0) {
+                // Registrations
+                bool res = handleRegistration(
+                    i, rands, registeredKeys, isKeyActive, skipEpochs, numRegistrations
+                );
+                if (res) {
+                    numRegistrations++;
+                }
+            } else if (ev == 1) {
+                // Exits
+                if (numRegistrations == 0) {
+                    continue;
+                }
+
+                bool res =
+                    handleExit(i, rands, registeredKeys, skipEpochs, numRegistrations, numExits);
+                if (res) {
+                    numExits++;
+                }
+            } else {
+                // Advance epoch
+                // ev == 2
+                if (skipEpochs) {
+                    handleAdvanceEpoch();
+                }
+            }
+
+            // Global invariants
+            assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
+            assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
+        }
     }
 }
