@@ -87,10 +87,6 @@ mod test_helpers {
         // The status API is well tested in the query service repo. Here we are just smoke testing
         // that we set it up correctly. Wait for a (non-genesis) block to be sequenced and then
         // check the success rate metrics.
-        tracing::info!(
-            "metrics {}",
-            client.get::<String>("status/metrics").send().await.unwrap()
-        );
         while client
             .get::<u64>("status/latest_block_height")
             .send()

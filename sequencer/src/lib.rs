@@ -260,6 +260,7 @@ pub struct NetworkParams {
     pub da_server_url: Url,
     pub consensus_server_url: Url,
     pub orchestrator_url: Url,
+    pub webserver_poll_interval: Duration,
 }
 
 pub async fn init_node(
@@ -297,17 +298,16 @@ pub async fn init_node(
         .collect();
 
     // Initialize networking.
-    let wait_time = Duration::from_millis(100);
     let networks = Networks {
         da_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
             network_params.da_server_url,
-            wait_time,
+            network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             true,
         ))),
         quorum_network: WebCommChannel::new(Arc::new(WebServerNetwork::create(
             network_params.consensus_server_url,
-            wait_time,
+            network_params.webserver_poll_interval,
             pub_keys[node_index as usize],
             false,
         ))),
