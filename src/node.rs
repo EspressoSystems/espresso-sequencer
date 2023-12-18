@@ -10,6 +10,16 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! A node's view of a HotShot chain
+//!
+//! The node API provides a subjective view of the HotShot blockchain, from the perspective of
+//! one particular node. It provides access to information that the
+//! [availability](crate::availability) API does not, because this information depends on the
+//! perspective of the node observing it, and may be subject to eventual consistency. For example,
+//! `/node/block-height` and `/node/proposals/:proposer_id/count` may both return smaller counts
+//! than expected, if the node being queried is not fully synced with the entire history of the
+//! chain. However, the node will _eventually_ sync and return the expected counts.
+
 use crate::{api::load_api, QueryError};
 use clap::Args;
 use derive_more::From;

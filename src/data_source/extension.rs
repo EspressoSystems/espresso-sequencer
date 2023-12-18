@@ -13,8 +13,8 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, LeafId, LeafQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
+        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, UpdateNodeData},
@@ -131,53 +131,42 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type LeafStream = D::LeafStream;
-    type BlockStream = D::BlockStream;
-
-    type LeafRange<'a, R> = D::LeafRange<'a, R>
+    type LeafRange<R> = D::LeafRange<R>
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
-    type BlockRange<'a, R> = D::BlockRange<'a, R>
+    type BlockRange<R> = D::BlockRange<R>
     where
-        Self: 'a,
         R: RangeBounds<usize> + Send;
 
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<LeafQueryData<Types>>
+    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.data_source.get_leaf(id).await
     }
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<BlockQueryData<Types>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_block(id).await
     }
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<Self::LeafRange<'_, R>>
+    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
-        R: RangeBounds<usize> + Send,
+        R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_leaf_range(range).await
     }
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<Self::BlockRange<'_, R>>
+    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
     where
-        R: RangeBounds<usize> + Send,
+        R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
     }
     async fn get_block_with_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
         self.data_source.get_block_with_transaction(hash).await
-    }
-    async fn subscribe_leaves(&self, height: usize) -> QueryResult<Self::LeafStream> {
-        self.data_source.subscribe_leaves(height).await
-    }
-    async fn subscribe_blocks(&self, height: usize) -> QueryResult<Self::BlockStream> {
-        self.data_source.subscribe_blocks(height).await
     }
 }
 

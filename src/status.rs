@@ -10,6 +10,20 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+//! Queries for node-specific state and uncommitted data.
+//!
+//! Unlike the [availability](crate::availability) and [node](crate::node) APIs, which deal only
+//! with committed data (albeit with different consistency properties), the status API offers a
+//! glimpse into internal consensus state and uncommitted data. Here you can find low-level
+//! information about a particular node, such as consensus and networking metrics. You can also find
+//! information about pending blocks and transactions in the mempool.
+//!
+//! The status API is intended to be a lightweight way to inspect the activities and health of a
+//! consensus node. It is the only API that can be run without any persistent storage, and its
+//! memory overhead is also very low. As a consequence, it only serves two types of data:
+//! * snapshots of the state right now, with no way to query historical snapshots
+//! * summary statistics
+
 use crate::api::load_api;
 use clap::Args;
 use derive_more::From;

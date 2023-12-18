@@ -910,6 +910,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-option"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0db678acb667b525ac40a324fc5f7d3390e29239b31c7327bb8157f5b4fff593"
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2841,6 +2847,7 @@ dependencies = [
  "async-compatibility-layer",
  "async-std",
  "async-trait",
+ "atomic-option",
  "atomic_store",
  "backtrace-on-stack-overflow",
  "bincode",
