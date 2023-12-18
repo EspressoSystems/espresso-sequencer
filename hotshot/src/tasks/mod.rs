@@ -244,7 +244,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     };
     consensus_state
         .quorum_network
-        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+        .inject_consensus_info(ConsensusIntentEvent::PollForLatestQuorumProposal)
         .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";

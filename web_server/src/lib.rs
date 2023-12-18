@@ -34,7 +34,10 @@ struct WebServerState<KEY> {
     /// view for oldest proposals in memory
     oldest_proposal: u64,
     /// view for the most recent proposal to help nodes catchup
-    recent_proposal: u64,
+    latest_quorum_proposal: u64,
+    /// view for the most recent view sync proposal
+    latest_view_sync_proposal: u64,
+
     /// view for teh oldest DA certificate
     oldest_certificate: u64,
 
@@ -88,7 +91,8 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             num_txns: 0,
             oldest_vote: 0,
             oldest_proposal: 0,
-            recent_proposal: 0,
+            latest_quorum_proposal: 0,
+            latest_view_sync_proposal: 0,
             oldest_certificate: 0,
             shutdown: None,
             stake_table: Vec::new(),
@@ -129,7 +133,8 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
 /// Trait defining methods needed for the `WebServerState`
 pub trait WebServerDataSource<KEY> {
     fn get_proposal(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
     fn get_view_sync_proposal(
         &self,
         view_number: u64,
@@ -214,8 +219,12 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         }
     }
 
-    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
-        self.get_proposal(self.recent_proposal)
+    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_proposal(self.latest_quorum_proposal)
+    }
+
+    fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_view_sync_proposal(self.latest_view_sync_proposal, 0)
     }
 
     fn get_view_sync_proposal(
@@ -433,12 +442,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
         info!("Received proposal for view {}", view_number);
 
-        if view_number > self.recent_proposal {
-            self.recent_proposal = view_number;
-        }
-
-        if view_number > self.recent_proposal {
-            self.recent_proposal = view_number;
+        if view_number > self.latest_quorum_proposal {
+            self.latest_quorum_proposal = view_number;
         }
 
         // Only keep proposal history for MAX_VIEWS number of view
@@ -480,6 +485,10 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         view_number: u64,
         proposal: Vec<u8>,
     ) -> Result<(), Error> {
+        if view_number > self.latest_view_sync_proposal {
+            self.latest_view_sync_proposal = view_number;
+        }
+
         // Only keep proposal history for MAX_VIEWS number of view
         if self.view_sync_proposals.len() >= MAX_VIEWS {
             self.view_sync_proposals
@@ -672,8 +681,11 @@ where
         }
         .boxed()
     })?
-    .get("getrecentproposal", |_req, state| {
-        async move { state.get_recent_proposal() }.boxed()
+    .get("get_latest_quorum_proposal", |_req, state| {
+        async move { state.get_latest_quorum_proposal() }.boxed()
+    })?
+    .get("get_latest_view_sync_proposal", |_req, state| {
+        async move { state.get_latest_view_sync_proposal() }.boxed()
     })?
     .get("getviewsyncproposal", |req, state| {
         async move {
