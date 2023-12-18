@@ -3,7 +3,7 @@ pub const DEFAULT_WEB_SERVER_DA_PORT: u16 = 9001;
 pub const DEFAULT_WEB_SERVER_VIEW_SYNC_PORT: u16 = 9002;
 
 /// How many views to keep in memory
-pub const MAX_VIEWS: usize = 25;
+pub const MAX_VIEWS: usize = 100;
 /// How many transactions to keep in memory
 pub const MAX_TXNS: usize = 500;
 /// How many transactions to return at once
