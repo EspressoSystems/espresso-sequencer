@@ -1,5 +1,6 @@
 use crate::{
     events::HotShotEvent,
+    helpers::cancel_task,
     vote::{spawn_vote_accumulator, AccumulatorInfo},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -105,7 +106,7 @@ pub struct ConsensusTaskState<
     pub timeout_vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// timeout task handle
-    pub timeout_task: JoinHandle<()>,
+    pub timeout_task: Option<JoinHandle<()>>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
@@ -231,15 +232,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
 
+            // TODO: re-enable this when HotShot/the sequencer needs the shares for something
+            // issue: https://github.com/EspressoSystems/HotShot/issues/2236
             // Only vote if you has seen the VID share for this view
-            if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
-            } else {
-                debug!(
-                    "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
-                    proposal.view_number
-                );
-                return false;
-            }
+            // if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
+            // } else {
+            //     debug!(
+            //         "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+            //         proposal.view_number
+            //     );
+            //     return false;
+            // }
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
@@ -340,6 +343,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Updating view from {} to {} in consensus task",
                 *self.cur_view, *new_view
             );
+            // cancel the old timeout task
+            if let Some(timeout_task) = self.timeout_task.take() {
+                cancel_task(timeout_task).await;
+            }
 
             // Remove old certs, we won't vote on past views
             for view in *self.cur_view..*new_view - 1 {
@@ -381,7 +388,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // Spawn a timeout task if we did actually update view
             let timeout = self.timeout;
-            self.timeout_task = async_spawn({
+            self.timeout_task = Some(async_spawn({
                 let stream = self.event_stream.clone();
                 // Nuance: We timeout on the view + 1 here because that means that we have
                 // not seen evidence to transition to this new view
@@ -392,7 +399,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish(HotShotEvent::Timeout(TYPES::Time::new(*view_number)))
                         .await;
                 }
-            });
+            }));
             let consensus = self.consensus.read().await;
             consensus
                 .metrics
@@ -952,7 +959,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
-                self.vid_shares.insert(view, disperse);
+                // TODO: re-enable this when HotShot/the sequencer needs the shares for something
+                // issue: https://github.com/EspressoSystems/HotShot/issues/2236
+                // self.vid_shares.insert(view, disperse);
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
@@ -1019,6 +1028,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
+                self.output_event_stream
+                    .publish(Event {
+                        view_number: view,
+                        event: EventType::ReplicaViewTimeout { view_number: view },
+                    })
+                    .await;
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }

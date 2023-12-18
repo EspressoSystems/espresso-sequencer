@@ -1,6 +1,6 @@
 //! Provides a number of tasks that run continuously on a [`HotShot`]
 
-use crate::{async_spawn, types::SystemContextHandle, HotShotConsensusApi};
+use crate::{types::SystemContextHandle, HotShotConsensusApi};
 use async_compatibility_layer::art::async_sleep;
 use futures::FutureExt;
 use hotshot_task::{
@@ -227,7 +227,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         _pd: PhantomData,
         vote_collector: None,
         timeout_vote_collector: None,
-        timeout_task: async_spawn(async move {}),
+        timeout_task: None,
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
         da_certs: HashMap::new(),
@@ -244,7 +244,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     };
     consensus_state
         .quorum_network
-        .inject_consensus_info(ConsensusIntentEvent::PollForCurrentProposal)
+        .inject_consensus_info(ConsensusIntentEvent::PollForLatestQuorumProposal)
         .await;
     let filter = FilterEvent(Arc::new(consensus_event_filter));
     let consensus_name = "Consensus Task";

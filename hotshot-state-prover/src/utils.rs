@@ -32,10 +32,11 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 
 /// Helper function for test
 pub(crate) fn stake_table_for_testing(
+    capacity: usize,
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
+    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(capacity);
     // Registering keys
     bls_keys
         .iter()

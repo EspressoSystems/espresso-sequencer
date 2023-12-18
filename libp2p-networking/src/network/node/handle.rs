@@ -88,7 +88,7 @@ impl<S: Default + Debug> NetworkNodeHandle<S> {
     /// constructs a new node listening on `known_addr`
     #[instrument]
     pub async fn new(config: NetworkNodeConfig, id: usize) -> Result<Self, NetworkNodeHandleError> {
-        //`randomly assigned port
+        // randomly assigned port
         let listen_addr = config
             .bound_addr
             .clone()

@@ -30,28 +30,26 @@ use super::GlobalTestEvent;
 
 /// the status of a view
 #[derive(Debug, Clone)]
-pub enum ViewStatus {
+pub enum ViewStatus<TYPES: NodeType> {
     /// success
     Ok,
     /// failure
     Failed,
     /// safety violation
-    Err(OverallSafetyTaskErr),
+    Err(OverallSafetyTaskErr<TYPES>),
     /// in progress
     InProgress,
 }
 
 /// possible errors
 #[derive(Snafu, Debug, Clone)]
-pub enum OverallSafetyTaskErr {
+pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     /// inconsistent txn nums
     InconsistentTxnsNum { map: HashMap<u64, usize> },
     /// too many failed  views
     TooManyFailures {
-        /// expected number of failures
-        expected: usize,
-        /// actual number of failures
-        got: usize,
+        /// vec of failed views
+        failed_views: HashSet<TYPES::Time>,
     },
     /// not enough decides
     NotEnoughDecides {
@@ -93,10 +91,10 @@ pub struct RoundResult<TYPES: NodeType> {
     success_nodes: HashMap<u64, (Vec<Leaf<TYPES>>, QuorumCertificate<TYPES>)>,
 
     /// Nodes that failed to commit this round
-    pub failed_nodes: HashMap<u64, Vec<Arc<HotShotError<TYPES>>>>,
+    pub failed_nodes: HashMap<u64, Arc<HotShotError<TYPES>>>,
 
     /// whether or not the round succeeded (for a custom defn of succeeded)
-    pub status: ViewStatus,
+    pub status: ViewStatus<TYPES>,
 
     /// NOTE: technically a map is not needed
     /// left one anyway for ease of viewing
@@ -158,20 +156,21 @@ impl<TYPES: NodeType> RoundCtx<TYPES> {
     pub fn insert_error_to_context(
         &mut self,
         view_number: TYPES::Time,
+        idx: usize,
         error: Arc<HotShotError<TYPES>>,
     ) {
         match self.round_results.entry(view_number) {
-            Entry::Occupied(mut o) => match o.get_mut().failed_nodes.entry(*view_number) {
+            Entry::Occupied(mut o) => match o.get_mut().failed_nodes.entry(idx as u64) {
                 Entry::Occupied(mut o2) => {
-                    o2.get_mut().push(error);
+                    *o2.get_mut() = error;
                 }
                 Entry::Vacant(v) => {
-                    v.insert(vec![error]);
+                    v.insert(error);
                 }
             },
             Entry::Vacant(v) => {
                 let mut round_result = RoundResult::default();
-                round_result.failed_nodes.insert(*view_number, vec![error]);
+                round_result.failed_nodes.insert(idx as u64, error);
                 v.insert(round_result);
             }
         }
@@ -233,6 +232,10 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         maybe_leaf
     }
 
+    pub fn check_if_failed(&mut self, threshold: usize, total_num_nodes: usize) -> bool {
+        let num_failed = self.failed_nodes.len();
+        total_num_nodes - num_failed >= threshold
+    }
     /// determines whether or not the round passes
     /// also do a safety check
     #[allow(clippy::too_many_arguments, clippy::let_unit_value)]
@@ -403,7 +406,7 @@ impl OverallSafetyPropertiesDescription {
                                     if state.ctx.successful_views.len() < num_successful_views {
                                         return (
                                             Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::NotEnoughDecides {
+                                                OverallSafetyTaskErr::<TYPES>::NotEnoughDecides {
                                                     got: state.ctx.successful_views.len(),
                                                     expected: num_successful_views,
                                                 },
@@ -417,9 +420,8 @@ impl OverallSafetyPropertiesDescription {
                                     {
                                         return (
                                             Some(HotShotTaskCompleted::Error(Box::new(
-                                                OverallSafetyTaskErr::TooManyFailures {
-                                                    got: state.ctx.failed_views.len(),
-                                                    expected: num_failed_rounds_total,
+                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                    failed_views: state.ctx.failed_views.clone(),
                                                 },
                                             ))),
                                             state,
@@ -443,7 +445,7 @@ impl OverallSafetyPropertiesDescription {
                             if let Either::Left(Event { view_number, event }) = maybe_event {
                                 let key = match event {
                                     EventType::Error { error } => {
-                                        state.ctx.insert_error_to_context(view_number, error);
+                                        state.ctx.insert_error_to_context(view_number, idx, error);
                                         None
                                     }
                                     EventType::Decide {
@@ -470,13 +472,12 @@ impl OverallSafetyPropertiesDescription {
                                             }
                                         }
                                     }
-                                    // TODO Emit this event in the consensus task once canceling the timeout task is implemented
                                     EventType::ReplicaViewTimeout { view_number } => {
                                         let error = Arc::new(HotShotError::<TYPES>::ViewTimeoutError {
                                             view_number,
                                             state: RoundTimedoutState::TestCollectRoundEventsTimedOut,
                                         });
-                                        state.ctx.insert_error_to_context(view_number, error);
+                                        state.ctx.insert_error_to_context(view_number, idx, error);
                                         None
                                     }
                                     _ => return (None, state),
@@ -514,16 +515,15 @@ impl OverallSafetyPropertiesDescription {
                                         }
                                         ViewStatus::Failed => {
                                             state.ctx.failed_views.insert(view_number);
-                                            if state.ctx.failed_views.len() >= self.num_failed_views {
+                                            if state.ctx.failed_views.len() > self.num_failed_views {
                                                 state
                                                     .test_event_stream
                                                     .publish(GlobalTestEvent::ShutDown)
                                                     .await;
                                                 return (
                                                     Some(HotShotTaskCompleted::Error(Box::new(
-                                                                OverallSafetyTaskErr::TooManyFailures {
-                                                                    got: state.ctx.failed_views.len(),
-                                                                    expected: num_failed_rounds_total,
+                                                                OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                                    failed_views: state.ctx.failed_views.clone(),
                                                                 },
                                                                 ))),
                                                                 state,
@@ -542,6 +542,25 @@ impl OverallSafetyPropertiesDescription {
                                         }
                                     }
                                 }
+                                else if view.check_if_failed(threshold, state.handles.len()) {
+                                        view.status = ViewStatus::Failed;
+                                        state.ctx.failed_views.insert(view_number);
+                                        if state.ctx.failed_views.len() > self.num_failed_views {
+                                            state
+                                                .test_event_stream
+                                                .publish(GlobalTestEvent::ShutDown)
+                                                .await;
+                                            return (
+                                                Some(HotShotTaskCompleted::Error(Box::new(
+                                                            OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                                                                failed_views: state.ctx.failed_views.clone(),
+                                                            },
+                                                            ))),
+                                                            state,
+                                                            );
+                                        }
+                                        return (None, state);
+                                    }
 
                             }
 
@@ -590,7 +609,7 @@ impl OverallSafetyPropertiesDescription {
 
 /// overall types for safety task
 pub type OverallSafetyTaskTypes<TYPES, I> = HSTWithEventAndMessage<
-    OverallSafetyTaskErr,
+    OverallSafetyTaskErr<TYPES>,
     GlobalTestEvent,
     ChannelStream<GlobalTestEvent>,
     (usize, Either<Event<TYPES>, HotShotEvent<TYPES>>),
