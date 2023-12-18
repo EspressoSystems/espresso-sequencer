@@ -3,6 +3,7 @@ mod block;
 mod block2;
 mod chain_variables;
 pub mod hotshot_commitment;
+pub mod light_client_signature;
 pub mod options;
 use url::Url;
 mod l1_client;
@@ -32,6 +33,7 @@ use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    light_client::StateKeyPair,
     traits::{
         metrics::Metrics,
         network::CommunicationChannel,
@@ -266,7 +268,11 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     config_path: Option<&Path>,
-) -> (SystemContextHandle<SeqTypes, Node<network::Web>>, u64) {
+) -> (
+    SystemContextHandle<SeqTypes, Node<network::Web>>,
+    u64,
+    StateKeyPair,
+) {
     // Orchestrator client
     let config_path = config_path.map(|path| path.display().to_string());
     let validator_args = ValidatorArgs {
@@ -295,6 +301,7 @@ pub async fn init_node(
     let known_nodes_with_stake: Vec<<PubKey as SignatureKey>::StakeTableEntry> = (0..num_nodes)
         .map(|id| pub_keys[id].get_stake_table_entry(1u64))
         .collect();
+    let state_key_pair = config.config.my_own_validator_config.state_key_pair.clone();
 
     // Initialize networking.
     let wait_time = Duration::from_millis(100);
@@ -348,6 +355,7 @@ pub async fn init_node(
         )
         .await,
         node_index,
+        state_key_pair,
     )
 }
 

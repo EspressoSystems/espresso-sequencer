@@ -1,7 +1,7 @@
 //! Sequencer-specific API endpoint handlers.
 
 use super::{
-    data_source::{SequencerDataSource, SubmitDataSource},
+    data_source::{SequencerDataSource, StateSignatureDataSource, SubmitDataSource},
     AppState,
 };
 use crate::{network, Header, NamespaceProofType, SeqTypes, Transaction};
@@ -114,6 +114,30 @@ where
                         .map_err(|err| Error::internal(err.to_string()))?,
                 )
                 .await
+                .map_err(|err| Error::internal(err.to_string()))
+        }
+        .boxed()
+    })?;
+
+    Ok(api)
+}
+
+pub(super) type LCSigState<S> = Arc<RwLock<S>>;
+
+pub(super) fn state_signature<S>() -> anyhow::Result<Api<LCSigState<S>, Error>>
+where
+    S: 'static + Send + Sync + StateSignatureDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
+    let mut api = Api::<LCSigState<S>, Error>::new(toml)?;
+
+    api.get("getstatesignature", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(|err| Error::internal(err.to_string()))?;
+            state
+                .get_signature(height)
                 .map_err(|err| Error::internal(err.to_string()))
         }
         .boxed()

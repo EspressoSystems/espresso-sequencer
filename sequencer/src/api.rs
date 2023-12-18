@@ -10,6 +10,7 @@ pub mod fs;
 pub mod options;
 mod update;
 
+use hotshot_types::light_client::StateKeyPair;
 pub use options::Options;
 
 type NodeIndex = u64;
@@ -20,6 +21,7 @@ pub struct SequencerNode<N: network::Type> {
     pub handle: Consensus<N>,
     pub update_task: JoinHandle<anyhow::Result<()>>,
     pub node_index: NodeIndex,
+    pub state_key_pair: StateKeyPair,
 }
 
 type AppState<N, D> = ExtensibleDataSource<D, Consensus<N>>;
@@ -73,7 +75,7 @@ mod test {
 
         let options = Options::from(options::Http { port });
         options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -120,7 +122,7 @@ mod test {
             options = options.query_fs(query);
         }
         let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
@@ -169,7 +171,7 @@ mod test {
                 for handle in &handles {
                     handle.hotshot.start_consensus().await;
                 }
-                (handles[0].clone(), 0)
+                (handles[0].clone(), 0, Default::default())
             }
             .boxed()
         };
@@ -230,7 +232,7 @@ mod test {
                 reset_store: true,
             })
             .status(Default::default())
-            .serve(|_| async move { (handles[0].clone(), 0) }.boxed())
+            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
 

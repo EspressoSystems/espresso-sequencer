@@ -18,6 +18,7 @@ tempfile = "3.7.1"
 [dependencies]
 anyhow = "1.0"
 ark-bls12-381 = "0.4"
+ark-ed-on-bn254 = "0.4"
 ark-serialize = { version = "0.4", features = ["derive"] }
 async-compatibility-layer = { git = "https://github.com/EspressoSystems/async-compatibility-layer", tag = "1.4.1", features = [
     "logging-utils",
@@ -41,6 +42,7 @@ time = "0.3"
 hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-signature-key = { workspace = true }
+hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
 

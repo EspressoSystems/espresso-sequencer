@@ -8,6 +8,7 @@ members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
 hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
 hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "ddb8d6f8d058ea456b2c11241cc67b821d77aeee" }

@@ -1,0 +1,4 @@
+[route.getstatesignature]
+PATH = ["block/:height/statesignature"]
+":height" = "Integer"
+DOC = "Get the signature for the light client state"

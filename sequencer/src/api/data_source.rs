@@ -8,6 +8,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
+use hotshot_types::light_client::StateSignature;
 
 /// A data source with sequencer-specific functionality.
 ///
@@ -44,4 +45,8 @@ pub(super) trait SequencerDataSource:
 
 pub(super) trait SubmitDataSource<N: network::Type> {
     fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
+}
+
+pub(super) trait StateSignatureDataSource {
+    fn get_signature(&self, block_height: u64) -> anyhow::Result<StateSignature>;
 }

@@ -16,7 +16,10 @@ use hotshot_query_service::{
     status::{self, UpdateStatusData},
     Error,
 };
-use hotshot_types::traits::metrics::{Metrics, NoMetrics};
+use hotshot_types::{
+    light_client::StateKeyPair,
+    traits::metrics::{Metrics, NoMetrics},
+};
 use std::path::PathBuf;
 use tide_disco::App;
 
@@ -71,7 +74,7 @@ impl Options {
     pub async fn serve<N, F>(mut self, init_handle: F) -> anyhow::Result<SequencerNode<N>>
     where
         N: network::Type,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (Consensus<N>, NodeIndex)>,
+        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (Consensus<N>, NodeIndex, StateKeyPair)>,
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
@@ -81,7 +84,7 @@ impl Options {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
-            let (handle, node_index) = init_handle(ds.populate_metrics()).await;
+            let (handle, node_index, state_key_pair) = init_handle(ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, handle.clone()),
             )));
@@ -103,12 +106,13 @@ impl Options {
                     app.serve(format!("0.0.0.0:{}", self.http.port))
                         .map_err(anyhow::Error::from),
                 ),
+                state_key_pair,
             }
         } else {
             // If no status or availability API is requested, we don't need metrics or a query
             // service data source. The only app state is the HotShot handle, which we use to submit
             // transactions.
-            let (handle, node_index) = init_handle(Box::new(NoMetrics)).await;
+            let (handle, node_index, state_key_pair) = init_handle(Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone()));
 
             // Initialize submit API
@@ -124,6 +128,7 @@ impl Options {
                     app.serve(format!("0.0.0.0:{}", self.http.port))
                         .map_err(anyhow::Error::from),
                 ),
+                state_key_pair,
             }
         };
 
@@ -167,7 +172,9 @@ pub struct Fs {
 async fn init_with_query_module<N, D>(
     opt: Options,
     mod_opt: D::Options,
-    init_handle: impl FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, (Consensus<N>, NodeIndex)>,
+    init_handle: impl FnOnce(
+        Box<dyn Metrics>,
+    ) -> BoxFuture<'static, (Consensus<N>, NodeIndex, StateKeyPair)>,
 ) -> anyhow::Result<SequencerNode<N>>
 where
     N: network::Type,
@@ -179,7 +186,7 @@ where
     let metrics = ds.populate_metrics();
 
     // Start up handle
-    let (mut handle, node_index) = init_handle(metrics).await;
+    let (mut handle, node_index, state_key_pair) = init_handle(metrics).await;
 
     // Get an event stream from the handle to use for populating the query data with
     // consensus events.
@@ -220,5 +227,6 @@ where
         handle,
         node_index,
         update_task,
+        state_key_pair,
     })
 }

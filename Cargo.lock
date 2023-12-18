@@ -3579,6 +3579,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-stake-table"
+version = "0.3.3"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=ddb8d6f8d058ea456b2c11241cc67b821d77aeee#ddb8d6f8d058ea456b2c11241cc67b821d77aeee"
+dependencies = [
+ "ark-bn254",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "bincode",
+ "bitvec",
+ "digest 0.10.7",
+ "displaydoc",
+ "ethereum-types",
+ "generic-array",
+ "hotshot-types",
+ "jf-primitives",
+ "jf-relation",
+ "jf-utils",
+ "serde",
+ "tagged-base64",
+ "typenum",
+]
+
+[[package]]
 name = "hotshot-task"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/hotshot?rev=ddb8d6f8d058ea456b2c11241cc67b821d77aeee#ddb8d6f8d058ea456b2c11241cc67b821d77aeee"
@@ -4243,7 +4268,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jf-plonk"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#fd2bcfcc322cf8bee38e4bfadbdbf52eac4ab33d"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -4272,7 +4297,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#fd2bcfcc322cf8bee38e4bfadbdbf52eac4ab33d"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
@@ -4296,6 +4321,7 @@ dependencies = [
  "digest 0.10.7",
  "displaydoc",
  "espresso-systems-common 0.4.0",
+ "generic-array",
  "hashbrown 0.13.2",
  "itertools 0.10.5",
  "jf-relation",
@@ -4316,7 +4342,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#fd2bcfcc322cf8bee38e4bfadbdbf52eac4ab33d"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -4342,7 +4368,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.4.0-pre.0"
-source = "git+https://github.com/EspressoSystems/jellyfish#d7ac08f360881fe9c63597a4afac345e1080b0b7"
+source = "git+https://github.com/EspressoSystems/jellyfish#fd2bcfcc322cf8bee38e4bfadbdbf52eac4ab33d"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -7234,6 +7260,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
+ "ark-ed-on-bn254",
  "ark-serialize 0.4.2",
  "async-compatibility-layer",
  "async-std",
@@ -7252,6 +7279,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-signature-key",
+ "hotshot-stake-table",
  "hotshot-testing",
  "hotshot-types",
  "hotshot-web-server",
