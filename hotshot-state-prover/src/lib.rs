@@ -37,8 +37,11 @@ pub type Proof = jf_plonk::proof_system::structs::Proof<Bn254>;
 pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 
 /// Given a SRS, returns the proving key and verifying key for state update
-pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
-    let (circuit, _) = circuit::build_for_preprocessing::<BaseField, EdwardsConfig>()?;
+pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
+    srs: &UniversalSrs,
+) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
+    let (circuit, _) =
+        circuit::build_for_preprocessing::<BaseField, EdwardsConfig, STAKE_TABLE_CAPACITY>()?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 
@@ -52,7 +55,7 @@ pub fn preprocess(srs: &UniversalSrs) -> Result<(ProvingKey, VerifyingKey), Plon
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all signed schnorr signatures are valid
-pub fn generate_state_update_proof<ST, R, BitIter, SigIter>(
+pub fn generate_state_update_proof<ST, R, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
     rng: &mut R,
     pk: &ProvingKey,
     stake_table: &ST,
@@ -76,7 +79,7 @@ where
         .try_iter(SnapshotVersion::LastEpochStart)
         .unwrap()
         .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount));
-    let (circuit, public_inputs) = circuit::build(
+    let (circuit, public_inputs) = circuit::build::<_, _, _, _, _, STAKE_TABLE_CAPACITY>(
         stake_table_entries,
         signer_bit_vec,
         signatures,
@@ -117,6 +120,8 @@ mod tests {
     };
     use jf_relation::Circuit;
     use jf_utils::test_rng;
+
+    const ST_CAPACITY: usize = 20;
 
     // FIXME(Chengyu): see <https://github.com/EspressoSystems/jellyfish/issues/249>
     fn universal_setup_for_testing<R>(
@@ -178,7 +183,7 @@ mod tests {
         let mut prng = test_rng();
 
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
-        let st = stake_table_for_testing(&bls_keys, &schnorr_keys);
+        let st = stake_table_for_testing(ST_CAPACITY, &bls_keys, &schnorr_keys);
 
         let block_comm_root = VariableLengthRescueCRHF::<BaseField, 1>::evaluate(vec![
             BaseField::from(1u32),
@@ -223,18 +228,19 @@ mod tests {
             .collect::<Vec<_>>();
 
         // good path
-        let num_gates = build_for_preprocessing::<BaseField, ark_ed_on_bn254::EdwardsConfig>()
-            .unwrap()
-            .0
-            .num_gates();
+        let num_gates =
+            build_for_preprocessing::<BaseField, ark_ed_on_bn254::EdwardsConfig, ST_CAPACITY>()
+                .unwrap()
+                .0
+                .num_gates();
         let test_srs = universal_setup_for_testing(num_gates + 2, &mut prng).unwrap();
         ark_std::println!("Number of constraint in the circuit: {}", num_gates);
 
-        let result = preprocess(&test_srs);
+        let result = preprocess::<ST_CAPACITY>(&test_srs);
         assert!(result.is_ok());
         let (pk, vk) = result.unwrap();
 
-        let result = generate_state_update_proof(
+        let result = generate_state_update_proof::<_, _, _, _, ST_CAPACITY>(
             &mut prng,
             &pk,
             &st,
@@ -255,7 +261,7 @@ mod tests {
         .is_ok());
 
         // minimum bad path, other bad cases are checked inside `circuit.rs`
-        let result = generate_state_update_proof(
+        let result = generate_state_update_proof::<_, _, _, _, ST_CAPACITY>(
             &mut prng,
             &pk,
             &st,
