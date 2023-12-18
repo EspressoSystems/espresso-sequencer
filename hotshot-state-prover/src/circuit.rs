@@ -4,7 +4,6 @@ use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethereum_types::U256;
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::LightClientState;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::{
@@ -187,7 +186,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
 /// - A PlonkError if any error happens when building the circuit
-pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
+pub(crate) fn build<F, P, STIter, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
     stake_table_entries: STIter,
     signer_bit_vec: BitIter,
     signatures: SigIter,
@@ -392,7 +391,7 @@ where
 }
 
 /// Internal function to build a dummy circuit
-pub(crate) fn build_for_preprocessing<F, P>(
+pub(crate) fn build_for_preprocessing<F, P, const STAKE_TABLE_CAPCITY: usize>(
 ) -> Result<(PlonkCircuit<F>, PublicInput<F>), PlonkError>
 where
     F: RescueParameter,
@@ -405,7 +404,7 @@ where
         fee_ledger_comm: F::default(),
         stake_table_comm: (F::default(), F::default(), F::default()),
     };
-    build::<F, P, _, _, _>(&[], &[], &[], &lightclient_state, &U256::zero())
+    build::<F, P, _, _, _, STAKE_TABLE_CAPCITY>(&[], &[], &[], &lightclient_state, &U256::zero())
 }
 
 #[cfg(test)]
@@ -424,6 +423,7 @@ mod tests {
     use jf_utils::test_rng;
 
     type F = ark_ed_on_bn254::Fq;
+    const ST_CAPACITY: usize = 20;
 
     #[test]
     fn crypto_test_circuit_building() {
@@ -431,7 +431,7 @@ mod tests {
         let mut prng = test_rng();
 
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut prng);
-        let st = stake_table_for_testing(&qc_keys, &state_keys);
+        let st = stake_table_for_testing(ST_CAPACITY, &qc_keys, &state_keys);
 
         let entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -477,7 +477,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         // good path
-        let (circuit, public_inputs) = build(
+        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -489,7 +489,7 @@ mod tests {
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
-        let (circuit, public_inputs) = build(
+        let (circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
@@ -517,7 +517,7 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        let (bad_circuit, public_inputs) = build(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
             &bad_bit_vec,
             &bad_bit_masked_sigs,
@@ -540,7 +540,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
             &bit_vec,
             &sig_for_bad_state,
@@ -564,7 +564,7 @@ mod tests {
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
-        let (bad_circuit, public_inputs) = build(
+        let (bad_circuit, public_inputs) = build::<_, _, _, _, _, ST_CAPACITY>(
             &entries,
             &bit_vec,
             &wrong_sigs,
@@ -575,5 +575,15 @@ mod tests {
         assert!(bad_circuit
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_err());
+
+        // bad path: overflowing stake table size
+        assert!(build::<_, _, _, _, _, 9>(
+            &entries,
+            &bit_vec,
+            &bit_masked_sigs,
+            &lightclient_state,
+            &U256::from(26u32),
+        )
+        .is_err())
     }
 }

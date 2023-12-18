@@ -44,6 +44,8 @@ where
     K2: Eq + Hash + Clone + Default + ToFields<F>,
     F: RescueParameter,
 {
+    /// upper bound on table size
+    capacity: usize,
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
     head: StakeTableSnapshot<K1, K2>,
     /// The snapshot of stake table at the beginning of the current epoch
@@ -240,20 +242,19 @@ where
     F: RescueParameter,
 {
     /// Initiating an empty stake table.
-    pub fn new() -> Self {
-        let bls_comm_preimage =
-            vec![F::default(); STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE];
+    pub fn new(capacity: usize) -> Self {
+        let bls_comm_preimage = vec![F::default(); capacity * <K1 as ToFields<F>>::SIZE];
         let default_bls_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(&bls_comm_preimage).unwrap()[0];
-        let schnorr_comm_preimage =
-            vec![F::default(); STAKE_TABLE_CAPACITY * <K2 as ToFields<F>>::SIZE];
+        let schnorr_comm_preimage = vec![F::default(); capacity * <K2 as ToFields<F>>::SIZE];
         let default_schnorr_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(&schnorr_comm_preimage).unwrap()[0];
-        let stake_comm_preimage = vec![F::default(); STAKE_TABLE_CAPACITY];
+        let stake_comm_preimage = vec![F::default(); capacity];
         let default_stake_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(&stake_comm_preimage).unwrap()[0];
         let default_comm = (default_bls_comm, default_schnorr_comm, default_stake_comm);
         Self {
+            capacity,
             head: StakeTableSnapshot::default(),
             epoch_start: StakeTableSnapshot::default(),
             last_epoch_start: StakeTableSnapshot::default(),
@@ -296,7 +297,7 @@ where
     /// Commitment of a stake table is a triple (bls_keys_comm, schnorr_keys_comm, stake_amount_comm)
     /// TODO(Chengyu): The BLS verification keys doesn't implement Default. Thus we directly pad with `F::default()`.
     fn compute_head_comm(&mut self) -> (F, F, F) {
-        let padding_len = STAKE_TABLE_CAPACITY - self.head.bls_keys.len();
+        let padding_len = self.capacity - self.head.bls_keys.len();
         // Compute rescue hash for bls keys
         let mut bls_comm_preimage = self
             .head
@@ -304,10 +305,7 @@ where
             .iter()
             .flat_map(|key| key.to_fields())
             .collect::<Vec<_>>();
-        bls_comm_preimage.resize(
-            STAKE_TABLE_CAPACITY * <K1 as ToFields<F>>::SIZE,
-            F::default(),
-        );
+        bls_comm_preimage.resize(self.capacity * <K1 as ToFields<F>>::SIZE, F::default());
         let bls_comm = VariableLengthRescueCRHF::<F, 1>::evaluate(bls_comm_preimage).unwrap()[0];
 
         // Compute rescue hash for Schnorr keys
@@ -328,7 +326,7 @@ where
             .iter()
             .map(|x| u256_to_field(x))
             .collect::<Vec<_>>();
-        stake_comm_preimage.resize(STAKE_TABLE_CAPACITY, F::default());
+        stake_comm_preimage.resize(self.capacity, F::default());
         let stake_comm =
             VariableLengthRescueCRHF::<F, 1>::evaluate(stake_comm_preimage).unwrap()[0];
         (bls_comm, schnorr_comm, stake_comm)
@@ -363,7 +361,7 @@ where
     F: RescueParameter,
 {
     fn default() -> Self {
-        Self::new()
+        Self::new(STAKE_TABLE_CAPACITY)
     }
 }
 
@@ -379,7 +377,7 @@ mod tests {
 
     #[test]
     fn crypto_test_stake_table() -> Result<(), StakeTableError> {
-        let mut st = StakeTable::<QCVerKey, StateVerKey, F>::new();
+        let mut st = StakeTable::<QCVerKey, StateVerKey, F>::default();
         let mut prng = jf_utils::test_rng();
         let keys = (0..10)
             .map(|_| {

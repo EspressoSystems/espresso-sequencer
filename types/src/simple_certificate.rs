@@ -24,9 +24,35 @@ use crate::{
 
 use serde::{Deserialize, Serialize};
 
+/// Trait which allows use to inject different threshold calculations into a Certificate type
+pub trait Threshold<TYPES: NodeType> {
+    /// Calculate a threshold based on the membership
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64;
+}
+
+/// Defines a threshold which is 2f + 1 (Amount needed for Quorum)
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
+pub struct SuccessThreshold {}
+
+impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
+        membership.success_threshold().into()
+    }
+}
+
+/// Defines a threshold which is f + 1 (i.e at least one of the stake is honest)
+#[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
+pub struct OneHonestThreshold {}
+
+impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
+        membership.failure_threshold().into()
+    }
+}
+
 /// A certificate which can be created by aggregating many simple votes on the commitment.
 #[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
-pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
+pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>> {
     /// The data this certificate is for.  I.e the thing that was voted on to create this Certificate
     pub data: VOTEABLE,
     /// commitment of all the votes this cert should be signed over
@@ -37,14 +63,15 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable> {
     pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType>,
     /// If this QC is for the genesis block
     pub is_genesis: bool,
-    /// phantom data for `MEMBERSHIP` and `TYPES`
-    pub _pd: PhantomData<TYPES>,
+    /// phantom data for `THRESHOLD` and `TYPES`
+    pub _pd: PhantomData<(TYPES, THRESHOLD)>,
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
-    for SimpleCertificate<TYPES, VOTEABLE>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>> Certificate<TYPES>
+    for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     type Voteable = VOTEABLE;
+    type Threshold = THRESHOLD;
 
     fn create_signed_certificate(
         vote_commitment: Commitment<VOTEABLE>,
@@ -67,7 +94,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
             membership.get_committee_qc_stake_table(),
-            U256::from(membership.success_threshold().get()),
+            U256::from(Self::threshold(membership)),
         );
         <TYPES::SignatureKey as SignatureKey>::check(
             &real_qc_pp,
@@ -76,7 +103,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
         )
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        membership.success_threshold().into()
+        THRESHOLD::threshold(membership)
     }
     fn get_data(&self) -> &Self::Voteable {
         &self.data
@@ -86,8 +113,8 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> Certificate<TYPES>
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static> HasViewNumber<TYPES>
-    for SimpleCertificate<TYPES, VOTEABLE>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
+    HasViewNumber<TYPES> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     fn get_view_number(&self) -> TYPES::Time {
         self.view_number
@@ -123,18 +150,17 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
 }
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
-pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>>;
+pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>, SuccessThreshold>;
 /// Type alias for a DA certificate over `DAData`
-pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData>;
+pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData, SuccessThreshold>;
 /// Type alias for a Timeout certificate over a view number
-pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>>;
-
-// TODO ED Update this to use the correct threshold instead of the default `success_threshold`
+pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>, SuccessThreshold>;
 /// Type alias for a `ViewSyncPreCommit` certificate over a view number
 pub type ViewSyncPreCommitCertificate2<TYPES> =
-    SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>>;
+    SimpleCertificate<TYPES, ViewSyncPreCommitData<TYPES>, OneHonestThreshold>;
 /// Type alias for a `ViewSyncCommit` certificate over a view number
-pub type ViewSyncCommitCertificate2<TYPES> = SimpleCertificate<TYPES, ViewSyncCommitData<TYPES>>;
+pub type ViewSyncCommitCertificate2<TYPES> =
+    SimpleCertificate<TYPES, ViewSyncCommitData<TYPES>, SuccessThreshold>;
 /// Type alias for a `ViewSyncFinalize` certificate over a view number
 pub type ViewSyncFinalizeCertificate2<TYPES> =
-    SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>>;
+    SimpleCertificate<TYPES, ViewSyncFinalizeData<TYPES>, SuccessThreshold>;
