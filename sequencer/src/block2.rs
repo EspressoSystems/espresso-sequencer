@@ -546,12 +546,12 @@ mod boilerplate {
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction, TxIndex,
-        TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction,
+        TxInclusionProof, TxIndex, TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
-    use jf_primitives::vid::VidScheme;
+    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
 
     #[test]
@@ -740,6 +740,41 @@ mod test {
             // test: cannot make a proof for txs outside the tx table
             assert!(block.transaction_with_proof(&tx_count).is_none());
         }
+    }
+
+    #[test]
+    fn malicious_tx_inclusion_proof() {
+        setup_logging();
+        setup_backtrace();
+
+        let mut rng = jf_utils::test_rng();
+        let test_case = TestCase::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
+        let block = BlockPayload::from_bytes(test_case.payload.iter().cloned());
+        assert_eq!(block.payload.len(), test_case.payload.len());
+        assert_eq!(block.len(), test_case.num_txs);
+
+        // test: cannot make a proof for such a small block
+        assert!(block.transaction_with_proof(&0).is_none());
+
+        let vid = test_vid_factory();
+        let disperse_data = vid.disperse(&block.payload).unwrap();
+
+        // make a fake proof for a nonexistent tx in the small block
+        let tx = Transaction::new(crate::VmId(0), Vec::new());
+        let proof = TxInclusionProof {
+            tx_table_len: block.get_tx_table_len(),
+            tx_table_len_proof: block.get_tx_table_len_proof(&vid).unwrap().clone(),
+            tx_table_range_start: None,
+            tx_table_range_end: TxTableEntry::from_usize(1),
+            tx_table_range_proof: vid.payload_proof(&block.payload, 0..3).unwrap(),
+            tx_payload_proof: None,
+        };
+
+        // test: fake proof should get rejected
+        // TODO should return Some(Err()) instead of None
+        assert!(proof
+            .verify(&tx, 0, &vid, &disperse_data.commit, &disperse_data.common)
+            .is_none());
     }
 
     struct TestCase {
