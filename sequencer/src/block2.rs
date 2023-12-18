@@ -80,17 +80,29 @@ impl BlockPayload {
         }
     }
 
-    // Return length of the tx table
-    // == number of txs in the payload
-    // == the first `TxTableEntry` word of `self.payload`.
-    fn get_tx_table_len(&self) -> Option<TxTableEntry> {
-        TxTableEntry::from_bytes(self.payload.get(0..TxTableEntry::byte_len())?)
+    /// Return a range `r` such that `self.payload[r]` is the bytes of the tx table length.
+    ///
+    /// Typically `r` is `0..TxTableEntry::byte_len()`.
+    /// But it might differ from this if the payload byte length is less than `TxTableEntry::byte_len()`.
+    fn tx_table_len_range(&self) -> Range<usize> {
+        0..std::cmp::min(TxTableEntry::byte_len(), self.payload.len())
+    }
+
+    /// Return length of the tx table, read from the payload bytes.
+    ///
+    /// This quantity equals number of txs in the payload.
+    fn get_tx_table_len(&self) -> TxTableEntry {
+        let tx_table_len_range = self.tx_table_len_range();
+        let mut entry_bytes = [0u8; TxTableEntry::byte_len()];
+        entry_bytes[..tx_table_len_range.len()].copy_from_slice(&self.payload[tx_table_len_range]);
+
+        TxTableEntry::from_bytes_array(entry_bytes)
     }
     fn get_tx_table_len_as<T>(&self) -> Option<T>
     where
         TxTableEntry: TryInto<T>,
     {
-        self.get_tx_table_len()?.try_into().ok()
+        self.get_tx_table_len().try_into().ok()
     }
 
     // Fetch the tx table length range proof from cache.
@@ -99,7 +111,7 @@ impl BlockPayload {
     fn get_tx_table_len_proof(&self, vid: &impl PayloadProver<RangeProof>) -> Option<&RangeProof> {
         self.tx_table_len_proof
             .get_or_init(|| {
-                vid.payload_proof(&self.payload, 0..TxTableEntry::byte_len())
+                vid.payload_proof(&self.payload, self.tx_table_len_range())
                     .ok()
             })
             .as_ref()
@@ -116,6 +128,8 @@ fn tx_payload_range(
     tx_table_len: &TxTableEntry,
     block_payload_byte_len: usize,
 ) -> Option<Range<usize>> {
+    // TODO(817) allow arbitrary tx_table_len
+    // eg: if overflow then just return a 0-length tx
     let tx_bodies_offset = usize::try_from(tx_table_len.clone())
         .ok()?
         .checked_add(1)?
@@ -138,11 +152,20 @@ impl QueryablePayload for BlockPayload {
     type InclusionProof = TxInclusionProof;
 
     fn len(&self) -> usize {
-        self.get_tx_table_len_as().unwrap_or(0)
+        // The number of txs in a block is defined as the minimum of:
+        // (1) the number of txs indicated in the tx table
+        // (2) the number of tx table entries that could fit into the payload
+        // Why? Because (1) could be anything. A block should not be allowed to contain 4 billion 0-length txs.
+        //
+        // The quantity (2) must exclude the first entry of the tx table because this entry indicates only the length of the tx table, not an actual tx.
+        std::cmp::min(
+            self.get_tx_table_len_as().unwrap_or(0),
+            (self.payload.len() / TxTableEntry::byte_len()).saturating_sub(1), // allow space for the tx table length
+        )
     }
 
     fn iter(&self) -> Self::Iter<'_> {
-        0..self.get_tx_table_len_as().unwrap_or(0)
+        0..self.len().try_into().unwrap_or(0)
     }
 
     fn transaction_with_proof(
@@ -150,7 +173,7 @@ impl QueryablePayload for BlockPayload {
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         let index_usize = usize::try_from(*index).ok()?;
-        if index_usize >= self.get_tx_table_len_as()? {
+        if index_usize >= self.len() {
             return None; // error: index out of bounds
         }
 
@@ -197,7 +220,7 @@ impl QueryablePayload for BlockPayload {
         let tx_payload_range = tx_payload_range(
             &tx_table_range_start,
             &tx_table_range_end,
-            &self.get_tx_table_len()?,
+            &self.get_tx_table_len(),
             self.payload.len(),
         )?;
 
@@ -209,7 +232,7 @@ impl QueryablePayload for BlockPayload {
                 self.payload.get(tx_payload_range.clone())?.to_vec(),
             ),
             TxInclusionProof {
-                tx_table_len: self.get_tx_table_len()?,
+                tx_table_len: self.get_tx_table_len(),
                 tx_table_len_proof: self.get_tx_table_len_proof(&vid)?.clone(),
                 tx_table_range_start,
                 tx_table_range_end,
@@ -362,6 +385,8 @@ mod tx_table_entry {
     type TxTableEntryWord = u32;
 
     impl TxTableEntry {
+        pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
+
         pub const fn checked_add(self, rhs: Self) -> Option<Self> {
             // `?` is not allowed in a `const fn` https://github.com/rust-lang/rust/issues/74935
             // Some(Self(self.0.checked_add(rhs.0)?))
@@ -383,6 +408,10 @@ mod tx_table_entry {
             Some(Self(TxTableEntryWord::from_le_bytes(
                 bytes.try_into().ok()?,
             )))
+        }
+        /// Infallible constructor.
+        pub fn from_bytes_array(bytes: [u8; TxTableEntry::byte_len()]) -> Self {
+            Self(TxTableEntryWord::from_le_bytes(bytes))
         }
         pub const fn byte_len() -> usize {
             size_of::<TxTableEntryWord>()
@@ -517,25 +546,26 @@ mod boilerplate {
 #[cfg(test)]
 mod test {
     use super::{
-        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction, TxIndex,
-        TxTableEntry,
+        boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction,
+        TxInclusionProof, TxIndex, TxTableEntry,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
-    use jf_primitives::vid::VidScheme;
+    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use rand::RngCore;
 
     #[test]
     fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            entries_from_lengths(&[5, 8, 8]),          // 3 non-empty txs
-            entries_from_lengths(&[0, 8, 8]),          // 1 empty tx at the beginning
-            entries_from_lengths(&[5, 0, 8]),          // 1 empty tx in the middle
-            entries_from_lengths(&[5, 8, 0]),          // 1 empty tx at the end
-            entries_from_lengths(&[5]),                // 1 nonempty tx
-            entries_from_lengths(&[0]),                // 1 empty tx
-            entries_from_lengths(&[]),                 // zero txs
-            entries_from_lengths(&[1000, 1000, 1000]), // large payload
+            vec![5, 8, 8],          // 3 non-empty txs
+            vec![0, 8, 8],          // 1 empty tx at the beginning
+            vec![5, 0, 8],          // 1 empty tx in the middle
+            vec![5, 8, 0],          // 1 empty tx at the end
+            vec![5],                // 1 nonempty tx
+            vec![0],                // 1 empty tx
+            vec![],                 // zero txs
+            vec![1000, 1000, 1000], // large payload
         ];
 
         setup_logging();
@@ -544,17 +574,19 @@ mod test {
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, tx_table_entries) in test_cases.into_iter().enumerate() {
+        for (t, lengths) in test_cases.into_iter().enumerate() {
             tracing::info!(
                 "test payload {} of {} with {} txs",
                 t + 1,
                 num_test_cases,
-                tx_table_entries.len()
+                lengths.len(),
             );
 
             // prepare things as a function of the test case
-            let tx_payloads_flat = random_tx_payloads_flat(&tx_table_entries, &mut rng);
-            let tx_bodies = extract_tx_payloads(&tx_table_entries, &tx_payloads_flat);
+            let entries = entries_from_lengths(&lengths);
+            let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&entries), &mut rng);
+            let tx_bodies = extract_tx_payloads(&entries, &tx_payloads_flat);
+            assert_eq!(tx_bodies.len(), entries.len());
             assert_eq!(
                 // enforce well-formed test case
                 tx_payloads_flat,
@@ -602,7 +634,9 @@ mod test {
 
             // tests for individual txs
             let disperse_data = vid.disperse(&block.payload).unwrap();
+            let mut block_iter = block.iter(); // test iterator correctness
             for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
+                assert!(block_iter.next().is_some());
                 let index = TxIndex::try_from(index_usize).unwrap();
                 // tracing::info!("tx index {}", index,);
 
@@ -620,48 +654,72 @@ mod test {
                     .unwrap()
                     .unwrap();
             }
+            assert!(block_iter.next().is_none());
         }
     }
 
     #[test]
-    fn negative_len_txs_and_truncated_tx_payload() {
+    fn malformed_payloads() {
         // play with this
         let mut rng = jf_utils::test_rng();
         let test_cases = vec![
-            random_payload(&[30, 10, 20], &mut rng), // 1 negative-length tx
-            random_payload(&[30, 20, 10], &mut rng), // 2 negative-length txs
-            random_payload_truncated(&[10, 20, 30], 15, &mut rng), // truncated tx payload
-            tx_table(&[10, 20, 30]),                 // 0-length tx payload
-            random_payload_truncated(&[30, 20, 10], 15, &mut rng), // negative-len txs, truncated tx payload
-            tx_table(&[30, 20, 10]), // negative-len txs, 0-len tx payload
-            random_payload_truncated(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
-            random_payload_truncated(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
-            random_block_with_tx_table_len(5, 100, &mut rng), // random payload except tx table len
-            random_block_with_tx_table_len(25, 1000, &mut rng), // random payload except tx table len
+            // negative-length txs
+            TestCase::from_entries(&[30, 10, 20], &mut rng), // 1 negative-length tx
+            TestCase::from_entries(&[30, 20, 10], &mut rng), // 2 negative-length txs
+            // truncated payload
+            TestCase::with_total_len(&[10, 20, 30], 20, &mut rng), // truncated tx payload
+            TestCase::with_trimmed_body(&[10, 20, 30], 0, &mut rng), // 0-length tx payload
+            TestCase::with_total_len(&[10, 20, u32::MAX as usize], 1000, &mut rng), // large tx truncated
+            // negative-length txs AND truncated payload
+            TestCase::with_total_len(&[30, 20, 10], 20, &mut rng), // negative-len txs, truncated tx payload
+            TestCase::with_trimmed_body(&[30, 20, 10], 0, &mut rng), // negative-len txs, 0-len tx payload
+            TestCase::with_total_len(&[10, u32::MAX as usize, 30], 1000, &mut rng), // negative-len tx, large tx truncated
+            // tx table fits inside payload
+            TestCase::from_tx_table_len(5, 100, &mut rng),
+            TestCase::from_tx_table_len(25, 1000, &mut rng),
+            // tx table too large for payload
+            TestCase::from_tx_table_len_unchecked(100, 40, &mut rng),
+            TestCase::from_tx_table_len_unchecked(
+                TxTableEntry::MAX.try_into().unwrap(),
+                100,
+                &mut rng,
+            ), // huge tx table length
+            // extra payload bytes
+            TestCase::with_total_len(&[10, 20, 30], 1000, &mut rng),
+            TestCase::with_total_len(&[], 1000, &mut rng), // 0 txs
+            // extremely small payload
+            TestCase::from_tx_table_len_unchecked(1, 3, &mut rng), // 3-byte payload too small to store tx table len
+            TestCase::from_tx_table_len_unchecked(1000, 3, &mut rng), // 3-byte payload, large number of txs
+            TestCase::from_tx_table_len_unchecked(0, 3, &mut rng),    // 3-byte payload, 0 txs
+            TestCase::from_tx_table_len_unchecked(6, 0, &mut rng),    // 0-byte payload
         ];
 
-        // TODO more test cases:
-        // - valid tx proof P made from large payload, checked against a prefix of that payload where P is invalid
-        // - payload <4 bytes
+        // TODO(817) more test cases:
+        // - this will break for extremely large payloads
+        //   - should we hard-code an upper limit so arithmetic never overflows?
 
         setup_logging();
         setup_backtrace();
 
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, payload) in test_cases.into_iter().enumerate() {
-            let payload_byte_len = payload.len();
-            let block = BlockPayload::from_bytes(payload);
+        for (t, test_case) in test_cases.into_iter().enumerate() {
+            let payload_byte_len = test_case.payload.len();
             tracing::info!(
                 "test payload {} of {} with {} txs and byte length {}",
                 t + 1,
                 num_test_cases,
-                block.len(),
+                test_case.num_txs,
                 payload_byte_len
             );
 
+            let block = BlockPayload::from_bytes(test_case.payload);
+            assert_eq!(block.len(), test_case.num_txs);
+            assert_eq!(block.payload.len(), payload_byte_len);
+
             let disperse_data = vid.disperse(&block.payload).unwrap();
 
+            let mut tx_count: <BlockPayload as QueryablePayload>::TransactionIndex = 0; // test iterator correctness
             for index in block.iter() {
                 // tracing::info!("tx index {}", index,);
                 let (tx, proof) = block.transaction_with_proof(&index).unwrap();
@@ -675,6 +733,167 @@ mod test {
                     )
                     .unwrap()
                     .unwrap();
+                tx_count += 1;
+            }
+            assert_eq!(test_case.num_txs, usize::try_from(tx_count).unwrap());
+
+            // test: cannot make a proof for txs outside the tx table
+            assert!(block.transaction_with_proof(&tx_count).is_none());
+        }
+    }
+
+    #[test]
+    fn malicious_tx_inclusion_proof() {
+        setup_logging();
+        setup_backtrace();
+
+        let mut rng = jf_utils::test_rng();
+        let test_case = TestCase::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
+        let block = BlockPayload::from_bytes(test_case.payload.iter().cloned());
+        assert_eq!(block.payload.len(), test_case.payload.len());
+        assert_eq!(block.len(), test_case.num_txs);
+
+        // test: cannot make a proof for such a small block
+        assert!(block.transaction_with_proof(&0).is_none());
+
+        let vid = test_vid_factory();
+        let disperse_data = vid.disperse(&block.payload).unwrap();
+
+        // make a fake proof for a nonexistent tx in the small block
+        let tx = Transaction::new(crate::VmId(0), Vec::new());
+        let proof = TxInclusionProof {
+            tx_table_len: block.get_tx_table_len(),
+            tx_table_len_proof: block.get_tx_table_len_proof(&vid).unwrap().clone(),
+            tx_table_range_start: None,
+            tx_table_range_end: TxTableEntry::from_usize(1),
+            tx_table_range_proof: vid.payload_proof(&block.payload, 0..3).unwrap(),
+            tx_payload_proof: None,
+        };
+
+        // test: fake proof should get rejected
+        // TODO should return Some(Err()) instead of None
+        assert!(proof
+            .verify(&tx, 0, &vid, &disperse_data.commit, &disperse_data.common)
+            .is_none());
+    }
+
+    struct TestCase {
+        payload: Vec<u8>,
+        num_txs: usize,
+    }
+    impl TestCase {
+        /// Return a well-formed random block whose tx table is derived from `lengths`.
+        #[allow(dead_code)]
+        fn from_lengths<R: RngCore>(lengths: &[usize], rng: &mut R) -> Self {
+            Self::from_entries(&entries_from_lengths(lengths), rng)
+        }
+
+        /// Return a random block whose tx table is derived from `entries`.
+        ///
+        /// If `entries` is well-formed then the result is well-formed.
+        fn from_entries<R: RngCore>(entries: &[usize], rng: &mut R) -> Self {
+            Self {
+                payload: [
+                    tx_table(entries),
+                    random_bytes(tx_bodies_byte_len(entries), rng),
+                ]
+                .concat(),
+                num_txs: entries.len(),
+            }
+        }
+
+        /// Like `from_entries` except the tx bodies byte length is `body_len`.
+        ///
+        /// Panics if `body_len` would not actually decrese the block size.
+        fn with_trimmed_body<R: RngCore>(entries: &[usize], body_len: usize, rng: &mut R) -> Self {
+            assert!(
+                body_len < tx_bodies_byte_len(entries),
+                "body_len too large to trim the body"
+            );
+            Self {
+                payload: [tx_table(entries), random_bytes(body_len, rng)].concat(),
+                num_txs: entries.len(),
+            }
+        }
+
+        /// Like `from_entries` except the byte length of the block is `block_byte_len`.
+        ///
+        /// Panics if `block_byte_len` would truncate the tx table.
+        /// If you want to truncate the tx table then use `with_total_len_unchecked`.
+        ///
+        /// If `block_byte_len` would increase block size then new space is filled with random bytes.
+        fn with_total_len<R: RngCore>(
+            entries: &[usize],
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            assert!(
+                tx_table_byte_len(entries) <= block_byte_len,
+                "tx table size {} for entries {:?} exceeds block_byte_len {}",
+                tx_table_byte_len(entries),
+                entries,
+                block_byte_len
+            );
+            Self::with_total_len_unchecked(entries, block_byte_len, rng)
+        }
+
+        /// Like `with_total_len` except `block_byte_len` may truncate the tx table.
+        fn with_total_len_unchecked<R: RngCore>(
+            entries: &[usize],
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            let mut payload = tx_table(entries);
+            let num_txs = if block_byte_len > payload.len() {
+                payload.extend(random_bytes(block_byte_len - payload.len(), rng));
+                entries.len()
+            } else {
+                payload.truncate(block_byte_len);
+                (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1)
+            };
+            Self { payload, num_txs }
+        }
+
+        /// Return a random block whose tx table indicates `tx_table_len` txs and whose total byte length is `block_byte_len`.
+        ///
+        /// Every byte of the block is random except the tx table header.
+        ///
+        /// Panics if `txs_byte_len` would truncate the tx table.
+        /// If you want to truncate the tx table then use `with_total_len_unchecked`.
+        fn from_tx_table_len<R: RngCore>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            let tx_table_byte_len = (tx_table_len + 1) * TxTableEntry::byte_len();
+            assert!(
+                tx_table_byte_len <= block_byte_len,
+                "tx table size {} exceeds block size {}",
+                tx_table_byte_len,
+                block_byte_len
+            );
+            Self::from_tx_table_len_unchecked(tx_table_len, block_byte_len, rng)
+        }
+
+        /// Like `from_tx_table_len` except `block_byte_len` may truncate the tx table.
+        fn from_tx_table_len_unchecked<R: RngCore>(
+            tx_table_len: usize,
+            block_byte_len: usize,
+            rng: &mut R,
+        ) -> Self {
+            // accommodate extremely small block payload
+            let header_byte_len = std::cmp::min(TxTableEntry::byte_len(), block_byte_len);
+            let mut payload = vec![0; block_byte_len];
+            rng.fill_bytes(&mut payload);
+            payload[..header_byte_len].copy_from_slice(
+                &TxTableEntry::from_usize(tx_table_len).to_bytes()[..header_byte_len],
+            );
+            Self {
+                payload,
+                num_txs: std::cmp::min(
+                    tx_table_len,
+                    (block_byte_len / TxTableEntry::byte_len()).saturating_sub(1),
+                ),
             }
         }
     }
@@ -684,12 +903,22 @@ mod test {
         use rand::RngCore;
 
         pub fn tx_table(entries: &[usize]) -> Vec<u8> {
-            let mut tx_table = Vec::with_capacity(entries.len() + TxTableEntry::byte_len());
+            let tx_table_byte_len = tx_table_byte_len(entries);
+            let mut tx_table = Vec::with_capacity(tx_table_byte_len);
             tx_table.extend(TxTableEntry::from_usize(entries.len()).to_bytes());
             for entry in entries {
                 tx_table.extend(TxTableEntry::from_usize(*entry).to_bytes());
             }
+            assert_eq!(
+                tx_table.len(),
+                tx_table_byte_len,
+                "bug in test code: unexpected tx table byte length"
+            );
             tx_table
+        }
+
+        pub fn tx_table_byte_len(entries: &[usize]) -> usize {
+            (entries.len() + 1) * TxTableEntry::byte_len()
         }
 
         pub fn entries_from_lengths(lengths: &[usize]) -> Vec<usize> {
@@ -707,44 +936,13 @@ mod test {
             assert_eq!(vec![10, 20, 30], entries_from_lengths(&[10, 10, 10]));
         }
 
-        pub fn random_tx_payloads_flat<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_tx_payloads_flat_truncated_inner(entries, None, rng)
+        pub fn tx_bodies_byte_len(entries: &[usize]) -> usize {
+            // largest entry in the tx table dictates size of tx payloads
+            *entries.iter().max().unwrap_or(&0)
         }
 
-        #[allow(dead_code)]
-        pub fn random_tx_payloads_flat_truncated<R>(
-            entries: &[usize],
-            max_tx_payloads_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_tx_payloads_flat_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
-        }
-
-        fn random_tx_payloads_flat_truncated_inner<R>(
-            entries: &[usize],
-            max_tx_payloads_byte_len: Option<usize>,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            // largest entry dictates size of tx bodies
-            let tx_payloads_flat_byte_len = *entries.iter().max().unwrap_or(&0);
-
-            // enforce max length if present
-            let tx_payloads_flat_byte_len = if let Some(max) = max_tx_payloads_byte_len {
-                std::cmp::min(tx_payloads_flat_byte_len, max)
-            } else {
-                tx_payloads_flat_byte_len
-            };
-
-            let mut result = vec![0; tx_payloads_flat_byte_len];
+        pub fn random_bytes<R: RngCore>(len: usize, rng: &mut R) -> Vec<u8> {
+            let mut result = vec![0; len];
             rng.fill_bytes(&mut result);
             result
         }
@@ -763,59 +961,6 @@ mod test {
                 result.push(tx_payload);
             }
             assert_eq!(result.len(), entries.len());
-            result
-        }
-
-        pub fn random_payload<R>(entries: &[usize], rng: &mut R) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_payload_truncated_inner(entries, None, rng)
-        }
-        pub fn random_payload_truncated<R>(
-            entries: &[usize],
-            max_tx_payloads_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            random_payload_truncated_inner(entries, Some(max_tx_payloads_byte_len), rng)
-        }
-        fn random_payload_truncated_inner<R>(
-            entries: &[usize],
-            max_tx_payloads_byte_len: Option<usize>,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            let mut result = tx_table(entries);
-            result.extend(random_tx_payloads_flat_truncated_inner(
-                entries,
-                max_tx_payloads_byte_len,
-                rng,
-            ));
-            result
-        }
-
-        pub fn random_block_with_tx_table_len<R>(
-            tx_table_len: usize,
-            block_byte_len: usize,
-            rng: &mut R,
-        ) -> Vec<u8>
-        where
-            R: RngCore,
-        {
-            // TODO a future PR will support tx table size > block size
-            assert!(
-                tx_table_len * TxTableEntry::byte_len() <= block_byte_len,
-                "tx table size exceeds block size"
-            );
-            let mut result = vec![0; block_byte_len];
-            rng.fill_bytes(&mut result);
-            result[..TxTableEntry::byte_len()]
-                .copy_from_slice(&TxTableEntry::from_usize(tx_table_len).to_bytes());
             result
         }
     }
