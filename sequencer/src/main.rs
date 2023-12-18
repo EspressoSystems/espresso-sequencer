@@ -28,7 +28,7 @@ async fn main() {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
-        webserver_poll_interval_ms: opt.webserver_poll_interval_ms,
+        webserver_poll_interval: opt.webserver_poll_interval,
     };
     let config_path = opt.config_path;
 

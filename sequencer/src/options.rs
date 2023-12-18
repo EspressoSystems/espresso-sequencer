@@ -2,6 +2,10 @@ use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use std::collections::HashSet;
 use std::iter::once;
+use std::time::Duration;
+use cld::ClDuration;
+use std::str::FromStr;
+use snafu::Snafu;
 use std::path::PathBuf;
 use url::Url;
 
@@ -65,14 +69,15 @@ pub struct Options {
     pub config_path: Option<PathBuf>,
 
     /// The amount of time to wait between each request to the HotShot
-    /// consensus or DA web servers during polling, in milliseconds.
+    /// consensus or DA web servers during polling.
     #[clap(
         short,
         long,
-        env = "ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL_MS",
-        default_value = "100"
+        env = "ESPRESSO_SEQUENCER_WEBSERVER_POLL_INTERVAL",
+        default_value = "100ms",
+        value_parser = parse_duration
     )]
-    pub webserver_poll_interval_ms: u64,
+    pub webserver_poll_interval: Duration,
 
     /// Add optional modules to the service.
     ///
@@ -95,6 +100,19 @@ impl Options {
     pub fn modules(&self) -> Modules {
         ModuleArgs(self.modules.clone()).parse()
     }
+}
+
+#[derive(Clone, Debug, Snafu)]
+struct ParseDurationError {
+    reason: String,
+}
+
+fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+    ClDuration::from_str(s)
+        .map(Duration::from)
+        .map_err(|err| ParseDurationError {
+            reason: err.to_string(),
+        })
 }
 
 #[derive(Clone, Debug)]
