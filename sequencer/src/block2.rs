@@ -15,6 +15,9 @@ use std::{ops::Range, sync::OnceLock};
 pub struct BlockPayload {
     payload: Vec<u8>,
 
+    // TODO(746) should metadata be included in hash, serde, etc?
+    metadata: NamespaceTable,
+
     // cache frequently used items
     //
     // TODO type should be `OnceLock<RangeProof>` instead of `OnceLock<Option<RangeProof>>`. We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
@@ -65,17 +68,18 @@ impl BlockPayload {
         payload.extend(tx_bodies);
         Some(Self {
             payload,
+            metadata: NamespaceTable(),
             tx_table_len_proof: Default::default(),
         })
     }
 
-    #[allow(dead_code)] // TODO temporary
     fn from_bytes<B>(bytes: B) -> Self
     where
         B: IntoIterator<Item = u8>,
     {
         Self {
             payload: bytes.into_iter().collect(),
+            metadata: NamespaceTable(),
             tx_table_len_proof: Default::default(),
         }
     }
@@ -145,6 +149,10 @@ fn tx_payload_range(
     let end = std::cmp::min(end, block_payload_byte_len);
     Some(start..end)
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+
+pub struct NamespaceTable();
 
 impl QueryablePayload for BlockPayload {
     type TransactionIndex = u32;
@@ -459,7 +467,8 @@ mod tx_table_entry {
 
 mod boilerplate {
     use super::{
-        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
+        BlockPayload, NamespaceTable, PolynomialCommitmentScheme, QueryablePayload, Transaction,
+        UnivariateKzgPCS,
     };
     use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
@@ -475,14 +484,14 @@ mod boilerplate {
     impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
         type Transaction = Transaction;
-        type Metadata = ();
+        type Metadata = NamespaceTable;
         type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
         fn from_transactions(
             transactions: impl IntoIterator<Item = Self::Transaction>,
         ) -> Result<(Self, Self::Metadata), Self::Error> {
             let payload = Self::from_txs(transactions).context(BlockBuildingSnafu)?;
-            Ok((payload, ()))
+            Ok((payload, NamespaceTable()))
         }
 
         fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
