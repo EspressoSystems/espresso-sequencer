@@ -10,7 +10,7 @@ use hotshot_task::{
 };
 use hotshot_types::traits::node_implementation::NodeType;
 use snafu::Snafu;
-use std::{collections::HashMap, future::Future, sync::Arc};
+use std::{collections::HashMap, future::Future, sync::Arc, thread::sleep, time::Duration};
 
 /// The state for the test harness task. Keeps track of which events and how many we expect to get
 pub struct TestHarnessState<TYPES: NodeType> {
@@ -107,6 +107,8 @@ pub fn handle_event<TYPES: NodeType>(
     }
 
     if state.expected_output.is_empty() {
+        // Sleep before the shutdown in case other tasks are still running.
+        sleep(Duration::from_millis(100));
         return (Some(HotShotTaskCompleted::ShutDown), state);
     }
 
