@@ -1,12 +1,12 @@
 use crate::{api, hotshot_commitment::CommitmentTaskOptions};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use cld::ClDuration;
+use snafu::Snafu;
 use std::collections::HashSet;
 use std::iter::once;
-use std::time::Duration;
-use cld::ClDuration;
-use std::str::FromStr;
-use snafu::Snafu;
 use std::path::PathBuf;
+use std::str::FromStr;
+use std::time::Duration;
 use url::Url;
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
