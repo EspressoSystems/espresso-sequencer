@@ -16,6 +16,7 @@ use derive_more::From;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::PathBuf;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
@@ -83,8 +84,8 @@ where
         .get("success_rate", |_, state| {
             async { state.success_rate().await.map_err(internal) }.boxed()
         })?
-        .get("metrics", |_, state| {
-            async { state.export_metrics().await.map_err(internal) }.boxed()
+        .metrics("metrics", |_, state| {
+            async { Ok(Cow::Borrowed(state.metrics())) }.boxed()
         })?;
     Ok(api)
 }
@@ -106,10 +107,11 @@ mod test {
     use futures::FutureExt;
     use hotshot_utils::bincode::bincode_opts;
     use portpicker::pick_unused_port;
+    use std::str::FromStr;
     use std::time::Duration;
     use surf_disco::Client;
     use tempdir::TempDir;
-    use tide_disco::App;
+    use tide_disco::{App, Url};
     use toml::toml;
 
     #[async_std::test]
@@ -127,8 +129,8 @@ mod test {
         spawn(app.serve(format!("0.0.0.0:{}", port)));
 
         // Start a client.
-        let client =
-            Client::<Error>::new(format!("http://localhost:{}/status", port).parse().unwrap());
+        let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
+        let client = Client::<Error>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Submit a transaction. We have not yet started the validators, so this transaction will
@@ -166,7 +168,9 @@ mod test {
         );
 
         // Test Prometheus export.
-        let prometheus = client.get::<String>("metrics").send().await.unwrap();
+        let mut res = surf::get(&format!("{url}/metrics")).send().await.unwrap();
+        assert_eq!(res.status(), StatusCode::Ok);
+        let prometheus = res.body_string().await.unwrap();
         let lines = prometheus.lines().collect::<Vec<_>>();
         assert!(
             lines.contains(&"consensus_outstanding_transactions 1"),
