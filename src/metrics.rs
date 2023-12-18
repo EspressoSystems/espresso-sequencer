@@ -125,11 +125,6 @@ pub struct PrometheusMetrics {
 }
 
 impl PrometheusMetrics {
-    /// Export all metrics in the Prometheus text format.
-    pub fn prometheus(&self) -> Result<String, MetricsError> {
-        self.metrics.export()
-    }
-
     /// Get a counter in this sub-group by name.
     pub fn get_counter(&self, label: &str) -> Result<Counter, MetricsError> {
         self.get_metric(&self.counters, label)
@@ -209,6 +204,14 @@ impl PrometheusMetrics {
                 .subsystem(group_names.join("_"));
         }
         opts
+    }
+}
+
+impl tide_disco::metrics::Metrics for PrometheusMetrics {
+    type Error = MetricsError;
+
+    fn export(&self) -> Result<String, Self::Error> {
+        self.metrics.export()
     }
 }
 
@@ -386,6 +389,7 @@ mod test {
     use super::*;
     use crate::testing::setup_test;
     use metrics::Metrics;
+    use tide_disco::metrics::Metrics as _;
 
     #[test]
     fn test_prometheus_metrics() {
@@ -434,7 +438,7 @@ mod test {
         assert_eq!(metrics.get_label("label").unwrap().get(), "another");
 
         // Export to a Prometheus string.
-        let string = metrics.prometheus().unwrap();
+        let string = metrics.export().unwrap();
         // Make sure the output makes sense.
         let lines = string.lines().collect::<Vec<_>>();
         assert!(lines.contains(&"counter 42"));
@@ -502,7 +506,7 @@ mod test {
 
         // Check fully-qualified counter name in export.
         assert!(metrics
-            .prometheus()
+            .export()
             .unwrap()
             .lines()
             .contains(&"subgroup1_subgroup2_counter 42"));
@@ -531,7 +535,7 @@ mod test {
 
         // Check fully-qualified label name in export.
         assert!(metrics
-            .prometheus()
+            .export()
             .unwrap()
             .lines()
             .contains(&"# LABEL subgroup1_subgroup2_label value"));

@@ -50,7 +50,7 @@ itertools = "0.12"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 snafu = { version = "0.7", features = ["backtraces"] }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.4" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco.git", tag = "v0.4.5" }
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
@@ -93,5 +93,6 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 portpicker = "0.1"
 rand = "0.8"
 spin_sleep = "1.1"
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.4" }
+surf = "2.3"
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco.git", tag = "v0.4.5" }
 tempdir = "0.3"

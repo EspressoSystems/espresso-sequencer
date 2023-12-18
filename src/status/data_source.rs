@@ -54,11 +54,6 @@ pub trait StatusDataSource {
         // By definition, a successful view is any which committed a block.
         Ok(self.block_height().await? as f64 / total_views)
     }
-
-    /// Export all available metrics in the Prometheus text format.
-    async fn export_metrics(&self) -> QueryResult<String> {
-        self.metrics().prometheus().map_err(metrics_err)
-    }
 }
 
 pub trait UpdateStatusData {
