@@ -53,7 +53,6 @@ async fn test_catchup() {
         check_leaf: true,
         ..Default::default()
     };
-    metadata.overall_safety_properties.num_failed_views = 2;
     // Make sure we keep commiting rounds after the catchup, but not the full 50.
     metadata.overall_safety_properties.num_successful_views = 22;
 
