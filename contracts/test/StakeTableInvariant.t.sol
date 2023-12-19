@@ -30,10 +30,12 @@ import { StdUtils } from "forge-std/StdUtils.sol";
 // TODO avoid code duplication with StakeTable.t.sol
 
 contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
-    S private stakeTable;
+    S public stakeTable;
     address tokenCreator;
     ExampleToken public token;
     BN254.G2Point[] vks;
+    BN254.G2Point[] vksWithdraw;
+    LightClientTest lightClient;
 
     function genClientWallet(address sender, uint8 seed)
         private
@@ -61,10 +63,16 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
         );
     }
 
-    constructor(S _stakeTable, address _tokenCreator, ExampleToken _token) {
+    constructor(
+        S _stakeTable,
+        address _tokenCreator,
+        ExampleToken _token,
+        LightClientTest _lightClient
+    ) {
         stakeTable = _stakeTable;
         token = _token;
         tokenCreator = _tokenCreator;
+        lightClient = _lightClient;
     }
 
     function registerWithSeed(address sender, uint8 seed, uint256 amount) private {
@@ -103,10 +111,28 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
 
     function requestExit(uint256 rand) public {
         uint256 index = bound(rand, 0, vks.length - 1);
-        // TODO advance epoch?
         vm.prank(tokenCreator);
         stakeTable.requestExit(vks[index]);
+        BN254.G2Point memory vk = vks[index];
+
+        // Remove vk from the list of registered keys
         delete vks[index];
+
+        // Add vk to the list of keys that can allow a withdrawal
+        vksWithdraw.push(vk);
+    }
+
+    function advanceEpoch() public {
+        uint64 currentEpoch = lightClient.currentEpoch();
+        uint64 nextEpoch = currentEpoch + 1;
+        lightClient.setCurrentEpoch(nextEpoch);
+    }
+
+    function withdrawFunds(uint256 rand) public {
+        uint256 index = bound(rand, 0, vks.length - 1);
+        BN254.G2Point memory vk = vks[index];
+        vm.prank(tokenCreator);
+        stakeTable.withdrawFunds(vk);
     }
 }
 
@@ -136,12 +162,21 @@ contract StakeTableInvariant_Tests is Test {
         });
         lightClientContract = new LightClientTest(genesis, 10);
         stakeTable = new S(address(token), address(lightClientContract), 10);
-        handler = new StakeTableHandler(stakeTable, exampleTokenCreator, token);
+        handler = new StakeTableHandler(stakeTable, exampleTokenCreator, token, lightClientContract);
+
+        // Only test the handler
+        targetContract(address(handler));
     }
 
-    function invariant_A() external {
+    function invariant_BalancesAreConsistent() external {
         uint256 balance1 = token.balanceOf(exampleTokenCreator);
         uint256 balance2 = token.balanceOf(address(stakeTable));
         assertEq(balance1 + balance2, INITIAL_BALANCE);
+    }
+
+    function invaritant_Queue() external {
+        // Global invariants
+        assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
+        assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
     }
 }
