@@ -322,7 +322,7 @@ async fn test_consensus_no_vote_without_vid_share() {
         HotShotEvent::ViewChange(ViewNumber::new(2)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
     );
-    // Sishan TODO: would better track the log ""We have not seen the VID share for this view ..."
+    // Sishan TODO: would better track the log "We have not seen the VID share for this view ..."
     input.push(HotShotEvent::Shutdown);
     output.insert(HotShotEvent::Shutdown, 1);
 

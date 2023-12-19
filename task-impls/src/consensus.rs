@@ -162,7 +162,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     // Check if we are able to vote, like whether the proposal is valid,
     // whether we have DAC and VID share, and if so, vote.
     async fn vote_if_able(&self) -> bool {
-        error!("Step 1 inside vote_if_able()"); // Sishan TODO: remove these error message
+
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
                 "We were not chosen for consensus committee on {:?}",
@@ -170,7 +170,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             );
             return false;
         }
-        error!("Step 2 inside vote_if_able()");
+
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
             // No need to check vid share nor da cert for genesis
@@ -232,7 +232,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            error!("Step 3 inside vote_if_able(), going to check vid share");
+
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
@@ -427,23 +427,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         *proposal.data.view_number,
                     ))
                     .await;
-                error!("Step 1"); // Sishan TODO: remove these error message
+
                 let view = proposal.data.get_view_number();
                 if view < self.cur_view {
                     debug!("Proposal is from an older view {:?}", proposal.data.clone());
                     return;
                 }
-                error!("Step 2");
+
                 let view_leader_key = self.quorum_membership.get_leader(view);
                 if view_leader_key != sender {
                     warn!("Leader key does not match key in proposal");
                     return;
                 }
-                error!(
-                    "Step 3, proposal.data.justify_qc.get_view_number() = {:?}, view - 1 = {:?}",
-                    proposal.data.justify_qc.get_view_number(),
-                    view - 1
-                );
+
                 // Verify a timeout certificate exists and is valid
                 if proposal.data.justify_qc.get_view_number() != view - 1 {
                     let Some(timeout_cert) = proposal.data.timeout_certificate.clone() else {
@@ -463,7 +459,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         return;
                     }
                 }
-                error!("Step 4");
+
                 let justify_qc = proposal.data.justify_qc.clone();
 
                 if !justify_qc.is_valid_cert(self.quorum_membership.as_ref()) {
@@ -472,14 +468,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     consensus.metrics.invalid_qc.update(1);
                     return;
                 }
-                error!("Step 5");
+
                 // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
                 self.update_view(view).await;
 
                 self.current_proposal = Some(proposal.data.clone());
 
                 let consensus = self.consensus.upgradable_read().await;
-                error!("Step 6");
+
                 // Construct the leaf.
                 let parent = if justify_qc.is_genesis {
                     self.genesis_leaf().await
@@ -568,7 +564,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Failed safety check and liveness check");
                     return;
                 }
-                error!("Step 7");
+
                 let high_qc = leaf.justify_qc.clone();
                 let mut new_anchor_view = consensus.last_decided_view;
                 let mut new_locked_view = consensus.locked_view;
@@ -723,7 +719,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         == self.current_proposal.clone().unwrap().view_number;
                 // todo get rid of this clone
                 let qc = consensus.high_qc.clone();
-                error!("Step 8");
+
                 drop(consensus);
                 if should_propose {
                     debug!(
@@ -733,7 +729,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await;
                 }
-                error!("Step 9, plan to go to vote_if_able()");
+
                 if !self.vote_if_able().await {
                     return;
                 }
