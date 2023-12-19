@@ -386,6 +386,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.vote_index.entry(view_number).or_insert(0);
         self.votes
             .entry(view_number)
@@ -406,6 +415,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vid_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_vid_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted vid vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.vid_vote_index.entry(view_number).or_insert(0);
         self.vid_votes
             .entry(view_number)
@@ -428,6 +446,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_view_sync_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted view sync vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
         self.view_sync_votes
             .entry(view_number)
