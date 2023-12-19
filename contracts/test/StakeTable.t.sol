@@ -31,8 +31,8 @@ contract StakeTable_Test is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
-    uint256 constant INITIAL_BALANCE = 1_000_000_000;
-    address exampleTokenCreator;
+    uint256 public constant INITIAL_BALANCE = 1_000_000_000;
+    address public exampleTokenCreator;
 
     function genClientWallet(address sender, uint8 seed)
         private

@@ -4,7 +4,6 @@ import { SafeTransferLib, ERC20 } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
-import { ExampleToken } from "../src/ExampleToken.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 

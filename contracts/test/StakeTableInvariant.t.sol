@@ -9,9 +9,8 @@ import "forge-std/Test.sol";
 
 using stdStorage for StdStorage;
 
-import { ERC20 } from "solmate/utils/SafeTransferLib.sol";
+import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { BN254 } from "bn254/BN254.sol";
-import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
@@ -31,11 +30,13 @@ import { StdUtils } from "forge-std/StdUtils.sol";
 
 contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
     S public stakeTable;
-    address tokenCreator;
+    address public tokenCreator;
     ExampleToken public token;
-    BN254.G2Point[] vks;
-    BN254.G2Point[] vksWithdraw;
-    LightClientTest lightClient;
+    mapping(uint256 index => BN254.G2Point vk) public vks;
+    BN254.G2Point[] public vksWithdraw;
+    LightClientTest public lightClient;
+    address[] public users;
+    uint256 public numberUsers;
 
     function genClientWallet(address sender, uint8 seed)
         private
@@ -67,15 +68,23 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
         S _stakeTable,
         address _tokenCreator,
         ExampleToken _token,
-        LightClientTest _lightClient
+        LightClientTest _lightClient,
+        address[] memory _users
     ) {
         stakeTable = _stakeTable;
         token = _token;
         tokenCreator = _tokenCreator;
         lightClient = _lightClient;
+        users = _users;
+        numberUsers = users.length;
     }
 
-    function registerWithSeed(address sender, uint8 seed, uint256 amount) private {
+    function registerWithSeed(address sender, uint256 userIndex, uint256 amount) private {
+        userIndex = bound(userIndex, 0, numberUsers - 1);
+
+        uint8 seed = uint8(userIndex);
+        address userAddress = users[userIndex];
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
@@ -85,7 +94,7 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
         uint64 validUntilEpoch = 1000;
 
         // Transfer some tokens to sender
-        vm.prank(tokenCreator);
+        vm.prank(userAddress);
         token.transfer(sender, depositAmount);
 
         // Prepare for the token transfer
@@ -102,7 +111,7 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
             sig,
             validUntilEpoch
         );
-        vks.push(blsVK);
+        vks[userIndex] = blsVK;
     }
 
     function register(uint8 seed, uint64 amount) public {
@@ -110,16 +119,9 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
     }
 
     function requestExit(uint256 rand) public {
-        uint256 index = bound(rand, 0, vks.length - 1);
-        vm.prank(tokenCreator);
+        uint256 index = bound(rand, 0, numberUsers - 1);
+        vm.prank(users[index]);
         stakeTable.requestExit(vks[index]);
-        BN254.G2Point memory vk = vks[index];
-
-        // Remove vk from the list of registered keys
-        delete vks[index];
-
-        // Add vk to the list of keys that can allow a withdrawal
-        vksWithdraw.push(vk);
     }
 
     function advanceEpoch() public {
@@ -129,17 +131,16 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
     }
 
     function withdrawFunds(uint256 rand) public {
-        uint256 index = bound(rand, 0, vks.length - 1);
-        BN254.G2Point memory vk = vksWithdraw[index];
+        uint256 index = bound(rand, 0, numberUsers - 1);
+        BN254.G2Point memory vk = vks[index];
 
         uint64 currentEpoch = lightClient.currentEpoch();
         uint64 slackForEscrowPeriod = 100;
         uint64 nextEpoch = currentEpoch + slackForEscrowPeriod;
         lightClient.setCurrentEpoch(nextEpoch);
 
-        vm.prank(tokenCreator);
+        vm.prank(users[index]);
         stakeTable.withdrawFunds(vk);
-        delete vksWithdraw[index];
     }
 }
 
@@ -150,8 +151,10 @@ contract StakeTableInvariant_Tests is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
-    uint256 constant INITIAL_BALANCE = 1_000_000_000;
-    address exampleTokenCreator;
+    uint256 public constant INITIAL_BALANCE = 1_000_000_000;
+    address public exampleTokenCreator;
+    address[] public users;
+    uint256 public constant NUM_USERS = 10;
 
     StakeTableHandler public handler;
 
@@ -159,6 +162,16 @@ contract StakeTableInvariant_Tests is Test {
         exampleTokenCreator = makeAddr("tokenCreator");
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
+
+        address userAddress;
+
+        // Distribute tokens to users
+        for (uint256 i = 0; i < NUM_USERS; i++) {
+            userAddress = makeAddr(string(abi.encode(i)));
+            users.push(userAddress);
+            vm.prank(exampleTokenCreator);
+            SafeTransferLib.safeTransfer(token, userAddress, 1000);
+        }
 
         LightClient.LightClientState memory genesis = LightClient.LightClientState({
             viewNum: 0,
@@ -172,19 +185,25 @@ contract StakeTableInvariant_Tests is Test {
         });
         lightClientContract = new LightClientTest(genesis, 10);
         stakeTable = new S(address(token), address(lightClientContract), 10);
-        handler = new StakeTableHandler(stakeTable, exampleTokenCreator, token, lightClientContract);
+        handler = new StakeTableHandler(
+            stakeTable, exampleTokenCreator, token, lightClientContract, users
+        );
 
         // Only test the handler
         targetContract(address(handler));
     }
 
     function invariant_BalancesAreConsistent() external {
-        uint256 balance1 = token.balanceOf(exampleTokenCreator);
-        uint256 balance2 = token.balanceOf(address(stakeTable));
-        assertEq(balance1 + balance2, INITIAL_BALANCE);
+        uint256 totalBalanceUsers = 0;
+        for (uint256 i = 0; i < NUM_USERS; i++) {
+            totalBalanceUsers += token.balanceOf(users[i]);
+        }
+        uint256 balanceStakeTable = token.balanceOf(address(stakeTable));
+        uint256 tokenCreatorBalance = token.balanceOf(address(exampleTokenCreator));
+        assertEq(totalBalanceUsers + balanceStakeTable + tokenCreatorBalance, INITIAL_BALANCE);
     }
 
-    function invaritant_Queue() external {
+    function invariant_Queue() external {
         // Global invariants
         assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
         assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());
