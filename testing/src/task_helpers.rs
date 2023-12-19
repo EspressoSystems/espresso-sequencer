@@ -279,7 +279,6 @@ async fn build_quorum_proposal_and_signature(
             timeout_certificate: None,
             proposer_id: leaf_view2.proposer_id,
         };
-        error!("Have you really entered view 2?");
         return (proposal_view2, signature_view2);
     }
 

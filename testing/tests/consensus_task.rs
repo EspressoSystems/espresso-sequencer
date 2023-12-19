@@ -197,7 +197,7 @@ async fn test_consensus_with_vid() {
     // For the test of vote logic with vid, starting view 2 we need vid share
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-    // Sishan TODO: Still need a valid DAC cert
+    // TODO: Still need a valid DAC cert, now tracking logging instead
     // https://github.com/EspressoSystems/HotShot/issues/2255
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
@@ -213,7 +213,7 @@ async fn test_consensus_with_vid() {
     );
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
-    // Sishan TODO: Uncomment this after the above TODO is done
+    // TODO: Uncomment this after the above TODO is done
     // https://github.com/EspressoSystems/HotShot/issues/2255
     // if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
     //     output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
