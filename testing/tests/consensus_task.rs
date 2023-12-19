@@ -153,7 +153,6 @@ async fn test_consensus_with_vid_vote() {
     use hotshot_types::{
         data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
     };
-    use tracing::error;
     use std::marker::PhantomData;
 
     async_compatibility_layer::logging::setup_logging();
@@ -244,7 +243,7 @@ async fn test_consensus_with_vid_vote() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
+#[ignore] // Sishan TODO: delete this ignore later.
 async fn test_consensus_no_vote_without_vid_share() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::task_helpers::build_system_handle;

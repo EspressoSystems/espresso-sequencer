@@ -162,6 +162,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     // Check if we are able to vote, like whether the proposal is valid,
     // whether we have DAC and VID share, and if so, vote.
     async fn vote_if_able(&self) -> bool {
+        error!("Step 1 inside vote_if_able()"); // Sishan TODO: remove these error message
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
                 "We were not chosen for consensus committee on {:?}",
@@ -169,6 +170,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             );
             return false;
         }
+        error!("Step 2 inside vote_if_able()");
         if let Some(proposal) = &self.current_proposal {
             // ED Need to account for the genesis DA cert
             // No need to check vid share nor da cert for genesis
@@ -230,7 +232,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-
+            error!("Step 3 inside vote_if_able(), going to check vid share");
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
@@ -318,7 +320,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            debug!(
+            error!( // Sishan TODO: change to debug level
                 "Received VID share, but couldn't find DAC cert in certs, meaning we haven't received it yet for view {:?}",
                 *proposal.get_view_number(),
             );
@@ -436,7 +438,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("Leader key does not match key in proposal");
                     return;
                 }
-                error!("Step 3, proposal.data.justify_qc.get_view_number() = {:?}, view - 1 = {:?}", proposal.data.justify_qc.get_view_number(), view - 1);
+                error!(
+                    "Step 3, proposal.data.justify_qc.get_view_number() = {:?}, view - 1 = {:?}",
+                    proposal.data.justify_qc.get_view_number(),
+                    view - 1
+                );
                 // Verify a timeout certificate exists and is valid
                 if proposal.data.justify_qc.get_view_number() != view - 1 {
                     let Some(timeout_cert) = proposal.data.timeout_certificate.clone() else {
@@ -483,7 +489,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .cloned()
                 };
 
-                //
                 // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
                 let Some(parent) = parent else {
                     // If no parent then just update our state map and return.  We will not vote.
