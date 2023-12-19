@@ -168,12 +168,12 @@ async fn main() {
 
     let opt = Arc::new(Options::parse());
     let seq = Arc::new(SequencerClient::new(opt.url.clone()));
-    seq.connect(None).await;
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);
     let to = max(opt.to.unwrap_or(block_height), from + 1);
 
+    tracing::info!("checking {} headers in [{from}, {to})", to - from);
     let ok = join_all(
         (from..to)
             .chunks((to - from) / opt.jobs)
