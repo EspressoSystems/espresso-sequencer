@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId, ResourceId},
-    data_source::sql::{include_migrations, Config, Migration, SqlDataSource},
+    data_source::sql::{include_migrations, Config, Migration, Query, SqlDataSource},
     QueryError, QueryResult,
 };
-use tokio_postgres::{types::BorrowToSql, Row};
+use tokio_postgres::Row;
 
 pub type DataSource = SqlDataSource<SeqTypes>;
 
@@ -35,6 +35,9 @@ impl SequencerDataSource for DataSource {
         }
         if let Some(password) = opt.password {
             cfg = cfg.password(password);
+        }
+        if opt.reset_store {
+            cfg = cfg.reset_schema();
         }
 
         Ok(cfg.connect().await?)
@@ -81,7 +84,8 @@ impl SequencerDataSource for DataSource {
              WHERE (data->'timestamp')::bigint >= $1
              ORDER BY height
              LIMIT 1";
-        let next = query_opt(self, query, [&(end as i64)])
+        let next = self
+            .query_opt(query, [&(end as i64)])
             .await?
             .map(parse_header)
             .transpose()?;
@@ -104,7 +108,8 @@ impl SequencerDataSource for DataSource {
              WHERE (data->'timestamp')::bigint < $1
              ORDER BY height DESC
              LIMIT 1";
-        let prev = query_opt(self, query, [&(start as i64)])
+        let prev = self
+            .query_opt(query, [&(start as i64)])
             .await?
             .map(parse_header)
             .transpose()?;
@@ -161,7 +166,8 @@ impl SequencerDataSource for DataSource {
              WHERE (data->'timestamp')::bigint >= $1
              ORDER BY height
              LIMIT 1";
-        let next = query_opt(self, query, [&(end as i64)])
+        let next = self
+            .query_opt(query, [&(end as i64)])
             .await?
             .map(parse_header)
             .transpose()?;
@@ -176,24 +182,6 @@ fn parse_header(row: Row) -> QueryResult<Header> {
     })?;
     serde_json::from_value(data).map_err(|err| QueryError::Error {
         message: format!("malformed header: {err}"),
-    })
-}
-
-async fn query_opt<I>(ds: &DataSource, query: &str, params: I) -> QueryResult<Option<Row>>
-where
-    I: IntoIterator,
-    I::IntoIter: ExactSizeIterator,
-    I::Item: BorrowToSql,
-{
-    let mut rows = ds
-        .query(query, params)
-        .await
-        .map_err(|err| QueryError::Error {
-            message: err.to_string(),
-        })?
-        .boxed();
-    rows.try_next().await.map_err(|err| QueryError::Error {
-        message: err.to_string(),
     })
 }
 
