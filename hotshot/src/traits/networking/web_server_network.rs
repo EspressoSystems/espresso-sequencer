@@ -1257,10 +1257,17 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for WebServerNetwo
         let url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
         info!("Launching web server on port {port}");
         // Start web server
-        async_spawn(hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
-            Some(server_shutdown),
-            url,
-        ));
+        async_spawn(async {
+            match hotshot_web_server::run_web_server::<TYPES::SignatureKey>(
+                Some(server_shutdown),
+                url,
+            )
+            .await
+            {
+                Ok(()) => error!("Web server future finished unexpectedly"),
+                Err(e) => error!("Web server task failed: {e}"),
+            }
+        });
 
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         let known_nodes = (0..expected_node_count as u64)
