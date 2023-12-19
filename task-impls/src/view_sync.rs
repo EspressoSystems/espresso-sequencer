@@ -190,13 +190,13 @@ impl<
         // If next view = cert round, then that means we should already have a task running for it
         let mut task_map = self.replica_task_map.write().await;
         if self.current_view > view {
-            error!("Already in a higher view than the view sync message");
+            debug!("Already in a higher view than the view sync message");
             return;
         }
 
         if let Some(replica_task) = task_map.remove(&view) {
             // Forward event then return
-            error!("Forwarding message");
+            debug!("Forwarding message");
             let result = replica_task.handle_event(event.clone()).await;
 
             if result.0 == Some(HotShotTaskCompleted::ShutDown) {
@@ -243,22 +243,22 @@ impl<
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match &event {
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
-                error!("Received view sync cert for phase {:?}", certificate);
+                debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.get_view_number();
                 self.send_to_or_create_replica(event, view).await;
             }
             HotShotEvent::ViewSyncCommitCertificate2Recv(certificate) => {
-                error!("Received view sync cert for phase {:?}", certificate);
+                debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.get_view_number();
                 self.send_to_or_create_replica(event, view).await;
             }
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
-                error!("Received view sync cert for phase {:?}", certificate);
+                debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.get_view_number();
                 self.send_to_or_create_replica(event, view).await;
             }
             HotShotEvent::ViewSyncTimeout(view, _, _) => {
-                error!("view sync timeout in main task {:?}", view);
+                debug!("view sync timeout in main task {:?}", view);
                 let view = *view;
                 self.send_to_or_create_replica(event, view).await;
             }
@@ -511,7 +511,7 @@ impl<
                     self.network
                         .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
                         .await;
-                    self.send_to_or_create_replica(event, TYPES::Time::new(next_view))
+                    self.send_to_or_create_replica(HotShotEvent::ViewSyncTrigger(view_number + 1), view_number + 1)
                         .await;
                 } else {
                     // If this is the first timeout we've seen advance to the next view
