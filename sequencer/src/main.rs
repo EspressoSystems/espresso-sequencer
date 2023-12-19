@@ -109,7 +109,12 @@ async fn main() {
                 } = event
                 {
                     if let Some(leaf) = leaf_chain.first() {
-                        light_client_signature_hook(leaf, state_key_pair.sign_key_ref()).await
+                        light_client_signature_hook(
+                            &mut handle,
+                            leaf,
+                            state_key_pair.sign_key_ref(),
+                        )
+                        .await
                     }
                 }
             }

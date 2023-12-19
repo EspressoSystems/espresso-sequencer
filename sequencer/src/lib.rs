@@ -2,9 +2,11 @@ pub mod api;
 mod block;
 mod block2;
 mod chain_variables;
+pub mod enriched_handle;
 pub mod hotshot_commitment;
 pub mod light_client_signature;
 pub mod options;
+use enriched_handle::EnrichedSystemContextHandle;
 use url::Url;
 mod l1_client;
 mod state;
@@ -270,7 +272,7 @@ pub async fn init_node(
     metrics: &dyn Metrics,
     config_path: Option<&Path>,
 ) -> (
-    SystemContextHandle<SeqTypes, Node<network::Web>>,
+    EnrichedSystemContextHandle<SeqTypes, Node<network::Web>>,
     u64,
     StateKeyPair,
 ) {
@@ -353,7 +355,8 @@ pub async fn init_node(
             config.config,
             metrics,
         )
-        .await,
+        .await
+        .into(),
         node_index,
         state_key_pair,
     )

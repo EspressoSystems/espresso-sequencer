@@ -14,7 +14,10 @@ use hotshot_query_service::{
 use jf_primitives::merkle_tree::namespaced_merkle_tree::NamespaceProof;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use tide_disco::{method::WriteState, Api};
+use tide_disco::{
+    method::{ReadState, WriteState},
+    Api,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -122,14 +125,14 @@ where
     Ok(api)
 }
 
-pub(super) type LCSigState<S> = Arc<RwLock<S>>;
-
-pub(super) fn state_signature<S>() -> anyhow::Result<Api<LCSigState<S>, Error>>
+pub(super) fn state_signature<N, S>() -> anyhow::Result<Api<S, Error>>
 where
-    S: 'static + Send + Sync + StateSignatureDataSource,
+    N: network::Type,
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + StateSignatureDataSource<N>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
-    let mut api = Api::<LCSigState<S>, Error>::new(toml)?;
+    let mut api = Api::<S, Error>::new(toml)?;
 
     api.get("getstatesignature", |req, state| {
         async move {
@@ -137,11 +140,36 @@ where
                 .integer_param("height")
                 .map_err(|err| Error::internal(err.to_string()))?;
             state
-                .get_signature(height)
-                .map_err(|err| Error::internal(err.to_string()))
+                .handle()
+                .get_state_signature(height)
+                .ok_or(Error::internal("Signature not found."))
         }
         .boxed()
     })?;
 
     Ok(api)
 }
+
+// pub(super) type LCSigState<S> = Arc<RwLock<S>>;
+
+// pub(super) fn state_signature<S>() -> anyhow::Result<Api<LCSigState<S>, Error>>
+// where
+//     S: 'static + Send + Sync + StateSignatureDataSource,
+// {
+//     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
+//     let mut api = Api::<LCSigState<S>, Error>::new(toml)?;
+
+//     api.get("getstatesignature", |req, state| {
+//         async move {
+//             let height = req
+//                 .integer_param("height")
+//                 .map_err(|err| Error::internal(err.to_string()))?;
+//             state
+//                 .get_signature(height)
+//                 .ok_or(Error::internal("Signature not found."))
+//         }
+//         .boxed()
+//     })?;
+
+//     Ok(api)
+// }

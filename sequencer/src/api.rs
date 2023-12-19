@@ -1,22 +1,24 @@
-use crate::{network, Node, SeqTypes};
+use crate::{enriched_handle::EnrichedSystemContextHandle, network, Node, SeqTypes};
 use async_std::task::JoinHandle;
 use data_source::SubmitDataSource;
-use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 
 mod data_source;
 pub mod endpoints;
 pub mod fs;
 pub mod options;
+pub mod signature_pool;
 pub mod sql;
 mod update;
 
 use hotshot_types::light_client::StateKeyPair;
 pub use options::Options;
 
+use self::data_source::StateSignatureDataSource;
+
 type NodeIndex = u64;
 
-pub type Consensus<N> = SystemContextHandle<SeqTypes, Node<N>>;
+pub type Consensus<N> = EnrichedSystemContextHandle<SeqTypes, Node<N>>;
 
 pub struct SequencerNode<N: network::Type> {
     pub handle: Consensus<N>,
@@ -34,6 +36,18 @@ impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
 }
 
 impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
+    fn handle(&self) -> &Consensus<N> {
+        self
+    }
+}
+
+impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
+    fn handle(&self) -> &Consensus<N> {
+        self.as_ref()
+    }
+}
+
+impl<N: network::Type> StateSignatureDataSource<N> for Consensus<N> {
     fn handle(&self) -> &Consensus<N> {
         self
     }
@@ -77,7 +91,7 @@ mod test_helpers {
                 for handle in &handles {
                     handle.hotshot.start_consensus().await;
                 }
-                (handles[0].clone(), 0, Default::default())
+                (handles[0].clone().into(), 0, Default::default())
             }
             .boxed()
         };
@@ -140,7 +154,7 @@ mod test_helpers {
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
+            .serve(|_| async move { (handles[0].clone().into(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
         let mut events = handle.get_event_stream(Default::default()).await.0;
@@ -204,7 +218,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { (handle, 0, Default::default()) }.boxed())
+            .serve(|_| async move { (handle.into(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -405,7 +419,7 @@ mod test {
 
         let options = Options::from(options::Http { port });
         options
-            .serve(|_| async move { (handles[0].clone(), 0, Default::default()) }.boxed())
+            .serve(|_| async move { (handles[0].clone().into(), 0, Default::default()) }.boxed())
             .await
             .unwrap();
 

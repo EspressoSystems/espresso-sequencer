@@ -96,7 +96,7 @@ impl Options {
             let ds = MetricsDataSource::default();
             let (handle, node_index, state_key_pair) = init_handle(ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
-                ExtensibleDataSource::new(ds, handle.clone()),
+                ExtensibleDataSource::new(ds, handle.clone().into()),
             )));
 
             // Initialize status API.
@@ -108,6 +108,9 @@ impl Options {
                 let submit_api = endpoints::submit()?;
                 app.register_module("submit", submit_api)?;
             }
+
+            let state_signature_api = endpoints::state_signature()?;
+            app.register_module("statesignature", state_signature_api)?;
 
             SequencerNode {
                 handle,
@@ -123,13 +126,16 @@ impl Options {
             // service data source. The only app state is the HotShot handle, which we use to submit
             // transactions.
             let (handle, node_index, state_key_pair) = init_handle(Box::new(NoMetrics)).await;
-            let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone()));
+            let mut app = App::<_, Error>::with_state(RwLock::new(handle.clone().into()));
 
             // Initialize submit API
             if self.submit.is_some() {
                 let submit_api = endpoints::submit::<N, RwLock<Consensus<N>>>()?;
                 app.register_module("submit", submit_api)?;
             }
+
+            let state_signature_api = endpoints::state_signature::<N, RwLock<Consensus<N>>>()?;
+            app.register_module("state_signature", state_signature_api)?;
 
             SequencerNode {
                 handle,
@@ -229,7 +235,10 @@ where
     // the first events emitted by consensus.
     let events = handle.get_event_stream(Default::default()).await.0;
 
-    let state: State<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(ds, handle.clone())));
+    let state: State<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(
+        ds,
+        handle.clone().into(),
+    )));
     let mut app = App::<_, Error>::with_state(state.clone());
 
     // Initialize submit API
@@ -247,6 +256,9 @@ where
     // Initialize availability API
     let availability_api = endpoints::availability::<N, D>()?;
     app.register_module("availability", availability_api)?;
+
+    let state_signature_api = endpoints::state_signature()?;
+    app.register_module("statesignature", state_signature_api)?;
 
     let update_task = spawn(async move {
         futures::join!(
