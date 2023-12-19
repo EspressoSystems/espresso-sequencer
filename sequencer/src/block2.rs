@@ -1,5 +1,5 @@
 use self::{boilerplate::RangeProof, tx_table_entry::TxTableEntry};
-use crate::Transaction;
+use crate::{Transaction, VmId};
 use derivative::Derivative;
 use hotshot_query_service::availability::QueryablePayload;
 use jf_primitives::{
@@ -7,16 +7,13 @@ use jf_primitives::{
     vid::payload_prover::{PayloadProver, Statement},
 };
 use serde::{Deserialize, Serialize};
-use std::{ops::Range, sync::OnceLock};
+use std::{collections::HashMap, ops::Range, sync::OnceLock};
 
 #[allow(dead_code)] // TODO temporary
 #[derive(Clone, Debug, Derivative, Deserialize, Eq, Serialize)]
 #[derivative(Hash, PartialEq)]
 pub struct BlockPayload {
     payload: Vec<u8>,
-
-    // TODO(746) should metadata be included in hash, serde, etc?
-    metadata: NamespaceTable,
 
     // cache frequently used items
     //
@@ -28,49 +25,87 @@ pub struct BlockPayload {
 }
 
 impl BlockPayload {
-    #[allow(dead_code)] // TODO temporary
-    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<Self> {
-        // `tx_table` is a bytes representation of the following table:
-        // word[0]: [number n of entries in tx table]
-        // word[j>0]: [end byte index of the (j-1)th tx in the payload]
-        //
-        // Thus, the ith tx payload bytes range is word[i-1]..word[i].
-        // Edge case: tx_table[-1] is implicitly 0.
-        //
-        // Word type is `TxTableEntry`.
-        //
-        // TODO final entry should be implicit:
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/757
-        let mut tx_table = Vec::new();
-
-        // concatenation of all tx payloads
-        let mut tx_bodies = Vec::<u8>::new();
-
-        // build tx_table, tx_bodies
-        let mut tx_bytes_end = TxTableEntry::zero();
-        let mut tx_table_len = TxTableEntry::zero();
-        for tx in txs.into_iter() {
-            let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
-            tx_bytes_end = tx_bytes_end.checked_add(tx_bytes_len)?;
-            tx_table.extend(tx_bytes_end.to_bytes());
-            tx_bodies.extend(tx.payload());
-            tx_table_len = tx_table_len.checked_add(TxTableEntry::one())?;
+    /// Returns (Self, metadata).
+    ///
+    /// `metadata` is a bytes representation of the namespace table defined for j>0:
+    /// word[0]:    [number of entries in namespace table]
+    /// word[2j-1]: [id for the jth namespace]
+    /// word[2j]:   [end byte index of the jth namespace in the payload]
+    ///
+    /// Thus, for j>2 the jth namespace payload bytes range is word[2(j-1)]..word[2j].
+    /// Edge case: for j=1 the jth namespace start index is implicitly 0.
+    ///
+    /// Word type is `TxTableEntry`.
+    ///
+    /// TODO(746) it's Vec<u8> to make it easy to move metadata into payload in the future.
+    /// TODO(746) don't use `TxTableEntry`; make a different type
+    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables.
+    /// TODO(746) should metadata be included in hash, serde, etc?
+    fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<(Self, Vec<u8>)> {
+        struct NamespaceInfo {
+            // `tx_table` is a bytes representation of the following table:
+            // word[0]: [number n of entries in tx table]
+            // word[j>0]: [end byte index of the (j-1)th tx in the payload]
+            //
+            // Thus, the ith tx payload bytes range is word[i-1]..word[i].
+            // Edge case: tx_table[-1] is implicitly 0.
+            //
+            // Word type is `TxTableEntry`.
+            //
+            // TODO final entry should be implicit:
+            // https://github.com/EspressoSystems/espresso-sequencer/issues/757
+            tx_table: Vec<u8>,
+            // concatenation of all tx payloads
+            tx_bodies: Vec<u8>,
+            tx_bytes_end: TxTableEntry,
+            tx_table_len: TxTableEntry,
         }
 
-        // Naively copy all pieces into a flat payload.
-        // We could avoid this by allocating memory in advance,
-        // but that would require knowing the number of txs and their total
-        // byte length in advance, which we can't do without a complete scan
-        // of the `txs` iterator.
+        let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
+        for tx in txs.into_iter() {
+            let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
+
+            let namespace = namespaces.entry(tx.vm()).or_insert(NamespaceInfo {
+                tx_table: Vec::new(),
+                tx_bodies: Vec::new(),
+                tx_bytes_end: TxTableEntry::zero(),
+                tx_table_len: TxTableEntry::zero(),
+            });
+
+            namespace.tx_bytes_end.checked_add_mut(tx_bytes_len)?;
+            namespace.tx_table.extend(namespace.tx_bytes_end.to_bytes());
+            namespace.tx_bodies.extend(tx.payload());
+            namespace
+                .tx_table_len
+                .checked_add_mut(TxTableEntry::one())?;
+        }
+
+        // first word of namespace table is its length
+        let namespace_table_len = (1 + 2 * namespaces.len()) * TxTableEntry::byte_len();
+        let mut namespace_table =
+            Vec::from(TxTableEntry::try_from(namespace_table_len).ok()?.to_bytes());
+
+        // fill payload and namespace table
+        // TODO(746) is it worth the trouble to allocate memory in advance?
         let mut payload = Vec::new();
-        payload.extend(tx_table_len.to_bytes());
-        payload.extend(tx_table);
-        payload.extend(tx_bodies);
-        Some(Self {
-            payload,
-            metadata: NamespaceTable(),
-            tx_table_len_proof: Default::default(),
-        })
+        let mut namespace_bytes_end = TxTableEntry::zero();
+        for (id, namespace) in namespaces {
+            payload.extend(namespace.tx_table_len.to_bytes());
+            payload.extend(namespace.tx_table);
+            payload.extend(namespace.tx_bodies);
+            namespace_table.extend(TxTableEntry::try_from(id).ok()?.to_bytes());
+            namespace_bytes_end.checked_add_mut(payload.len().try_into().ok()?)?;
+            namespace_table.extend(namespace_bytes_end.to_bytes());
+        }
+        assert_eq!(namespace_table.len(), namespace_table_len); // sanity
+
+        Some((
+            Self {
+                payload,
+                tx_table_len_proof: Default::default(),
+            },
+            namespace_table,
+        ))
     }
 
     fn from_bytes<B>(bytes: B) -> Self
@@ -79,7 +114,6 @@ impl BlockPayload {
     {
         Self {
             payload: bytes.into_iter().collect(),
-            metadata: NamespaceTable(),
             tx_table_len_proof: Default::default(),
         }
     }
@@ -149,10 +183,6 @@ fn tx_payload_range(
     let end = std::cmp::min(end, block_payload_byte_len);
     Some(start..end)
 }
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-
-pub struct NamespaceTable();
 
 impl QueryablePayload for BlockPayload {
     type TransactionIndex = u32;
@@ -384,6 +414,8 @@ impl TxInclusionProof {
 }
 
 mod tx_table_entry {
+    use crate::VmId;
+
     use super::{Deserialize, Serialize, TxIndex};
     use std::mem::size_of;
 
@@ -395,13 +427,10 @@ mod tx_table_entry {
     impl TxTableEntry {
         pub const MAX: TxTableEntry = Self(TxTableEntryWord::MAX);
 
-        pub const fn checked_add(self, rhs: Self) -> Option<Self> {
-            // `?` is not allowed in a `const fn` https://github.com/rust-lang/rust/issues/74935
-            // Some(Self(self.0.checked_add(rhs.0)?))
-            match self.0.checked_add(rhs.0) {
-                Some(val) => Some(Self(val)),
-                None => None,
-            }
+        /// Adds `rhs` to `self` in place. Returns `None` on overflow.
+        pub fn checked_add_mut(&mut self, rhs: Self) -> Option<()> {
+            self.0 = self.0.checked_add(rhs.0)?;
+            Some(())
         }
         pub const fn zero() -> Self {
             Self(0)
@@ -463,12 +492,19 @@ mod tx_table_entry {
             TxIndex::try_from(value.0)
         }
     }
+
+    impl TryFrom<VmId> for TxTableEntry {
+        type Error = <TxTableEntryWord as TryFrom<u64>>::Error;
+
+        fn try_from(value: VmId) -> Result<Self, Self::Error> {
+            TxTableEntryWord::try_from(value.0).map(Self)
+        }
+    }
 }
 
 mod boilerplate {
     use super::{
-        BlockPayload, NamespaceTable, PolynomialCommitmentScheme, QueryablePayload, Transaction,
-        UnivariateKzgPCS,
+        BlockPayload, PolynomialCommitmentScheme, QueryablePayload, Transaction, UnivariateKzgPCS,
     };
     use crate::BlockBuildingSnafu;
     use ark_bls12_381::Bls12_381;
@@ -484,16 +520,16 @@ mod boilerplate {
     impl hotshot::traits::BlockPayload for BlockPayload {
         type Error = crate::Error;
         type Transaction = Transaction;
-        type Metadata = NamespaceTable;
+        type Metadata = Vec<u8>;
         type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
         fn from_transactions(
             transactions: impl IntoIterator<Item = Self::Transaction>,
         ) -> Result<(Self, Self::Metadata), Self::Error> {
-            let payload = Self::from_txs(transactions).context(BlockBuildingSnafu)?;
-            Ok((payload, NamespaceTable()))
+            Ok(Self::from_txs(transactions).context(BlockBuildingSnafu)?)
         }
 
+        // TODO(746) from_bytes doesn't need `metadata`!
         fn from_bytes<I>(encoded_transactions: I, _metadata: Self::Metadata) -> Self
         where
             I: Iterator<Item = u8>,
@@ -610,15 +646,13 @@ mod test {
             let tx_offsets: Vec<TxTableEntry> = tx_bodies
                 .iter()
                 .scan(TxTableEntry::zero(), |end, tx| {
-                    *end = end
-                        .clone()
-                        .checked_add(TxTableEntry::try_from(tx.len()).unwrap())
+                    end.checked_add_mut(TxTableEntry::try_from(tx.len()).unwrap())
                         .unwrap();
                     Some(end.clone())
                 })
                 .collect();
 
-            let block = BlockPayload::from_txs(txs).unwrap();
+            let (block, _namespace_table) = BlockPayload::from_txs(txs).unwrap();
 
             // test tx table length
             let (tx_table_len_bytes, payload) = block.payload.split_at(TxTableEntry::byte_len());
