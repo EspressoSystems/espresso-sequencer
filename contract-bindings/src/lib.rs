@@ -6,6 +6,7 @@
 pub mod abstract_stake_table;
 pub mod bls_sig;
 pub mod bn254;
+pub mod bn256g2;
 pub mod bytes_lib;
 pub mod ed_on_bn254;
 pub mod erc20;

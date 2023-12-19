@@ -7,6 +7,7 @@ pragma solidity ^0.8.0;
 // Libraries
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
+import { BN256G2 } from "../src/libraries/BN256G2.sol";
 
 // Target contract
 import { BLSSig } from "../src/libraries/BLSSig.sol";
@@ -72,11 +73,28 @@ contract BLSSig_Test is Test {
         this.wrapVerifyBlsSig(message, badSig, vk);
     }
 
-    function test_RevertWhen_usingWrongVK() external {
+    function testFuzz_RevertWhen_usingWrongVK(uint256 exp) external {
         bytes memory message = "Hi";
+
         (BN254.G2Point memory vk, BN254.G1Point memory sig) = genBLSSig(message);
         vk; // To avoid compiler warning
-        BN254.G2Point memory badVK = BN254.P2();
+
+        BN254.G2Point memory g2 = BN254.P2();
+        (uint256 x0, uint256 x1, uint256 y0, uint256 y1) = BN256G2.ECTwistMul(
+            exp,
+            BN254.BaseField.unwrap(g2.x0),
+            BN254.BaseField.unwrap(g2.x1),
+            BN254.BaseField.unwrap(g2.y0),
+            BN254.BaseField.unwrap(g2.y1)
+        );
+
+        BN254.G2Point memory badVK = BN254.G2Point(
+            BN254.BaseField.wrap(x0),
+            BN254.BaseField.wrap(x1),
+            BN254.BaseField.wrap(y0),
+            BN254.BaseField.wrap(y1)
+        );
+
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         this.wrapVerifyBlsSig(message, sig, badVK);
     }
