@@ -498,22 +498,23 @@ mod test_headers {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
-    /// Just the part of the header we care about for these tests.
-    #[derive(Debug, Default)]
-    struct HeaderInfo {
-        timestamp: u64,
-        l1_head: u64,
-        l1_finalized: Option<L1BlockInfo>,
-    }
-
     #[derive(Debug, Default)]
     #[must_use]
     struct TestCase {
-        parent: HeaderInfo,
+        // Parent header info.
+        parent_timestamp: u64,
+        parent_l1_head: u64,
+        parent_l1_finalized: Option<L1BlockInfo>,
+
+        // Environment at the time the new header is created.
         l1_head: u64,
         l1_finalized: Option<L1BlockInfo>,
         timestamp: u64,
-        expected: HeaderInfo,
+
+        // Expected new header info.
+        expected_timestamp: u64,
+        expected_l1_head: u64,
+        expected_l1_finalized: Option<L1BlockInfo>,
     }
 
     impl TestCase {
@@ -522,16 +523,16 @@ mod test_headers {
             setup_backtrace();
 
             // Check test case validity.
-            assert!(self.expected.timestamp >= self.parent.timestamp);
-            assert!(self.expected.l1_head >= self.parent.l1_head);
-            assert!(self.expected.l1_finalized >= self.parent.l1_finalized);
+            assert!(self.expected_timestamp >= self.parent_timestamp);
+            assert!(self.expected_l1_head >= self.parent_l1_head);
+            assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
             let genesis = Header::genesis().0;
 
             let mut parent = genesis.clone();
-            parent.timestamp = self.parent.timestamp;
-            parent.l1_head = self.parent.l1_head;
-            parent.l1_finalized = self.parent.l1_finalized;
+            parent.timestamp = self.parent_timestamp;
+            parent.l1_head = self.parent_l1_head;
+            parent.l1_finalized = self.parent_l1_finalized;
 
             let header = Header::from_info(
                 genesis.payload_commitment,
@@ -544,9 +545,9 @@ mod test_headers {
                 self.timestamp,
             );
             assert_eq!(header.height, parent.height + 1);
-            assert_eq!(header.timestamp, self.expected.timestamp);
-            assert_eq!(header.l1_head, self.expected.l1_head);
-            assert_eq!(header.l1_finalized, self.expected.l1_finalized);
+            assert_eq!(header.timestamp, self.expected_timestamp);
+            assert_eq!(header.l1_head, self.expected_l1_head);
+            assert_eq!(header.l1_finalized, self.expected_l1_finalized);
         }
     }
 
@@ -567,10 +568,7 @@ mod test_headers {
     fn test_new_header_advance_timestamp() {
         TestCase {
             timestamp: 1,
-            expected: HeaderInfo {
-                timestamp: 1,
-                ..Default::default()
-            },
+            expected_timestamp: 1,
             ..Default::default()
         }
         .run()
@@ -579,18 +577,15 @@ mod test_headers {
     #[test]
     fn test_new_header_advance_l1_block() {
         TestCase {
-            parent: HeaderInfo {
-                l1_head: 0,
-                l1_finalized: Some(l1_block(0)),
-                ..Default::default()
-            },
+            parent_l1_head: 0,
+            parent_l1_finalized: Some(l1_block(0)),
+
             l1_head: 1,
             l1_finalized: Some(l1_block(1)),
-            expected: HeaderInfo {
-                l1_head: 1,
-                l1_finalized: Some(l1_block(1)),
-                ..Default::default()
-            },
+
+            expected_l1_head: 1,
+            expected_l1_finalized: Some(l1_block(1)),
+
             ..Default::default()
         }
         .run()
@@ -600,10 +595,7 @@ mod test_headers {
     fn test_new_header_advance_l1_finalized_from_none() {
         TestCase {
             l1_finalized: Some(l1_block(1)),
-            expected: HeaderInfo {
-                l1_finalized: Some(l1_block(1)),
-                ..Default::default()
-            },
+            expected_l1_finalized: Some(l1_block(1)),
             ..Default::default()
         }
         .run()
@@ -620,11 +612,11 @@ mod test_headers {
             l1_head: 1,
             l1_finalized,
             timestamp: 0,
-            expected: HeaderInfo {
-                l1_head: 1,
-                l1_finalized,
-                timestamp: 1,
-            },
+
+            expected_l1_head: 1,
+            expected_l1_finalized: l1_finalized,
+            expected_timestamp: 1,
+
             ..Default::default()
         }
         .run()
@@ -633,15 +625,10 @@ mod test_headers {
     #[test]
     fn test_new_header_timestamp_behind() {
         TestCase {
-            parent: HeaderInfo {
-                timestamp: 1,
-                ..Default::default()
-            },
+            parent_timestamp: 1,
             timestamp: 0,
-            expected: HeaderInfo {
-                timestamp: 1,
-                ..Default::default()
-            },
+            expected_timestamp: 1,
+
             ..Default::default()
         }
         .run()
@@ -650,15 +637,10 @@ mod test_headers {
     #[test]
     fn test_new_header_l1_head_behind() {
         TestCase {
-            parent: HeaderInfo {
-                l1_head: 1,
-                ..Default::default()
-            },
+            parent_l1_head: 1,
             l1_head: 0,
-            expected: HeaderInfo {
-                l1_head: 1,
-                ..Default::default()
-            },
+            expected_l1_head: 1,
+
             ..Default::default()
         }
         .run()
@@ -667,15 +649,10 @@ mod test_headers {
     #[test]
     fn test_new_header_l1_finalized_behind_some() {
         TestCase {
-            parent: HeaderInfo {
-                l1_finalized: Some(l1_block(1)),
-                ..Default::default()
-            },
+            parent_l1_finalized: Some(l1_block(1)),
             l1_finalized: Some(l1_block(0)),
-            expected: HeaderInfo {
-                l1_finalized: Some(l1_block(1)),
-                ..Default::default()
-            },
+            expected_l1_finalized: Some(l1_block(1)),
+
             ..Default::default()
         }
         .run()
@@ -684,15 +661,10 @@ mod test_headers {
     #[test]
     fn test_new_header_l1_finalized_behind_none() {
         TestCase {
-            parent: HeaderInfo {
-                l1_finalized: Some(l1_block(0)),
-                ..Default::default()
-            },
+            parent_l1_finalized: Some(l1_block(0)),
             l1_finalized: None,
-            expected: HeaderInfo {
-                l1_finalized: Some(l1_block(0)),
-                ..Default::default()
-            },
+            expected_l1_finalized: Some(l1_block(0)),
+
             ..Default::default()
         }
         .run()
