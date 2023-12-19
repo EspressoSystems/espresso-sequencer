@@ -475,7 +475,7 @@ pub async fn add_view_sync_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         private_key: api.private_key().clone(),
         api,
         num_timeouts_tracked: 0,
-        replica_task_map: HashMap::default(),
+        replica_task_map: HashMap::default().into(),
         relay_task_map: HashMap::default(),
         view_sync_timeout: Duration::new(10, 0),
         id: handle.hotshot.inner.id,
