@@ -40,7 +40,6 @@ use hotshot_types::utils::ViewInner;
 use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
 use hotshot_utils::bincode::bincode_opts;
-use tracing::error;
 
 pub async fn build_system_handle(
     node_id: u64,
