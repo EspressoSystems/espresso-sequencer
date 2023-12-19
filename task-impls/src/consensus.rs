@@ -236,7 +236,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                debug!(
+                error!(
+                    // Sishan TODO: change to debug level
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );

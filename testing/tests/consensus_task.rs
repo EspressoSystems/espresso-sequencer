@@ -144,7 +144,7 @@ async fn test_consensus_task() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_consensus_with_vid_vote() {
+async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestTransaction;
     use hotshot_testing::task_helpers::build_system_handle;
@@ -196,9 +196,9 @@ async fn test_consensus_with_vid_vote() {
 
     // For the test of vote logic with vid, starting view 2 we need vid share
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    // Sishan TOOD: this proposal on view 2 doesn't have a valid justify QC
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
     // Sishan TODO: Still need a valid DAC cert
+    // https://github.com/EspressoSystems/HotShot/issues/2255
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
     // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
@@ -214,9 +214,12 @@ async fn test_consensus_with_vid_vote() {
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
     // Sishan TODO: Uncomment this after the above TODO is done
+    // https://github.com/EspressoSystems/HotShot/issues/2255
     // if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
     //     output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
     // }
+
+    // Sishan TODO: track the logging message "Received VID share, but couldn't find DAC cert in certs xxx",
 
     output.insert(
         HotShotEvent::ViewChange(ViewNumber::new(1)),
@@ -243,55 +246,73 @@ async fn test_consensus_with_vid_vote() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore] // Sishan TODO: delete this ignore later.
+#[allow(clippy::should_panic_without_expect)]
+#[should_panic]
 async fn test_consensus_no_vote_without_vid_share() {
     use hotshot_task_impls::harness::run_harness;
+    use hotshot_testing::block_types::TestTransaction;
     use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::task_helpers::vid_init;
+    use hotshot_types::data::VidSchemeTrait;
+    use hotshot_types::{
+        data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
+    };
+    use std::marker::PhantomData;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let (handle, _event_stream) = build_system_handle(2).await;
     // We assign node's key pair rather than read from config file since it's a test
-    let (private_key_view1, public_key_view1) = key_pair_for_id(1);
     // In view 2, node 2 is the leader.
     let (private_key_view2, public_key_view2) = key_pair_for_id(2);
+
+    // For the test of vote logic with vid
+    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
+        inner: handle.hotshot.inner.clone(),
+    };
+    let pub_key = *api.public_key();
+    let vid = vid_init();
+    let transactions = vec![TestTransaction(vec![0])];
+    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
+    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
+    let payload_commitment = vid_disperse.commit;
+
+    let signature =
+        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
+    let vid_disperse = VidDisperse {
+        view_number: ViewNumber::new(2),
+        payload_commitment,
+        shares: vid_disperse.shares,
+        common: vid_disperse.common,
+    };
+    let vid_proposal: Proposal<TestTypes, VidDisperse<TestTypes>> = Proposal {
+        data: vid_disperse.clone(),
+        signature,
+        _pd: PhantomData,
+    };
 
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
-    let proposal_view1 = build_quorum_proposal(&handle, &private_key_view1, 1).await;
     // Do a view change, so that it's not the genesis view, and vid vote is needed
     input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::QuorumProposalRecv(
-        proposal_view1.clone(),
-        public_key_view1,
-    ));
 
-    output.insert(
-        HotShotEvent::QuorumProposalRecv(proposal_view1.clone(), public_key_view1),
-        1,
-    );
-
-    // Since it's genesis view, node can vote without dac and vid share
-    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view1.data).await {
-        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
-        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
-        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
-    }
-
+    // For the test of vote logic with vid, starting view 2 we need vid share
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
+
+    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
     input.push(HotShotEvent::QuorumProposalRecv(
         proposal_view2.clone(),
         public_key_view2,
     ));
 
-    // Without vid share, there is no HotShotEvent::QuorumVoteSend in the output.
     output.insert(
         HotShotEvent::QuorumProposalRecv(proposal_view2.clone(), public_key_view2),
         1,
     );
+    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
     output.insert(
         HotShotEvent::ViewChange(ViewNumber::new(1)),
@@ -301,7 +322,7 @@ async fn test_consensus_no_vote_without_vid_share() {
         HotShotEvent::ViewChange(ViewNumber::new(2)),
         2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
     );
-
+    // Sishan TODO: would better track the log ""We have not seen the VID share for this view ..."
     input.push(HotShotEvent::Shutdown);
     output.insert(HotShotEvent::Shutdown, 1);
 
