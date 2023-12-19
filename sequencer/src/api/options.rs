@@ -184,6 +184,10 @@ pub struct Sql {
     /// Password for Postgres user.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PASSWORD")]
     pub password: Option<String>,
+
+    /// Reset database upon connecting.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
+    pub reset_store: bool,
 }
 
 /// Options for the query API module backed by the file system.
