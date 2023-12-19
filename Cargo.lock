@@ -3661,7 +3661,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/hotshot?rev=251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9#251a3e6bf1e8af1d0af757a6c0ceb836f8ecfef9"
+source = "git+https://github.com/EspressoSystems/hotshot?rev=e61171e5f9f4c11183c465c3ff4b684ff7ec5537#e61171e5f9f4c11183c465c3ff4b684ff7ec5537"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
