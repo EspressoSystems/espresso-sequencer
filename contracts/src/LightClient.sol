@@ -12,6 +12,11 @@ import { VkTest } from "../test/mocks/Transfer1In2Out24DepthVk.sol";
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
 contract LightClient {
+    // === Events ===
+    //
+    // @notice Notify a new epoch is starting
+    event EpochChanged(uint64);
+
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
@@ -165,5 +170,6 @@ contract LightClient {
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
         currentEpoch += 1;
+        emit EpochChanged(currentEpoch);
     }
 }
