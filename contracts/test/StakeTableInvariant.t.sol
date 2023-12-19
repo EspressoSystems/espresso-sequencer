@@ -15,6 +15,7 @@ import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { LightClientTest } from "../test/mocks/LightClientTest.sol";
+import { StakeTable_Test } from "../test/StakeTable.t.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -26,9 +27,8 @@ import { CommonBase } from "forge-std/Base.sol";
 import { StdCheats } from "forge-std/StdCheats.sol";
 import { StdUtils } from "forge-std/StdUtils.sol";
 
-// TODO avoid code duplication with StakeTable.t.sol
-
 contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
+    StakeTable_Test private testStakeTableContract;
     S public stakeTable;
     address public tokenCreator;
     ExampleToken public token;
@@ -37,32 +37,6 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
     LightClientTest public lightClient;
     address[] public users;
     uint256 public numberUsers;
-
-    function genClientWallet(address sender, uint8 seed)
-        private
-        returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
-    {
-        // Generate a BLS signature and other values using rust code
-        string[] memory cmds = new string[](4);
-        cmds[0] = "diff-test";
-        cmds[1] = "gen-client-wallet";
-        cmds[2] = vm.toString(sender);
-        cmds[3] = vm.toString(seed);
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            BN254.G1Point memory blsSig,
-            BN254.G2Point memory blsVK,
-            uint256 schnorrVKx,
-            uint256 schnorrVKy
-        ) = abi.decode(result, (BN254.G1Point, BN254.G2Point, uint256, uint256));
-
-        return (
-            blsVK,
-            EdOnBN254.EdOnBN254Point(schnorrVKx, schnorrVKy), // schnorrVK
-            blsSig
-        );
-    }
 
     constructor(
         S _stakeTable,
@@ -89,7 +63,7 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(sender, seed);
+        ) = testStakeTableContract.genClientWallet(sender, seed);
         uint64 depositAmount = uint64(bound(amount, 0, 100));
         uint64 validUntilEpoch = 1000;
 

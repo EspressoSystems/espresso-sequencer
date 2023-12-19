@@ -35,7 +35,7 @@ contract StakeTable_Test is Test {
     address public exampleTokenCreator;
 
     function genClientWallet(address sender, uint8 seed)
-        private
+        public
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
         // Generate a BLS signature and other values using rust code
