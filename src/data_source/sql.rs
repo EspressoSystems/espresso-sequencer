@@ -336,7 +336,7 @@ impl Config {
 ///
 /// ## Resetting
 ///
-/// In general, resetting the database when necessary is left up to the adminstrator. However, for
+/// In general, resetting the database when necessary is left up to the administrator. However, for
 /// convenience, we do provide a [`reset_schema`](Config::reset_schema) option which can be used to
 /// wipe out existing state and create a fresh instance of the query service. This is particularly
 /// useful for development and staging environments. This function will permanently delete all
