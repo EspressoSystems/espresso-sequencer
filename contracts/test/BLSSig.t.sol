@@ -61,10 +61,12 @@ contract BLSSig_Test is Test {
         BLSSig.verifyBlsSig(message, sig, vk);
     }
 
-    function test_RevertWhen_SignatureIsInvalid() external {
+    function testFuzz_RevertWhen_SignatureIsInvalid(uint256 exp) external {
         bytes memory message = "Hi";
+        BN254.ScalarField expScalar = BN254.ScalarField.wrap(exp);
 
         BN254.G1Point memory badSig = BN254.P1();
+        badSig = BN254.scalarMul(badSig, expScalar);
         (BN254.G2Point memory vk,) = genBLSSig(message);
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         this.wrapVerifyBlsSig(message, badSig, vk);
@@ -77,5 +79,22 @@ contract BLSSig_Test is Test {
         BN254.G2Point memory badVK = BN254.P2();
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         this.wrapVerifyBlsSig(message, sig, badVK);
+    }
+
+    /// @dev Ensure the verification can detect invalid points provided as signature. Note: checking
+    /// pk belong to G2 is not possible in practice
+    /// https://ethresear.ch/t/fast-mathbb-g-2-subgroup-check-in-bn254/13974
+    function testFuzz_RevertWhen_SignatureIsAnInvalidPoint(uint256 x, uint256 y) external {
+        bytes memory message = "Hi";
+        (BN254.G2Point memory vk,) = genBLSSig(message);
+
+        // Make sure the point is invalid by picking a non valid field element for the x component.
+        uint256 invalidX = bound(x, BN254.P_MOD, type(uint256).max);
+        BN254.BaseField xBaseField = BN254.BaseField.wrap(invalidX);
+        BN254.BaseField yBaseField = BN254.BaseField.wrap(y);
+        BN254.G1Point memory invalidPoint = BN254.G1Point(xBaseField, yBaseField);
+
+        vm.expectRevert("Bn254: invalid G1 point");
+        this.wrapVerifyBlsSig(message, invalidPoint, vk);
     }
 }
