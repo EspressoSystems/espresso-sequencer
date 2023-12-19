@@ -13,3 +13,6 @@
 [submodule "contracts/lib/solmate"]
 	path = contracts/lib/solmate
 	url = https://github.com/transmissions11/solmate
+[submodule "contracts/lib/solidity-BN256G2"]
+	path = contracts/lib/solidity-BN256G2
+	url = https://github.com/musalbas/solidity-BN256G2
