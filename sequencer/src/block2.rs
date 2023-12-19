@@ -600,7 +600,7 @@ mod test {
     use rand::RngCore;
 
     #[test]
-    fn basic_correctness() {
+    fn basic_correctness_1_namespace() {
         // play with this
         let test_cases = vec![
             vec![5, 8, 8],          // 3 non-empty txs
@@ -655,12 +655,19 @@ mod test {
             let (block, _namespace_table) = BlockPayload::from_txs(txs).unwrap();
 
             // test tx table length
-            let (tx_table_len_bytes, payload) = block.payload.split_at(TxTableEntry::byte_len());
-            let tx_table_len = TxTableEntry::from_bytes(tx_table_len_bytes).unwrap();
-            assert_eq!(
-                tx_table_len,
-                TxTableEntry::try_from(tx_bodies.len()).unwrap()
-            );
+            let payload = if entries.is_empty() {
+                assert!(block.payload.is_empty());
+                &[][..]
+            } else {
+                let (tx_table_len_bytes, payload) =
+                    block.payload.split_at(TxTableEntry::byte_len());
+                let tx_table_len = TxTableEntry::from_bytes(tx_table_len_bytes).unwrap();
+                assert_eq!(
+                    tx_table_len,
+                    TxTableEntry::try_from(tx_bodies.len()).unwrap()
+                );
+                payload
+            };
 
             // test tx table contents
             let (tx_table_bytes, payload) =
