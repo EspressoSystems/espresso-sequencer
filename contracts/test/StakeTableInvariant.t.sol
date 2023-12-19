@@ -130,13 +130,23 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
 
     function withdrawFunds(uint256 rand) public {
         uint256 index = bound(rand, 0, vks.length - 1);
-        BN254.G2Point memory vk = vks[index];
+        BN254.G2Point memory vk = vksWithdraw[index];
+
+        uint64 currentEpoch = lightClient.currentEpoch();
+        uint64 slackForEscrowPeriod = 100;
+        uint64 nextEpoch = currentEpoch + slackForEscrowPeriod;
+        lightClient.setCurrentEpoch(nextEpoch);
+
         vm.prank(tokenCreator);
         stakeTable.withdrawFunds(vk);
+        delete vksWithdraw[index];
     }
 }
 
 contract StakeTableInvariant_Tests is Test {
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 20
+
     S public stakeTable;
     ExampleToken public token;
     LightClientTest public lightClientContract;
