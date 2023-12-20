@@ -965,7 +965,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Add to the storage that we have received the VID disperse for a specific view
                 // TODO: re-enable this when HotShot/the sequencer needs the shares for something
                 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
-                // Sishan: comment this for now
+                // Sishan TODO: comment this for now
                 self.vid_shares.insert(view, disperse);
             }
             HotShotEvent::ViewChange(new_view) => {
