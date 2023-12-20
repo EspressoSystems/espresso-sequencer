@@ -245,6 +245,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             last_decided_view: anchored_leaf.get_view_number(),
             saved_leaves,
             saved_payloads,
+            saved_da_certs: HashMap::new(),
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             locked_view: anchored_leaf.get_view_number(),

@@ -9,7 +9,7 @@ use displaydoc::Display;
 use crate::{
     data::{Leaf, VidCommitment},
     error::HotShotError,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{DACertificate, QuorumCertificate},
     traits::{
         metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
         node_implementation::NodeType,
@@ -35,6 +35,10 @@ pub struct Consensus<TYPES: NodeType> {
     /// The phases that are currently loaded in memory
     // TODO(https://github.com/EspressoSystems/hotshot/issues/153): Allow this to be loaded from `Storage`?
     pub state_map: BTreeMap<TYPES::Time, View<TYPES>>,
+
+    /// All the DA certs we've received for current and future views.
+    /// view -> DA cert
+    pub saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// cur_view from pseudocode
     pub cur_view: TYPES::Time,
@@ -310,6 +314,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             );
         }
         // perform gc
+        self.saved_da_certs
+            .retain(|view_number, _| *view_number >= old_anchor_view);
         self.state_map
             .range(old_anchor_view..new_anchor_view)
             .filter_map(|(_view_number, view)| view.get_payload_commitment())
