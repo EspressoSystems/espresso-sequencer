@@ -144,6 +144,56 @@ async fn test_consensus_task() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+async fn test_consensus_vote() {
+    use hotshot_task_impls::harness::run_harness;
+    use hotshot_testing::task_helpers::build_system_handle;
+
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let handle = build_system_handle(2).await.0;
+    // We assign node's key pair rather than read from config file since it's a test
+    let (private_key, public_key) = key_pair_for_id(1);
+
+    let mut input = Vec::new();
+    let mut output = HashMap::new();
+
+    let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
+
+    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
+    input.push(HotShotEvent::QuorumProposalRecv(
+        proposal.clone(),
+        public_key,
+    ));
+    output.insert(
+        HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
+        1,
+    );
+    let proposal = proposal.data;
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal).await {
+        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
+        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
+        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
+    }
+
+    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
+
+    input.push(HotShotEvent::Shutdown);
+    output.insert(HotShotEvent::Shutdown, 1);
+
+    let build_fn = |task_runner, event_stream| {
+        add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
+    };
+
+    run_harness(input, output, None, build_fn).await;
+}
+
+#[cfg(test)]
+#[cfg_attr(
+    async_executor_impl = "tokio",
+    tokio::test(flavor = "multi_thread", worker_threads = 2)
+)]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestTransaction;
@@ -339,52 +389,3 @@ async fn test_consensus_no_vote_without_vid_share() {
     run_harness(input, output, None, build_fn).await;
 }
 
-#[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_consensus_vote() {
-    use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::task_helpers::build_system_handle;
-
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
-
-    let handle = build_system_handle(2).await.0;
-    // We assign node's key pair rather than read from config file since it's a test
-    let (private_key, public_key) = key_pair_for_id(1);
-
-    let mut input = Vec::new();
-    let mut output = HashMap::new();
-
-    let proposal = build_quorum_proposal(&handle, &private_key, 1).await;
-
-    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
-    input.push(HotShotEvent::QuorumProposalRecv(
-        proposal.clone(),
-        public_key,
-    ));
-    output.insert(
-        HotShotEvent::QuorumProposalRecv(proposal.clone(), public_key),
-        1,
-    );
-    let proposal = proposal.data;
-    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal).await {
-        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
-        input.push(HotShotEvent::QuorumVoteRecv(vote.clone()));
-        output.insert(HotShotEvent::QuorumVoteRecv(vote), 1);
-    }
-
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(1)), 1);
-
-    input.push(HotShotEvent::Shutdown);
-    output.insert(HotShotEvent::Shutdown, 1);
-
-    let build_fn = |task_runner, event_stream| {
-        add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
-    };
-
-    run_harness(input, output, None, build_fn).await;
-}
