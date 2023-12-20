@@ -2,11 +2,11 @@ pub mod api;
 mod block;
 mod block2;
 mod chain_variables;
-pub mod enriched_handle;
+pub mod context;
 pub mod hotshot_commitment;
-pub mod light_client_signature;
 pub mod options;
-use enriched_handle::EnrichedSystemContextHandle;
+pub mod state_signature;
+use context::SequencerContext;
 use url::Url;
 mod l1_client;
 mod state;
@@ -35,7 +35,6 @@ use hotshot_signature_key::bn254::BLSPubKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    light_client::StateKeyPair,
     traits::{
         metrics::Metrics,
         network::CommunicationChannel,
@@ -271,11 +270,7 @@ pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     config_path: Option<&Path>,
-) -> (
-    EnrichedSystemContextHandle<SeqTypes, Node<network::Web>>,
-    u64,
-    StateKeyPair,
-) {
+) -> SequencerContext<SeqTypes, Node<network::Web>> {
     // Orchestrator client
     let config_path = config_path.map(|path| path.display().to_string());
     let validator_args = ValidatorArgs {
@@ -345,7 +340,7 @@ pub async fn init_node(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    (
+    SequencerContext::new(
         init_hotshot(
             pub_keys.clone(),
             known_nodes_with_stake.clone(),
@@ -355,8 +350,7 @@ pub async fn init_node(
             config.config,
             metrics,
         )
-        .await
-        .into(),
+        .await,
         node_index,
         state_key_pair,
     )

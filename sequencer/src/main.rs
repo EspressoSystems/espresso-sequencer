@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
     init_node, init_static,
-    light_client_signature::light_client_signature_hook,
+    state_signature::state_signature_hook,
     Event, NetworkParams, Options,
 };
 
@@ -37,7 +37,7 @@ async fn main() {
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    let (mut handle, state_key_pair, query_api_port) = match modules.http {
+    let (mut context, query_api_port) = match modules.http {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
@@ -61,11 +61,7 @@ async fn main() {
             } else {
                 None
             };
-            let SequencerNode {
-                handle,
-                state_key_pair,
-                ..
-            } = opt
+            let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
                     async move {
                         init_node(
@@ -79,26 +75,27 @@ async fn main() {
                 })
                 .await
                 .expect("Failed to initialize API");
-            (handle, state_key_pair, query_api_port)
+            (context, query_api_port)
         }
         None => {
-            let (handle, _, state_key_pair) = init_node(
+            let context = init_node(
                 network_params,
                 &NoMetrics,
                 config_path.as_ref().map(|path| path.as_ref()),
             )
             .await;
-            (handle, state_key_pair, None)
+            (context, None)
         }
     };
     // Register a task to run consensus.
     tasks.push(
         async move {
             // Start doing consensus.
-            handle.hotshot.start_consensus().await;
+            let consensus = context.consensus_mut();
+            consensus.hotshot.start_consensus().await;
 
             // Wait for events just to keep the process from exiting before consensus exits.
-            let mut events = handle.get_event_stream(Default::default()).await.0;
+            let mut events = consensus.get_event_stream(Default::default()).await.0;
             while let Some(event) = events.next().await {
                 tracing::debug!(?event);
 
@@ -109,12 +106,7 @@ async fn main() {
                 } = event
                 {
                     if let Some(leaf) = leaf_chain.first() {
-                        light_client_signature_hook(
-                            &mut handle,
-                            leaf,
-                            state_key_pair.sign_key_ref(),
-                        )
-                        .await
+                        state_signature_hook(&mut context, leaf).await
                     }
                 }
             }

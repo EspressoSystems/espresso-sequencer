@@ -1,55 +1,56 @@
-use crate::{enriched_handle::EnrichedSystemContextHandle, network, Node, SeqTypes};
+use crate::{context::SequencerContext, network, Node, SeqTypes};
 use async_std::task::JoinHandle;
 use data_source::SubmitDataSource;
+use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 
 mod data_source;
 pub mod endpoints;
 pub mod fs;
 pub mod options;
-pub mod signature_pool;
 pub mod sql;
 mod update;
 
-use hotshot_types::light_client::StateKeyPair;
 pub use options::Options;
 
 use self::data_source::StateSignatureDataSource;
 
-type NodeIndex = u64;
-
-pub type Consensus<N> = EnrichedSystemContextHandle<SeqTypes, Node<N>>;
+pub type Context<N> = SequencerContext<SeqTypes, Node<N>>;
 
 pub struct SequencerNode<N: network::Type> {
-    pub handle: Consensus<N>,
+    pub context: Context<N>,
     pub update_task: JoinHandle<anyhow::Result<()>>,
-    pub node_index: NodeIndex,
-    pub state_key_pair: StateKeyPair,
 }
 
-type AppState<N, D> = ExtensibleDataSource<D, Consensus<N>>;
+type AppState<N, D> = ExtensibleDataSource<D, Context<N>>;
 
 impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
-    fn handle(&self) -> &Consensus<N> {
-        self.as_ref()
+    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self.as_ref().consensus()
     }
 }
 
-impl<N: network::Type> SubmitDataSource<N> for Consensus<N> {
-    fn handle(&self) -> &Consensus<N> {
-        self
+impl<N: network::Type> SubmitDataSource<N> for Context<N> {
+    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+        self.consensus()
     }
 }
 
 impl<N: network::Type, D> StateSignatureDataSource<N> for AppState<N, D> {
-    fn handle(&self) -> &Consensus<N> {
-        self.as_ref()
+    fn get_state_signature(
+        &self,
+        height: u64,
+    ) -> Option<hotshot_types::light_client::StateSignature> {
+        self.as_ref().get_state_signature(height)
     }
 }
 
-impl<N: network::Type> StateSignatureDataSource<N> for Consensus<N> {
-    fn handle(&self) -> &Consensus<N> {
-        self
+impl<N: network::Type> StateSignatureDataSource<N> for Context<N> {
+    fn get_state_signature(
+        &self,
+        height: u64,
+    ) -> Option<hotshot_types::light_client::StateSignature> {
+        self.get_state_signature(height)
     }
 }
 
@@ -91,7 +92,7 @@ mod test_helpers {
                 for handle in &handles {
                     handle.hotshot.start_consensus().await;
                 }
-                (handles[0].clone().into(), 0, Default::default())
+                SequencerContext::new(handles[0].clone(), 0, Default::default())
             }
             .boxed()
         };
@@ -149,11 +150,17 @@ mod test_helpers {
         }
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let SequencerNode { mut handle, .. } = options
-            .serve(|_| async move { (handles[0].clone().into(), 0, Default::default()) }.boxed())
+        let SequencerNode { mut context, .. } = options
+            .serve(|_| {
+                async move { Context::new(handles[0].clone(), 0, Default::default()) }.boxed()
+            })
             .await
             .unwrap();
-        let mut events = handle.get_event_stream(Default::default()).await.0;
+        let mut events = context
+            .consensus_mut()
+            .get_event_stream(Default::default())
+            .await
+            .0;
 
         client.connect(None).await;
 
@@ -214,7 +221,7 @@ mod generic_tests {
         let handle = handles[0].clone();
         D::options(&storage, options::Http { port }.into())
             .status(Default::default())
-            .serve(|_| async move { (handle.into(), 0, Default::default()) }.boxed())
+            .serve(|_| async move { Context::new(handle, 0, Default::default()) }.boxed())
             .await
             .unwrap();
 
@@ -415,7 +422,9 @@ mod test {
 
         let options = Options::from(options::Http { port });
         options
-            .serve(|_| async move { (handles[0].clone().into(), 0, Default::default()) }.boxed())
+            .serve(|_| {
+                async move { Context::new(handles[0].clone(), 0, Default::default()) }.boxed()
+            })
             .await
             .unwrap();
 

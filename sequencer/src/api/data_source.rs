@@ -1,12 +1,14 @@
 use super::endpoints::TimeWindowQueryData;
-use crate::{enriched_handle::EnrichedSystemContextHandle, network, Node, SeqTypes};
+use crate::{network, Node, SeqTypes};
 use async_trait::async_trait;
+use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockId},
     data_source::{UpdateDataSource, VersionedDataSource},
     status::StatusDataSource,
     QueryResult,
 };
+use hotshot_types::light_client::StateSignature;
 
 /// A data source with sequencer-specific functionality.
 ///
@@ -42,11 +44,11 @@ pub(crate) trait SequencerDataSource:
 }
 
 pub(crate) trait SubmitDataSource<N: network::Type> {
-    fn handle(&self) -> &EnrichedSystemContextHandle<SeqTypes, Node<N>>;
+    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
-    fn handle(&self) -> &EnrichedSystemContextHandle<SeqTypes, Node<N>>;
+    fn get_state_signature(&self, height: u64) -> Option<StateSignature>;
 }
 
 #[cfg(test)]

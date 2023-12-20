@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tide_disco::{
     method::{ReadState, WriteState},
-    Api,
+    Api, StatusCode,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -140,36 +140,14 @@ where
                 .integer_param("height")
                 .map_err(|err| Error::internal(err.to_string()))?;
             state
-                .handle()
                 .get_state_signature(height)
-                .ok_or(Error::internal("Signature not found."))
+                .ok_or(tide_disco::Error::catch_all(
+                    StatusCode::NotFound,
+                    "Signature not found.".to_owned(),
+                ))
         }
         .boxed()
     })?;
 
     Ok(api)
 }
-
-// pub(super) type LCSigState<S> = Arc<RwLock<S>>;
-
-// pub(super) fn state_signature<S>() -> anyhow::Result<Api<LCSigState<S>, Error>>
-// where
-//     S: 'static + Send + Sync + StateSignatureDataSource,
-// {
-//     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
-//     let mut api = Api::<LCSigState<S>, Error>::new(toml)?;
-
-//     api.get("getstatesignature", |req, state| {
-//         async move {
-//             let height = req
-//                 .integer_param("height")
-//                 .map_err(|err| Error::internal(err.to_string()))?;
-//             state
-//                 .get_signature(height)
-//                 .ok_or(Error::internal("Signature not found."))
-//         }
-//         .boxed()
-//     })?;
-
-//     Ok(api)
-// }
