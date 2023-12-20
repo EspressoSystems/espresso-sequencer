@@ -8,7 +8,7 @@ pub type StateSignatureScheme =
 pub use hotshot_stake_table::vec_based::config::FieldType as BaseField;
 
 pub async fn state_signature_hook<N: network::Type>(
-    context: &mut SequencerContext<SeqTypes, Node<N>>,
+    context: &SequencerContext<SeqTypes, Node<N>>,
     leaf: &Leaf,
 ) {
     let new_light_client_state = LightClientState::<BaseField> {

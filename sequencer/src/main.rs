@@ -106,7 +106,7 @@ async fn main() {
                 } = event
                 {
                     if let Some(leaf) = leaf_chain.first() {
-                        state_signature_hook(&mut context, leaf).await
+                        state_signature_hook(&context, leaf).await
                     }
                 }
             }
