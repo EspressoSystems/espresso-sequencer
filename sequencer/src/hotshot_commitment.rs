@@ -83,10 +83,15 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     sequence(max, hotshot, contract).await;
 }
 
-async fn sequence(max_blocks: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
+async fn sequence(mut max_blocks: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
     loop {
         if let Err(err) = sync_with_l1(max_blocks, &hotshot, &contract).await {
             tracing::error!("error synchronizing with HotShot contract: {err}");
+            // If we are erroring because of a block gas limit exception, we can try again
+            // with fewer blocks next time
+            if err.to_string().contains("exceeds block gas limit") && max_blocks > 1 {
+                max_blocks /= 2
+            }
 
             // Wait a bit to avoid spam, then try again.
             sleep(RETRY_DELAY).await;
@@ -163,9 +168,7 @@ async fn sync_with_l1(
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
     // example, if there are multiple commitment tasks racing.
-    contract_send(&txn)
-        .await
-        .ok_or_else(|| anyhow::Error::msg("failed to send transaction"))?;
+    contract_send(&txn).await?;
 
     Ok(())
 }
