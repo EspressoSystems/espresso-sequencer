@@ -307,13 +307,6 @@ pub async fn wait_for_rpc(
         sleep(interval).await;
     }
 
-    // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
-    // do not work until at least one block has been mined. Send a transaction to force the
-    // mining of a block.
-    while let Err(err) = client.fee_history(1, BlockNumber::Latest, &[]).await {
-        tracing::warn!("RPC is not ready: {err}");
-        sleep(interval).await;
-    }
     Err(format!("No JSON-RPC at {url}"))
 }
 
