@@ -73,11 +73,13 @@
 use async_compatibility_layer::channel::{
     oneshot, unbounded, OneShotReceiver, OneShotSender, UnboundedReceiver, UnboundedSender,
 };
-use async_std::sync::{Arc, Weak};
-use atomic_option::AtomicOption;
+use async_std::sync::Arc;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use std::{future::IntoFuture, sync::atomic::Ordering};
+use std::{
+    future::IntoFuture,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 pub trait Predicate<T>: 'static + Send + Sync + Fn(&T) -> bool {}
 impl<F, T> Predicate<T> for F where F: 'static + Send + Sync + Fn(&T) -> bool {}
@@ -88,17 +90,22 @@ struct Subscriber<T> {
     #[derivative(Debug = "ignore")]
     predicate: Box<dyn Predicate<T>>,
     #[derivative(Debug = "ignore")]
-    sender: Arc<AtomicOption<OneShotSender<T>>>,
+    sender: Option<OneShotSender<T>>,
+    closed: Arc<AtomicBool>,
 }
 
 impl<T> Subscriber<T> {
     fn is_closed(&self) -> bool {
-        self.sender.load_raw(Ordering::Relaxed).is_null()
+        // A subscriber can be closed because it was explicitly closed by its receiver (e.g. the
+        // receiver was dropped)
+        self.closed.load(Ordering::Relaxed) ||
+        // Or because it has already been notified, which `take`s the oneshot sender.
+        self.sender.is_none()
     }
 }
 
 impl<T: Clone> Subscriber<T> {
-    fn notify(&self, msg: &T) {
+    fn notify(&mut self, msg: &T) {
         // First, check if the subscriber has been closed. If it has, we can skip it and save the
         // work of evaluating the predicate.
         if self.is_closed() {
@@ -113,7 +120,7 @@ impl<T: Clone> Subscriber<T> {
         // Now we are committed to sending the message to this subscriber if possible. We can take
         // the sender. We need to check for closed again in case the subscriber was closed since the
         // previous check.
-        if let Some(sender) = self.sender.take(Ordering::Relaxed) {
+        if let Some(sender) = self.sender.take() {
             sender.send(msg.clone());
         }
     }
@@ -167,7 +174,7 @@ impl<T: Clone> Notifier<T> {
     /// Notify all subscribers whose predicate is satisfied by `msg`.
     pub fn notify(&mut self, msg: &T) {
         // Try sending the message to each active subscriber.
-        for subscriber in &self.active {
+        for subscriber in &mut self.active {
             subscriber.notify(msg);
         }
 
@@ -176,7 +183,7 @@ impl<T: Clone> Notifier<T> {
         self.active.retain(|subscriber| !subscriber.is_closed());
 
         // Promote pending subscribers to active and send them the message.
-        for subscriber in self.pending.drain().unwrap_or_default() {
+        for mut subscriber in self.pending.drain().unwrap_or_default() {
             subscriber.notify(msg);
             if !subscriber.is_closed() {
                 // If that message didn't satisfy the subscriber, or it was dropped, at it to the
@@ -192,23 +199,19 @@ impl<T> Notifier<T> {
     pub async fn wait_for(&self, predicate: impl Predicate<T>) -> WaitFor<T> {
         // Create a oneshot channel for receiving the notification.
         let (sender, receiver) = oneshot();
-        let sender = Arc::new(AtomicOption::new(Box::new(sender)));
+        let sender = Some(sender);
+        let closed = Arc::new(AtomicBool::new(false));
 
-        // Create a handle which will close the subscription by nulling out the oneshot sender when
-        // dropped. We use a weak referene to handle the case where the notifier is dropped while we
-        // are waiting on the notification. In this case, a strong reference in `handle` would keep
-        // the oneshot sender alive, which would prevent the future from resolving with an error; we
-        // would block forever. The weak reference allows us to close the channel if we are dropped
-        // before the notifier, but also allows the notifier to wake us up by dropping the sender if
-        // it is dropped first.
+        // Create a handle which will close the subscription when dropped.
         let handle = ReceiveHandle {
-            sender: Arc::downgrade(&sender),
+            closed: closed.clone(),
         };
 
         // Create a subscriber with our predicate and the oneshot channel.
         let subscriber = Subscriber {
             predicate: Box::new(predicate),
             sender,
+            closed,
         };
 
         // Add the subscriber to the channel and return it. We can ignore errors here: `send` only
@@ -221,15 +224,13 @@ impl<T> Notifier<T> {
 }
 
 /// A handle that closes a subscriber when dropped.
-struct ReceiveHandle<T> {
-    sender: Weak<AtomicOption<OneShotSender<T>>>,
+struct ReceiveHandle {
+    closed: Arc<AtomicBool>,
 }
 
-impl<T> Drop for ReceiveHandle<T> {
+impl Drop for ReceiveHandle {
     fn drop(&mut self) {
-        if let Some(sender) = Weak::upgrade(&self.sender) {
-            sender.take(Ordering::Relaxed);
-        }
+        self.closed.store(true, Ordering::Relaxed);
     }
 }
 
@@ -242,7 +243,7 @@ impl<T> Drop for ReceiveHandle<T> {
 /// If [`WaitFor`] is dropped before a notification is delivered, it will automatically clean up its
 /// resources in the [`Notifier`].
 pub struct WaitFor<T> {
-    handle: ReceiveHandle<T>,
+    handle: ReceiveHandle,
     receiver: OneShotReceiver<T>,
 }
 
