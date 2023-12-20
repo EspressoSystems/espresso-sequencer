@@ -12,7 +12,6 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{H256, U256},
 };
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_state_prover::circuit::PublicInput;
 use hotshot_state_prover::Proof;
@@ -29,6 +28,8 @@ use jf_utils::test_rng;
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+
+const STAKE_TABLE_CAPACITY: usize = 40;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
@@ -67,7 +68,7 @@ impl MockLedger {
         // credit: https://github.com/EspressoSystems/HotShot/blob/5554b7013b00e6034691b533299b44f3295fa10d/crates/hotshot-state-prover/src/lib.rs#L176
         let mut rng = test_rng();
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut rng);
-        let st = stake_table_for_testing(&qc_keys, &state_keys);
+        let st = stake_table_for_testing(pp.st_cap, &qc_keys, &state_keys);
         let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
         // arbitrary commitment values as they don't affect logic being tested
@@ -224,20 +225,22 @@ impl MockLedger {
                 powers_of_g: srs.powers_of_g,
                 h: srs.h,
                 beta_h: srs.beta_h,
+                powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = hotshot_state_prover::preprocess(&srs)
+        let (pk, _) = hotshot_state_prover::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
             .expect("Fail to preprocess state prover circuit");
-        let (proof, pi) = hotshot_state_prover::generate_state_update_proof(
-            &mut self.rng,
-            &pk,
-            &self.st,
-            &bit_vec,
-            &sigs,
-            &self.state,
-            &self.threshold,
-        )
-        .expect("Fail to generate state proof");
+        let (proof, pi) =
+            hotshot_state_prover::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+                &mut self.rng,
+                &pk,
+                &self.st,
+                &bit_vec,
+                &sigs,
+                &self.state,
+                &self.threshold,
+            )
+            .expect("Fail to generate state proof");
         (pi, proof)
     }
 
@@ -311,10 +314,11 @@ pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(
 
 /// Helper function for test
 pub(crate) fn stake_table_for_testing(
+    capacity: usize,
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new();
+    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(capacity);
     // Registering keys
     bls_keys
         .iter()
