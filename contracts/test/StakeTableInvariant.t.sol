@@ -38,6 +38,20 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
     address[] public users;
     uint256 public numberUsers;
 
+    // Variables for testing invariant relative to Register
+    uint64 public nextRegistrationEpochBefore;
+    uint64 public pendingRegistrationsBefore;
+    uint64 public stakeTableFirstAvailableRegistrationEpoch;
+    uint64 public stakeTableNumPendingRegistrations;
+    bool public registrationSuccessful;
+
+    // Variables for testing invariant relative to requestExit
+    uint64 public nextExitEpochBefore;
+    uint64 public pendingExitsBefore;
+    uint64 public stakeTableFirstAvailableExitEpoch;
+    uint64 public stakeTableNumPendingExits;
+    bool public requestExitSuccessful;
+
     constructor(
         S _stakeTable,
         address _tokenCreator,
@@ -53,7 +67,10 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
         numberUsers = users.length;
     }
 
-    function registerWithSeed(address sender, uint256 userIndex, uint256 amount) private {
+    function registerWithSeed(address sender, uint256 userIndex, uint256 amount)
+        private
+        returns (bool)
+    {
         userIndex = bound(userIndex, 0, numberUsers - 1);
 
         uint8 seed = uint8(userIndex);
@@ -77,7 +94,7 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
 
         vm.prank(sender);
 
-        stakeTable.register(
+        bool res = stakeTable.register(
             blsVK,
             schnorrVK,
             depositAmount,
@@ -86,16 +103,32 @@ contract StakeTableHandler is CommonBase, StdCheats, StdUtils {
             validUntilEpoch
         );
         vks[userIndex] = blsVK;
+
+        return res;
     }
 
     function register(uint8 seed, uint64 amount) public {
-        registerWithSeed(tokenCreator, seed, amount);
+        (nextRegistrationEpochBefore, pendingRegistrationsBefore) =
+            stakeTable.nextRegistrationEpoch();
+
+        bool res = registerWithSeed(tokenCreator, seed, amount);
+
+        stakeTableFirstAvailableRegistrationEpoch = stakeTable._firstAvailableRegistrationEpoch();
+        stakeTableNumPendingRegistrations = stakeTable.numPendingRegistrations();
+        registrationSuccessful = res;
     }
 
     function requestExit(uint256 rand) public {
         uint256 index = bound(rand, 0, numberUsers - 1);
+
+        (nextExitEpochBefore, pendingExitsBefore) = stakeTable.nextExitEpoch();
+
         vm.prank(users[index]);
-        stakeTable.requestExit(vks[index]);
+        bool res = stakeTable.requestExit(vks[index]);
+
+        stakeTableFirstAvailableExitEpoch = stakeTable._firstAvailableExitEpoch();
+        stakeTableNumPendingExits = stakeTable.numPendingExits();
+        requestExitSuccessful = res;
     }
 
     function advanceEpoch() public {
@@ -175,6 +208,30 @@ contract StakeTableInvariant_Tests is Test {
         uint256 balanceStakeTable = token.balanceOf(address(stakeTable));
         uint256 tokenCreatorBalance = token.balanceOf(address(exampleTokenCreator));
         assertEq(totalBalanceUsers + balanceStakeTable + tokenCreatorBalance, INITIAL_BALANCE);
+    }
+
+    function invariant_Register() external {
+        // Here we check that the queue state is updated in a consistent manner with the output
+        // of nextExitEpoch.
+        if (handler.registrationSuccessful()) {
+            assertEq(
+                handler.stakeTableFirstAvailableRegistrationEpoch(),
+                handler.nextRegistrationEpochBefore()
+            );
+            assertEq(
+                handler.stakeTableNumPendingRegistrations(),
+                handler.pendingRegistrationsBefore() + 1
+            );
+        }
+    }
+
+    function invariant_RequestExit() external {
+        // Here we check that the queue state is updated in a consistent manner with the output
+        // of nextExitEpoch.
+        if (handler.requestExitSuccessful()) {
+            assertGe(handler.stakeTableFirstAvailableExitEpoch(), stakeTable.currentEpoch() + 1);
+            assertGe(handler.stakeTableNumPendingExits(), 1);
+        }
     }
 
     function invariant_Queue() external {
