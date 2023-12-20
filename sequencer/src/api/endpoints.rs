@@ -111,7 +111,7 @@ where
     api.post("submit", |req, state| {
         async move {
             state
-                .handle()
+                .consensus()
                 .submit_transaction(
                     req.body_auto::<Transaction>()
                         .map_err(|err| Error::internal(err.to_string()))?,

@@ -25,13 +25,13 @@ pub struct SequencerNode<N: network::Type> {
 type AppState<N, D> = ExtensibleDataSource<D, Context<N>>;
 
 impl<N: network::Type, D> SubmitDataSource<N> for AppState<N, D> {
-    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.as_ref().consensus()
     }
 }
 
 impl<N: network::Type> SubmitDataSource<N> for Context<N> {
-    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>> {
         self.consensus()
     }
 }

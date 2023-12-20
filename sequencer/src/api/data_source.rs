@@ -44,7 +44,7 @@ pub(crate) trait SequencerDataSource:
 }
 
 pub(crate) trait SubmitDataSource<N: network::Type> {
-    fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
+    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
