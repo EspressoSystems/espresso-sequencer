@@ -332,7 +332,7 @@ mod generic_tests {
 
         // Case 2: no `next`, end of window is after the most recently sequenced block.
         let start = test_blocks[2][0].timestamp;
-        let end = test_blocks[2].last().unwrap().timestamp + 1;
+        let end = i64::MAX as u64;
         let res = get_window(start, end).await;
         assert_eq!(res.prev.unwrap(), *test_blocks[1].last().unwrap());
         // There may have been more blocks sequenced since we grabbed `test_blocks`, so just check
@@ -386,8 +386,8 @@ mod generic_tests {
         client
             .get::<TimeWindowQueryData>(&format!(
                 "availability/headers/window/{}/{}",
-                test_blocks[2].last().unwrap().timestamp + 1,
-                test_blocks[2].last().unwrap().timestamp + 2
+                i64::MAX - 1,
+                i64::MAX
             ))
             .send()
             .await

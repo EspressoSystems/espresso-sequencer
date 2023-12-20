@@ -493,9 +493,12 @@ pub mod testing {
 mod test {
     use super::{transaction::ApplicationTransaction, vm::TestVm, *};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use futures::StreamExt;
+    use hotshot::types::EventType::Decide;
     use hotshot_testing::{
         overall_safety_task::OverallSafetyPropertiesDescription, test_builder::TestMetadata,
     };
+    use hotshot_types::traits::block_contents::BlockHeader;
     use testing::{init_hotshot_handles, wait_for_decide_on_handle};
 
     // Run a hotshot test with our types
@@ -538,5 +541,43 @@ mod test {
         tracing::info!("Submitted transaction to handle: {txn:?}");
 
         wait_for_decide_on_handle(&mut events, &submitted_txn).await
+    }
+
+    #[async_std::test]
+    async fn test_header_invariants() {
+        setup_logging();
+        setup_backtrace();
+
+        let success_height = 30;
+
+        let mut handles = init_hotshot_handles().await;
+        let mut events = handles[0].get_event_stream(Default::default()).await.0;
+        for handle in handles.iter() {
+            handle.hotshot.start_consensus().await;
+        }
+
+        let mut parent = Header::genesis().0;
+        loop {
+            let event = events.next().await.unwrap();
+            let Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            tracing::info!("Got decide {leaf_chain:?}");
+
+            // Check that each successive header satisfies invariants relative to its parent: all
+            // the fields which should be monotonic are.
+            for leaf in leaf_chain.iter().rev() {
+                let header = leaf.block_header.clone();
+                assert_eq!(header.height, parent.height + 1);
+                assert!(header.timestamp >= parent.timestamp);
+                assert!(header.l1_head >= parent.l1_head);
+                assert!(header.l1_finalized >= parent.l1_finalized);
+                parent = header;
+            }
+
+            if parent.height >= success_height {
+                break;
+            }
+        }
     }
 }
