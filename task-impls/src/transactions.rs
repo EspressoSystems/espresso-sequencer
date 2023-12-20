@@ -170,7 +170,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 
@@ -283,7 +283,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 match result {
                     Err(_) => {
                         // Fall through below to updating new block
-                        error!(
+                        debug!(
                             "propose_max_round_time passed, sending transactions we have so far"
                         );
                     }

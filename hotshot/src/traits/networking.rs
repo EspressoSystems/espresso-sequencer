@@ -15,7 +15,7 @@ use std::{
 };
 
 use custom_debug::Debug;
-use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Label, Metrics};
+use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics};
 pub use hotshot_types::traits::network::{
     ChannelSendSnafu, CouldNotDeliverSnafu, FailedToDeserializeSnafu, FailedToSerializeSnafu,
     NetworkError, NetworkReliability, NoSuchNodeSnafu, ShutDownSnafu,
@@ -25,8 +25,6 @@ pub use hotshot_types::traits::network::{
 #[derive(Clone, Debug)]
 pub struct NetworkingMetricsValue {
     #[allow(dead_code)]
-    /// The values that are being tracked
-    pub values: Arc<Mutex<InnerNetworkingMetrics>>,
     /// A [`Gauge`] which tracks how many peers are connected
     pub connected_peers: Box<dyn Gauge>,
     /// A [`Counter`] which tracks how many messages have been received directly
@@ -163,14 +161,8 @@ impl Label for NetworkingMetrics {
 impl NetworkingMetricsValue {
     /// Create a new instance of this [`NetworkingMetricsValue`] struct, setting all the counters and gauges
     #[must_use]
-    pub fn new() -> Self {
-        let values = Arc::default();
-        let metrics: Box<dyn Metrics> = Box::new(NetworkingMetrics {
-            prefix: String::new(),
-            values: Arc::clone(&values),
-        });
+    pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
-            values,
             connected_peers: metrics.create_gauge(String::from("connected_peers"), None),
             incoming_direct_message_count: metrics
                 .create_counter(String::from("incoming_direct_message_count"), None),
@@ -188,6 +180,6 @@ impl NetworkingMetricsValue {
 
 impl Default for NetworkingMetricsValue {
     fn default() -> Self {
-        Self::new()
+        Self::new(&*NoMetrics::boxed())
     }
 }

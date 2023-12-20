@@ -167,7 +167,7 @@ async fn memory_network_direct_queue() {
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group.clone(),
         Option::None,
     );
@@ -175,7 +175,7 @@ async fn memory_network_direct_queue() {
     let pub_key_2 = get_pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group,
         Option::None,
     );
@@ -232,14 +232,14 @@ async fn memory_network_broadcast_queue() {
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group.clone(),
         Option::None,
     );
     let pub_key_2 = get_pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group,
         Option::None,
     );
@@ -302,14 +302,14 @@ async fn memory_network_test_in_flight_message_count() {
     let pub_key_1 = get_pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group.clone(),
         Option::None,
     );
     let pub_key_2 = get_pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         group,
         Option::None,
     );

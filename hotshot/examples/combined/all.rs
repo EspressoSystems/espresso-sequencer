@@ -43,6 +43,8 @@ async fn main() {
     let _sender = Arc::new(server_shutdown_sender_cdn);
     let _sender = Arc::new(server_shutdown_sender_da);
 
+    let orchestrator_url = Url::parse("http://localhost:4444").unwrap();
+
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
             <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
@@ -77,7 +79,7 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        url: Url::parse("http://localhost:4444").unwrap(),
+        url: orchestrator_url.clone(),
 
         config_file: args.config_file.clone(),
     }));
@@ -89,6 +91,7 @@ async fn main() {
     > = load_config_from_file::<TestTypes>(args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..config.config.total_nodes.into() {
+        let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
             infra::main_entry_point::<
                 TestTypes,
@@ -99,9 +102,9 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                url: "http://localhost".to_string(),
-                port: 4444,
+                url: orchestrator_url,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                network_config_file: None,
             })
             .await
         });

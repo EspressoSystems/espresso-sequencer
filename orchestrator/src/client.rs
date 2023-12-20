@@ -5,12 +5,14 @@ use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
 
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::{election::ElectionConfig, signature_key::SignatureKey};
 use surf_disco::{error::ClientError, Client};
+use tide_disco::Url;
 
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     client: surf_disco::Client<ClientError>,
+    pub identity: String,
 }
 
 // VALIDATOR
@@ -23,28 +25,82 @@ pub struct OrchestratorClient {
 /// Arguments passed to the validator
 pub struct ValidatorArgs {
     /// The address the orchestrator runs on
-    pub url: String,
-    /// The port the orchestrator runs on
-    pub port: u16,
+    pub url: Url,
     /// This node's public IP address, for libp2p
     /// If no IP address is passed in, it will default to 127.0.0.1
     pub public_ip: Option<IpAddr>,
+    /// An optional network config file to save to/load from
+    /// Allows for rejoining the network on a complete state loss
+    #[arg(short, long)]
+    pub network_config_file: Option<String>,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct MultiValidatorArgs {
+    /// Number of validators to run
+    pub num_nodes: u16,
+    /// The address the orchestrator runs on
+    pub url: Url,
+    /// This node's public IP address, for libp2p
+    /// If no IP address is passed in, it will default to 127.0.0.1
+    pub public_ip: Option<IpAddr>,
+    /// An optional network config file to save to/load from
+    /// Allows for rejoining the network on a complete state loss
+    #[arg(short, long)]
+    pub network_config_file: Option<String>,
+}
+
+impl ValidatorArgs {
+    /// Constructs `ValidatorArgs` from `MultiValidatorArgs` and a node index.
+    ///
+    /// If `network_config_file` is present in `MultiValidatorArgs`, it appends the node index to it to create a unique file name for each node.
+    ///
+    /// # Arguments
+    ///
+    /// * `multi_args` - A `MultiValidatorArgs` instance containing the base arguments for the construction.
+    /// * `node_index` - A `u16` representing the index of the node for which the args are being constructed.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a new instance of `ValidatorArgs`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let multi_args = MultiValidatorArgs::new();
+    /// let node_index = 1;
+    /// let instance = Self::from_multi_args(multi_args, node_index);
+    /// ```
+    pub fn from_multi_args(multi_args: MultiValidatorArgs, node_index: u16) -> Self {
+        Self {
+            url: multi_args.url,
+            public_ip: multi_args.public_ip,
+            network_config_file: multi_args
+                .network_config_file
+                .map(|s| format!("{}-{}", s, node_index)),
+        }
+    }
 }
 
 impl OrchestratorClient {
-    /// Creates the client that connects to the orchestrator
-    pub async fn connect_to_orchestrator(args: ValidatorArgs) -> Self {
-        let base_url = format!("{0}:{1}", args.url, args.port).parse().unwrap();
-        let client = surf_disco::Client::<ClientError>::new(base_url);
+    /// Creates the client that will connect to the orchestrator
+    pub async fn new(args: ValidatorArgs, identity: String) -> Self {
+        let client = surf_disco::Client::<ClientError>::new(args.url);
         // TODO ED: Add healthcheck wait here
-        OrchestratorClient { client }
+        OrchestratorClient { client, identity }
     }
 
-    /// Sends an identify message to the server
-    /// Returns this validator's node_index in the network
-    pub async fn identify_with_orchestrator(&self, identity: String) -> u16 {
+    /// Sends an identify message to the orchestrator and attempts to get its config
+    /// Returns both the node_index and the run configuration from the orchestrator
+    /// Will block until both are returned
+    #[allow(clippy::type_complexity)]
+    pub async fn get_config<K: SignatureKey, E: ElectionConfig>(
+        &self,
+        identity: String,
+    ) -> NetworkConfig<K, E> {
+        // get the node index
         let identity = identity.as_str();
-        let f = |client: Client<ClientError>| {
+        let identity = |client: Client<ClientError>| {
             async move {
                 let node_index: Result<u16, ClientError> = client
                     .post(&format!("api/identity/{identity}"))
@@ -54,23 +110,12 @@ impl OrchestratorClient {
             }
             .boxed()
         };
-        self.wait_for_fn_from_orchestrator(f).await
-    }
+        let node_index = self.wait_for_fn_from_orchestrator(identity).await;
 
-    /// Returns the run configuration from the orchestrator
-    /// Will block until the configuration is returned
-    #[allow(clippy::type_complexity)]
-
-    pub async fn get_config_from_orchestrator<TYPES: NodeType>(
-        &self,
-        node_index: u16,
-    ) -> NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType> {
+        // get the corresponding config
         let f = |client: Client<ClientError>| {
             async move {
-                let config: Result<
-                    NetworkConfig<TYPES::SignatureKey, TYPES::ElectionConfigType>,
-                    ClientError,
-                > = client
+                let config: Result<NetworkConfig<K, E>, ClientError> = client
                     .post(&format!("api/config/{node_index}"))
                     .send()
                     .await;
@@ -78,7 +123,12 @@ impl OrchestratorClient {
             }
             .boxed()
         };
-        self.wait_for_fn_from_orchestrator(f).await
+
+        let mut config = self.wait_for_fn_from_orchestrator(f).await;
+
+        config.node_index = node_index as u64;
+
+        config
     }
 
     /// Tells the orchestrator this validator is ready to start

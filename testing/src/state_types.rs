@@ -37,7 +37,7 @@ impl Committable for TestState {
     }
 
     fn tag() -> String {
-        "SEQUENCING_TEST_STATE".to_string()
+        "TEST_STATE".to_string()
     }
 }
 

@@ -14,8 +14,9 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotType, Memberships, Networks, SystemContext,
+    Memberships, Networks, SystemContext,
 };
+use hotshot_orchestrator::config::NetworkConfigSource;
 use hotshot_orchestrator::{
     self,
     client::{OrchestratorClient, ValidatorArgs},
@@ -153,9 +154,9 @@ async fn webserver_network_from_config<TYPES: NodeType>(
     let WebServerConfig {
         url,
         wait_between_polls,
-    }: WebServerConfig = config.clone().web_server_config.unwrap();
+    }: WebServerConfig = config.web_server_config.unwrap();
 
-    WebServerNetwork::create(url, wait_between_polls, pub_key.clone(), false)
+    WebServerNetwork::create(url, wait_between_polls, pub_key, false)
 }
 
 async fn libp2p_network_from_config<TYPES: NodeType>(
@@ -252,7 +253,7 @@ match node_type {
     let node_config = config_builder.build().unwrap();
 
     Libp2pNetwork::new(
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         node_config,
         pub_key.clone(),
         Arc::new(RwLock::new(
@@ -293,7 +294,6 @@ pub trait RunDA<
     TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
-    SystemContext<TYPES, NODE>: HotShotType<TYPES, NODE>,
 {
     /// Initializes networking, returns self
     async fn initialize_networking(
@@ -360,7 +360,7 @@ pub trait RunDA<
             memberships,
             networks_bundle,
             initializer,
-            ConsensusMetricsValue::new(),
+            ConsensusMetricsValue::default(),
         )
         .await
         .expect("Could not init hotshot")
@@ -387,7 +387,7 @@ pub trait RunDA<
         error!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
         async_sleep(Duration::from_secs(start_delay_seconds)).await;
 
-        error!("Starting hotshot!");
+        error!("Starting HotShot example!");
         let start = Instant::now();
 
         let (mut event_stream, _streamid) = context.get_event_stream(FilterEvent::default()).await;
@@ -825,34 +825,27 @@ pub async fn main_entry_point<
 
     error!("Starting validator");
 
-    let orchestrator_client: OrchestratorClient =
-        OrchestratorClient::connect_to_orchestrator(args.clone()).await;
-
-    // Identify with the orchestrator
+    // see what our public identity will be
     let public_ip = match args.public_ip {
         Some(ip) => ip,
         None => local_ip_address::local_ip().unwrap(),
     };
-    error!(
-        "Identifying with orchestrator using IP address {}",
-        public_ip.to_string()
-    );
-    let node_index: u16 = orchestrator_client
-        .identify_with_orchestrator(public_ip.to_string())
-        .await;
-    error!("Finished identifying; our node index is {node_index}");
-    error!("Getting config from orchestrator");
 
-    let mut run_config = orchestrator_client
-        .get_config_from_orchestrator::<TYPES>(node_index)
-        .await;
+    let orchestrator_client: OrchestratorClient =
+        OrchestratorClient::new(args.clone(), public_ip.to_string()).await;
 
-    run_config.node_index = node_index.into();
+    // conditionally save/load config from file or orchestrator
+    let (mut run_config, source) =
+        NetworkConfig::from_file_or_orchestrator(&orchestrator_client, args.network_config_file)
+            .await;
+
+    let node_index = run_config.node_index;
+    error!("Retrieved config; our node index is {node_index}");
 
     run_config.config.my_own_validator_config =
         ValidatorConfig::<<TYPES as NodeType>::SignatureKey>::generated_from_seed_indexed(
             run_config.seed,
-            node_index.into(),
+            node_index,
             1,
         );
     //run_config.libp2p_config.as_mut().unwrap().public_ip = args.public_ip.unwrap();
@@ -892,12 +885,14 @@ pub async fn main_entry_point<
         }
     }
 
-    error!("Waiting for start command from orchestrator");
-    orchestrator_client
-        .wait_for_all_nodes_ready(run_config.clone().node_index)
-        .await;
+    if let NetworkConfigSource::Orchestrator = source {
+        error!("Waiting for the start command from orchestrator");
+        orchestrator_client
+            .wait_for_all_nodes_ready(run_config.clone().node_index)
+            .await;
+    }
 
-    error!("All nodes are ready!  Starting HotShot");
+    error!("Starting HotShot");
     run.run_hotshot(
         hotshot,
         &mut transactions,

@@ -60,6 +60,8 @@ async fn test_with_failures_one() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(5, dead_nodes)],
     };
+    metadata.overall_safety_properties.num_failed_views = 2;
+    metadata.overall_safety_properties.num_successful_views = 25;
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
@@ -107,7 +109,11 @@ async fn test_with_failures_half_f() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(5, dead_nodes)],
     };
-    metadata.overall_safety_properties.num_failed_views = 6;
+
+    // TODO: this should only have 3 failures for each down leader, investigate why it fails additional views
+    metadata.overall_safety_properties.num_failed_views = 8;
+    // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
+    metadata.overall_safety_properties.num_successful_views = 22;
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()

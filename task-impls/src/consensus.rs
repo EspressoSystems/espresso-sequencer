@@ -1,5 +1,6 @@
 use crate::{
     events::HotShotEvent,
+    helpers::cancel_task,
     vote::{spawn_vote_accumulator, AccumulatorInfo},
 };
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -105,7 +106,7 @@ pub struct ConsensusTaskState<
     pub timeout_vote_collector: Option<(TYPES::Time, usize, usize)>,
 
     /// timeout task handle
-    pub timeout_task: JoinHandle<()>,
+    pub timeout_task: Option<JoinHandle<()>>,
 
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
@@ -232,11 +233,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
 
+            // TODO: re-enable this when HotShot/the sequencer needs the shares for something
+            // issue: https://github.com/EspressoSystems/HotShot/issues/2236
             // Only vote if you has seen the VID share for this view
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                error!(
-                    // Sishan TODO: change to debug level
+                debug!(
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );
@@ -342,6 +344,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 "Updating view from {} to {} in consensus task",
                 *self.cur_view, *new_view
             );
+            // cancel the old timeout task
+            if let Some(timeout_task) = self.timeout_task.take() {
+                cancel_task(timeout_task).await;
+            }
 
             // Remove old certs, we won't vote on past views
             for view in *self.cur_view..*new_view - 1 {
@@ -383,7 +389,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // Spawn a timeout task if we did actually update view
             let timeout = self.timeout;
-            self.timeout_task = async_spawn({
+            self.timeout_task = Some(async_spawn({
                 let stream = self.event_stream.clone();
                 // Nuance: We timeout on the view + 1 here because that means that we have
                 // not seen evidence to transition to this new view
@@ -394,7 +400,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish(HotShotEvent::Timeout(TYPES::Time::new(*view_number)))
                         .await;
                 }
-            });
+            }));
             let consensus = self.consensus.read().await;
             consensus
                 .metrics
@@ -415,8 +421,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
-                error!(
-                    "Received Quorum Proposal for view {}",
+                debug!(
+                    "Receved Quorum Propsoal for view {}",
                     *proposal.data.view_number
                 );
 
@@ -554,8 +560,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 );
                 let safety_check = outcome.is_ok();
                 if let Err(e) = outcome {
-                    self.api.send_view_error(view, Arc::new(e)).await;
-                    return;
+                    self.api
+                        .send_event(Event {
+                            view_number: view,
+                            event: EventType::Error { error: Arc::new(e) },
+                        })
+                        .await;
                 }
 
                 // Skip if both saftey and liveness checks fail.
@@ -605,11 +615,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             // starting from the first iteration with a three chain, e.g. right after the else if case nested in the if case above
                             if new_decide_reached {
                                 let mut leaf = leaf.clone();
-                                consensus
-                                    .metrics
-                                    .last_synced_block_height
-                                    .set(usize::try_from(leaf.get_height()).unwrap_or(0));
-
+                                if leaf.view_number == new_anchor_view {
+                                    consensus
+                                        .metrics
+                                        .last_synced_block_height
+                                        .set(usize::try_from(leaf.get_height()).unwrap_or(0));
+                                }
                                 // If the block payload is available for this leaf, include it in
                                 // the leaf chain that we send to the client.
                                 if let Some(encoded_txns) =
@@ -619,12 +630,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                                         encoded_txns.clone().into_iter(),
                                         leaf.get_block_header().metadata(),
                                     );
-                                    if let Err(e) = leaf.fill_block_payload(payload) {
-                                        error!(
-                                            "Saved block payload and commitment don't match: {:?}",
-                                            e
-                                        );
-                                    }
+
+                                    leaf.fill_block_payload_unchecked(payload);
                                 }
 
                                 leaf_views.push(leaf.clone());
@@ -841,6 +848,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("QC Formed event happened!");
 
                 if let either::Right(qc) = cert.clone() {
+                    // cancel poll for votes
+                    self.quorum_network
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
+
                     debug!(
                         "Attempting to publish proposal after forming a TC for view {}",
                         *qc.view_number
@@ -862,6 +876,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let mut consensus = self.consensus.write().await;
                     consensus.high_qc = qc.clone();
 
+                    // cancel poll for votes
+                    self.quorum_network
+                        .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
+                            *qc.view_number,
+                        ))
+                        .await;
+
                     drop(consensus);
                     debug!(
                         "Attempting to publish proposal after forming a QC for view {}",
@@ -872,7 +893,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
                         .await
                     {
-                        warn!("Wasn't able to publish proposal");
+                        debug!(
+                            "Wasn't able to publish proposal when QC was formed, still may publish"
+                        );
                     }
                 }
             }
@@ -882,6 +905,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 self.quorum_network
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForDAC(*view))
+                    .await;
+
+                self.committee_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
 
                 self.da_certs.insert(view, cert);
@@ -907,7 +934,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
-                info!("VID disperse data is not more than one view older.");
+                debug!("VID disperse data is not more than one view older.");
                 let payload_commitment = disperse.data.payload_commitment;
 
                 // Check whether the sender is the right leader for this view
@@ -933,7 +960,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .await;
 
                 // Add to the storage that we have received the VID disperse for a specific view
-                self.vid_shares.insert(view, disperse);
+                // TODO: re-enable this when HotShot/the sequencer needs the shares for something
+                // issue: https://github.com/EspressoSystems/HotShot/issues/2236
+                // self.vid_shares.insert(view, disperse);
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
@@ -976,6 +1005,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
 
+                // cancel poll for votes
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
+                    .await;
+
+                // cancel poll for proposal
+                self.quorum_network
+                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(*view))
+                    .await;
+
                 let vote = TimeoutVote::create_signed_vote(
                     TimeoutData { view },
                     view,
@@ -990,11 +1029,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     "We did not receive evidence for view {} in time, sending timeout vote for that view!",
                     *view
                 );
+                self.output_event_stream
+                    .publish(Event {
+                        view_number: view,
+                        event: EventType::ReplicaViewTimeout { view_number: view },
+                    })
+                    .await;
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
             HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata) => {
                 self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
+                let high_qc = self.consensus.read().await.high_qc.clone();
+                let leader_view = high_qc.get_view_number() + 1;
+                if self.quorum_membership.get_leader(leader_view) == self.public_key {
+                    self.publish_proposal_if_able(high_qc, leader_view, None)
+                        .await;
+                }
             }
             _ => {}
         }
@@ -1009,10 +1060,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
         if self.quorum_membership.get_leader(view) != self.public_key {
-            error!(
-                "Somehow we formed a QC but are not the leader for the next view {:?}",
-                view
-            );
+            // This is expected for view 1, so skipping the logging.
+            if view != TYPES::Time::new(1) {
+                error!(
+                    "Somehow we formed a QC but are not the leader for the next view {:?}",
+                    view
+                );
+            }
             return false;
         }
 
@@ -1114,7 +1168,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.payload_commitment_and_metadata = None;
             return true;
         }
-        debug!("Self block was None");
+        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
         false
     }
 }

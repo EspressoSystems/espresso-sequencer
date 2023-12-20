@@ -98,6 +98,7 @@ pub fn handle_event<TYPES: NodeType>(
         state.expected_output.contains_key(&event),
         "Got an unexpected event: {event:?}",
     );
+
     let num_expected = state.expected_output.get_mut(&event).unwrap();
     if *num_expected == 1 {
         state.expected_output.remove(&event);
@@ -108,5 +109,6 @@ pub fn handle_event<TYPES: NodeType>(
     if state.expected_output.is_empty() {
         return (Some(HotShotTaskCompleted::ShutDown), state);
     }
+
     (None, state)
 }

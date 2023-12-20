@@ -111,7 +111,7 @@ mod test {
     use super::*;
     use commit::Committable;
     use hotshot_testing::{
-        block_types::{TestBlockHeader, TestBlockPayload},
+        block_types::{genesis_vid_commitment, TestBlockHeader, TestBlockPayload},
         node_types::TestTypes,
     };
     use hotshot_types::{
@@ -126,7 +126,7 @@ mod test {
         let payload = TestBlockPayload::genesis();
         let header = TestBlockHeader {
             block_number: 0,
-            payload_commitment: payload.payload_commitment,
+            payload_commitment: genesis_vid_commitment(),
         };
         let dummy_leaf_commit = fake_commitment::<Leaf<TestTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {

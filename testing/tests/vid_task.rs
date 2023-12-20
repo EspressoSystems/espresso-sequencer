@@ -8,7 +8,7 @@ use hotshot_testing::{
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     data::{DAProposal, VidDisperse, VidSchemeTrait, ViewNumber},
-    traits::{consensus_api::ConsensusSharedApi, state::ConsensusTime},
+    traits::{consensus_api::ConsensusApi, state::ConsensusTime},
 };
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -33,7 +33,10 @@ async fn test_vid_task() {
     };
     let pub_key = *api.public_key();
 
-    let vid = vid_init();
+    // quorum membership for VID share distribution
+    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
+
+    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(0));
     let transactions = vec![TestTransaction(vec![0])];
     let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
@@ -51,12 +54,13 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
-    let vid_disperse = VidDisperse {
-        view_number: message.data.view_number,
-        payload_commitment,
-        shares: vid_disperse.shares,
-        common: vid_disperse.common,
-    };
+
+    let vid_disperse = VidDisperse::from_membership(
+        message.data.view_number,
+        vid_disperse,
+        &quorum_membership.clone().into(),
+    );
+
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),
         signature: message.signature.clone(),

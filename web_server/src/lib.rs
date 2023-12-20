@@ -34,7 +34,10 @@ struct WebServerState<KEY> {
     /// view for oldest proposals in memory
     oldest_proposal: u64,
     /// view for the most recent proposal to help nodes catchup
-    recent_proposal: u64,
+    latest_quorum_proposal: u64,
+    /// view for the most recent view sync proposal
+    latest_view_sync_proposal: u64,
+
     /// view for teh oldest DA certificate
     oldest_certificate: u64,
 
@@ -88,7 +91,8 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
             num_txns: 0,
             oldest_vote: 0,
             oldest_proposal: 0,
-            recent_proposal: 0,
+            latest_quorum_proposal: 0,
+            latest_view_sync_proposal: 0,
             oldest_certificate: 0,
             shutdown: None,
             stake_table: Vec::new(),
@@ -129,7 +133,8 @@ impl<KEY: SignatureKey + 'static> WebServerState<KEY> {
 /// Trait defining methods needed for the `WebServerState`
 pub trait WebServerDataSource<KEY> {
     fn get_proposal(&self, view_number: u64) -> Result<Option<Vec<Vec<u8>>>, Error>;
-    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
+    fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error>;
     fn get_view_sync_proposal(
         &self,
         view_number: u64,
@@ -214,8 +219,12 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         }
     }
 
-    fn get_recent_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
-        self.get_proposal(self.recent_proposal)
+    fn get_latest_quorum_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_proposal(self.latest_quorum_proposal)
+    }
+
+    fn get_latest_view_sync_proposal(&self) -> Result<Option<Vec<Vec<u8>>>, Error> {
+        self.get_view_sync_proposal(self.latest_view_sync_proposal, 0)
     }
 
     fn get_view_sync_proposal(
@@ -377,6 +386,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.vote_index.entry(view_number).or_insert(0);
         self.votes
             .entry(view_number)
@@ -397,6 +415,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_vid_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_vid_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted vid vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.vid_vote_index.entry(view_number).or_insert(0);
         self.vid_votes
             .entry(view_number)
@@ -419,6 +446,15 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
                 self.oldest_view_sync_vote += 1;
             }
         }
+
+        // don't accept the vote if it is too old
+        if self.oldest_view_sync_vote > view_number {
+            return Err(ServerError {
+                status: StatusCode::Gone,
+                message: "Posted view sync vote is too old".to_string(),
+            });
+        }
+
         let next_index = self.view_sync_vote_index.entry(view_number).or_insert(0);
         self.view_sync_votes
             .entry(view_number)
@@ -433,8 +469,8 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
     fn post_proposal(&mut self, view_number: u64, mut proposal: Vec<u8>) -> Result<(), Error> {
         info!("Received proposal for view {}", view_number);
 
-        if view_number > self.recent_proposal {
-            self.recent_proposal = view_number;
+        if view_number > self.latest_quorum_proposal {
+            self.latest_quorum_proposal = view_number;
         }
 
         // Only keep proposal history for MAX_VIEWS number of view
@@ -476,6 +512,10 @@ impl<KEY: SignatureKey> WebServerDataSource<KEY> for WebServerState<KEY> {
         view_number: u64,
         proposal: Vec<u8>,
     ) -> Result<(), Error> {
+        if view_number > self.latest_view_sync_proposal {
+            self.latest_view_sync_proposal = view_number;
+        }
+
         // Only keep proposal history for MAX_VIEWS number of view
         if self.view_sync_proposals.len() >= MAX_VIEWS {
             self.view_sync_proposals
@@ -646,7 +686,7 @@ where
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error>::from_file(path)?,
         None => {
-            let toml = toml::from_str(include_str!("../api.toml")).map_err(|err| {
+            let toml: toml::Value = toml::from_str(include_str!("../api.toml")).map_err(|err| {
                 ApiError::CannotReadToml {
                     reason: err.to_string(),
                 }
@@ -668,8 +708,11 @@ where
         }
         .boxed()
     })?
-    .get("getrecentproposal", |_req, state| {
-        async move { state.get_recent_proposal() }.boxed()
+    .get("get_latest_quorum_proposal", |_req, state| {
+        async move { state.get_latest_quorum_proposal() }.boxed()
+    })?
+    .get("get_latest_view_sync_proposal", |_req, state| {
+        async move { state.get_latest_view_sync_proposal() }.boxed()
     })?
     .get("getviewsyncproposal", |req, state| {
         async move {

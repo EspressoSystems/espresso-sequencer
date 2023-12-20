@@ -60,6 +60,8 @@ async fn main() {
         }
     });
 
+    let orchestrator_url = Url::parse("http://localhost:4444").unwrap();
+
     // web server orchestrator
     async_spawn(run_orchestrator::<
         TestTypes,
@@ -69,7 +71,7 @@ async fn main() {
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        url: Url::parse("http://localhost:4444").unwrap(),
+        url: orchestrator_url.clone(),
         config_file: args.config_file.clone(),
     }));
 
@@ -80,6 +82,7 @@ async fn main() {
     > = load_config_from_file::<TestTypes>(args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..(config.config.total_nodes.get()) {
+        let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
             infra::main_entry_point::<
                 TestTypes,
@@ -90,9 +93,9 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                url: "http://localhost".to_string(),
-                port: 4444,
+                url: orchestrator_url,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                network_config_file: None,
             })
             .await
         });

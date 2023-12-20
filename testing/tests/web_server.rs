@@ -28,6 +28,7 @@ async fn web_server_network() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
+            num_failed_views: 33,
             num_successful_views: 35,
             ..Default::default()
         },

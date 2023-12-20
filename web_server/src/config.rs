@@ -3,7 +3,7 @@ pub const DEFAULT_WEB_SERVER_DA_PORT: u16 = 9001;
 pub const DEFAULT_WEB_SERVER_VIEW_SYNC_PORT: u16 = 9002;
 
 /// How many views to keep in memory
-pub const MAX_VIEWS: usize = 25;
+pub const MAX_VIEWS: usize = 100;
 /// How many transactions to keep in memory
 pub const MAX_TXNS: usize = 500;
 /// How many transactions to return at once
@@ -17,8 +17,12 @@ pub fn post_proposal_route(view_number: u64) -> String {
     format!("api/proposal/{view_number}")
 }
 
-pub fn get_recent_proposal_route() -> String {
-    "api/proposal".to_string()
+pub fn get_latest_quorum_proposal_route() -> String {
+    "api/proposal/latest".to_string()
+}
+
+pub fn get_latest_view_sync_proposal_route() -> String {
+    "api/view_sync_proposal/latest".to_string()
 }
 
 pub fn get_da_certificate_route(view_number: u64) -> String {
