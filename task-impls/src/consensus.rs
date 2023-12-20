@@ -239,8 +239,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Sishan TODO: comment this for now
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                error!(
-                    // Sishan TODO: change to debug level
+                debug!(
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );
@@ -324,8 +323,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            error!(
-                // Sishan TODO: change to debug level
+            debug!(
                 "Received VID share, but couldn't find DAC cert for view {:?}",
                 *proposal.get_view_number(),
             );
@@ -903,7 +901,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::DACRecv(cert) => {
-                debug!("DAC Received for view ! {}", *cert.view_number);
+                debug!("DAC Received for view {}!", *cert.view_number);
                 let view = cert.view_number;
 
                 self.quorum_network

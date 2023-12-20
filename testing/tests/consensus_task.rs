@@ -196,10 +196,17 @@ async fn test_consensus_vote() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
+    use hotshot_testing::block_types::TestBlockPayload;
     use hotshot_testing::block_types::TestTransaction;
+    use hotshot_testing::task_helpers::build_dac;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;
     use hotshot_types::data::VidSchemeTrait;
+    use hotshot_types::simple_certificate::DACertificate;
+    use hotshot_types::simple_vote::DAVote;
+    use hotshot_types::traits::block_contents::vid_commitment;
+    use hotshot_types::traits::state::TestableBlock;
+    use hotshot_types::traits::BlockPayload;
     use hotshot_types::{
         data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
     };
@@ -252,6 +259,24 @@ async fn test_consensus_with_vid() {
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
     // TODO: Still need a valid DAC cert, now tracking logging instead
     // https://github.com/EspressoSystems/HotShot/issues/2255
+    let block = <TestBlockPayload as TestableBlock>::genesis();
+    let da_payload_commitment = vid_commitment(
+        &block.encode().unwrap().collect(),
+        handle
+            .hotshot
+            .inner
+            .memberships
+            .quorum_membership
+            .total_nodes(),
+    );
+    let dac_view2 = build_dac::<TestTypes, DAVote<TestTypes>, DACertificate<TestTypes>>(
+        da_payload_commitment,
+        &handle,
+        ViewNumber::new(2),
+        &public_key_view2,
+        &private_key_view2,
+    );
+    input.push(HotShotEvent::DACRecv(dac_view2.clone()));
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
     // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
@@ -264,15 +289,14 @@ async fn test_consensus_with_vid() {
         HotShotEvent::QuorumProposalRecv(proposal_view2.clone(), public_key_view2),
         1,
     );
+    output.insert(HotShotEvent::DACRecv(dac_view2), 1);
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
     // TODO: Uncomment this after the above TODO is done
     // https://github.com/EspressoSystems/HotShot/issues/2255
-    // if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
-    //     output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
-    // }
-
-    // Sishan TODO: track the logging message "Received VID share, but couldn't find DAC cert in certs xxx",
+    if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
+        output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
+    }
 
     output.insert(
         HotShotEvent::ViewChange(ViewNumber::new(1)),

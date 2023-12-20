@@ -14,9 +14,10 @@ use hotshot_task::event_stream::ChannelStream;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, VidScheme, ViewNumber},
+    data::{Leaf, QuorumProposal, VidCommitment, VidScheme, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
+    simple_vote::{DAData, DAVote, SimpleVote},
     traits::{
         block_contents::vid_commitment,
         block_contents::BlockHeader,
@@ -174,6 +175,68 @@ pub fn build_qc<
     let vote = QuorumVote::<TYPES>::create_signed_vote(
         QuorumData {
             leaf_commit: leaf.commit(),
+        },
+        view,
+        public_key,
+        private_key,
+    );
+    let cert = CERT::create_signed_certificate(
+        vote.get_data_commitment(),
+        vote.get_data().clone(),
+        real_qc_sig,
+        vote.get_view_number(),
+    );
+    cert
+}
+
+pub fn build_dac<
+    TYPES: NodeType<SignatureKey = BLSPubKey>,
+    VOTE: Vote<TYPES, Commitment = DAData>,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+>(
+    payload_commitment: VidCommitment,
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    view: TYPES::Time,
+    public_key: &TYPES::SignatureKey,
+    private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
+) -> CERT {
+    let stake_table = handle.get_committee_qc_stake_table();
+    let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
+        <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+            stake_table.clone(),
+            handle.get_threshold(),
+        );
+    let total_nodes = stake_table.len();
+    let signers = bitvec![1; total_nodes];
+    let mut sig_lists = Vec::new();
+
+    // calculate vote
+    for node_id in 0..total_nodes {
+        let (private_key_i, public_key_i) = key_pair_for_id(node_id.try_into().unwrap());
+        let da_vote: SimpleVote<TYPES, DAData> = DAVote::create_signed_vote(
+            DAData {
+                payload_commit: payload_commitment,
+            },
+            view,
+            &public_key_i,
+            &private_key_i,
+        );
+        let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
+            bincode_opts()
+                .deserialize(&da_vote.get_signature().0)
+                .expect("Deserialization on the signature shouldn't be able to fail.");
+        sig_lists.push(original_signature);
+    }
+
+    let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(
+        &real_qc_pp,
+        signers.as_bitslice(),
+        &sig_lists[..],
+    );
+
+    let vote: SimpleVote<TYPES, DAData> = DAVote::create_signed_vote(
+        DAData {
+            payload_commit: payload_commitment,
         },
         view,
         public_key,
