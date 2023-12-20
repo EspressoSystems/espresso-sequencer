@@ -239,7 +239,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // Sishan TODO: comment this for now
             if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
             } else {
-                error!( // Sishan TODO: change to debug level
+                error!(
+                    // Sishan TODO: change to debug level
                     "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                     proposal.view_number
                 );
@@ -323,7 +324,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return true;
                 }
             }
-            error!( // Sishan TODO: change to debug level
+            error!(
+                // Sishan TODO: change to debug level
                 "Received VID share, but couldn't find DAC cert for view {:?}",
                 *proposal.get_view_number(),
             );

@@ -298,7 +298,6 @@ async fn test_consensus_no_vote_without_vid_share() {
         _pd: PhantomData,
     };
 
-
     let mut input = Vec::new();
     let mut output = HashMap::new();
 
