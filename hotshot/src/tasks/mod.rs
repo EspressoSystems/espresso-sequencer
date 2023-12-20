@@ -230,7 +230,6 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         timeout_task: None,
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
-        da_certs: HashMap::new(),
         vid_shares: HashMap::new(),
         current_proposal: None,
         id: handle.hotshot.inner.id,

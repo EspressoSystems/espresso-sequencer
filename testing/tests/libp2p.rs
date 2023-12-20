@@ -4,7 +4,7 @@ use hotshot_testing::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     node_types::{Libp2pImpl, TestTypes},
     overall_safety_task::OverallSafetyPropertiesDescription,
-    test_builder::TestMetadata,
+    test_builder::{TestMetadata, TimingData},
 };
 use tracing::instrument;
 
@@ -28,6 +28,10 @@ async fn libp2p_network() {
                 duration: Duration::new(240, 0),
             },
         ),
+        timing_data: TimingData {
+            round_start_delay: 100,
+            ..Default::default()
+        },
         ..TestMetadata::default_multiple_rounds()
     };
 

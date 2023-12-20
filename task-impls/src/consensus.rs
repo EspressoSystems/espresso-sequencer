@@ -21,7 +21,7 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal, VidCommitment, VidDisperse},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
-    simple_certificate::{DACertificate, QuorumCertificate, TimeoutCertificate},
+    simple_certificate::{QuorumCertificate, TimeoutCertificate},
     simple_vote::{QuorumData, QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         block_contents::BlockHeader,
@@ -119,9 +119,6 @@ pub struct ConsensusTaskState<
 
     /// Event stream to publish events to the application layer
     pub output_event_stream: ChannelStream<Event<TYPES>>,
-
-    /// All the DA certs we've received for current and future views.
-    pub da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// All the VID shares we've received for current and future views.
     /// In the future we will need a different struct similar to VidDisperse except
@@ -252,7 +249,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
-            if let Some(cert) = self.da_certs.get(&(proposal.get_view_number())) {
+            if let Some(cert) = self
+                .consensus
+                .read()
+                .await
+                .saved_da_certs
+                .get(&(proposal.get_view_number()))
+            {
                 let view = cert.view_number;
                 // TODO: do some of this logic without the vote token check, only do that when voting.
                 let justify_qc = proposal.justify_qc.clone();
@@ -352,12 +355,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // cancel the old timeout task
             if let Some(timeout_task) = self.timeout_task.take() {
                 cancel_task(timeout_task).await;
-            }
-
-            // Remove old certs, we won't vote on past views
-            for view in *self.cur_view..*new_view - 1 {
-                let v = TYPES::Time::new(view);
-                self.da_certs.remove(&v);
             }
             self.cur_view = new_view;
 
@@ -745,11 +742,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return;
                 }
                 self.current_proposal = None;
-
-                for v in (*self.cur_view)..=(*view) {
-                    let time = TYPES::Time::new(v);
-                    self.da_certs.remove(&time);
-                }
             }
             HotShotEvent::QuorumVoteRecv(ref vote) => {
                 debug!("Received quroum vote: {:?}", vote.get_view_number());
@@ -912,7 +904,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view))
                     .await;
 
-                self.da_certs.insert(view, cert);
+                self.consensus
+                    .write()
+                    .await
+                    .saved_da_certs
+                    .insert(view, cert);
 
                 if self.vote_if_able().await {
                     self.current_proposal = None;

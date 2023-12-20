@@ -38,17 +38,20 @@ async fn test_catchup() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(25, catchup_nodes)],
+        // Start the nodes before their leadership.
+        node_changes: vec![(15, catchup_nodes)],
     };
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(100000),
+                duration: Duration::from_secs(60),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 25,
+        // Make sure we keep commiting rounds after the catchup, but not the full 50.
+        num_successful_views: 22,
+        num_failed_views: 5,
         check_leaf: true,
         ..Default::default()
     };
@@ -104,7 +107,7 @@ async fn test_catchup_web() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 25,
+        num_failed_views: 5,
         check_leaf: true,
         ..Default::default()
     };
@@ -123,7 +126,6 @@ async fn test_catchup_web() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_catchup_one_node() {
     use std::time::Duration;
 
@@ -152,22 +154,23 @@ async fn test_catchup_one_node() {
     metadata.total_nodes = 20;
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(25, catchup_nodes)],
+        // Start the node before its leadership.
+        node_changes: vec![(15, catchup_nodes)],
     };
 
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(20000),
+                duration: Duration::from_secs(60),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 25,
+        // Make sure we keep commiting rounds after the catchup, but not the full 50.
+        num_successful_views: 22,
+        num_failed_views: 1,
         check_leaf: true,
         ..Default::default()
     };
-    // only alow for the view which the catchup node hasn't started to fail
-    metadata.overall_safety_properties.num_failed_views = 5;
 
     metadata
         .gen_launcher::<TestTypes, MemoryImpl>(0)
@@ -177,14 +180,12 @@ async fn test_catchup_one_node() {
 }
 
 /// Same as `test_catchup` except we start the nodes after their leadership so they join during view sync
-/// This fails for the same reason as the timeout test and should work once that is fixed.
 #[cfg(test)]
 #[cfg_attr(
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[ignore]
 async fn test_catchup_in_view_sync() {
     use std::time::Duration;
 
@@ -225,12 +226,12 @@ async fn test_catchup_in_view_sync() {
     metadata.completion_task_description =
         CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_millis(10000),
+                duration: Duration::from_secs(60),
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         check_leaf: true,
-        num_failed_views: 25,
+        num_failed_views: 5,
         ..Default::default()
     };
 
