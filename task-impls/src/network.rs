@@ -293,10 +293,10 @@ impl<TYPES: NodeType, COMMCHANNEL: CommunicationChannel<TYPES>>
             TransmitType::Broadcast => self.channel.broadcast_message(message, membership).await,
         };
 
-        match transmit_result {
-            Ok(()) => {}
-            Err(e) => error!("Failed to send message from network task: {:?}", e),
-        }
+        // match transmit_result {
+        //     Ok(()) => {}
+        //     Err(e) => error!("Failed to send message from network task: {:?}", e),
+        // }
 
         None
     }
