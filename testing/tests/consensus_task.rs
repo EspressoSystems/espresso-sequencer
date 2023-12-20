@@ -388,4 +388,3 @@ async fn test_consensus_no_vote_without_vid_share() {
 
     run_harness(input, output, None, build_fn).await;
 }
-
