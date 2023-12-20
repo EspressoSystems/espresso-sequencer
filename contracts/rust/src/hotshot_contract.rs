@@ -11,14 +11,12 @@ mod test {
     use jf_primitives::signatures::SignatureScheme;
     use jf_utils::test_rng;
     use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::{wait_for_anvil_endpoints, AnvilOptions};
+    use sequencer_utils::AnvilOptions;
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
-
-        wait_for_anvil_endpoints(&provider).await;
 
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
@@ -72,8 +70,6 @@ mod test {
     async fn test_hotshot_stake_table() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
-
-        wait_for_anvil_endpoints(&provider).await;
 
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
