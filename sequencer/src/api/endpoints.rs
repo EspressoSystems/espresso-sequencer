@@ -134,7 +134,7 @@ where
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
     let mut api = Api::<S, Error>::new(toml)?;
 
-    api.get("getstatesignature", |req, state| {
+    api.get("get_state_signature", |req, state| {
         async move {
             let height = req
                 .integer_param("height")
