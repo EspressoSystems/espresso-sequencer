@@ -5,19 +5,21 @@ mod test {
 
     use contract_bindings::hot_shot::{NewBlocksCall, Qc};
     use contract_bindings::shared_types::G2Point;
-
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
 
     use jf_primitives::signatures::bls_over_bn254::BLSOverBN254CurveSignatureScheme;
     use jf_primitives::signatures::SignatureScheme;
     use jf_utils::test_rng;
     use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{wait_for_anvil_endpoints, AnvilOptions};
 
     #[async_std::test]
     async fn test_hotshot_block_commitment() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
+
+        wait_for_anvil_endpoints(&provider).await;
+
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let block_num = U256::from(0);
@@ -70,6 +72,9 @@ mod test {
     async fn test_hotshot_stake_table() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
+
+        wait_for_anvil_endpoints(&provider).await;
+
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let rng = &mut test_rng();

@@ -208,7 +208,7 @@ mod test {
     use futures::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
     use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{wait_for_anvil_endpoints, AnvilOptions};
     use surf_disco::{Error, StatusCode};
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
@@ -276,6 +276,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+        wait_for_anvil_endpoints(&anvil.provider()).await;
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
 
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
@@ -345,6 +346,8 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+        wait_for_anvil_endpoints(&anvil.provider()).await;
+
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let mut from_block = l1.provider.get_block_number().await.unwrap();
         let adaptor_l1_signer = Arc::new(
