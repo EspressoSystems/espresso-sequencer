@@ -30,7 +30,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
-use async_std::sync::RwLockUpgradableReadGuard;
+use async_lock::RwLockUpgradableReadGuard;
 use bincode::Options;
 use bitvec::bitvec;
 use hotshot_types::simple_vote::QuorumData;
