@@ -61,6 +61,7 @@ impl BlockPayload {
             tx_table_len: TxTableEntry,
         }
 
+        // TODO(746) do we want deterministic namespace table ordering? If so then we need BTreeMap instead of HashMap.
         let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
         for tx in txs.into_iter() {
             let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
@@ -81,7 +82,7 @@ impl BlockPayload {
         }
 
         // first word of namespace table is its length
-        let namespace_table_len = (1 + 2 * namespaces.len()) * TxTableEntry::byte_len();
+        let namespace_table_len = namespaces.len();
         let mut namespace_table =
             Vec::from(TxTableEntry::try_from(namespace_table_len).ok()?.to_bytes());
 
@@ -97,7 +98,6 @@ impl BlockPayload {
             namespace_bytes_end.checked_add_mut(payload.len().try_into().ok()?)?;
             namespace_table.extend(namespace_bytes_end.to_bytes());
         }
-        assert_eq!(namespace_table.len(), namespace_table_len); // sanity
 
         Some((
             Self {
@@ -414,13 +414,13 @@ impl TxInclusionProof {
 }
 
 mod tx_table_entry {
-    use crate::VmId;
-
     use super::{Deserialize, Serialize, TxIndex};
+    use crate::VmId;
+    use derive_more::Display;
     use std::mem::size_of;
 
     // Use newtype pattern so that tx table entires cannot be confused with other types.
-    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+    #[derive(Clone, Debug, Deserialize, Display, Eq, Hash, PartialEq, Serialize)]
     pub struct TxTableEntry(TxTableEntryWord);
     type TxTableEntryWord = u32;
 
@@ -500,6 +500,13 @@ mod tx_table_entry {
             TxTableEntryWord::try_from(value.0).map(Self)
         }
     }
+    impl TryFrom<TxTableEntry> for VmId {
+        type Error = <u64 as TryFrom<TxTableEntryWord>>::Error;
+
+        fn try_from(value: TxTableEntry) -> Result<Self, Self::Error> {
+            u64::try_from(value.0).map(Self)
+        }
+    }
 }
 
 mod boilerplate {
@@ -526,7 +533,7 @@ mod boilerplate {
         fn from_transactions(
             transactions: impl IntoIterator<Item = Self::Transaction>,
         ) -> Result<(Self, Self::Metadata), Self::Error> {
-            Ok(Self::from_txs(transactions).context(BlockBuildingSnafu)?)
+            Self::from_txs(transactions).context(BlockBuildingSnafu)
         }
 
         // TODO(746) from_bytes doesn't need `metadata`!
@@ -590,6 +597,8 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
+    use crate::VmId;
+
     use super::{
         boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction,
         TxInclusionProof, TxIndex, TxTableEntry,
@@ -600,111 +609,227 @@ mod test {
     use rand::RngCore;
 
     #[test]
-    fn basic_correctness_1_namespace() {
+    fn basic_correctness() {
         // play with this
         let test_cases = vec![
-            vec![5, 8, 8],          // 3 non-empty txs
-            vec![0, 8, 8],          // 1 empty tx at the beginning
-            vec![5, 0, 8],          // 1 empty tx in the middle
-            vec![5, 8, 0],          // 1 empty tx at the end
-            vec![5],                // 1 nonempty tx
-            vec![0],                // 1 empty tx
-            vec![],                 // zero txs
-            vec![1000, 1000, 1000], // large payload
+            // 1 namespace only
+            vec![vec![5, 8, 8]], // 3 non-empty txs
+            vec![vec![0, 8, 8]], // 1 empty tx at the beginning
+            vec![vec![5, 0, 8]], // 1 empty tx in the middle
+            vec![vec![5, 8, 0]], // 1 empty tx at the end
+            vec![vec![5]],       // 1 nonempty tx
+            vec![vec![0]],       // 1 empty tx
+            // vec![],                 // zero txs
+            vec![vec![1000, 1000, 1000]], // large payload
+            // multiple namespaces
+            vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
+            vec![vec![], vec![7, 9, 11], vec![10, 5, 8]], // 1 empty namespace at the beginning
+            vec![vec![5, 8, 8], vec![], vec![10, 5, 8]],  // 1 empty namespace in the middle
+            vec![vec![5, 8, 8], vec![7, 9, 11], vec![]],  // 1 empty namespace at the end
+            vec![vec![0], vec![0, 0]], // 2 non-empty namespaces with all-empty txs
+            vec![vec![], vec![]],      // 2 empty namespaces
+            vec![vec![1000, 1000, 1000], vec![2000, 2000, 2000]], // large payload
         ];
+        // vec![(0,5), (0,8), (0,8), (1,7), (1,9), (1,11), (2,10), (2,5), (2,8)], // 3 non-empty namespaces, in order
+        // vec![(14,5), (3,8), (7,8), (7,7), (14,9), (7,11), (3,10), (3,5), (14,8)], // 3 non-empty namespaces, out of order
+        // vec![(0,0), (1,7), (1,9), (1,11), (2,10), (2,5), (2,8)], // a namespace with 1 empty tx at the beginning
+        // vec![(0,5), (0,8), (0,8), (1,0), (2,10), (2,5), (2,8)],  // a namespace with 1 empty tx in the middle
+        // vec![(0,0), (1,0)], // 2 namespaces, each with 1 empty tx
 
         setup_logging();
         setup_backtrace();
         let mut rng = jf_utils::test_rng();
 
+        struct NamespaceInfo {
+            payload_flat: Vec<u8>,
+            tx_table_derived: Vec<TxTableEntry>,
+            tx_payloads: Vec<Vec<u8>>,
+        }
+
         let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
-        for (t, lengths) in test_cases.into_iter().enumerate() {
-            tracing::info!(
-                "test payload {} of {} with {} txs",
-                t + 1,
-                num_test_cases,
-                lengths.len(),
-            );
+        for (t, test_case) in test_cases.iter().enumerate() {
+            let mut txs = Vec::new();
+            let mut nss = Vec::new();
+            let mut ns_offset = 0;
+            for (n, tx_lengths) in test_case.iter().enumerate() {
+                tracing::info!(
+                    "test block {} of {} namespace {} of {} with {} txs",
+                    t + 1,
+                    num_test_cases,
+                    n + 1,
+                    test_case.len(),
+                    tx_lengths.len(),
+                );
 
-            // prepare things as a function of the test case
-            let entries = entries_from_lengths(&lengths);
-            let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&entries), &mut rng);
-            let tx_bodies = extract_tx_payloads(&entries, &tx_payloads_flat);
-            assert_eq!(tx_bodies.len(), entries.len());
-            assert_eq!(
+                // generate this namespace's tx payloads
+                let entries = entries_from_lengths(tx_lengths);
+                let tx_payloads_flat = random_bytes(tx_bodies_byte_len(&entries), &mut rng);
+                let tx_payloads = extract_tx_payloads(&entries, &tx_payloads_flat);
+
                 // enforce well-formed test case
-                tx_payloads_flat,
-                tx_bodies.iter().flatten().cloned().collect::<Vec<_>>(),
-                "test block payload {} is malformed",
-                t + 1
-            );
-            let txs = tx_bodies
+                assert_eq!(
+                    tx_payloads_flat,
+                    tx_payloads.iter().flatten().cloned().collect::<Vec<_>>(),
+                    "test block {} namespace {} is malformed",
+                    t + 1,
+                    n + 1
+                );
+
+                // derive this namespace's tx table
+                let tx_table_derived: Vec<TxTableEntry> = tx_payloads
+                    .iter()
+                    .scan(TxTableEntry::try_from(ns_offset).unwrap(), |end, tx| {
+                        end.checked_add_mut(TxTableEntry::try_from(tx.len()).unwrap())
+                            .unwrap();
+                        Some(end.clone())
+                    })
+                    .collect();
+                tracing::info!("tx_table_derived {:?}", tx_table_derived);
+
+                // derive this namespace's payload
+                let ns_payload_flat = {
+                    let mut ns_payload = Vec::new();
+                    ns_payload.extend(TxTableEntry::from_usize(tx_table_derived.len()).to_bytes());
+                    for entry in tx_table_derived.iter() {
+                        // ns_payload.extend(TxTableEntry::try_from(n).unwrap().to_bytes());
+                        ns_payload.extend(entry.to_bytes());
+                    }
+                    ns_payload.extend(tx_payloads_flat);
+                    ns_payload
+                };
+                ns_offset += ns_payload_flat.len();
+
+                txs.extend(tx_payloads.iter().cloned().map(|tx_payload| {
+                    Transaction::new(crate::VmId(n.try_into().unwrap()), tx_payload)
+                }));
+
+                nss.push(NamespaceInfo {
+                    payload_flat: ns_payload_flat,
+                    tx_table_derived,
+                    tx_payloads,
+                });
+            }
+
+            // derive the namespace table
+            let ns_table_derived: Vec<(VmId, TxTableEntry)> = nss
                 .iter()
-                .cloned()
-                .map(|payload| Transaction::new(crate::VmId(0), payload));
-            let tx_offsets: Vec<TxTableEntry> = tx_bodies
-                .iter()
-                .scan(TxTableEntry::zero(), |end, tx| {
-                    end.checked_add_mut(TxTableEntry::try_from(tx.len()).unwrap())
+                .scan(TxTableEntry::zero(), |end, ns| {
+                    end.checked_add_mut(TxTableEntry::try_from(ns.payload_flat.len()).unwrap())
                         .unwrap();
                     Some(end.clone())
                 })
+                .enumerate()
+                .map(|(n, entry)| {
+                    (
+                        TxTableEntry::try_from(n).unwrap().try_into().unwrap(),
+                        entry,
+                    )
+                })
                 .collect();
+            assert_eq!(
+                ns_table_derived.len(),
+                test_case.len(),
+                "derived namespace table length expect {} got {}",
+                test_case.len(),
+                ns_table_derived.len()
+            );
+            assert_eq!(ns_table_derived.len(), nss.len(), "sanity check fail");
 
-            let (block, _namespace_table) = BlockPayload::from_txs(txs).unwrap();
+            let (block, namespace_table) = BlockPayload::from_txs(txs).unwrap();
 
-            // test tx table length
-            let payload = if entries.is_empty() {
-                assert!(block.payload.is_empty());
-                &[][..]
-            } else {
-                let (tx_table_len_bytes, payload) =
-                    block.payload.split_at(TxTableEntry::byte_len());
+            // test namespace table length
+            let ns_table_len_bytes = &namespace_table[..TxTableEntry::byte_len()];
+            let ns_table_len = TxTableEntry::from_bytes(ns_table_len_bytes).unwrap();
+            assert_eq!(
+                ns_table_len,
+                TxTableEntry::try_from(ns_table_derived.len()).unwrap(),
+                "namespace table length expect {} got {}",
+                ns_table_derived.len(),
+                ns_table_len
+            );
+
+            // test namespace table contents
+            let ns_table_body = &namespace_table[TxTableEntry::byte_len()..];
+            let ns_table: Vec<(VmId, TxTableEntry)> = ns_table_body
+                .chunks(2 * TxTableEntry::byte_len())
+                .map(|bytes| {
+                    // this is a bit ugly
+                    (
+                        VmId::try_from(
+                            TxTableEntry::from_bytes(&bytes[..TxTableEntry::byte_len()]).unwrap(),
+                        )
+                        .unwrap(),
+                        TxTableEntry::from_bytes(&bytes[TxTableEntry::byte_len()..]).unwrap(),
+                    )
+                })
+                .collect();
+            assert_eq!(ns_table, ns_table_derived, "incorrect namespace table");
+
+            // test namespace payloads
+            let disperse_data = vid.disperse(&block.payload).unwrap();
+            let mut tx_index_offset = 0;
+            for (ns_id, ns) in nss.iter().enumerate() {
+                // test tx table length
+                let tx_table_len_bytes = &ns.payload_flat[..TxTableEntry::byte_len()];
                 let tx_table_len = TxTableEntry::from_bytes(tx_table_len_bytes).unwrap();
                 assert_eq!(
                     tx_table_len,
-                    TxTableEntry::try_from(tx_bodies.len()).unwrap()
+                    TxTableEntry::try_from(ns.tx_table_derived.len()).unwrap(),
+                    "namespace {} tx table length expect {} got {}",
+                    ns_id,
+                    ns.tx_table_derived.len(),
+                    tx_table_len
                 );
-                payload
-            };
 
-            // test tx table contents
-            let (tx_table_bytes, payload) =
-                payload.split_at(tx_bodies.len() * TxTableEntry::byte_len());
-            let tx_table: Vec<TxTableEntry> = tx_table_bytes
-                .chunks(TxTableEntry::byte_len())
-                .map(|len_bytes| TxTableEntry::from_bytes(len_bytes).unwrap())
-                .collect();
-            assert_eq!(tx_table, tx_offsets);
+                // test tx table contents
+                let tx_table_bytes = &ns.payload_flat[TxTableEntry::byte_len()
+                    ..(ns.tx_table_derived.len() + 1) * TxTableEntry::byte_len()];
+                tracing::info!("tx table bytes {:?}", tx_table_bytes);
+                let tx_table: Vec<TxTableEntry> = tx_table_bytes
+                    .chunks(TxTableEntry::byte_len())
+                    .map(|bytes| TxTableEntry::from_bytes(bytes).unwrap())
+                    .collect();
+                assert_eq!(
+                    tx_table, ns.tx_table_derived,
+                    "incorrect tx table for namespace {}",
+                    ns_id
+                );
 
-            // test block payload body
-            assert_eq!(payload, tx_payloads_flat);
-            assert_eq!(tx_bodies.len(), block.len());
+                // tests for individual txs in this namespace
+                // let start = tx_table.len() * TxTableEntry::byte_len();
+                let mut block_iter = block.iter(); // test iterator correctness
+                for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
+                    assert!(block_iter.next().is_some());
+                    let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
+                    tracing::info!("tx index {}", tx_index,);
 
-            // tests for individual txs
-            let disperse_data = vid.disperse(&block.payload).unwrap();
-            let mut block_iter = block.iter(); // test iterator correctness
-            for (index_usize, tx_body) in tx_bodies.iter().enumerate() {
-                assert!(block_iter.next().is_some());
-                let index = TxIndex::try_from(index_usize).unwrap();
-                // tracing::info!("tx index {}", index,);
-
-                // test `transaction_with_proof()`
-                let (tx, proof) = block.transaction_with_proof(&index).unwrap();
-                assert_eq!(tx_body, tx.payload());
-                proof
-                    .verify(
-                        &tx,
-                        index,
-                        &vid,
-                        &disperse_data.commit,
-                        &disperse_data.common,
-                    )
-                    .unwrap()
-                    .unwrap();
+                    // test `transaction_with_proof()`
+                    let (tx, proof) = block.transaction_with_proof(&tx_index).unwrap();
+                    assert_eq!(tx_payload, tx.payload());
+                    proof
+                        .verify(
+                            &tx,
+                            tx_index,
+                            &vid,
+                            &disperse_data.commit,
+                            &disperse_data.common,
+                        )
+                        .unwrap()
+                        .unwrap();
+                }
+                assert!(block_iter.next().is_none());
+                tx_index_offset += tx_table.len();
             }
-            assert!(block_iter.next().is_none());
+
+            // test full block payload
+            assert_eq!(tx_index_offset, block.len());
+            assert_eq!(
+                block.payload,
+                nss.into_iter()
+                    .flat_map(|ns| ns.payload_flat)
+                    .collect::<Vec<u8>>(),
+            );
         }
     }
 
@@ -1010,7 +1135,13 @@ mod test {
                 start = end;
                 result.push(tx_payload);
             }
-            assert_eq!(result.len(), entries.len());
+            assert_eq!(
+                result.len(),
+                entries.len(),
+                "bug in test code: expect to extract {} txs but got {}",
+                entries.len(),
+                result.len()
+            );
             result
         }
     }
