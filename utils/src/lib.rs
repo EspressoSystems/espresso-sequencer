@@ -426,9 +426,6 @@ pub async fn wait_for_anvil_endpoints<P: JsonRpcClient>(provider: &Provider<P>) 
         .await
         .unwrap();
 
-    // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
-    // do not work until at least one block has been mined. Send a transaction to force the
-    // mining of a block.
     while let Err(err) = provider.fee_history(1, BlockNumber::Latest, &[]).await {
         tracing::warn!("RPC is not ready: {err}");
         sleep(Duration::from_millis(200)).await;
