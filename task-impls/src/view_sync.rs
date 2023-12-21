@@ -740,7 +740,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 );
 
                 self.event_stream
-                    .publish(HotShotEvent::ViewChange(self.next_view-1))
+                    .publish(HotShotEvent::ViewChange(self.next_view - 1))
                     .await;
 
                 self.event_stream

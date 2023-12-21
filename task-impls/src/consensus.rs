@@ -108,6 +108,9 @@ pub struct ConsensusTaskState<
     /// timeout task handle
     pub timeout_task: Option<JoinHandle<()>>,
 
+    /// last Timeout Certificate this node formed
+    pub timeout_cert: Option<TimeoutCertificate<TYPES>>,
+
     /// Global events stream to publish events
     pub event_stream: ChannelStream<HotShotEvent<TYPES>>,
 
@@ -159,7 +162,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus vote if able", level = "error")]
     // Check if we are able to vote, like whether the proposal is valid,
     // whether we have DAC and VID share, and if so, vote.
-    async fn vote_if_able(&self) -> bool {
+    async fn vote_if_able(&mut self) -> bool {
         if !self.quorum_membership.has_stake(&self.public_key) {
             debug!(
                 "We were not chosen for consensus committee on {:?}",
@@ -215,6 +218,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     &self.public_key,
                     &self.private_key,
                 );
+
+                self.payload_commitment_and_metadata = None;
                 let message = GeneralConsensusMessage::<TYPES>::Vote(vote);
 
                 if let GeneralConsensusMessage::Vote(vote) = message {
@@ -293,7 +298,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         && cert.get_data().payload_commit
                             != proposal.block_header.payload_commitment()
                     {
-                        error!("Block payload commitment does not equal parent commitment");
+                        error!("Block payload commitment does not equal da cert payload commitment. View = {}", *view);
                         return false;
                     }
                     let vote = QuorumVote::<TYPES>::create_signed_vote(
@@ -417,7 +422,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
-                debug!(
+                error!(
                     "Receved Quorum Proposal for view {}",
                     *proposal.data.view_number
                 );
@@ -729,7 +734,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         "Attempting to publish proposal after voting; now in view: {}",
                         *new_view
                     );
-                    self.publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
+                    self.publish_proposal_if_able(qc.view_number + 1, None)
                         .await;
                 }
                 if !self.vote_if_able().await {
@@ -839,6 +844,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 debug!("QC Formed event happened!");
 
                 if let either::Right(qc) = cert.clone() {
+                    self.timeout_cert = Some(qc.clone());
                     // cancel poll for votes
                     self.quorum_network
                         .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(
@@ -846,21 +852,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         ))
                         .await;
 
-                    debug!(
+                    error!(
                         "Attempting to publish proposal after forming a TC for view {}",
                         *qc.view_number
                     );
 
                     let view = qc.view_number + 1;
 
-                    let high_qc = self.consensus.read().await.high_qc.clone();
-
-                    if self
-                        .publish_proposal_if_able(high_qc, view, Some(qc.clone()))
-                        .await
-                    {
+                    if self.publish_proposal_if_able(view, Some(qc.clone())).await {
                     } else {
-                        warn!("Wasn't able to publish proposal");
+                        error!("Wasn't able to publish proposal");
                     }
                 }
                 if let either::Left(qc) = cert {
@@ -881,7 +882,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     );
 
                     if !self
-                        .publish_proposal_if_able(qc.clone(), qc.view_number + 1, None)
+                        .publish_proposal_if_able(qc.view_number + 1, None)
                         .await
                     {
                         debug!(
@@ -891,7 +892,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::DACRecv(cert) => {
-                debug!("DAC Recved for view ! {}", *cert.view_number);
+                error!("DAC Recved for view ! {}", *cert.view_number);
                 let view = cert.view_number;
 
                 self.quorum_network
@@ -1033,13 +1034,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
-            HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata) => {
+            HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata, view) => {
+                error!("got commit and meta {:?}", payload_commitment);
                 self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
-                let high_qc = self.consensus.read().await.high_qc.clone();
-                let leader_view = high_qc.get_view_number() + 1;
-                if self.quorum_membership.get_leader(leader_view) == self.public_key {
-                    self.publish_proposal_if_able(high_qc, leader_view, None)
-                        .await;
+                if let Some(proposal) = &self.current_proposal {
+                    if self.quorum_membership.get_leader(view) == self.public_key
+                        && proposal.get_view_number() + 1 == view
+                    {
+                        self.publish_proposal_if_able(view, None).await;
+                    }
                 }
             }
             _ => {}
@@ -1050,7 +1053,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     #[allow(clippy::too_many_lines)]
     pub async fn publish_proposal_if_able(
         &mut self,
-        _qc: QuorumCertificate<TYPES>,
         view: TYPES::Time,
         timeout_certificate: Option<TimeoutCertificate<TYPES>>,
     ) -> bool {
@@ -1150,7 +1152,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 signature,
                 _pd: PhantomData,
             };
-            debug!(
+            error!(
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
@@ -1163,7 +1165,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.payload_commitment_and_metadata = None;
             return true;
         }
-        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
+        error!("Cannot propose because we don't have the VID payload commitment and metadata");
         false
     }
 }
@@ -1210,10 +1212,10 @@ pub fn consensus_event_filter<TYPES: NodeType>(event: &HotShotEvent<TYPES>) -> b
             | HotShotEvent::QCFormed(_)
             | HotShotEvent::DACRecv(_)
             | HotShotEvent::ViewChange(_)
-            | HotShotEvent::SendPayloadCommitmentAndMetadata(_, _)
+            | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
             | HotShotEvent::Timeout(_)
             | HotShotEvent::TimeoutVoteRecv(_)
-            | HotShotEvent::VidDisperseRecv(_, _)
+            | HotShotEvent::VidDisperseRecv(..)
             | HotShotEvent::Shutdown,
     )
 }
