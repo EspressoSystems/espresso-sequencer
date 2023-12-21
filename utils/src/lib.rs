@@ -59,12 +59,40 @@ impl AnvilOptions {
     pub async fn spawn(self) -> Anvil {
         let state_dir = TempDir::new().unwrap();
         let (child, url) = Anvil::spawn_server(&self, Some(state_dir.path())).await;
-        Anvil {
+        let anvil: Anvil = Anvil {
             child,
             url,
             state_dir,
             opt: self,
+        };
+
+        // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
+        // do not work until at least one block has been mined. Send a transaction to force the
+        // mining of a block.
+        anvil
+            .provider()
+            .send_transaction(
+                TransactionRequest {
+                    to: Some(Address::zero().into()),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
+        while let Err(err) = anvil
+            .provider()
+            .fee_history(1, BlockNumber::Latest, &[])
+            .await
+        {
+            tracing::warn!("RPC is not ready: {err}");
+            sleep(Duration::from_millis(200)).await;
         }
+
+        anvil
     }
 }
 
@@ -306,6 +334,7 @@ pub async fn wait_for_rpc(
         tracing::debug!("Waiting for JSON-RPC at {url}, retrying in {interval:?}");
         sleep(interval).await;
     }
+
     Err(format!("No JSON-RPC at {url}"))
 }
 
@@ -404,7 +433,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
         sleep(interval).await;
     }
 
-    tracing::error!("contraact call {hash:?}: not mined after {retries} retries");
+    tracing::error!("contract call {hash:?}: not mined after {retries} retries");
     false
 }
 
