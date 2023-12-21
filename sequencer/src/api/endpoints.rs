@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tide_disco::{
     method::{ReadState, WriteState},
-    Api, StatusCode,
+    Api, Error as _, StatusCode,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -114,7 +114,7 @@ where
                 .consensus()
                 .submit_transaction(
                     req.body_auto::<Transaction>()
-                        .map_err(|err| Error::internal(err.to_string()))?,
+                        .map_err(Error::from_request_error)?,
                 )
                 .await
                 .map_err(|err| Error::internal(err.to_string()))
@@ -138,7 +138,7 @@ where
         async move {
             let height = req
                 .integer_param("height")
-                .map_err(|err| Error::internal(err.to_string()))?;
+                .map_err(Error::from_request_error)?;
             state
                 .get_state_signature(height)
                 .ok_or(tide_disco::Error::catch_all(
