@@ -58,5 +58,5 @@ async fn test_view_sync_task() {
     let build_fn =
         |task_runner, event_stream| add_view_sync_task(task_runner, event_stream, handle);
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }
