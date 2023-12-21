@@ -196,7 +196,7 @@ async fn test_consensus_vote() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 // TODO: re-enable this when HotShot/the sequencer needs the shares for something
 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
-// #[ignore] // Sishan TODO: comment this later
+#[ignore]
 async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestBlockPayload;

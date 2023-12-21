@@ -236,15 +236,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             // TODO: re-enable this when HotShot/the sequencer needs the shares for something
             // issue: https://github.com/EspressoSystems/HotShot/issues/2236
             // Only vote if you has seen the VID share for this view
-            // Sishan TODO: comment this for now
-            if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
-            } else {
-                debug!(
-                    "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
-                    proposal.view_number
-                );
-                return false;
-            }
+            // if let Some(_vid_share) = self.vid_shares.get(&proposal.view_number) {
+            // } else {
+            //     debug!(
+            //         "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+            //         proposal.view_number
+            //     );
+            //     return false;
+            // }
 
             // Only vote if you have the DA cert
             // ED Need to update the view number this is stored under?
@@ -313,8 +312,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 if let GeneralConsensusMessage::Vote(vote) = message {
-                    error!(
-                        // Sishan TODO: change to debug level later
+                    debug!(
                         "Sending vote to next quorum leader {:?}",
                         vote.get_view_number() + 1
                     );
@@ -424,7 +422,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!(
-                    "Receved Quorum Propsoal for view {}",
+                    "Received Quorum Proposal for view {}",
                     *proposal.data.view_number
                 );
 
@@ -964,8 +962,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Add to the storage that we have received the VID disperse for a specific view
                 // TODO: re-enable this when HotShot/the sequencer needs the shares for something
                 // issue: https://github.com/EspressoSystems/HotShot/issues/2236
-                // Sishan TODO: comment this for now
-                self.vid_shares.insert(view, disperse);
+                // self.vid_shares.insert(view, disperse);
             }
             HotShotEvent::ViewChange(new_view) => {
                 debug!("View Change event for view {} in consensus task", *new_view);
