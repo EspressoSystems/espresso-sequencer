@@ -201,7 +201,7 @@ async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestBlockPayload;
     use hotshot_testing::block_types::TestTransaction;
-    use hotshot_testing::task_helpers::build_dac;
+    use hotshot_testing::task_helpers::build_cert;
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_testing::task_helpers::vid_init;
     use hotshot_types::data::VidSchemeTrait;
@@ -269,14 +269,15 @@ async fn test_consensus_with_vid() {
     let da_data = DAData {
         payload_commit: da_payload_commitment,
     };
-    let dac_view2 = build_dac::<TestTypes, DAVote<TestTypes>, DACertificate<TestTypes>>(
-        da_data,
-        &quorum_membership,
-        ViewNumber::new(2),
-        &public_key_view2,
-        &private_key_view2,
-    );
-    input.push(HotShotEvent::DACRecv(dac_view2.clone()));
+    let created_dac_view2 =
+        build_cert::<TestTypes, DAData, DAVote<TestTypes>, DACertificate<TestTypes>>(
+            da_data,
+            &quorum_membership,
+            ViewNumber::new(2),
+            &public_key_view2,
+            &private_key_view2,
+        );
+    input.push(HotShotEvent::DACRecv(created_dac_view2.clone()));
     input.push(HotShotEvent::VidDisperseRecv(vid_proposal.clone(), pub_key));
 
     // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
@@ -289,7 +290,7 @@ async fn test_consensus_with_vid() {
         HotShotEvent::QuorumProposalRecv(proposal_view2.clone(), public_key_view2),
         1,
     );
-    output.insert(HotShotEvent::DACRecv(dac_view2), 1);
+    output.insert(HotShotEvent::DACRecv(created_dac_view2), 1);
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
     if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
