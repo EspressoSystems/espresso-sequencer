@@ -238,10 +238,8 @@ impl QueryablePayload for BlockPayload {
                 )?)?),
             )
         };
-        tracing::info!("tx_table_range_proof_start");
 
         // end
-        tracing::info!("2");
         let tx_table_range_proof_end = index_usize
             .checked_add(2)?
             .checked_mul(TxTableEntry::byte_len())?;
@@ -251,7 +249,6 @@ impl QueryablePayload for BlockPayload {
         )?)?;
 
         // correctness proof for the tx payload range
-        tracing::info!("3");
         let tx_table_range_proof = vid
             .payload_proof(
                 &self.payload,
@@ -265,7 +262,6 @@ impl QueryablePayload for BlockPayload {
             &self.get_tx_table_len(),
             self.payload.len(),
         )?;
-        tracing::info!("4");
         Some((
             // TODO don't copy the tx bytes into the return value
             // https://github.com/EspressoSystems/hotshot-query-service/issues/267
@@ -609,9 +605,8 @@ mod boilerplate {
 mod test {
     use super::{
         boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction,
-        TxInclusionProof, TxIndex, TxTableEntry,
+        TxInclusionProof, TxTableEntry,
     };
-    use crate::VmId;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
@@ -623,17 +618,18 @@ mod test {
         // play with this
         let test_cases = vec![
             // 1 namespace only
-            // vec![vec![5, 8, 8]], // 3 non-empty txs
-            // vec![vec![0, 8, 8]], // 1 empty tx at the beginning
-            // vec![vec![5, 0, 8]], // 1 empty tx in the middle
-            // vec![vec![5, 8, 0]], // 1 empty tx at the end
-            // vec![vec![5]],       // 1 nonempty tx
-            // vec![vec![0]],       // 1 empty tx
-            // // vec![],                 // zero txs
-            // vec![vec![1000, 1000, 1000]], // large payload
+            vec![vec![5, 8, 8]], // 3 non-empty txs
+            vec![vec![0, 8, 8]], // 1 empty tx at the beginning
+            vec![vec![5, 0, 8]], // 1 empty tx in the middle
+            vec![vec![5, 8, 0]], // 1 empty tx at the end
+            vec![vec![5]],       // 1 nonempty tx
+            vec![vec![0]],       // 1 empty tx
+            // vec![],                 // zero txs
+            vec![vec![1000, 1000, 1000]], // large payload
             // multiple namespaces
             vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
         ];
+        // TODO(746) future test cases
         // vec![vec![], vec![7, 9, 11], vec![10, 5, 8]], // 1 empty namespace at the beginning
         // vec![vec![5, 8, 8], vec![], vec![10, 5, 8]],  // 1 empty namespace in the middle
         // vec![vec![5, 8, 8], vec![7, 9, 11], vec![]],  // 1 empty namespace at the end
@@ -653,14 +649,15 @@ mod test {
 
         struct NamespaceInfo {
             payload_flat: Vec<u8>,
-            tx_table_derived: Vec<TxTableEntry>,
+            tx_table: Vec<TxTableEntry>,
+            #[allow(dead_code)] // TODO temporary
             tx_payloads: Vec<Vec<u8>>,
         }
 
-        let vid = test_vid_factory();
+        // let vid = test_vid_factory();
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
-            // derive a bunch of stuff for this test case
+            // DERIVE A BUNCH OF STUFF FOR THIS TEST CASE
             let mut txs = Vec::new();
             let mut derived_nss = HashMap::new();
             for (n, tx_lengths) in test_case.iter().enumerate() {
@@ -696,7 +693,7 @@ mod test {
                         Some(end.clone())
                     })
                     .collect();
-                tracing::info!("ns {} tx_table_derived {:?}", n, tx_table_derived);
+                // tracing::info!("ns {} tx_table_derived {:?}", n, tx_table_derived);
 
                 // derive this namespace's payload
                 let ns_payload_flat = {
@@ -724,7 +721,7 @@ mod test {
                     ns_id,
                     NamespaceInfo {
                         payload_flat: ns_payload_flat,
-                        tx_table_derived,
+                        tx_table: tx_table_derived,
                         tx_payloads,
                     },
                 );
@@ -732,9 +729,11 @@ mod test {
             }
             assert_eq!(derived_nss.len(), test_case.len());
 
+            // COMPUTE ACTUAL STUFF AGAINST WHICH TO TEST DERIVED STUFF
             let (block, actual_ns_table) = BlockPayload::from_txs(txs).unwrap();
+            // let disperse_data = vid.disperse(&block.payload).unwrap();
 
-            // test actual stuff against derived stuff
+            // TEST ACTUAL STUFF AGAINST DERIVED STUFF
 
             // test namespace table length
             let actual_ns_table_len =
@@ -747,93 +746,91 @@ mod test {
                 actual_ns_table_len
             );
 
-            // Test namespace table contents.
-            //
-            // We cannot derive the namespace table ourselves
-            // because the order of entries in the namespace table is nondeterministic.
-            // Thus, we need to need to mirror the order of entries produced by `BlockPayload::from_txs`.
-            tracing::info!("actual_ns_table {:?}", actual_ns_table);
+            // test each namespace
+            // let mut tx_index_offset = 0;
             let mut prev_entry = TxTableEntry::zero();
+            let mut derived_block_payload = Vec::new();
             for (ns_id, entry) in ns_table_iter(&actual_ns_table) {
-                // test namespace payload
                 let actual_ns_payload_range = Range {
                     start: usize::try_from(prev_entry.clone()).unwrap(),
                     end: usize::try_from(entry.clone()).unwrap(),
                 };
-                let actual_ns_payload = block.payload.get(actual_ns_payload_range).unwrap();
-                let derived_ns_payload = &derived_nss.get(&ns_id).unwrap().payload_flat;
-                assert_eq!(
-                    actual_ns_payload, derived_ns_payload,
-                    "namespace {} incorrect payload bytes expect {:?} got {:?}",
-                    ns_id.0, derived_ns_payload, actual_ns_payload
-                );
-                prev_entry = entry;
-            }
+                let actual_ns_payload_flat = block.payload.get(actual_ns_payload_range).unwrap();
+                let derived_ns = derived_nss.remove(&ns_id).unwrap();
 
-            // test namespace payloads
-            let disperse_data = vid.disperse(&block.payload).unwrap();
-            let mut tx_index_offset = 0;
-            for (ns_id, ns) in derived_nss.iter() {
                 // test tx table length
-                let tx_table_len_bytes = &ns.payload_flat[..TxTableEntry::byte_len()];
-                let tx_table_len = TxTableEntry::from_bytes(tx_table_len_bytes).unwrap();
+                let actual_tx_table_len_bytes = &actual_ns_payload_flat[..TxTableEntry::byte_len()];
+                let actual_tx_table_len =
+                    usize::try_from(TxTableEntry::from_bytes(actual_tx_table_len_bytes).unwrap())
+                        .unwrap();
                 assert_eq!(
-                    tx_table_len,
-                    TxTableEntry::try_from(ns.tx_table_derived.len()).unwrap(),
+                    actual_tx_table_len,
+                    derived_ns.tx_table.len(),
                     "namespace {} tx table length expect {} got {}",
                     ns_id.0,
-                    ns.tx_table_derived.len(),
-                    tx_table_len
+                    derived_ns.tx_table.len(),
+                    actual_tx_table_len
                 );
 
                 // test tx table contents
-                let tx_table_bytes = &ns.payload_flat[TxTableEntry::byte_len()
-                    ..(ns.tx_table_derived.len() + 1) * TxTableEntry::byte_len()];
-                tracing::info!("ns tx table bytes {:?}", tx_table_bytes);
-                let tx_table: Vec<TxTableEntry> = tx_table_bytes
+                let actual_tx_table_body_bytes = &actual_ns_payload_flat[TxTableEntry::byte_len()
+                    ..(actual_tx_table_len + 1) * TxTableEntry::byte_len()];
+                // tracing::info!(ns t"x table bytes {:?}", actual_tx_table_body_bytes);
+                let actual_tx_table: Vec<TxTableEntry> = actual_tx_table_body_bytes
                     .chunks(TxTableEntry::byte_len())
                     .map(|bytes| TxTableEntry::from_bytes(bytes).unwrap())
                     .collect();
                 assert_eq!(
-                    tx_table, ns.tx_table_derived,
-                    "incorrect tx table for namespace {}",
+                    actual_tx_table, derived_ns.tx_table,
+                    "namespace {} incorrect tx table for",
                     ns_id.0
                 );
 
-                // tests for individual txs in this namespace
-                let start = tx_table.len() * TxTableEntry::byte_len();
-                // let mut block_iter = block.iter(); // test iterator correctness
-                for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
-                    // assert!(block_iter.next().is_some());
-                    let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
-                    tracing::info!("tx index {}", tx_index,);
+                // test entire namespace payload flat
+                assert_eq!(
+                    actual_ns_payload_flat, derived_ns.payload_flat,
+                    "namespace {} incorrect payload bytes",
+                    ns_id.0,
+                );
 
-                    // test `transaction_with_proof()`
-                    // let (tx, proof) = block.transaction_with_proof(&tx_index).unwrap();
-                    // assert_eq!(tx_payload, tx.payload());
-                    // proof
-                    //     .verify(
-                    //         &tx,
-                    //         tx_index,
-                    //         &vid,
-                    //         &disperse_data.commit,
-                    //         &disperse_data.common,
-                    //     )
-                    //     .unwrap()
-                    //     .unwrap();
-                }
+                // tests for individual txs in this namespace
+                // TODO(746) rework this part
+                //
+                // let mut block_iter = block.iter(); // test iterator correctness
+                // for (tx_index, tx_payload) in ns.tx_payloads.iter().enumerate() {
+                //     assert!(block_iter.next().is_some());
+                //     let tx_index = TxIndex::try_from(tx_index + tx_index_offset).unwrap();
+                //     tracing::info!("tx index {}", tx_index,);
+                //
+                //     // test `transaction_with_proof()`
+                //     let (tx, proof) = block.transaction_with_proof(&tx_index).unwrap();
+                //     assert_eq!(tx_payload, tx.payload());
+                //     proof
+                //         .verify(
+                //             &tx,
+                //             tx_index,
+                //             &vid,
+                //             &disperse_data.commit,
+                //             &disperse_data.common,
+                //         )
+                //         .unwrap()
+                //         .unwrap();
+                // }
                 // assert!(block_iter.next().is_none());
-                tx_index_offset += tx_table.len();
+
+                // prepare for the next loop iteration
+                // tx_index_offset += actual_tx_table.len();
+                prev_entry = entry;
+                derived_block_payload.extend(derived_ns.payload_flat);
             }
+            assert!(
+                derived_nss.is_empty(),
+                "some derived namespaces missing from namespace table"
+            );
 
             // test full block payload
             // assert_eq!(tx_index_offset, block.len());
-            assert_eq!(
-                block.payload,
-                ns_table_iter(&actual_ns_table)
-                    .flat_map(|(ns_id, _)| { derived_nss.remove(&ns_id).unwrap().payload_flat })
-                    .collect::<Vec<u8>>()
-            );
+            assert_eq!(block.payload, derived_block_payload);
         }
     }
 
