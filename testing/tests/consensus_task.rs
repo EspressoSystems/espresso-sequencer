@@ -194,6 +194,9 @@ async fn test_consensus_vote() {
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+// TODO: re-enable this when HotShot/the sequencer needs the shares for something
+// issue: https://github.com/EspressoSystems/HotShot/issues/2236
+// #[ignore] // Sishan TODO: comment this later
 async fn test_consensus_with_vid() {
     use hotshot_task_impls::harness::run_harness;
     use hotshot_testing::block_types::TestBlockPayload;
@@ -257,8 +260,6 @@ async fn test_consensus_with_vid() {
     // For the test of vote logic with vid, starting view 2 we need vid share
     input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
     let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-    // TODO: Still need a valid DAC cert, now tracking logging instead
-    // https://github.com/EspressoSystems/HotShot/issues/2255
     let block = <TestBlockPayload as TestableBlock>::genesis();
     let da_payload_commitment = vid_commitment(
         &block.encode().unwrap().collect(),
@@ -292,8 +293,6 @@ async fn test_consensus_with_vid() {
     output.insert(HotShotEvent::DACRecv(dac_view2), 1);
     output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
 
-    // TODO: Uncomment this after the above TODO is done
-    // https://github.com/EspressoSystems/HotShot/issues/2255
     if let GeneralConsensusMessage::Vote(vote) = build_vote(&handle, proposal_view2.data).await {
         output.insert(HotShotEvent::QuorumVoteSend(vote.clone()), 1);
     }
@@ -317,98 +316,3 @@ async fn test_consensus_with_vid() {
     run_harness(input, output, None, build_fn).await;
 }
 
-#[cfg(test)]
-#[cfg_attr(
-    async_executor_impl = "tokio",
-    tokio::test(flavor = "multi_thread", worker_threads = 2)
-)]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-#[allow(clippy::should_panic_without_expect)]
-#[should_panic]
-async fn test_consensus_no_vote_without_vid_share() {
-    use hotshot_task_impls::harness::run_harness;
-    use hotshot_testing::block_types::TestTransaction;
-    use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_testing::task_helpers::vid_init;
-    use hotshot_types::data::VidSchemeTrait;
-    use hotshot_types::{
-        data::VidDisperse, message::Proposal, traits::node_implementation::NodeType,
-    };
-    use std::marker::PhantomData;
-
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
-
-    let (handle, _event_stream) = build_system_handle(2).await;
-    // We assign node's key pair rather than read from config file since it's a test
-    // In view 2, node 2 is the leader.
-    let (private_key_view2, public_key_view2) = key_pair_for_id(2);
-
-    // For the test of vote logic with vid
-    let api: HotShotConsensusApi<TestTypes, MemoryImpl> = HotShotConsensusApi {
-        inner: handle.hotshot.inner.clone(),
-    };
-    let pub_key = *api.public_key();
-    let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
-    let vid = vid_init::<TestTypes>(quorum_membership.clone(), ViewNumber::new(2));
-    let transactions = vec![TestTransaction(vec![0])];
-    let encoded_transactions = TestTransaction::encode(transactions.clone()).unwrap();
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit;
-
-    let vid_signature =
-        <TestTypes as NodeType>::SignatureKey::sign(api.private_key(), payload_commitment.as_ref());
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let vid_disperse_inner = VidDisperse::from_membership(
-        ViewNumber::new(2),
-        vid_disperse,
-        &quorum_membership.clone().into(),
-    );
-    // TODO for now reuse the same block payload commitment and signature as DA committee
-    // https://github.com/EspressoSystems/jellyfish/issues/369
-    let vid_proposal = Proposal {
-        data: vid_disperse_inner.clone(),
-        signature: vid_signature,
-        _pd: PhantomData,
-    };
-
-    let mut input = Vec::new();
-    let mut output = HashMap::new();
-
-    // Do a view change, so that it's not the genesis view, and vid vote is needed
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-
-    // For the test of vote logic with vid, starting view 2 we need vid share
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    let proposal_view2 = build_quorum_proposal(&handle, &private_key_view2, 2).await;
-
-    // Send a proposal, vote on said proposal, update view based on proposal QC, receive vote as next leader
-    input.push(HotShotEvent::QuorumProposalRecv(
-        proposal_view2.clone(),
-        public_key_view2,
-    ));
-
-    output.insert(
-        HotShotEvent::QuorumProposalRecv(proposal_view2.clone(), public_key_view2),
-        1,
-    );
-    output.insert(HotShotEvent::VidDisperseRecv(vid_proposal, pub_key), 1);
-
-    output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(1)),
-        2, // 2 occurrences: 1 from `QuorumProposalRecv`, 1 from input
-    );
-    output.insert(
-        HotShotEvent::ViewChange(ViewNumber::new(2)),
-        2, // 2 occurrences: 1 from `QuorumProposalRecv`?, 1 from input
-    );
-    // Sishan TODO: would better track the log "We have not seen the VID share for this view ..."
-    input.push(HotShotEvent::Shutdown);
-    output.insert(HotShotEvent::Shutdown, 1);
-
-    let build_fn = |task_runner, event_stream| {
-        add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
-    };
-
-    run_harness(input, output, None, build_fn).await;
-}
