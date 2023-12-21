@@ -1037,12 +1037,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata, view) => {
                 error!("got commit and meta {:?}", payload_commitment);
                 self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
-                if let Some(proposal) = &self.current_proposal {
-                    if self.quorum_membership.get_leader(view) == self.public_key
-                        && proposal.get_view_number() + 1 == view
-                    {
-                        self.publish_proposal_if_able(view, None).await;
-                    }
+                if self.quorum_membership.get_leader(view) == self.public_key
+                    && self.consensus.read().await.high_qc.get_view_number() == view
+                {
+                    self.publish_proposal_if_able(view, None).await;
                 }
                 if let Some(tc) = &self.timeout_cert {
                     if self.quorum_membership.get_leader(tc.get_view_number() + 1) == self.public_key {

@@ -227,7 +227,7 @@ async fn test_with_failures_2() {
     // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
     metadata.overall_safety_properties.num_successful_views = 15;
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
         .run_test()
         .await;
