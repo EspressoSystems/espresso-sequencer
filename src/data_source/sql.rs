@@ -41,12 +41,14 @@ use hotshot_types::{
     },
 };
 use itertools::Itertools;
+use postgres_native_tls::TlsConnector;
 use snafu::OptionExt;
 use std::{
     ops::{Bound, RangeBounds},
     pin::Pin,
 };
 use tokio_postgres::{
+    tls::TlsConnect,
     types::{BorrowToSql, ToSql},
     Client, NoTls, Row, ToStatement,
 };
@@ -188,6 +190,7 @@ pub struct Config {
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
+    tls: bool,
 }
 
 impl Default for Config {
@@ -202,6 +205,7 @@ impl Default for Config {
             reset: false,
             migrations: vec![],
             no_migrations: false,
+            tls: false,
         }
     }
 }
@@ -272,6 +276,12 @@ impl Config {
     /// Skip all migrations when connecting to the database.
     pub fn no_migrations(mut self) -> Self {
         self.no_migrations = true;
+        self
+    }
+
+    /// Use TLS for an encrypted connection to the database.
+    pub fn tls(mut self) -> Self {
+        self.tls = true;
         self
     }
 
@@ -557,22 +567,12 @@ where
         if let Some(database) = &config.database {
             pgcfg.dbname(database);
         }
-        let (mut client, connection) = pgcfg.connect_raw(tcp, NoTls).await?;
-
-        // Spawn a task to drive the connection, with a channel to kill it when this data source is
-        // dropped.
-        let (kill, killed) = oneshot::channel();
-        spawn(select(killed, connection).inspect(|res| {
-            if let Either::Right((res, _)) = res {
-                // If we were killed, do nothing. That is the normal shutdown path. But if the
-                // `select` returned because the `connection` terminated, we should log something,
-                // as that is unusual.
-                match res {
-                    Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
-                    Err(err) => tracing::error!("postgres connection closed with error: {err}"),
-                }
-            }
-        }));
+        let (mut client, kill) = if config.tls {
+            let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
+            connect(pgcfg, tcp, tls).await?
+        } else {
+            connect(pgcfg, tcp, NoTls).await?
+        };
 
         // Create or connect to the schema for this query service.
         if config.reset {
@@ -1293,6 +1293,39 @@ where
     (where_clause, params)
 }
 
+/// Connect to a Postgres database with a TLS implementation.
+///
+/// Spawns a background task to run the connection. Returns a client and a channel to kill the
+/// connection task.
+async fn connect<T>(
+    pgcfg: postgres::Config,
+    tcp: TcpStream,
+    tls: T,
+) -> anyhow::Result<(Client, oneshot::Sender<()>)>
+where
+    T: TlsConnect<TcpStream>,
+    T::Stream: Send + 'static,
+{
+    let (client, connection) = pgcfg.connect_raw(tcp, tls).await?;
+
+    // Spawn a task to drive the connection, with a channel to kill it when this data source is
+    // dropped.
+    let (kill, killed) = oneshot::channel();
+    spawn(select(killed, connection).inspect(|res| {
+        if let Either::Right((res, _)) = res {
+            // If we were killed, do nothing. That is the normal shutdown path. But if the `select`
+            // returned because the `connection` terminated, we should log something, as that is
+            // unusual.
+            match res {
+                Ok(()) => tracing::warn!("postgres connection terminated unexpectedly"),
+                Err(err) => tracing::error!("postgres connection closed with error: {err}"),
+            }
+        }
+    }));
+
+    Ok((client, kill))
+}
+
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
 // traits do not require any specifics of the tokio runtime. Thus we can implement them using the
 // async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
@@ -1475,6 +1508,7 @@ pub mod testing {
                 .user("postgres")
                 .password("password")
                 .port(tmp_db.port())
+                .tls()
                 .connect()
                 .await
                 .unwrap()
@@ -1485,6 +1519,7 @@ pub mod testing {
                 .user("postgres")
                 .password("password")
                 .port(tmp_db.port())
+                .tls()
                 .reset_schema()
                 .connect()
                 .await

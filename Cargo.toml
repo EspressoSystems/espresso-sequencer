@@ -21,7 +21,16 @@ license = "GPL-3.0-or-later"
 default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
 file-system-data-source = ["atomic_store"]
 metrics-data-source = []
-sql-data-source = ["anyhow", "include_dir", "refinery", "serde_json", "tokio", "tokio-postgres"]
+sql-data-source = [
+	"anyhow",
+	"include_dir",
+	"native-tls",
+	"postgres-native-tls",
+	"refinery",
+	"serde_json",
+	"tokio",
+	"tokio-postgres",
+]
 testing = ["espresso-macros", "hotshot-testing", "portpicker", "rand", "spin_sleep", "tempdir"]
 
 [[example]]
@@ -61,6 +70,8 @@ atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag
 # Dependencies enabled by feature "sql-data-source".
 anyhow = { version = "1.0", optional = true }
 include_dir = { version = "0.7", optional = true }
+native-tls = { version = "0.2", optional = true }
+postgres-native-tls = { version = "0.5", optional = true }
 refinery = { version = "0.8", features = ["tokio-postgres"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tokio = { version = "1.35", optional = true }
