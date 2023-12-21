@@ -57,6 +57,11 @@ pub struct DATaskState<
     /// Membership for the DA committee
     pub da_membership: Arc<TYPES::Membership>,
 
+    /// Membership for the quorum committee
+    /// We need this only for calculating the proper VID scheme
+    /// from the number of nodes in the quorum.
+    pub quorum_membership: Arc<TYPES::Membership>,
+
     /// Network for DA
     pub da_network: Arc<I::CommitteeNetwork>,
 
@@ -113,7 +118,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
 
-                let payload_commitment = vid_commitment(&proposal.data.encoded_transactions);
+                let payload_commitment = vid_commitment(
+                    &proposal.data.encoded_transactions,
+                    self.quorum_membership.total_nodes(),
+                );
                 let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
 
                 // ED Is this the right leader?
@@ -210,7 +218,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 if *view - *self.cur_view > 1 {
-                    error!("View changed by more than 1 going to view {:?}", view);
+                    warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 

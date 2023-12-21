@@ -258,7 +258,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
             MemoryNetwork::new(
                 pubkey,
-                NetworkingMetricsValue::new(),
+                NetworkingMetricsValue::default(),
                 master.clone(),
                 reliability_config.clone(),
             )

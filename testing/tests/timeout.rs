@@ -39,6 +39,7 @@ async fn test_timeout_web() {
     metadata.timing_data = timing_data;
 
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        num_failed_views: 25,
         num_successful_views: 25,
         ..Default::default()
     };
@@ -87,28 +88,32 @@ async fn test_timeout_libp2p() {
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
         next_view_timeout: 2000,
+        start_delay: 2000,
+        round_start_delay: 1000,
         ..Default::default()
     };
 
     let mut metadata = TestMetadata {
         total_nodes: 10,
         start_nodes: 10,
+        num_bootstrap_nodes: 10,
         ..Default::default()
     };
     let dead_nodes = vec![ChangeNode {
-        idx: 5,
+        idx: 9,
         updown: UpDown::Down,
     }];
 
     metadata.timing_data = timing_data;
 
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        num_failed_views: 25,
         num_successful_views: 25,
         ..Default::default()
     };
 
     metadata.spinning_properties = SpinningTaskDescription {
-        node_changes: vec![(2, dead_nodes)],
+        node_changes: vec![(5, dead_nodes)],
     };
 
     metadata.completion_task_description =

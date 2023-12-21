@@ -9,7 +9,7 @@ use crate::{
 };
 use hotshot::{types::SystemContextHandle, Memberships};
 
-use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, HotShotType, SystemContext};
+use hotshot::{traits::TestableNodeImplementation, HotShotInitializer, SystemContext};
 use hotshot_task::{
     event_stream::ChannelStream, global_registry::GlobalRegistry, task_launcher::TaskRunner,
 };
@@ -46,7 +46,6 @@ pub struct TestRunner<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestRunner<TYPES, I>
 where
-    SystemContext<TYPES, I>: HotShotType<TYPES, I>,
     I: TestableNodeImplementation<TYPES, CommitteeElectionConfig = TYPES::ElectionConfigType>,
 {
     /// excecute test
@@ -66,11 +65,6 @@ where
                 }
             }
         }
-        assert!(
-            late_start_nodes.len()
-                <= self.launcher.metadata.total_nodes - self.launcher.metadata.start_nodes,
-            "Test wants to late start too many nodes."
-        );
 
         self.add_nodes(self.launcher.metadata.total_nodes, &late_start_nodes)
             .await;
@@ -273,7 +267,7 @@ where
             memberships,
             network_bundle,
             initializer,
-            ConsensusMetricsValue::new(),
+            ConsensusMetricsValue::default(),
         )
         .await
         .expect("Could not init hotshot")

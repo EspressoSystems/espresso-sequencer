@@ -19,9 +19,16 @@ DOC = """
 Return the VID disperse data for a given view number
 """
 
-# GET the proposal for a view, where the view is passed as an argument
-[route.getrecentproposal]
-PATH = ["proposal/"]
+# GET the latest quorum proposal
+[route.get_latest_quorum_proposal]
+PATH = ["proposal/latest"]
+DOC = """
+Return the proposal for the most recent view the server has
+"""
+
+# GET the latest quorum proposal
+[route.get_latest_view_sync_proposal]
+PATH = ["view_sync_proposal/latest"]
 DOC = """
 Return the proposal for the most recent view the server has
 """

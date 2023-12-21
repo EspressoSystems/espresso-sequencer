@@ -107,60 +107,35 @@ impl<TYPES: NodeType> Storage<TYPES> for MemoryStorage<TYPES> {
 
 #[cfg(test)]
 mod test {
-    use crate::traits::election::static_committee::{GeneralStaticCommittee, StaticElectionConfig};
 
     use super::*;
     use commit::Committable;
-    use hotshot_signature_key::bn254::BLSPubKey;
-    use hotshot_types::{
-        block_impl::{VIDBlockHeader, VIDBlockPayload, VIDTransaction},
-        data::{fake_commitment, genesis_proposer_id, Leaf, ViewNumber},
-        simple_certificate::QuorumCertificate,
-        traits::{node_implementation::NodeType, state::dummy::DummyState, state::ConsensusTime},
+    use hotshot_testing::{
+        block_types::{genesis_vid_commitment, TestBlockHeader, TestBlockPayload},
+        node_types::TestTypes,
     };
-    use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+    use hotshot_types::{
+        data::{fake_commitment, genesis_proposer_id, Leaf},
+        simple_certificate::QuorumCertificate,
+        traits::{node_implementation::NodeType, state::ConsensusTime},
+    };
+    use std::marker::PhantomData;
     use tracing::instrument;
 
-    #[derive(
-        Copy,
-        Clone,
-        Debug,
-        Default,
-        Hash,
-        PartialEq,
-        Eq,
-        PartialOrd,
-        Ord,
-        serde::Serialize,
-        serde::Deserialize,
-    )]
-    struct DummyTypes;
-
-    impl NodeType for DummyTypes {
-        type Time = ViewNumber;
-        type BlockHeader = VIDBlockHeader;
-        type BlockPayload = VIDBlockPayload;
-        type SignatureKey = BLSPubKey;
-        type Transaction = VIDTransaction;
-        type ElectionConfigType = StaticElectionConfig;
-        type StateType = DummyState;
-        type Membership = GeneralStaticCommittee<DummyTypes, BLSPubKey>;
-    }
-
-    fn random_stored_view(view_number: <DummyTypes as NodeType>::Time) -> StoredView<DummyTypes> {
-        let payload = VIDBlockPayload::genesis();
-        let header = VIDBlockHeader {
+    fn random_stored_view(view_number: <TestTypes as NodeType>::Time) -> StoredView<TestTypes> {
+        let payload = TestBlockPayload::genesis();
+        let header = TestBlockHeader {
             block_number: 0,
-            payload_commitment: payload.payload_commitment,
+            payload_commitment: genesis_vid_commitment(),
         };
-        let dummy_leaf_commit = fake_commitment::<Leaf<DummyTypes>>();
+        let dummy_leaf_commit = fake_commitment::<Leaf<TestTypes>>();
         let data = hotshot_types::simple_vote::QuorumData {
             leaf_commit: dummy_leaf_commit,
         };
         let commit = data.commit();
         StoredView::from_qc_block_and_state(
             QuorumCertificate {
-                is_genesis: view_number == <DummyTypes as NodeType>::Time::genesis(),
+                is_genesis: view_number == <TestTypes as NodeType>::Time::genesis(),
                 data,
                 vote_commitment: commit,
                 signatures: None,
@@ -183,7 +158,7 @@ mod test {
     #[instrument]
     async fn memory_storage() {
         let storage = MemoryStorage::construct_tmp_storage().unwrap();
-        let genesis = random_stored_view(<DummyTypes as NodeType>::Time::genesis());
+        let genesis = random_stored_view(<TestTypes as NodeType>::Time::genesis());
         storage
             .append_single_view(genesis.clone())
             .await

@@ -195,13 +195,16 @@ pub fn gen_multiaddr(port: u16) -> Multiaddr {
     build_multiaddr!(Ip4([0, 0, 0, 0]), Udp(port), QuicV1)
 }
 
+/// `BoxedTransport` is a type alias for a boxed tuple containing a `PeerId` and a `StreamMuxerBox`.
+///
+/// This type is used to represent a transport in the libp2p network framework. The `PeerId` is a unique identifier for each peer in the network, and the `StreamMuxerBox` is a type of multiplexer that can handle multiple substreams over a single connection.
+type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
+
 /// Generate authenticated transport
 /// # Errors
 /// could not sign the quic key with `identity`
 #[instrument(skip(identity))]
-pub async fn gen_transport(
-    identity: Keypair,
-) -> Result<Boxed<(PeerId, StreamMuxerBox)>, NetworkError> {
+pub async fn gen_transport(identity: Keypair) -> Result<BoxedTransport, NetworkError> {
     let quic_transport = {
         let mut config = quic::Config::new(&identity);
         config.handshake_timeout = std::time::Duration::from_secs(20);

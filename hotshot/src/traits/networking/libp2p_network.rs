@@ -152,7 +152,7 @@ where
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
-        network_id: usize,
+        _network_id: usize,
         da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
@@ -184,9 +184,13 @@ where
                     node_id,
                     node_id < num_bootstrap as u64
                 );
+
+                // pick a free, unused UDP port for testing
+                let port = portpicker::pick_unused_port().expect("Could not find an open port");
+
                 let addr =
-                    // Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/0/quic-v1")).unwrap();
-                    Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{}{}/quic-v1", 5000 + node_id, network_id)).unwrap();
+                    Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{port}/quic-v1")).unwrap();
+
                 // We assign node's public key and stake value rather than read from config file since it's a test
                 let privkey =
                     TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
@@ -240,7 +244,7 @@ where
                 let reliability_config_dup = reliability_config.clone();
                 async_block_on(async move {
                     match Libp2pNetwork::new(
-                        NetworkingMetricsValue::new(),
+                        NetworkingMetricsValue::default(),
                         config,
                         pubkey.clone(),
                         bootstrap_addrs_ref,
@@ -354,7 +358,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> Libp2pNetwork<M, K> {
                 is_ready: Arc::new(AtomicBool::new(false)),
                 // This is optimal for 10-30 nodes. TODO: parameterize this for both tests and examples
                 // https://github.com/EspressoSystems/HotShot/issues/2088
-                dht_timeout: Duration::from_secs(8),
+                dht_timeout: Duration::from_secs(1),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
                 metrics,
                 topic_map,

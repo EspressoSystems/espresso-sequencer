@@ -27,13 +27,13 @@ async fn test_view_sync_task() {
 
     let vote_data = ViewSyncPreCommitData {
         relay: 0,
-        round: <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
+        round: <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(4),
     };
     let vote = hotshot_types::simple_vote::ViewSyncPreCommitVote::<TestTypes>::create_signed_vote(
         vote_data,
-        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(5),
-        hotshot_types::traits::consensus_api::ConsensusSharedApi::public_key(&api),
-        hotshot_types::traits::consensus_api::ConsensusSharedApi::private_key(&api),
+        <TestTypes as hotshot_types::traits::node_implementation::NodeType>::Time::new(4),
+        hotshot_types::traits::consensus_api::ConsensusApi::public_key(&api),
+        hotshot_types::traits::consensus_api::ConsensusApi::private_key(&api),
     );
 
     tracing::error!("Vote in test is {:?}", vote.clone());
@@ -44,16 +44,13 @@ async fn test_view_sync_task() {
 
     input.push(HotShotEvent::Timeout(ViewNumber::new(2)));
     input.push(HotShotEvent::Timeout(ViewNumber::new(3)));
-    input.push(HotShotEvent::Timeout(ViewNumber::new(4)));
 
     input.push(HotShotEvent::Shutdown);
 
     output.insert(HotShotEvent::Timeout(ViewNumber::new(2)), 1);
     output.insert(HotShotEvent::Timeout(ViewNumber::new(3)), 1);
-    output.insert(HotShotEvent::Timeout(ViewNumber::new(4)), 1);
 
     output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(3)), 1);
     output.insert(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()), 1);
 
     output.insert(HotShotEvent::Shutdown, 1);
@@ -61,5 +58,5 @@ async fn test_view_sync_task() {
     let build_fn =
         |task_runner, event_stream| add_view_sync_task(task_runner, event_stream, handle);
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }

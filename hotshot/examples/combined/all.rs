@@ -6,12 +6,13 @@ use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::channel::oneshot;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot::demo::DemoTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_testing::state_types::TestTypes;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use surf_disco::Url;
 use tracing::{error, instrument};
 
 use crate::{
@@ -42,13 +43,14 @@ async fn main() {
     let _sender = Arc::new(server_shutdown_sender_cdn);
     let _sender = Arc::new(server_shutdown_sender_da);
 
+    let orchestrator_url = Url::parse("http://localhost:4444").unwrap();
+
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(
             Some(server_shutdown_cdn),
-            "http://localhost".to_string(),
-            9000,
+            Url::parse("http://localhost:9000").unwrap(),
         )
         .await
         {
@@ -57,11 +59,10 @@ async fn main() {
     });
     async_spawn(async move {
         if let Err(e) = hotshot_web_server::run_web_server::<
-            <DemoTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
+            <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey,
         >(
             Some(server_shutdown_da),
-            "http://localhost".to_string(),
-            9001,
+            Url::parse("http://localhost:9001").unwrap(),
         )
         .await
         {
@@ -71,28 +72,29 @@ async fn main() {
 
     // orchestrator
     async_spawn(run_orchestrator::<
-        DemoTypes,
+        TestTypes,
         DANetwork,
         QuorumNetwork,
         ViewSyncNetwork,
         VIDNetwork,
         NodeImpl,
     >(OrchestratorArgs {
-        url: "http://localhost".to_string(),
-        port: 4444,
+        url: orchestrator_url.clone(),
+
         config_file: args.config_file.clone(),
     }));
 
     // nodes
     let config: NetworkConfig<
-        <DemoTypes as NodeType>::SignatureKey,
-        <DemoTypes as NodeType>::ElectionConfigType,
-    > = load_config_from_file::<DemoTypes>(args.config_file);
+        <TestTypes as NodeType>::SignatureKey,
+        <TestTypes as NodeType>::ElectionConfigType,
+    > = load_config_from_file::<TestTypes>(args.config_file);
     let mut nodes = Vec::new();
     for _ in 0..config.config.total_nodes.into() {
+        let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
             infra::main_entry_point::<
-                DemoTypes,
+                TestTypes,
                 DANetwork,
                 QuorumNetwork,
                 ViewSyncNetwork,
@@ -100,9 +102,9 @@ async fn main() {
                 NodeImpl,
                 ThisRun,
             >(ValidatorArgs {
-                url: "http://localhost".to_string(),
-                port: 4444,
+                url: orchestrator_url,
                 public_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                network_config_file: None,
             })
             .await
         });

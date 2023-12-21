@@ -14,20 +14,20 @@ use hotshot::{
         NodeImplementation,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotType, Memberships, Networks, SystemContext,
+    Memberships, Networks, SystemContext,
 };
+use hotshot_orchestrator::config::NetworkConfigSource;
 use hotshot_orchestrator::{
     self,
     client::{OrchestratorClient, ValidatorArgs},
     config::{NetworkConfig, NetworkConfigFile, WebServerConfig},
 };
 use hotshot_task::task::FilterEvent;
-use hotshot_types::block_impl::VIDBlockHeader;
+use hotshot_testing::block_types::{TestBlockHeader, TestBlockPayload, TestTransaction};
 use hotshot_types::message::Message;
 use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::ValidatorConfig;
 use hotshot_types::{
-    block_impl::{VIDBlockPayload, VIDTransaction},
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
@@ -53,6 +53,7 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use std::{collections::BTreeSet, sync::Arc};
 use std::{num::NonZeroUsize, str::FromStr};
+use surf_disco::Url;
 
 use libp2p_identity::PeerId;
 use std::fmt::Debug;
@@ -66,10 +67,8 @@ use tracing::{error, info, warn};
 )]
 /// Arguments passed to the orchestrator
 pub struct OrchestratorArgs {
-    /// The url the orchestrator runs on; this should be in the form of `http://localhost` or `http://0.0.0.0`
-    pub url: String,
-    /// The port the orchestrator runs on
-    pub port: u16,
+    /// The url the orchestrator runs on; this should be in the form of `http://localhost:5555` or `http://0.0.0.0:5555`
+    pub url: Url,
     /// The configuration file to be used for this run
     pub config_file: String,
 }
@@ -125,18 +124,14 @@ pub async fn run_orchestrator<
     VIDCHANNEL: CommunicationChannel<TYPES> + Debug,
     NODE: NodeImplementation<TYPES, Storage = MemoryStorage<TYPES>>,
 >(
-    OrchestratorArgs {
-        url,
-        port,
-        config_file,
-    }: OrchestratorArgs,
+    OrchestratorArgs { url, config_file }: OrchestratorArgs,
 ) {
     error!("Starting orchestrator",);
     let run_config = load_config_from_file::<TYPES>(config_file);
     let _result = hotshot_orchestrator::run_orchestrator::<
         TYPES::SignatureKey,
         TYPES::ElectionConfigType,
-    >(run_config, url, port)
+    >(run_config, url)
     .await;
 }
 
@@ -158,11 +153,10 @@ async fn webserver_network_from_config<TYPES: NodeType>(
     // Get the configuration for the web server
     let WebServerConfig {
         url,
-        port,
         wait_between_polls,
-    }: WebServerConfig = config.clone().web_server_config.unwrap();
+    }: WebServerConfig = config.web_server_config.unwrap();
 
-    WebServerNetwork::create(&url, port, wait_between_polls, pub_key.clone(), false)
+    WebServerNetwork::create(url, wait_between_polls, pub_key, false)
 }
 
 async fn libp2p_network_from_config<TYPES: NodeType>(
@@ -259,7 +253,7 @@ async fn libp2p_network_from_config<TYPES: NodeType>(
     let node_config = config_builder.build().unwrap();
 
     Libp2pNetwork::new(
-        NetworkingMetricsValue::new(),
+        NetworkingMetricsValue::default(),
         node_config,
         pub_key.clone(),
         Arc::new(RwLock::new(
@@ -297,10 +291,9 @@ pub trait RunDA<
 > where
     <TYPES as NodeType>::StateType: TestableState,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
-    TYPES: NodeType<Transaction = VIDTransaction>,
+    TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
-    SystemContext<TYPES, NODE>: HotShotType<TYPES, NODE>,
 {
     /// Initializes networking, returns self
     async fn initialize_networking(
@@ -367,7 +360,7 @@ pub trait RunDA<
             memberships,
             networks_bundle,
             initializer,
-            ConsensusMetricsValue::new(),
+            ConsensusMetricsValue::default(),
         )
         .await
         .expect("Could not init hotshot")
@@ -378,7 +371,7 @@ pub trait RunDA<
     async fn run_hotshot(
         &self,
         mut context: SystemContextHandle<TYPES, NODE>,
-        transactions: &mut Vec<VIDTransaction>,
+        transactions: &mut Vec<TestTransaction>,
         transactions_to_send_per_round: u64,
     ) {
         let NetworkConfig {
@@ -394,7 +387,7 @@ pub trait RunDA<
         error!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
         async_sleep(Duration::from_secs(start_delay_seconds)).await;
 
-        error!("Starting hotshot!");
+        error!("Starting HotShot example!");
         let start = Instant::now();
 
         let (mut event_stream, _streamid) = context.get_event_stream(FilterEvent::default()).await;
@@ -499,9 +492,9 @@ pub struct WebServerDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -533,7 +526,6 @@ where
         // extract values from config (for DA network)
         let WebServerConfig {
             url,
-            port,
             wait_between_polls,
         }: WebServerConfig = config.clone().da_web_server_config.unwrap();
 
@@ -551,11 +543,11 @@ where
             WebCommChannel::new(underlying_quorum_network.into());
 
         let da_channel: WebCommChannel<TYPES> = WebCommChannel::new(
-            WebServerNetwork::create(&url, port, wait_between_polls, pub_key.clone(), true).into(),
+            WebServerNetwork::create(url.clone(), wait_between_polls, pub_key.clone(), true).into(),
         );
 
         let vid_channel: WebCommChannel<TYPES> = WebCommChannel::new(
-            WebServerNetwork::create(&url, port, wait_between_polls, pub_key, true).into(),
+            WebServerNetwork::create(url, wait_between_polls, pub_key, true).into(),
         );
 
         WebServerDARun {
@@ -602,9 +594,9 @@ pub struct Libp2pDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -695,9 +687,9 @@ pub struct CombinedDARun<TYPES: NodeType> {
 #[async_trait]
 impl<
         TYPES: NodeType<
-            Transaction = VIDTransaction,
-            BlockPayload = VIDBlockPayload,
-            BlockHeader = VIDBlockHeader,
+            Transaction = TestTransaction,
+            BlockPayload = TestBlockPayload,
+            BlockHeader = TestBlockHeader,
         >,
         NODE: NodeImplementation<
             TYPES,
@@ -739,7 +731,6 @@ where
         // extract values from config (for webserver DA network)
         let WebServerConfig {
             url,
-            port,
             wait_between_polls,
         }: WebServerConfig = config.clone().da_web_server_config.unwrap();
 
@@ -748,7 +739,7 @@ where
             webserver_network_from_config::<TYPES>(config.clone(), pub_key.clone()).await;
 
         let webserver_underlying_da_network =
-            WebServerNetwork::create(&url, port, wait_between_polls, pub_key, true);
+            WebServerNetwork::create(url, wait_between_polls, pub_key, true);
 
         webserver_underlying_quorum_network.wait_for_ready().await;
 
@@ -807,9 +798,9 @@ where
 /// Main entry point for validators
 pub async fn main_entry_point<
     TYPES: NodeType<
-        Transaction = VIDTransaction,
-        BlockPayload = VIDBlockPayload,
-        BlockHeader = VIDBlockHeader,
+        Transaction = TestTransaction,
+        BlockPayload = TestBlockPayload,
+        BlockHeader = TestBlockHeader,
     >,
     DACHANNEL: CommunicationChannel<TYPES> + Debug,
     QUORUMCHANNEL: CommunicationChannel<TYPES> + Debug,
@@ -834,34 +825,27 @@ pub async fn main_entry_point<
 
     error!("Starting validator");
 
-    let orchestrator_client: OrchestratorClient =
-        OrchestratorClient::connect_to_orchestrator(args.clone()).await;
-
-    // Identify with the orchestrator
+    // see what our public identity will be
     let public_ip = match args.public_ip {
         Some(ip) => ip,
         None => local_ip_address::local_ip().unwrap(),
     };
-    error!(
-        "Identifying with orchestrator using IP address {}",
-        public_ip.to_string()
-    );
-    let node_index: u16 = orchestrator_client
-        .identify_with_orchestrator(public_ip.to_string())
-        .await;
-    error!("Finished identifying; our node index is {node_index}");
-    error!("Getting config from orchestrator");
 
-    let mut run_config = orchestrator_client
-        .get_config_from_orchestrator::<TYPES>(node_index)
-        .await;
+    let orchestrator_client: OrchestratorClient =
+        OrchestratorClient::new(args.clone(), public_ip.to_string()).await;
 
-    run_config.node_index = node_index.into();
+    // conditionally save/load config from file or orchestrator
+    let (mut run_config, source) =
+        NetworkConfig::from_file_or_orchestrator(&orchestrator_client, args.network_config_file)
+            .await;
+
+    let node_index = run_config.node_index;
+    error!("Retrieved config; our node index is {node_index}");
 
     run_config.config.my_own_validator_config =
         ValidatorConfig::<<TYPES as NodeType>::SignatureKey>::generated_from_seed_indexed(
             run_config.seed,
-            node_index.into(),
+            node_index,
             1,
         );
     //run_config.libp2p_config.as_mut().unwrap().public_ip = args.public_ip.unwrap();
@@ -901,12 +885,14 @@ pub async fn main_entry_point<
         }
     }
 
-    error!("Waiting for start command from orchestrator");
-    orchestrator_client
-        .wait_for_all_nodes_ready(run_config.clone().node_index)
-        .await;
+    if let NetworkConfigSource::Orchestrator = source {
+        error!("Waiting for the start command from orchestrator");
+        orchestrator_client
+            .wait_for_all_nodes_ready(run_config.clone().node_index)
+            .await;
+    }
 
-    error!("All nodes are ready!  Starting HotShot");
+    error!("Starting HotShot");
     run.run_hotshot(
         hotshot,
         &mut transactions,

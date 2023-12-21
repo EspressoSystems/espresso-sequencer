@@ -1,5 +1,5 @@
 //! Minimal compatibility over public key signatures
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bitvec::prelude::*;
 use espresso_systems_common::hotshot::tag;
 use ethereum_types::U256;

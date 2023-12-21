@@ -22,8 +22,3 @@ pub mod implementations {
         storage::memory_storage::MemoryStorage, // atomic_storage::AtomicStorage,
     };
 }
-
-/// Dummy testing implementations
-pub mod dummy {
-    pub use hotshot_types::traits::state::dummy::DummyState;
-}
