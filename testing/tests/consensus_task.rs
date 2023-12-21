@@ -206,6 +206,7 @@ async fn test_consensus_with_vid() {
     use hotshot_testing::task_helpers::vid_init;
     use hotshot_types::data::VidSchemeTrait;
     use hotshot_types::simple_certificate::DACertificate;
+    use hotshot_types::simple_vote::DAData;
     use hotshot_types::simple_vote::DAVote;
     use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::state::TestableBlock;
@@ -265,9 +266,11 @@ async fn test_consensus_with_vid() {
         &block.encode().unwrap().collect(),
         quorum_membership.total_nodes(),
     );
-
+    let da_data = DAData {
+        payload_commit: da_payload_commitment,
+    };
     let dac_view2 = build_dac::<TestTypes, DAVote<TestTypes>, DACertificate<TestTypes>>(
-        da_payload_commitment,
+        da_data,
         &quorum_membership,
         ViewNumber::new(2),
         &public_key_view2,
