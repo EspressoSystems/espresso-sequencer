@@ -313,5 +313,5 @@ async fn test_consensus_with_vid() {
         add_consensus_task(task_runner, event_stream, ChannelStream::new(), handle)
     };
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }
