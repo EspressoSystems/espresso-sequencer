@@ -43,8 +43,8 @@ use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
 use hotshot_utils::bincode::bincode_opts;
 
-use std::{fmt::Debug, hash::Hash};
 use serde::Serialize;
+use std::{fmt::Debug, hash::Hash};
 
 pub async fn build_system_handle(
     node_id: u64,
@@ -132,8 +132,11 @@ pub fn build_qc<
     let quorum_data = QuorumData {
         leaf_commit: leaf_commitment,
     };
-    let real_qc_sig =
-        build_assembled_sig::<TYPES, VOTE, CERT, QuorumData<TYPES>>(quorum_data.clone(), membership, view);
+    let real_qc_sig = build_assembled_sig::<TYPES, VOTE, CERT, QuorumData<TYPES>>(
+        quorum_data.clone(),
+        membership,
+        view,
+    );
 
     let vote = QuorumVote::<TYPES>::create_signed_vote(
         QuorumData {
@@ -211,12 +214,8 @@ pub fn build_dac<
     let real_qc_sig =
         build_assembled_sig::<TYPES, VOTE, CERT, DAData>(data.clone(), membership, view);
 
-    let vote: SimpleVote<TYPES, DAData> = DAVote::create_signed_vote(
-        data,
-        view,
-        public_key,
-        private_key,
-    );
+    let vote: SimpleVote<TYPES, DAData> =
+        DAVote::create_signed_vote(data, view, public_key, private_key);
     let cert = CERT::create_signed_certificate(
         vote.get_data_commitment(),
         vote.get_data().clone(),
