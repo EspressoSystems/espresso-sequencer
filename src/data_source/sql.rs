@@ -46,8 +46,10 @@ use snafu::OptionExt;
 use std::{
     ops::{Bound, RangeBounds},
     pin::Pin,
+    str::FromStr,
 };
 use tokio_postgres::{
+    config::Host,
     tls::TlsConnect,
     types::{BorrowToSql, ToSql},
     Client, NoTls, Row, ToStatement,
@@ -181,11 +183,9 @@ fn add_custom_migrations(
 /// Postgres client config.
 #[derive(Clone, Debug)]
 pub struct Config {
+    pgcfg: postgres::Config,
     host: String,
     port: u16,
-    user: Option<String>,
-    password: Option<String>,
-    database: Option<String>,
     schema: String,
     reset: bool,
     migrations: Vec<Migration>,
@@ -196,17 +196,41 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            pgcfg: Default::default(),
             host: "localhost".into(),
             port: 5432,
-            user: None,
-            password: None,
-            database: None,
             schema: "hotshot".into(),
             reset: false,
             migrations: vec![],
             no_migrations: false,
             tls: false,
         }
+    }
+}
+
+impl From<postgres::Config> for Config {
+    fn from(pgcfg: postgres::Config) -> Self {
+        // We connect via TCP manually, without using the host and port from pgcfg. So we need to
+        // pull those out of pgcfg if they have been specified, to override the defaults.
+        let host = match pgcfg.get_hosts().first() {
+            Some(Host::Tcp(host)) => host.to_string(),
+            _ => "localhost".into(),
+        };
+        let port = *pgcfg.get_ports().first().unwrap_or(&5432);
+        Self {
+            pgcfg,
+            host,
+            port,
+            ..Default::default()
+        }
+    }
+}
+
+impl FromStr for Config {
+    type Err = <postgres::Config as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(postgres::Config::from_str(s)?.into())
     }
 }
 
@@ -228,20 +252,20 @@ impl Config {
     }
 
     /// Set the DB user to connect as.
-    pub fn user(mut self, user: impl Into<String>) -> Self {
-        self.user = Some(user.into());
+    pub fn user(mut self, user: &str) -> Self {
+        self.pgcfg.user(user);
         self
     }
 
     /// Set a password for connecting to the database.
-    pub fn password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
+    pub fn password(mut self, password: &str) -> Self {
+        self.pgcfg.password(password);
         self
     }
 
     /// Set the name of the database to connect to.
-    pub fn database(mut self, database: impl Into<String>) -> Self {
-        self.database = Some(database.into());
+    pub fn database(mut self, database: &str) -> Self {
+        self.pgcfg.dbname(database);
         self
     }
 
@@ -557,21 +581,11 @@ where
         let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
 
         // Convert the TCP connection into a postgres connection.
-        let mut pgcfg = postgres::Config::default();
-        if let Some(user) = &config.user {
-            pgcfg.user(user);
-        }
-        if let Some(password) = &config.password {
-            pgcfg.password(password);
-        }
-        if let Some(database) = &config.database {
-            pgcfg.dbname(database);
-        }
         let (mut client, kill) = if config.tls {
             let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
-            connect(pgcfg, tcp, tls).await?
+            connect(config.pgcfg, tcp, tls).await?
         } else {
-            connect(pgcfg, tcp, NoTls).await?
+            connect(config.pgcfg, tcp, NoTls).await?
         };
 
         // Create or connect to the schema for this query service.
@@ -1603,5 +1617,25 @@ mod test {
 
         // Connecting with the customized schema should work even without running migrations.
         connect(true, migrations).await.unwrap();
+    }
+
+    #[test]
+    fn test_config_from_str() {
+        let cfg = Config::from_str("postgresql://user:password@host:8080").unwrap();
+        assert_eq!(cfg.pgcfg.get_user(), Some("user"));
+        assert_eq!(cfg.pgcfg.get_password(), Some("password".as_bytes()));
+        assert_eq!(cfg.host, "host");
+        assert_eq!(cfg.port, 8080);
+    }
+
+    #[test]
+    fn test_config_from_pgcfg() {
+        let mut pgcfg = postgres::Config::default();
+        pgcfg.dbname("db");
+        let cfg = Config::from(pgcfg.clone());
+        assert_eq!(cfg.pgcfg, pgcfg);
+        // Default values.
+        assert_eq!(cfg.host, "localhost");
+        assert_eq!(cfg.port, 5432);
     }
 }
