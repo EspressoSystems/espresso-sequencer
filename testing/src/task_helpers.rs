@@ -6,6 +6,7 @@ use crate::{
     test_builder::TestMetadata,
 };
 use commit::Committable;
+use ethereum_types::U256;
 use hotshot::{
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotConsensusApi, HotShotInitializer, Memberships, Networks, SystemContext,
@@ -41,7 +42,6 @@ use hotshot_types::utils::ViewInner;
 use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
 use hotshot_utils::bincode::bincode_opts;
-use tracing::error;
 
 pub async fn build_system_handle(
     node_id: u64,
@@ -121,15 +121,15 @@ pub fn build_assembled_sig<
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 >(
     leaf: Leaf<TYPES>,
-    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    membership: &TYPES::Membership,
     view: TYPES::Time,
 ) -> <TYPES::SignatureKey as SignatureKey>::QCType {
     // Assemble QC
-    let stake_table = handle.get_committee_qc_stake_table();
+    let stake_table = membership.get_committee_qc_stake_table();
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
         <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
             stake_table.clone(),
-            handle.get_threshold(),
+            U256::from(CERT::threshold(membership)),
         );
     let total_nodes = stake_table.len();
     let signers = bitvec![1; total_nodes];
@@ -196,16 +196,16 @@ pub fn build_dac<
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 >(
     payload_commitment: VidCommitment,
-    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    membership: &TYPES::Membership,
     view: TYPES::Time,
     public_key: &TYPES::SignatureKey,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
 ) -> CERT {
-    let stake_table = handle.get_committee_qc_stake_table();
+    let stake_table = membership.get_committee_qc_stake_table();
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
         <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
             stake_table.clone(),
-            handle.get_threshold(),
+            U256::from(CERT::threshold(membership)),
         );
     let total_nodes = stake_table.len();
     let signers = bitvec![1; total_nodes];
@@ -317,11 +317,13 @@ async fn build_quorum_proposal_and_signature(
             },
         );
         consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
-        let created_assembled_sig = build_assembled_sig::<
-            TestTypes,
-            QuorumVote<TestTypes>,
-            QuorumCertificate<TestTypes>,
-        >(leaf.clone(), handle, ViewNumber::new(cur_view - 1));
+        let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
+        let created_assembled_sig =
+            build_assembled_sig::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(
+                leaf.clone(),
+                &quorum_membership,
+                ViewNumber::new(cur_view - 1),
+            );
         let created_qc = build_qc::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(
             created_assembled_sig,
             leaf.clone(),

@@ -263,16 +263,12 @@ async fn test_consensus_with_vid() {
     let block = <TestBlockPayload as TestableBlock>::genesis();
     let da_payload_commitment = vid_commitment(
         &block.encode().unwrap().collect(),
-        handle
-            .hotshot
-            .inner
-            .memberships
-            .quorum_membership
-            .total_nodes(),
+        quorum_membership.total_nodes(),
     );
+
     let dac_view2 = build_dac::<TestTypes, DAVote<TestTypes>, DACertificate<TestTypes>>(
         da_payload_commitment,
-        &handle,
+        &quorum_membership,
         ViewNumber::new(2),
         &public_key_view2,
         &private_key_view2,
@@ -315,4 +311,3 @@ async fn test_consensus_with_vid() {
 
     run_harness(input, output, None, build_fn).await;
 }
-

@@ -4,7 +4,6 @@ use crate::{traits::NodeImplementation, types::Event, SystemContext};
 use async_compatibility_layer::channel::UnboundedStream;
 use async_lock::RwLock;
 use commit::Committable;
-use ethereum_types::U256;
 use futures::Stream;
 use hotshot_task::{
     boxed_sync,
@@ -16,7 +15,6 @@ use hotshot_task::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::traits::election::Membership;
-use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::{
     consensus::Consensus,
     error::HotShotError,
@@ -199,31 +197,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     }
 
     // Below is for testing only:
-
-    /// Gets the current membership of the [`HotShot`] instance
-    #[cfg(feature = "hotshot-testing")]
-    pub fn get_committee_qc_stake_table(
-        &self,
-    ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        self.hotshot
-            .inner
-            .memberships
-            .quorum_membership
-            .get_committee_qc_stake_table()
-    }
-
-    /// Gets the threshold of current membership of the [`HotShot`] instance
-    #[cfg(feature = "hotshot-testing")]
-    pub fn get_threshold(&self) -> U256 {
-        U256::from(
-            self.hotshot
-                .inner
-                .memberships
-                .quorum_membership
-                .success_threshold()
-                .get(),
-        )
-    }
 
     /// Wrapper for `HotShotConsensusApi`'s `get_leader` function
     #[allow(clippy::unused_async)] // async for API compatibility reasons

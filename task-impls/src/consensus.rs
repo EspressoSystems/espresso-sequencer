@@ -313,7 +313,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 if let GeneralConsensusMessage::Vote(vote) = message {
-                    debug!(
+                    error!(
+                        // Sishan TODO: change to debug level later
                         "Sending vote to next quorum leader {:?}",
                         vote.get_view_number()
                     );
