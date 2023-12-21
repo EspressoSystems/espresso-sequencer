@@ -191,7 +191,7 @@ async fn test_with_failures_f() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_with_failures_2() {
     use hotshot_testing::{
-        node_types::{WebImpl, TestTypes},
+        node_types::{TestTypes, WebImpl},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };

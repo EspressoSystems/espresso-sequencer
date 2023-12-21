@@ -172,7 +172,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let mut make_block = false;
                 if *view - *self.cur_view > 1 {
                     error!("View changed by more than 1 going to view {:?}", view);
-                    make_block = self.membership.get_leader(view) == self.public_key
+                    make_block = self.membership.get_leader(view) == self.public_key;
                 }
                 self.cur_view = view;
 
@@ -231,11 +231,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 // send the sequenced transactions to VID and DA tasks
-                let block_view = if make_block {
-                    view
-                } else {
-                    view + 1
-                };
+                let block_view = if make_block { view } else { view + 1 };
                 self.event_stream
                     .publish(HotShotEvent::TransactionsSequenced(
                         encoded_transactions,
