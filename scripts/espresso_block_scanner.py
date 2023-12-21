@@ -8,6 +8,7 @@ import urllib.request
 import json
 import time
 import sys
+from base64 import b64encode
 
 parser = argparse.ArgumentParser(
     prog="Espresso Block Scanner",
@@ -16,6 +17,7 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("-u", "--url", default="http://localhost:50000")
+parser.add_argument("-b", "--block", default=None, type=int)
 
 args = parser.parse_args()
 
@@ -25,9 +27,17 @@ url = f"{args.url}/availability/block/"
 payloads = set()
 
 # Find the current block number.
-res = urllib.request.urlopen(f"{args.url}/status/latest_block_height")
-block_number = int(res.read())
+if args.block is None:
+    res = urllib.request.urlopen(f"{args.url}/status/latest_block_height")
+    block_number = int(res.read())
+else:
+    block_number = args.block
 print(f"scanning from block {block_number}")
+
+
+def b64(b: bytes) -> str:
+    return b64encode(b).decode("utf-8")
+
 
 # Scan block by block
 while True:
@@ -51,15 +61,16 @@ while True:
         received = datetime.now()
         block = page.read()
         struct = json.loads(block)
+        # print(json.dumps(struct, indent=2))
 
         # throw exception if json is different from expected
         try:
-            txns = struct["block"]["transaction_nmt"]
+            txns = struct["payload"]["transaction_nmt"]
             # we only need to show the block once per vm, so if several transactions are seen for same vm in same block, treat them as duplicates
             seen_vms = set()
             for txn in txns:
                 vm = txn["vm"]  # extract Rollup ID
-                payload = bytes(txn["payload"]).hex()
+                payload = b64(bytes(txn["payload"]))
                 # if transaction already seen, skip
                 if payload in payloads:
                     continue
@@ -98,7 +109,7 @@ while True:
                     vm_block_struct["proof"][
                         "right_boundary_proof"
                     ] = "[...]"  # Merkle proof for inclusion of righ boundary vm transaction
-                del vm_block_struct["header"]["metadata"]["l1_finalized"]
+                del vm_block_struct["header"]["l1_finalized"]
                 for proof in vm_block_struct["proof"]["proofs"]:
                     # proof is too large to see, Eliding details
                     proof[
@@ -106,19 +117,22 @@ while True:
                     ] = "[...] # Merkle proof for inclusion of each vm transaction in the Espresso Block"
                     del proof["_phantom_arity"]
 
-                # transform byte arrays in hex strings for visualization
-                root_as_hex = bytes(
-                    vm_block_struct["header"]["transactions_root"]["root"]
-                ).hex()
-                vm_block_struct["header"]["transactions_root"]["root"] = root_as_hex
+                # transform byte arrays in b64 strings for visualization
+                root_as_b64 = b64(
+                    bytes(vm_block_struct["header"]["transactions_root"]["root"])
+                )
+                vm_block_struct["header"]["transactions_root"]["root"] = root_as_b64
+                vm_block_struct["header"]["payload_commitment"] = b64(
+                    bytes(vm_block_struct["header"]["payload_commitment"])
+                )
+
                 for txn in vm_block_struct["transactions"]:
-                    payload_hex = bytes(txn["payload"]).hex()
-                    txn["payload"] = payload_hex
+                    txn["payload"] = b64(bytes(txn["payload"]))
 
                 # transform unix timespamp to date
-                timestamp = vm_block_struct["header"]["metadata"]["timestamp"]
+                timestamp = vm_block_struct["header"]["timestamp"]
                 date = datetime.fromtimestamp(timestamp)
-                vm_block_struct["header"]["metadata"]["timestamp"] = str(date)
+                vm_block_struct["header"]["timestamp"] = str(date)
 
                 # print trimmed block
                 print(json.dumps(vm_block_struct, indent=2))
