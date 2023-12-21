@@ -83,18 +83,29 @@ pub async fn run_hotshot_commitment_task(opt: &CommitmentTaskOptions) {
     sequence(max, hotshot, contract).await;
 }
 
-async fn sequence(mut max_blocks: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
+async fn sequence(hard_block_limit: u64, hotshot: HotShotClient, contract: HotShot<Signer>) {
+    // This is the number of blocks we attempt to sequence
+    // If we fail to submit soft_block_limit leaves, we assume we have hit
+    // A gas limit exception and decrease the limit
+    // If we succeed, we increase the limit towards the hard_block_limit
+    let mut soft_block_limit = hard_block_limit;
     loop {
-        if let Err(err) = sync_with_l1(max_blocks, &hotshot, &contract).await {
-            tracing::error!("error synchronizing with HotShot contract: {err}");
-            // If we are erroring because of a block gas limit exception, we can try again
-            // with fewer blocks next time
-            if err.to_string().contains("exceeds block gas limit") && max_blocks > 1 {
-                max_blocks /= 2
+        if let Err(sync_err) = sync_with_l1(soft_block_limit, &hotshot, &contract).await {
+            match sync_err {
+                SyncError::Other(err) => {
+                    tracing::error!("error synchronizing with HotShot contract: {err}");
+                }
+                SyncError::TransactionFailed { err, num_leaves } => {
+                    // Assume we have hit a gas limit exception, decrease the limit
+                    tracing::error!("error synchronizing with HotShot contract, leaf submission failed with {num_leaves}: {err}");
+                    soft_block_limit = std::cmp::max(num_leaves / 2, 1)
+                }
             }
-
             // Wait a bit to avoid spam, then try again.
             sleep(RETRY_DELAY).await;
+        } else {
+            // If we succeed, increase the limit
+            soft_block_limit = std::cmp::min(soft_block_limit * 2, hard_block_limit)
         }
     }
 }
@@ -132,20 +143,37 @@ impl HotShotDataSource for HotShotClient {
     }
 }
 
+#[derive(Debug)]
+enum SyncError {
+    TransactionFailed { err: anyhow::Error, num_leaves: u64 },
+    Other(anyhow::Error),
+}
+
 async fn sync_with_l1(
     max_blocks: u64,
     hotshot: &impl HotShotDataSource,
     contract: &HotShot<Signer>,
-) -> Result<(), anyhow::Error> {
-    let contract_block_height = contract.block_height().call().await?.as_u64();
+) -> Result<(), SyncError> {
+    let contract_block_height = contract
+        .block_height()
+        .call()
+        .await
+        .map_err(|e| SyncError::Other(e.into()))?
+        .as_u64();
     let hotshot_block_height = loop {
-        let height = hotshot.block_height().await?;
+        let height = hotshot
+            .block_height()
+            .await
+            .map_err(|e| SyncError::Other(e.into()))?;
         if height <= contract_block_height {
             // If the contract is caught up with HotShot, wait for more blocks to be produced.
             tracing::debug!(
                 "HotShot at height {height}, waiting for it to pass height {contract_block_height}"
             );
-            hotshot.wait_for_block_height(contract_block_height).await?;
+            hotshot
+                .wait_for_block_height(contract_block_height)
+                .await
+                .map_err(|e| SyncError::Other(e.into()))?;
         } else {
             // HotShot is ahead of the contract, sequence the blocks which are currently ready.
             tracing::debug!("synchronizing blocks {contract_block_height}-{height}");
@@ -159,7 +187,8 @@ async fn sync_with_l1(
             .take(max_blocks as usize)
             .map(|height| hotshot.get_leaf(height)),
     )
-    .await?;
+    .await
+    .map_err(|e| SyncError::Other(e.into()))?;
     tracing::info!("sending {} leaves to the contract", leaves.len());
 
     // Send the leaves to the contract.
@@ -168,7 +197,12 @@ async fn sync_with_l1(
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
     // example, if there are multiple commitment tasks racing.
-    contract_send(&txn).await?;
+    contract_send(&txn)
+        .await
+        .map_err(|e| SyncError::TransactionFailed {
+            err: e,
+            num_leaves: max_blocks,
+        })?;
 
     Ok(())
 }
