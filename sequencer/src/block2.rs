@@ -64,8 +64,6 @@ impl BlockPayload {
             tx_table_len: TxTableEntry,
         }
 
-        // TODO(746) use of HashMap causes nondeterministic ordering for the namespace table.
-        // I think this is ok because a builder can do whatever it wants anyway.
         let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
         for tx in txs.into_iter() {
             let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
@@ -91,17 +89,13 @@ impl BlockPayload {
             Vec::from(TxTableEntry::try_from(namespace_table_len).ok()?.to_bytes());
 
         // fill payload and namespace table
-        // TODO(746) is it worth the trouble to allocate memory in advance?
         let mut payload = Vec::new();
-        let mut namespace_bytes_end = TxTableEntry::zero();
         for (id, namespace) in namespaces {
-            let prev_len = payload.len();
             payload.extend(namespace.tx_table_len.to_bytes());
             payload.extend(namespace.tx_table);
             payload.extend(namespace.tx_bodies);
             namespace_table.extend(TxTableEntry::try_from(id).ok()?.to_bytes());
-            namespace_bytes_end.checked_add_mut((payload.len() - prev_len).try_into().ok()?)?;
-            namespace_table.extend(namespace_bytes_end.to_bytes());
+            namespace_table.extend(TxTableEntry::try_from(payload.len()).ok()?.to_bytes());
         }
 
         Some((
