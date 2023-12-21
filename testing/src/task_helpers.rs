@@ -41,6 +41,7 @@ use hotshot_types::utils::ViewInner;
 use hotshot_types::vote::Certificate;
 use hotshot_types::vote::Vote;
 use hotshot_utils::bincode::bincode_opts;
+use tracing::error;
 
 pub async fn build_system_handle(
     node_id: u64,
@@ -288,7 +289,7 @@ async fn build_quorum_proposal_and_signature(
             .total_nodes(),
     );
     let block_header = TestBlockHeader::new(payload_commitment, (), &parent_leaf.block_header);
-    let leaf = Leaf {
+    let mut leaf = Leaf {
         view_number: ViewNumber::new(1),
         justify_qc: consensus.high_qc.clone(),
         parent_commitment: parent_leaf.commit(),
@@ -298,16 +299,15 @@ async fn build_quorum_proposal_and_signature(
         timestamp: 0,
         proposer_id: api.public_key().to_bytes(),
     };
-    let signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
-    let proposal = QuorumProposal::<TestTypes> {
+    let mut signature = <BLSPubKey as SignatureKey>::sign(private_key, leaf.commit().as_ref());
+    let mut proposal = QuorumProposal::<TestTypes> {
         block_header: block_header.clone(),
         view_number: ViewNumber::new(1),
         justify_qc: QuorumCertificate::genesis(),
         timeout_certificate: None,
         proposer_id: leaf.proposer_id.clone(),
     };
-
-    if view == 2 {
+    for cur_view in 2..=view {
         consensus.state_map.insert(
             ViewNumber::new(1),
             View {
@@ -321,7 +321,7 @@ async fn build_quorum_proposal_and_signature(
             TestTypes,
             QuorumVote<TestTypes>,
             QuorumCertificate<TestTypes>,
-        >(leaf.clone(), handle, ViewNumber::new(1));
+        >(leaf.clone(), handle, ViewNumber::new(cur_view - 1));
         let created_qc = build_qc::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(
             created_assembled_sig,
             leaf.clone(),
@@ -330,8 +330,8 @@ async fn build_quorum_proposal_and_signature(
             private_key,
         );
         let parent_leaf = leaf.clone();
-        let leaf_view2 = Leaf {
-            view_number: ViewNumber::new(2),
+        let leaf_new_view = Leaf {
+            view_number: ViewNumber::new(cur_view),
             justify_qc: created_qc.clone(),
             parent_commitment: parent_leaf.commit(),
             block_header: block_header.clone(),
@@ -340,16 +340,18 @@ async fn build_quorum_proposal_and_signature(
             timestamp: 0,
             proposer_id: api.public_key().to_bytes(),
         };
-        let signature_view2 =
-            <BLSPubKey as SignatureKey>::sign(private_key, leaf_view2.commit().as_ref());
-        let proposal_view2 = QuorumProposal::<TestTypes> {
-            block_header,
-            view_number: ViewNumber::new(2),
+        let signature_new_view =
+            <BLSPubKey as SignatureKey>::sign(private_key, leaf_new_view.commit().as_ref());
+        let proposal_new_view = QuorumProposal::<TestTypes> {
+            block_header: block_header.clone(),
+            view_number: ViewNumber::new(cur_view),
             justify_qc: created_qc,
             timeout_certificate: None,
-            proposer_id: leaf_view2.proposer_id,
+            proposer_id: leaf_new_view.clone().proposer_id,
         };
-        return (proposal_view2, signature_view2);
+        proposal = proposal_new_view;
+        signature = signature_new_view;
+        leaf = leaf_new_view;
     }
 
     (proposal, signature)
