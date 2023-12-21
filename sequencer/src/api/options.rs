@@ -1,8 +1,10 @@
 //! Sequencer-specific API options and initialization.
 
 use super::{
-    data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState, Consensus,
-    NodeIndex, SequencerNode,
+    data_source::{DataSourceOptions, SequencerDataSource},
+    endpoints, fs, sql,
+    update::update_loop,
+    AppState, Consensus, NodeIndex, SequencerNode,
 };
 use crate::network;
 use async_std::{
@@ -190,6 +192,14 @@ pub struct Sql {
     pub reset_store: bool,
 }
 
+impl DataSourceOptions for Sql {
+    type DataSource = sql::DataSource;
+
+    fn reset_storage(&mut self) {
+        self.reset_store = true;
+    }
+}
+
 /// Options for the query API module backed by the file system.
 #[derive(Parser, Clone, Debug)]
 pub struct Fs {
@@ -200,6 +210,14 @@ pub struct Fs {
     /// Create new query storage instead of opening existing one.
     #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
     pub reset_store: bool,
+}
+
+impl DataSourceOptions for Fs {
+    type DataSource = fs::DataSource;
+
+    fn reset_storage(&mut self) {
+        self.reset_store = true;
+    }
 }
 
 async fn init_with_query_module<N, D>(
