@@ -9,19 +9,24 @@ use hotshot_query_service::{
     QueryResult,
 };
 
+pub trait DataSourceOptions {
+    type DataSource: SequencerDataSource<Options = Self>;
+    fn reset_storage(&mut self);
+}
+
 /// A data source with sequencer-specific functionality.
 ///
 /// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
 /// provided sequencer-specific endpoints.
 #[async_trait]
-pub(crate) trait SequencerDataSource:
+pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + StatusDataSource
     + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {
-    type Options;
+    type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options) -> anyhow::Result<Self>;
@@ -42,7 +47,7 @@ pub(crate) trait SequencerDataSource:
         ID: Into<BlockId<SeqTypes>> + Send + Sync;
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type> {
+pub trait SubmitDataSource<N: network::Type> {
     fn handle(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
 }
 
