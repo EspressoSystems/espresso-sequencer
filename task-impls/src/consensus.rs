@@ -852,7 +852,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         ))
                         .await;
 
-                    error!(
+                    debug!(
                         "Attempting to publish proposal after forming a TC for view {}",
                         *qc.view_number
                     );
@@ -861,7 +861,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                     if self.publish_proposal_if_able(view, Some(qc.clone())).await {
                     } else {
-                        error!("Wasn't able to publish proposal");
+                        warn!("Wasn't able to publish proposal");
                     }
                 }
                 if let either::Left(qc) = cert {
@@ -892,7 +892,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
             }
             HotShotEvent::DACRecv(cert) => {
-                error!("DAC Recved for view ! {}", *cert.view_number);
+                debug!("DAC Recved for view ! {}", *cert.view_number);
                 let view = cert.view_number;
 
                 self.quorum_network
@@ -1035,7 +1035,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 consensus.metrics.number_of_timeouts.add(1);
             }
             HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, metadata, view) => {
-                error!("got commit and meta {:?}", payload_commitment);
+                debug!("got commit and meta {:?}", payload_commitment);
                 self.payload_commitment_and_metadata = Some((payload_commitment, metadata));
                 if self.quorum_membership.get_leader(view) == self.public_key
                     && self.consensus.read().await.high_qc.get_view_number() == view
@@ -1043,8 +1043,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     self.publish_proposal_if_able(view, None).await;
                 }
                 if let Some(tc) = &self.timeout_cert {
-                    if self.quorum_membership.get_leader(tc.get_view_number() + 1) == self.public_key {
-                        self.publish_proposal_if_able(view, self.timeout_cert.clone()).await;
+                    if self.quorum_membership.get_leader(tc.get_view_number() + 1)
+                        == self.public_key
+                    {
+                        self.publish_proposal_if_able(view, self.timeout_cert.clone())
+                            .await;
                     }
                 }
             }
@@ -1156,7 +1159,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 signature,
                 _pd: PhantomData,
             };
-            error!(
+            debug!(
                 "Sending proposal for view {:?} \n {:?}",
                 leaf.view_number, ""
             );
@@ -1169,7 +1172,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             self.payload_commitment_and_metadata = None;
             return true;
         }
-        error!("Cannot propose because we don't have the VID payload commitment and metadata");
+        debug!("Cannot propose because we don't have the VID payload commitment and metadata");
         false
     }
 }
