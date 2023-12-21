@@ -316,7 +316,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!(
                         // Sishan TODO: change to debug level later
                         "Sending vote to next quorum leader {:?}",
-                        vote.get_view_number()
+                        vote.get_view_number() + 1
                     );
                     self.event_stream
                         .publish(HotShotEvent::QuorumVoteSend(vote))

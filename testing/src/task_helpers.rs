@@ -5,7 +5,7 @@ use crate::{
     node_types::{MemoryImpl, TestTypes},
     test_builder::TestMetadata,
 };
-use commit::Committable;
+use commit::{Commitment, Committable};
 use ethereum_types::U256;
 use hotshot::{
     types::{bn254::BLSPubKey, SignatureKey, SystemContextHandle},
@@ -120,7 +120,7 @@ pub fn build_assembled_sig<
     VOTE: Vote<TYPES>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 >(
-    leaf: Leaf<TYPES>,
+    leaf_commitment: Commitment<Leaf<TYPES>>,
     membership: &TYPES::Membership,
     view: TYPES::Time,
 ) -> <TYPES::SignatureKey as SignatureKey>::QCType {
@@ -140,7 +140,7 @@ pub fn build_assembled_sig<
         let (private_key, public_key) = key_pair_for_id(node_id.try_into().unwrap());
         let vote = QuorumVote::<TYPES>::create_signed_vote(
             QuorumData {
-                leaf_commit: leaf.commit(),
+                leaf_commit: leaf_commitment,
             },
             view,
             &public_key,
@@ -163,19 +163,21 @@ pub fn build_assembled_sig<
 }
 
 pub fn build_qc<
-    TYPES: NodeType,
+    TYPES: NodeType<SignatureKey = BLSPubKey>,
     VOTE: Vote<TYPES, Commitment = QuorumData<TYPES>>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
 >(
-    real_qc_sig: <TYPES::SignatureKey as SignatureKey>::QCType,
-    leaf: Leaf<TYPES>,
+    leaf_commitment: Commitment<Leaf<TYPES>>,
+    membership: &TYPES::Membership,
     view: TYPES::Time,
     public_key: &TYPES::SignatureKey,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
 ) -> CERT {
+    let real_qc_sig = build_assembled_sig::<TYPES, VOTE, CERT>(leaf_commitment, membership, view);
+
     let vote = QuorumVote::<TYPES>::create_signed_vote(
         QuorumData {
-            leaf_commit: leaf.commit(),
+            leaf_commit: leaf_commitment,
         },
         view,
         public_key,
@@ -190,7 +192,7 @@ pub fn build_qc<
     cert
 }
 
-pub fn build_dac<
+pub fn build_assembled_sig_da<
     TYPES: NodeType<SignatureKey = BLSPubKey>,
     VOTE: Vote<TYPES, Commitment = DAData>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
@@ -198,9 +200,7 @@ pub fn build_dac<
     payload_commitment: VidCommitment,
     membership: &TYPES::Membership,
     view: TYPES::Time,
-    public_key: &TYPES::SignatureKey,
-    private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-) -> CERT {
+) -> <TYPES::SignatureKey as SignatureKey>::QCType {
     let stake_table = membership.get_committee_qc_stake_table();
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
         <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
@@ -214,7 +214,8 @@ pub fn build_dac<
     // calculate vote
     for node_id in 0..total_nodes {
         let (private_key_i, public_key_i) = key_pair_for_id(node_id.try_into().unwrap());
-        let da_vote: SimpleVote<TYPES, DAData> = DAVote::create_signed_vote(
+        // DAVote = SimpleVote<TYPES, DAData>
+        let da_vote: SimpleVote<TYPES, DAData> = SimpleVote::<TYPES, DAData>::create_signed_vote(
             DAData {
                 payload_commit: payload_commitment,
             },
@@ -234,6 +235,23 @@ pub fn build_dac<
         signers.as_bitslice(),
         &sig_lists[..],
     );
+
+    real_qc_sig
+}
+
+pub fn build_dac<
+    TYPES: NodeType<SignatureKey = BLSPubKey>,
+    VOTE: Vote<TYPES, Commitment = DAData>,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+>(
+    payload_commitment: VidCommitment,
+    membership: &TYPES::Membership,
+    view: TYPES::Time,
+    public_key: &TYPES::SignatureKey,
+    private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
+) -> CERT {
+    let real_qc_sig =
+        build_assembled_sig_da::<TYPES, VOTE, CERT>(payload_commitment, membership, view);
 
     let vote: SimpleVote<TYPES, DAData> = DAVote::create_signed_vote(
         DAData {
@@ -318,16 +336,10 @@ async fn build_quorum_proposal_and_signature(
         );
         consensus.saved_leaves.insert(leaf.commit(), leaf.clone());
         let quorum_membership = handle.hotshot.inner.memberships.quorum_membership.clone();
-        let created_assembled_sig =
-            build_assembled_sig::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(
-                leaf.clone(),
-                &quorum_membership,
-                ViewNumber::new(cur_view - 1),
-            );
         let created_qc = build_qc::<TestTypes, QuorumVote<TestTypes>, QuorumCertificate<TestTypes>>(
-            created_assembled_sig,
-            leaf.clone(),
-            ViewNumber::new(1),
+            leaf.commit(),
+            &quorum_membership,
+            ViewNumber::new(cur_view - 1),
             public_key,
             private_key,
         );
