@@ -1044,6 +1044,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                         self.publish_proposal_if_able(view, None).await;
                     }
                 }
+                if let Some(tc) = &self.timeout_cert {
+                    if self.quorum_membership.get_leader(tc.get_view_number() + 1) == self.public_key {
+                        self.publish_proposal_if_able(view, self.timeout_cert.clone()).await;
+                    }
+                }
             }
             _ => {}
         }
@@ -1147,6 +1152,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 proposer_id: leaf.proposer_id,
             };
 
+            self.timeout_cert = None;
             let message = Proposal {
                 data: proposal,
                 signature,
