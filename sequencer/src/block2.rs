@@ -27,7 +27,10 @@ pub struct BlockPayload {
 impl BlockPayload {
     /// Returns (Self, metadata).
     ///
-    /// `metadata` is a bytes representation of the namespace table defined for j>0:
+    /// `metadata` is a bytes representation of the namespace table.
+    /// Why bytes? To make it easy to move metdata into payload in the future.
+    ///
+    /// Namespace table defined as follows for j>0:
     /// word[0]:    [number of entries in namespace table]
     /// word[2j-1]: [id for the jth namespace]
     /// word[2j]:   [end byte index of the jth namespace in the payload]
@@ -36,11 +39,12 @@ impl BlockPayload {
     /// Edge case: for j=1 the jth namespace start index is implicitly 0.
     ///
     /// Word type is `TxTableEntry`.
+    /// TODO(746) don't use `TxTableEntry`; make a different type for type safety.
     ///
-    /// TODO(746) it's Vec<u8> to make it easy to move metadata into payload in the future.
-    /// TODO(746) don't use `TxTableEntry`; make a different type
-    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables.
-    /// TODO(746) should metadata be included in hash, serde, etc?
+    /// TODO final entry should be implicit:
+    /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
+    ///
+    /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     fn from_txs(txs: impl IntoIterator<Item = Transaction>) -> Option<(Self, Vec<u8>)> {
         struct NamespaceInfo {
             // `tx_table` is a bytes representation of the following table:
@@ -55,13 +59,13 @@ impl BlockPayload {
             // TODO final entry should be implicit:
             // https://github.com/EspressoSystems/espresso-sequencer/issues/757
             tx_table: Vec<u8>,
-            // concatenation of all tx payloads
-            tx_bodies: Vec<u8>,
+            tx_bodies: Vec<u8>, // concatenation of all tx payloads
             tx_bytes_end: TxTableEntry,
             tx_table_len: TxTableEntry,
         }
 
-        // TODO(746) do we want deterministic namespace table ordering? If so then we need BTreeMap instead of HashMap.
+        // TODO(746) use of HashMap causes nondeterministic ordering for the namespace table.
+        // I think this is ok because a builder can do whatever it wants anyway.
         let mut namespaces: HashMap<VmId, NamespaceInfo> = HashMap::new();
         for tx in txs.into_iter() {
             let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().ok()?;
@@ -693,7 +697,6 @@ mod test {
                         Some(end.clone())
                     })
                     .collect();
-                // tracing::info!("ns {} tx_table_derived {:?}", n, tx_table_derived);
 
                 // derive this namespace's payload
                 let ns_payload_flat = {
@@ -702,7 +705,6 @@ mod test {
                     // write tx table bytes
                     ns_payload.extend(TxTableEntry::from_usize(tx_table_derived.len()).to_bytes());
                     for entry in tx_table_derived.iter() {
-                        // ns_payload.extend(TxTableEntry::try_from(n).unwrap().to_bytes());
                         ns_payload.extend(entry.to_bytes());
                     }
 
