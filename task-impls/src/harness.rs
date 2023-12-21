@@ -35,7 +35,10 @@ pub type TestHarnessTaskTypes<TYPES> = HSTWithEvent<
 /// Runs a test by building the task using `build_fn` and then passing it the `input` events
 /// and testing the make sure all of the `expected_output` events are seen
 ///
-/// `event_stream` - if given, will be used to register the task builder.
+/// # Arguments
+/// * `event_stream` - if given, will be used to register the task builder.
+/// * `allow_extra_output` - whether to allow an extra output after we've seen all expected
+/// outputs. Should be `false` in most cases.
 ///
 /// # Panics
 /// Panics if any state the test expects is not set. Panicing causes a test failure
@@ -45,6 +48,7 @@ pub async fn run_harness<TYPES, Fut>(
     expected_output: HashMap<HotShotEvent<TYPES>, usize>,
     event_stream: Option<ChannelStream<HotShotEvent<TYPES>>>,
     build_fn: impl FnOnce(TaskRunner, ChannelStream<HotShotEvent<TYPES>>) -> Fut,
+    allow_extra_output: bool,
 ) where
     TYPES: NodeType,
     Fut: Future<Output = TaskRunner>,
@@ -54,7 +58,7 @@ pub async fn run_harness<TYPES, Fut>(
     let event_stream = event_stream.unwrap_or_default();
     let state = TestHarnessState { expected_output };
     let handler = HandleEvent(Arc::new(move |event, state| {
-        async move { handle_event(event, state) }.boxed()
+        async move { handle_event(event, state, allow_extra_output) }.boxed()
     }));
     let filter = FilterEvent::default();
     let builder = TaskBuilder::<TestHarnessTaskTypes<TYPES>>::new("test_harness".to_string())
@@ -84,20 +88,30 @@ pub async fn run_harness<TYPES, Fut>(
 /// Handles an event for the Test Harness Task.  If the event is expected, remove it from
 /// the `expected_output` in state.  If unexpected fail test.
 ///
+/// # Arguments
+/// * `allow_extra_output` - whether to allow an extra output after we've seen all expected
+/// outputs. Should be `false` in most cases.
+///
 ///  # Panics
 /// Will panic to fail the test when it receives and unexpected event
 #[allow(clippy::needless_pass_by_value)]
 pub fn handle_event<TYPES: NodeType>(
     event: HotShotEvent<TYPES>,
     mut state: TestHarnessState<TYPES>,
+    allow_extra_output: bool,
 ) -> (
     std::option::Option<HotShotTaskCompleted>,
     TestHarnessState<TYPES>,
 ) {
-    assert!(
-        state.expected_output.contains_key(&event),
-        "Got an unexpected event: {event:?}",
-    );
+    // Check the output in either case:
+    // * We allow outputs only in our expected output set.
+    // * We haven't received all expected outputs yet.
+    if !allow_extra_output || !state.expected_output.is_empty() {
+        assert!(
+            state.expected_output.contains_key(&event),
+            "Got an unexpected event: {event:?}",
+        );
+    }
 
     let num_expected = state.expected_output.get_mut(&event).unwrap();
     if *num_expected == 1 {
