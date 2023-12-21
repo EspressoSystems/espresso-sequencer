@@ -91,11 +91,12 @@ impl BlockPayload {
         let mut payload = Vec::new();
         let mut namespace_bytes_end = TxTableEntry::zero();
         for (id, namespace) in namespaces {
+            let prev_len = payload.len();
             payload.extend(namespace.tx_table_len.to_bytes());
             payload.extend(namespace.tx_table);
             payload.extend(namespace.tx_bodies);
             namespace_table.extend(TxTableEntry::try_from(id).ok()?.to_bytes());
-            namespace_bytes_end.checked_add_mut(payload.len().try_into().ok()?)?;
+            namespace_bytes_end.checked_add_mut((payload.len() - prev_len).try_into().ok()?)?;
             namespace_table.extend(namespace_bytes_end.to_bytes());
         }
 
@@ -597,16 +598,16 @@ mod boilerplate {
 
 #[cfg(test)]
 mod test {
-    use crate::VmId;
-
     use super::{
         boilerplate::test_vid_factory, BlockPayload, QueryablePayload, Transaction,
         TxInclusionProof, TxIndex, TxTableEntry,
     };
+    use crate::VmId;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
+    use std::collections::HashMap;
 
     #[test]
     fn basic_correctness() {
@@ -650,8 +651,7 @@ mod test {
         let num_test_cases = test_cases.len();
         for (t, test_case) in test_cases.iter().enumerate() {
             let mut txs = Vec::new();
-            let mut nss = Vec::new();
-            let mut ns_offset = 0;
+            let mut nss = HashMap::new();
             for (n, tx_lengths) in test_case.iter().enumerate() {
                 tracing::info!(
                     "test block {} of {} namespace {} of {} with {} txs",
@@ -679,7 +679,7 @@ mod test {
                 // derive this namespace's tx table
                 let tx_table_derived: Vec<TxTableEntry> = tx_payloads
                     .iter()
-                    .scan(TxTableEntry::try_from(ns_offset).unwrap(), |end, tx| {
+                    .scan(TxTableEntry::zero(), |end, tx| {
                         end.checked_add_mut(TxTableEntry::try_from(tx.len()).unwrap())
                             .unwrap();
                         Some(end.clone())
@@ -698,78 +698,73 @@ mod test {
                     ns_payload.extend(tx_payloads_flat);
                     ns_payload
                 };
-                ns_offset += ns_payload_flat.len();
 
-                txs.extend(tx_payloads.iter().cloned().map(|tx_payload| {
-                    Transaction::new(crate::VmId(n.try_into().unwrap()), tx_payload)
-                }));
-
-                nss.push(NamespaceInfo {
-                    payload_flat: ns_payload_flat,
-                    tx_table_derived,
-                    tx_payloads,
-                });
+                let ns_id = crate::VmId(n.try_into().unwrap());
+                txs.extend(
+                    tx_payloads
+                        .iter()
+                        .cloned()
+                        .map(|tx_payload| Transaction::new(ns_id, tx_payload)),
+                );
+                let existing = nss.insert(
+                    ns_id,
+                    NamespaceInfo {
+                        payload_flat: ns_payload_flat,
+                        tx_table_derived,
+                        tx_payloads,
+                    },
+                );
+                assert!(existing.is_none());
             }
-
-            // derive the namespace table
-            let ns_table_derived: Vec<(VmId, TxTableEntry)> = nss
-                .iter()
-                .scan(TxTableEntry::zero(), |end, ns| {
-                    end.checked_add_mut(TxTableEntry::try_from(ns.payload_flat.len()).unwrap())
-                        .unwrap();
-                    Some(end.clone())
-                })
-                .enumerate()
-                .map(|(n, entry)| {
-                    (
-                        TxTableEntry::try_from(n).unwrap().try_into().unwrap(),
-                        entry,
-                    )
-                })
-                .collect();
-            assert_eq!(
-                ns_table_derived.len(),
-                test_case.len(),
-                "derived namespace table length expect {} got {}",
-                test_case.len(),
-                ns_table_derived.len()
-            );
-            assert_eq!(ns_table_derived.len(), nss.len(), "sanity check fail");
 
             let (block, namespace_table) = BlockPayload::from_txs(txs).unwrap();
 
             // test namespace table length
-            let ns_table_len_bytes = &namespace_table[..TxTableEntry::byte_len()];
-            let ns_table_len = TxTableEntry::from_bytes(ns_table_len_bytes).unwrap();
+            let ns_table_len =
+                TxTableEntry::from_bytes(&namespace_table[..TxTableEntry::byte_len()]).unwrap();
             assert_eq!(
                 ns_table_len,
-                TxTableEntry::try_from(ns_table_derived.len()).unwrap(),
+                TxTableEntry::try_from(test_case.len()).unwrap(),
                 "namespace table length expect {} got {}",
-                ns_table_derived.len(),
+                test_case.len(),
                 ns_table_len
             );
 
             // test namespace table contents
-            let ns_table_body = &namespace_table[TxTableEntry::byte_len()..];
-            let ns_table: Vec<(VmId, TxTableEntry)> = ns_table_body
-                .chunks(2 * TxTableEntry::byte_len())
-                .map(|bytes| {
-                    // this is a bit ugly
-                    (
-                        VmId::try_from(
-                            TxTableEntry::from_bytes(&bytes[..TxTableEntry::byte_len()]).unwrap(),
-                        )
-                        .unwrap(),
-                        TxTableEntry::from_bytes(&bytes[TxTableEntry::byte_len()..]).unwrap(),
+            // (need to mirror the order of entries)
+            tracing::info!("namespace_table {:?}", namespace_table);
+            let ns_table = {
+                let ns_table_body = &namespace_table[TxTableEntry::byte_len()..];
+                let mut ns_table = Vec::new();
+                let mut prev_entry = TxTableEntry::zero();
+                for bytes in ns_table_body.chunks(2 * TxTableEntry::byte_len()) {
+                    // read (namespace id, entry) from the namespace table
+                    let ns_id = VmId::try_from(
+                        TxTableEntry::from_bytes(&bytes[..TxTableEntry::byte_len()]).unwrap(),
                     )
-                })
-                .collect();
-            assert_eq!(ns_table, ns_table_derived, "incorrect namespace table");
+                    .unwrap();
+                    let entry =
+                        TxTableEntry::from_bytes(&bytes[TxTableEntry::byte_len()..]).unwrap();
+                    tracing::info!("(id, entry) ({},{})", ns_id.0, entry);
+
+                    // test namespace payload length
+                    let ns_payload_len_derived = usize::try_from(entry.clone()).unwrap()
+                        - usize::try_from(prev_entry.clone()).unwrap();
+                    let ns = nss.get(&ns_id).unwrap();
+                    let ns_payload_len = ns.payload_flat.len();
+                    assert_eq!(ns_payload_len, ns_payload_len_derived);
+
+                    ns_table.push((ns_id, entry.clone()));
+                    prev_entry = entry;
+                }
+                assert_eq!(ns_table.len(), test_case.len());
+                ns_table
+            };
 
             // test namespace payloads
             let disperse_data = vid.disperse(&block.payload).unwrap();
             let mut tx_index_offset = 0;
-            for (ns_id, ns) in nss.iter().enumerate() {
+            for (ns_id, ns) in nss.iter() {
                 // test tx table length
                 let tx_table_len_bytes = &ns.payload_flat[..TxTableEntry::byte_len()];
                 let tx_table_len = TxTableEntry::from_bytes(tx_table_len_bytes).unwrap();
@@ -777,7 +772,7 @@ mod test {
                     tx_table_len,
                     TxTableEntry::try_from(ns.tx_table_derived.len()).unwrap(),
                     "namespace {} tx table length expect {} got {}",
-                    ns_id,
+                    ns_id.0,
                     ns.tx_table_derived.len(),
                     tx_table_len
                 );
@@ -793,7 +788,7 @@ mod test {
                 assert_eq!(
                     tx_table, ns.tx_table_derived,
                     "incorrect tx table for namespace {}",
-                    ns_id
+                    ns_id.0
                 );
 
                 // tests for individual txs in this namespace
@@ -826,9 +821,10 @@ mod test {
             assert_eq!(tx_index_offset, block.len());
             assert_eq!(
                 block.payload,
-                nss.into_iter()
-                    .flat_map(|ns| ns.payload_flat)
-                    .collect::<Vec<u8>>(),
+                ns_table
+                    .into_iter()
+                    .flat_map(|(ns_id, _)| { nss.remove(&ns_id).unwrap().payload_flat })
+                    .collect::<Vec<u8>>()
             );
         }
     }
