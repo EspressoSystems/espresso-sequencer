@@ -35,7 +35,7 @@ async fn test_view_sync_task() {
         hotshot_types::traits::consensus_api::ConsensusSharedApi::public_key(&api),
         hotshot_types::traits::consensus_api::ConsensusSharedApi::private_key(&api),
     )
-    .unwrap();
+    .expect("Should be able to create a ViewSyncPreCommitVote.");
 
     tracing::error!("Vote in test is {:?}", vote.clone());
 
