@@ -191,7 +191,7 @@ async fn test_with_failures_f() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_with_failures_2() {
     use hotshot_testing::{
-        node_types::{MemoryImpl, TestTypes},
+        node_types::{WebImpl, TestTypes},
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::TestMetadata,
     };
@@ -224,7 +224,7 @@ async fn test_with_failures_2() {
     // Make sure we keep commiting rounds after the bad leaders, but not the full 50 because of the numerous timeouts
     metadata.overall_safety_properties.num_successful_views = 25;
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher::<TestTypes, WebImpl>(0)
         .launch()
         .run_test()
         .await;
