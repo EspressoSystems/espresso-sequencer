@@ -103,5 +103,5 @@ async fn test_da_task() {
 
     let build_fn = |task_runner, event_stream| add_da_task(task_runner, event_stream, handle);
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }
