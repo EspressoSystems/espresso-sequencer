@@ -276,6 +276,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
 
         let l1_initial_block = l1.provider.get_block_number().await.unwrap();
@@ -345,6 +346,7 @@ mod test {
         setup_backtrace();
 
         let anvil = AnvilOptions::default().spawn().await;
+
         let l1 = TestL1System::deploy(anvil.provider()).await.unwrap();
         let mut from_block = l1.provider.get_block_number().await.unwrap();
         let adaptor_l1_signer = Arc::new(
