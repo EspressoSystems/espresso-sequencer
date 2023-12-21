@@ -422,7 +422,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     pub async fn handle_event(&mut self, event: HotShotEvent<TYPES>) {
         match event {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
-                error!(
+                debug!(
                     "Receved Quorum Proposal for view {}",
                     *proposal.data.view_number
                 );
