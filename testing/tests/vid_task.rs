@@ -99,7 +99,7 @@ async fn test_vid_task() {
     );
 
     output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, ()),
+        HotShotEvent::SendPayloadCommitmentAndMetadata(payload_commitment, (), ViewNumber::new(2)),
         1,
     );
     output.insert(
@@ -113,5 +113,5 @@ async fn test_vid_task() {
 
     let build_fn = |task_runner, event_stream| add_vid_task(task_runner, event_stream, handle);
 
-    run_harness(input, output, None, build_fn).await;
+    run_harness(input, output, None, build_fn, false).await;
 }

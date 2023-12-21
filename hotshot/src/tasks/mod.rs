@@ -228,6 +228,7 @@ pub async fn add_consensus_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         vote_collector: None.into(),
         timeout_vote_collector: None.into(),
         timeout_task: None,
+        timeout_cert: None,
         event_stream: event_stream.clone(),
         output_event_stream: output_stream,
         vid_shares: HashMap::new(),

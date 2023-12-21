@@ -98,6 +98,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .publish(HotShotEvent::SendPayloadCommitmentAndMetadata(
                         vid_disperse.commit,
                         metadata,
+                        view_number,
                     ))
                     .await;
 
