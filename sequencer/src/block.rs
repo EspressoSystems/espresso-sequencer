@@ -108,37 +108,45 @@ impl Committable for NMTRoot {
     }
 }
 
-impl BlockHeader for Header {
-    type Payload = Payload;
-
-    fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
-        // The HotShot APIs should be redesigned so that
-        // * they are async
-        // * new blocks being created have access to the application state, which in our case could
-        //   contain an already connected L1 client.
-        // For now, as a workaround, we will create a new L1 client based on environment variables
-        // and use `block_on` to query it.
-        let l1 = if let Some(l1_client) = &*L1_CLIENT {
-            block_on(l1_client.snapshot())
-        } else {
-            // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
-            L1Snapshot {
-                finalized: None,
-                head: 0,
-            }
-        };
-
+impl Header {
+    fn from_info(
+        payload_commitment: VidCommitment,
+        transactions_root: NMTRoot,
+        parent: &Self,
+        mut l1: L1Snapshot,
+        mut timestamp: u64,
+    ) -> Self {
         // Increment height.
         let height = parent.height + 1;
 
-        // Sample a timestamp, ensuring that it does not decrease.
-        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
+        // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
+        // are lying about the current time, or our clock is just lagging.
         if timestamp < parent.timestamp {
             tracing::warn!(
                 "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
                 parent.timestamp
             );
             timestamp = parent.timestamp;
+        }
+
+        // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
+        // accurate.
+        if l1.head < parent.l1_head {
+            tracing::warn!(
+                "L1 head {} behind parent {}, L1 client may be lagging",
+                l1.head,
+                parent.l1_head
+            );
+            l1.head = parent.l1_head;
+        }
+        if l1.finalized < parent.l1_finalized {
+            tracing::warn!(
+                "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
+                l1.finalized,
+                parent.l1_finalized
+            );
+            l1.finalized = parent.l1_finalized;
         }
 
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
@@ -159,6 +167,36 @@ impl BlockHeader for Header {
             payload_commitment,
             transactions_root,
         }
+    }
+}
+
+impl BlockHeader for Header {
+    type Payload = Payload;
+
+    fn new(payload_commitment: VidCommitment, transactions_root: NMTRoot, parent: &Self) -> Self {
+        // The HotShot APIs should be redesigned so that
+        // * they are async
+        // * new blocks being created have access to the application state, which in our case could
+        //   contain an already connected L1 client.
+        // For now, as a workaround, we will create a new L1 client based on environment variables
+        // and use `block_on` to query it.
+        let l1 = if let Some(l1_client) = &*L1_CLIENT {
+            block_on(l1_client.snapshot())
+        } else {
+            // For unit testing, we may disable the L1 client and use mock L1 blocks instead.
+            L1Snapshot {
+                finalized: None,
+                head: 0,
+            }
+        };
+
+        Self::from_info(
+            payload_commitment,
+            transactions_root,
+            parent,
+            l1,
+            OffsetDateTime::now_utc().unix_timestamp() as u64,
+        )
     }
 
     fn genesis() -> (
@@ -452,5 +490,183 @@ mod reference {
             "BLOCK~RUbMrcJRDhzRaMw1ICtL6SNjX4CbDi4R2b_82R38gz1o",
             |header| header.commit(),
         );
+    }
+}
+
+#[cfg(test)]
+mod test_headers {
+    use super::*;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
+    #[derive(Debug, Default)]
+    #[must_use]
+    struct TestCase {
+        // Parent header info.
+        parent_timestamp: u64,
+        parent_l1_head: u64,
+        parent_l1_finalized: Option<L1BlockInfo>,
+
+        // Environment at the time the new header is created.
+        l1_head: u64,
+        l1_finalized: Option<L1BlockInfo>,
+        timestamp: u64,
+
+        // Expected new header info.
+        expected_timestamp: u64,
+        expected_l1_head: u64,
+        expected_l1_finalized: Option<L1BlockInfo>,
+    }
+
+    impl TestCase {
+        fn run(self) {
+            setup_logging();
+            setup_backtrace();
+
+            // Check test case validity.
+            assert!(self.expected_timestamp >= self.parent_timestamp);
+            assert!(self.expected_l1_head >= self.parent_l1_head);
+            assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
+
+            let genesis = Header::genesis().0;
+
+            let mut parent = genesis.clone();
+            parent.timestamp = self.parent_timestamp;
+            parent.l1_head = self.parent_l1_head;
+            parent.l1_finalized = self.parent_l1_finalized;
+
+            let header = Header::from_info(
+                genesis.payload_commitment,
+                genesis.transactions_root,
+                &parent,
+                L1Snapshot {
+                    head: self.l1_head,
+                    finalized: self.l1_finalized,
+                },
+                self.timestamp,
+            );
+            assert_eq!(header.height, parent.height + 1);
+            assert_eq!(header.timestamp, self.expected_timestamp);
+            assert_eq!(header.l1_head, self.expected_l1_head);
+            assert_eq!(header.l1_finalized, self.expected_l1_finalized);
+        }
+    }
+
+    fn l1_block(number: u64) -> L1BlockInfo {
+        L1BlockInfo {
+            number,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_new_header() {
+        // Simplest case: building on genesis, L1 info and timestamp unchanged.
+        TestCase::default().run()
+    }
+
+    #[test]
+    fn test_new_header_advance_timestamp() {
+        TestCase {
+            timestamp: 1,
+            expected_timestamp: 1,
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_advance_l1_block() {
+        TestCase {
+            parent_l1_head: 0,
+            parent_l1_finalized: Some(l1_block(0)),
+
+            l1_head: 1,
+            l1_finalized: Some(l1_block(1)),
+
+            expected_l1_head: 1,
+            expected_l1_finalized: Some(l1_block(1)),
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_advance_l1_finalized_from_none() {
+        TestCase {
+            l1_finalized: Some(l1_block(1)),
+            expected_l1_finalized: Some(l1_block(1)),
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_timestamp_behind_finalized_l1_block() {
+        let l1_finalized = Some(L1BlockInfo {
+            number: 1,
+            timestamp: 1.into(),
+            ..Default::default()
+        });
+        TestCase {
+            l1_head: 1,
+            l1_finalized,
+            timestamp: 0,
+
+            expected_l1_head: 1,
+            expected_l1_finalized: l1_finalized,
+            expected_timestamp: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_timestamp_behind() {
+        TestCase {
+            parent_timestamp: 1,
+            timestamp: 0,
+            expected_timestamp: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_head_behind() {
+        TestCase {
+            parent_l1_head: 1,
+            l1_head: 0,
+            expected_l1_head: 1,
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_finalized_behind_some() {
+        TestCase {
+            parent_l1_finalized: Some(l1_block(1)),
+            l1_finalized: Some(l1_block(0)),
+            expected_l1_finalized: Some(l1_block(1)),
+
+            ..Default::default()
+        }
+        .run()
+    }
+
+    #[test]
+    fn test_new_header_l1_finalized_behind_none() {
+        TestCase {
+            parent_l1_finalized: Some(l1_block(0)),
+            l1_finalized: None,
+            expected_l1_finalized: Some(l1_block(0)),
+
+            ..Default::default()
+        }
+        .run()
     }
 }

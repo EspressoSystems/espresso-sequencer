@@ -10,6 +10,9 @@ ENTRYPOINT ["tini", "--"]
 COPY target/$TARGETARCH/release/sequencer /bin/sequencer
 RUN chmod +x /bin/sequencer
 
+COPY target/$TARGETARCH/release/reset-storage /bin/reset-storage
+RUN chmod +x /bin/reset-storage
+
 # Set a path to save the consensus config on startup.
 #
 # Upon restart, the config will be loaded from this file and the node will be able to resume

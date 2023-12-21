@@ -5,7 +5,6 @@ mod test {
 
     use contract_bindings::hot_shot::{NewBlocksCall, Qc};
     use contract_bindings::shared_types::G2Point;
-
     use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
 
     use jf_primitives::signatures::bls_over_bn254::BLSOverBN254CurveSignatureScheme;
@@ -18,6 +17,7 @@ mod test {
     async fn test_hotshot_block_commitment() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
+
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let block_num = U256::from(0);
@@ -70,6 +70,7 @@ mod test {
     async fn test_hotshot_stake_table() {
         let anvil = AnvilOptions::default().spawn().await;
         let provider = anvil.provider();
+
         let TestL1System { hotshot, .. } = TestL1System::deploy(provider.clone()).await.unwrap();
 
         let rng = &mut test_rng();
