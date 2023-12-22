@@ -267,7 +267,7 @@ pub struct NetworkParams {
 pub async fn init_node(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    persistence: impl SequencerPersistence,
+    persistence: &mut impl SequencerPersistence,
 ) -> anyhow::Result<SequencerContext<SeqTypes, Node<network::Web>>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -288,6 +288,7 @@ pub async fn init_node(
             tracing::info!("loading network config from orchestrator");
             let config = orchestrator_client.get_config(public_ip.to_string()).await;
             tracing::info!("loaded config, we are node {}", config.node_index);
+            persistence.save_config(&config).await?;
             tracing::info!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(config.node_index)

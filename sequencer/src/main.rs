@@ -78,15 +78,19 @@ where
             if let Some(status) = modules.status {
                 opt = opt.status(status);
             }
-            let storage = storage_opt.create().await?;
+            let mut storage = storage_opt.create().await?;
             let SequencerNode { context, .. } = opt
                 .serve(move |metrics| {
-                    async move { init_node(network_params, &*metrics, storage).await.unwrap() }
-                        .boxed()
+                    async move {
+                        init_node(network_params, &*metrics, &mut storage)
+                            .await
+                            .unwrap()
+                    }
+                    .boxed()
                 })
                 .await?;
             context
         }
-        None => init_node(network_params, &NoMetrics, storage_opt.create().await?).await?,
+        None => init_node(network_params, &NoMetrics, &mut storage_opt.create().await?).await?,
     })
 }
