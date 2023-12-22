@@ -1,18 +1,17 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use futures::{
-    future::{join_all, FutureExt},
-    stream::StreamExt,
-};
+use futures::{future::FutureExt, stream::StreamExt};
+use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
-    api::{self, SequencerNode},
-    hotshot_commitment::run_hotshot_commitment_task,
-    init_node, init_static, NetworkParams, Options,
+    api::{self, data_source::DataSourceOptions, SequencerNode},
+    init_node, init_static, network,
+    options::{Modules, Options},
+    persistence, NetworkParams, Node, SeqTypes,
 };
 
 #[async_std::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
@@ -20,30 +19,54 @@ async fn main() {
 
     tracing::info!("sequencer starting up");
     let opt = Options::parse();
-    let modules = opt.modules();
+    let mut modules = opt.modules();
     tracing::info!("modules: {:?}", modules);
 
-    let mut tasks = vec![];
+    let mut handle = if let Some(storage) = modules.storage_fs.take() {
+        init_with_storage(modules, opt, storage).await?
+    } else if let Some(storage) = modules.storage_sql.take() {
+        init_with_storage(modules, opt, storage).await?
+    } else {
+        // Persistence is required. If none is provided, just use the local file system.
+        init_with_storage(modules, opt, persistence::fs::Options::default()).await?
+    };
+
+    // Start doing consensus.
+    handle.hotshot.start_consensus().await;
+
+    // Wait for events just to keep the process from exiting before consensus exits.
+    let mut events = handle.get_event_stream(Default::default()).await.0;
+    while let Some(event) = events.next().await {
+        tracing::debug!(?event);
+    }
+    tracing::debug!("event stream ended");
+    Ok(())
+}
+
+async fn init_with_storage<S>(
+    modules: Modules,
+    opt: Options,
+    storage_opt: S,
+) -> anyhow::Result<SystemContextHandle<SeqTypes, Node<network::Web>>>
+where
+    S: DataSourceOptions,
+{
     let network_params = NetworkParams {
         da_server_url: opt.da_server_url,
         consensus_server_url: opt.consensus_server_url,
         orchestrator_url: opt.orchestrator_url,
         webserver_poll_interval: opt.webserver_poll_interval,
     };
-    let config_path = opt.config_path;
 
     // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    let (mut handle, query_api_port) = match modules.http {
+    Ok(match modules.http {
         Some(opt) => {
             // Add optional API modules as requested.
             let mut opt = api::Options::from(opt);
-            if let Some(query_sql) = modules.query_sql {
-                opt = opt.query_sql(query_sql);
-            }
-            if let Some(query_fs) = modules.query_fs {
-                opt = opt.query_fs(query_fs);
+            if let Some(query) = modules.query {
+                opt = storage_opt.enable_query_module(opt, query);
             }
             if let Some(submit) = modules.submit {
                 opt = opt.submit(submit);
@@ -51,80 +74,19 @@ async fn main() {
             if let Some(status) = modules.status {
                 opt = opt.status(status);
             }
-
-            // Save the port if we are running a query API. This can be used later when starting the
-            // commitment task; otherwise the user must give us the URL of an external query API.
-            let query_api_port = if opt.has_query_module() {
-                Some(opt.http.port)
-            } else {
-                None
-            };
+            let storage = storage_opt.create().await?;
             let SequencerNode { handle, .. } = opt
                 .serve(move |metrics| {
-                    async move {
-                        init_node(
-                            network_params,
-                            &*metrics,
-                            config_path.as_ref().map(|path| path.as_ref()),
-                        )
-                        .await
-                    }
-                    .boxed()
+                    async move { init_node(network_params, &*metrics, storage).await.unwrap() }
+                        .boxed()
                 })
-                .await
-                .expect("Failed to initialize API");
-            (handle, query_api_port)
+                .await?;
+            handle
         }
-        None => (
-            init_node(
-                network_params,
-                &NoMetrics,
-                config_path.as_ref().map(|path| path.as_ref()),
-            )
-            .await
-            .0,
-            None,
-        ),
-    };
-    // Register a task to run consensus.
-    tasks.push(
-        async move {
-            // Start doing consensus.
-            handle.hotshot.start_consensus().await;
-
-            // Wait for events just to keep the process from exiting before consensus exits.
-            let mut events = handle.get_event_stream(Default::default()).await.0;
-            while let Some(event) = events.next().await {
-                tracing::debug!(?event);
-            }
-            tracing::debug!("event stream ended");
+        None => {
+            init_node(network_params, &NoMetrics, storage_opt.create().await?)
+                .await?
+                .0
         }
-        .boxed(),
-    );
-
-    // Register a task to run the HotShot commitment module, if requested.
-    if let Some(mut options) = modules.commitment_task {
-        // If no query service is specified, use the one of this node.
-        if options.query_service_url.is_none() {
-            options.query_service_url = Some(
-                format!(
-                    "http://localhost:{}",
-                    query_api_port
-                        .expect("Query API port is required when running commitment task")
-                )
-                .parse()
-                .unwrap(),
-            );
-        }
-        tasks.push(
-            async move {
-                tracing::info!("Starting HotShot commitment task");
-                run_hotshot_commitment_task(&options).await
-            }
-            .boxed(),
-        )
-    }
-
-    // Run all tasks in parallel.
-    join_all(tasks).await;
+    })
 }

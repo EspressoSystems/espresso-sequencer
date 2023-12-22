@@ -1,5 +1,10 @@
-use super::endpoints::TimeWindowQueryData;
-use crate::{network, Node, SeqTypes};
+use super::{
+    endpoints::TimeWindowQueryData,
+    fs,
+    options::{Options, Query},
+    sql,
+};
+use crate::{network, persistence, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -9,9 +14,26 @@ use hotshot_query_service::{
     QueryResult,
 };
 
-pub trait DataSourceOptions {
+pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
-    fn reset_storage(&mut self);
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options;
+}
+
+impl DataSourceOptions for persistence::sql::Options {
+    type DataSource = sql::DataSource;
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options {
+        opt.query_sql(query, self.clone())
+    }
+}
+
+impl DataSourceOptions for persistence::fs::Options {
+    type DataSource = fs::DataSource;
+
+    fn enable_query_module(&self, opt: Options, query: Query) -> Options {
+        opt.query_fs(query, self.clone())
+    }
 }
 
 /// A data source with sequencer-specific functionality.
@@ -29,7 +51,7 @@ pub trait SequencerDataSource:
     type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
-    async fn create(opt: Self::Options) -> anyhow::Result<Self>;
+    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self>;
 
     /// Update sequencer-specific indices when a new block is added.
     ///

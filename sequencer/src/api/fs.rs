@@ -1,7 +1,5 @@
-use super::{
-    data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Fs as Options,
-};
-use crate::SeqTypes;
+use super::{data_source::SequencerDataSource, endpoints::TimeWindowQueryData};
+use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
 use futures::StreamExt;
 use hotshot_query_service::{
@@ -23,13 +21,13 @@ pub type DataSource = ExtensibleDataSource<FileSystemDataSource<SeqTypes>, Index
 impl SequencerDataSource for DataSource {
     type Options = Options;
 
-    async fn create(opt: Self::Options) -> anyhow::Result<Self> {
-        let storage_path = Path::new(&opt.storage_path);
+    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self> {
+        let path = Path::new(&opt.path);
         let data_source = {
-            if opt.reset_store {
-                FileSystemDataSource::create(storage_path).await?
+            if reset {
+                FileSystemDataSource::create(path).await?
             } else {
-                FileSystemDataSource::open(storage_path).await?
+                FileSystemDataSource::open(path).await?
             }
         };
         let mut index = Index::default();
@@ -143,10 +141,12 @@ mod impl_testable_data_source {
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
-            opt.query_fs(Options {
-                storage_path: storage.path().into(),
-                reset_store: true,
-            })
+            opt.query_fs(
+                Default::default(),
+                Options {
+                    path: storage.path().into(),
+                },
+            )
         }
     }
 }
