@@ -4,7 +4,7 @@ use super::{
     data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState, Context,
     SequencerNode,
 };
-use crate::{api::state_signature::state_signature_loop, network, persistence};
+use crate::{api::state_signature::state_signature_loop, network, persistence, Event};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -16,6 +16,7 @@ use hotshot_query_service::{
     status::{self, UpdateStatusData},
     Error,
 };
+use hotshot_task::task::FilterEvent;
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use tide_disco::App;
 
@@ -231,9 +232,19 @@ where
         .await
         .0;
 
+    let decided_event_filter = FilterEvent(Arc::new(|event| {
+        matches!(
+            event,
+            Event {
+                event: hotshot_types::event::EventType::Decide { .. },
+                ..
+            }
+        )
+    }));
+
     let events_for_state_signature = context
         .consensus_mut()
-        .get_event_stream(Default::default())
+        .get_event_stream(decided_event_filter)
         .await
         .0;
 

@@ -51,6 +51,7 @@ hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-signature-key = { workspace = true }
 hotshot-stake-table = { workspace = true }
+hotshot-task = { workspace = true }
 hotshot-types = { workspace = true }
 hotshot-web-server = { workspace = true }
 

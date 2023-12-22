@@ -7527,6 +7527,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-signature-key",
  "hotshot-stake-table",
+ "hotshot-task",
  "hotshot-testing",
  "hotshot-types",
  "hotshot-web-server",
