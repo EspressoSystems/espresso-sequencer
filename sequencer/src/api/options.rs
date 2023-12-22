@@ -4,7 +4,7 @@ use super::{
     data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState, Context,
     SequencerNode,
 };
-use crate::network;
+use crate::{api::state_signature::state_signature_loop, network};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -91,10 +91,21 @@ impl Options {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
             // which allows us to run the status API with no persistent storage.
             let ds = MetricsDataSource::default();
-            let context = init_context(ds.populate_metrics()).await;
+            let mut context = init_context(ds.populate_metrics()).await;
             let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
                 ExtensibleDataSource::new(ds, context.clone()),
             )));
+
+            // Get an event stream from the handle to use for populating the query data with
+            // consensus events.
+            //
+            // We must do this _before_ starting consensus on the handle, otherwise we could miss
+            // the first events emitted by consensus.
+            let events = context
+                .consensus_mut()
+                .get_event_stream(Default::default())
+                .await
+                .0;
 
             // Initialize status API.
             let status_api = status::define_api(&Default::default())?;
@@ -110,18 +121,33 @@ impl Options {
             app.register_module("state-signature", state_signature_api)?;
 
             SequencerNode {
-                context,
-                update_task: spawn(
-                    app.serve(format!("0.0.0.0:{}", self.http.port))
-                        .map_err(anyhow::Error::from),
-                ),
+                context: context.clone(),
+                update_task: spawn(async move {
+                    futures::join!(
+                        app.serve(format!("0.0.0.0:{}", self.http.port))
+                            .map_err(anyhow::Error::from),
+                        state_signature_loop(context, events),
+                    )
+                    .0
+                }),
             }
         } else {
             // If no status or availability API is requested, we don't need metrics or a query
             // service data source. The only app state is the HotShot handle, which we use to submit
             // transactions.
-            let context = init_context(Box::new(NoMetrics)).await;
+            let mut context = init_context(Box::new(NoMetrics)).await;
             let mut app = App::<_, Error>::with_state(RwLock::new(context.clone()));
+
+            // Get an event stream from the handle to use for populating the query data with
+            // consensus events.
+            //
+            // We must do this _before_ starting consensus on the handle, otherwise we could miss
+            // the first events emitted by consensus.
+            let events = context
+                .consensus_mut()
+                .get_event_stream(Default::default())
+                .await
+                .0;
 
             // Initialize submit API
             if self.submit.is_some() {
@@ -133,11 +159,15 @@ impl Options {
             app.register_module("state-signature", state_signature_api)?;
 
             SequencerNode {
-                context,
-                update_task: spawn(
-                    app.serve(format!("0.0.0.0:{}", self.http.port))
-                        .map_err(anyhow::Error::from),
-                ),
+                context: context.clone(),
+                update_task: spawn(async move {
+                    futures::join!(
+                        app.serve(format!("0.0.0.0:{}", self.http.port))
+                            .map_err(anyhow::Error::from),
+                        state_signature_loop(context, events),
+                    )
+                    .0
+                }),
             }
         };
 
@@ -234,6 +264,12 @@ where
         .await
         .0;
 
+    let events_for_state_signature = context
+        .consensus_mut()
+        .get_event_stream(Default::default())
+        .await
+        .0;
+
     let state: State<N, D> = Arc::new(RwLock::new(ExtensibleDataSource::new(ds, context.clone())));
     let mut app = App::<_, Error>::with_state(state.clone());
 
@@ -256,17 +292,16 @@ where
     let state_signature_api = endpoints::state_signature()?;
     app.register_module("state-signature", state_signature_api)?;
 
-    let update_task = spawn(async move {
-        futures::join!(
-            app.serve(format!("0.0.0.0:{}", opt.http.port))
-                .map_err(anyhow::Error::from),
-            update_loop(state, events),
-        )
-        .0
-    });
-
     Ok(SequencerNode {
-        context,
-        update_task,
+        context: context.clone(),
+        update_task: spawn(async move {
+            futures::join!(
+                app.serve(format!("0.0.0.0:{}", opt.http.port))
+                    .map_err(anyhow::Error::from),
+                update_loop(state, events),
+                state_signature_loop(context, events_for_state_signature),
+            )
+            .0
+        }),
     })
 }

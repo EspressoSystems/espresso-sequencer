@@ -8,9 +8,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, SequencerNode},
     hotshot_commitment::run_hotshot_commitment_task,
-    init_node, init_static,
-    state_signature::state_signature_hook,
-    Event, NetworkParams, Options,
+    init_node, init_static, NetworkParams, Options,
 };
 
 #[async_std::main]
@@ -98,17 +96,6 @@ async fn main() {
             let mut events = consensus.get_event_stream(Default::default()).await.0;
             while let Some(event) = events.next().await {
                 tracing::debug!(?event);
-
-                // Trigger the light client signature hook when a new leaf is decided
-                if let Event {
-                    event: hotshot_types::event::EventType::Decide { leaf_chain, .. },
-                    ..
-                } = event
-                {
-                    if let Some(leaf) = leaf_chain.first() {
-                        state_signature_hook(&context, leaf).await
-                    }
-                }
             }
 
             tracing::debug!("event stream ended");

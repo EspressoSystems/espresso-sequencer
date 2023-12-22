@@ -1,5 +1,5 @@
 use super::endpoints::TimeWindowQueryData;
-use crate::{network, Node, SeqTypes};
+use crate::{network, state_signature, Node, SeqTypes};
 use async_trait::async_trait;
 use hotshot::types::SystemContextHandle;
 use hotshot_query_service::{
@@ -8,7 +8,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     QueryResult,
 };
-use hotshot_types::light_client::StateSignature;
+use hotshot_types::light_client::{LightClientState, StateSignature};
 
 /// A data source with sequencer-specific functionality.
 ///
@@ -49,6 +49,8 @@ pub(crate) trait SubmitDataSource<N: network::Type> {
 
 pub(crate) trait StateSignatureDataSource<N: network::Type> {
     fn get_state_signature(&self, height: u64) -> Option<StateSignature>;
+
+    fn sign_new_state(&self, state: &LightClientState<state_signature::BaseField>);
 }
 
 #[cfg(test)]
