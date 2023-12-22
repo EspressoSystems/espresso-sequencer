@@ -6,6 +6,7 @@ use ark_poly::domain::radix2::Radix2EvaluationDomain;
 use ark_poly::EvaluationDomain;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
 use clap::{Parser, ValueEnum};
+use diff_test_bn254::ParsedG2Point;
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
@@ -79,6 +80,8 @@ enum Action {
     MockGenesis,
     /// Generate internal hash values for the BLS signature scheme
     GenBLSHashes,
+    /// Generate BLS keys and a signature
+    GenBLSSig,
 }
 
 #[allow(clippy::type_complexity)]
@@ -471,6 +474,28 @@ fn main() {
             let hash_to_curve_elem_parsed: ParsedG1Point = hash_to_curve_elem.into();
 
             let res = (fq_u256, hash_to_curve_elem_parsed);
+            println!("{}", res.encode_hex());
+        }
+        Action::GenBLSSig => {
+            let mut rng = jf_utils::test_rng();
+
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=message");
+            }
+            let message_bytes = cli.args[0].parse::<Bytes>().unwrap();
+
+            // Generate the BLS ver key
+            let key_pair = BLSKeyPair::generate(&mut rng);
+            let vk = key_pair.ver_key();
+            let vk_g2_affine: G2Affine = vk.to_affine();
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
+
+            // Sign the message
+            let sig: Signature = key_pair.sign(&message_bytes, CS_ID_BLS_BN254);
+            let sig_affine_point = sig.sigma.into_affine();
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
+
+            let res = (vk_parsed, sig_parsed);
             println!("{}", res.encode_hex());
         }
     };
