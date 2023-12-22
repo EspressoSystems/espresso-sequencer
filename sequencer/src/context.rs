@@ -68,5 +68,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencerContext<TYPES, I> {
         .unwrap();
         let mut pool_guard = self.state_signatures.write().unwrap();
         pool_guard.push(state.block_height as u64, state_signature);
+        tracing::info!(
+            "New signature added for block height {}",
+            state.block_height
+        );
     }
 }

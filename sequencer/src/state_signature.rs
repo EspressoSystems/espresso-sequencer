@@ -21,7 +21,7 @@ pub(super) async fn state_signature_loop<N>(
 ) where
     N: network::Type,
 {
-    tracing::debug!("waiting for event");
+    tracing::debug!("Watching event stream for decided leaves.");
     while let Some(event) = events.next().await {
         tracing::info!("got event {:?}", event);
 
@@ -32,12 +32,13 @@ pub(super) async fn state_signature_loop<N>(
         } = event
         {
             if let Some(leaf) = leaf_chain.first() {
+                tracing::info!("New leaves decided. Newest leaf: {:?}", leaf);
                 let new_state = form_light_client_state(leaf);
                 context.sign_new_state(&new_state);
             }
         }
     }
-    tracing::warn!("end of HotShot event stream, updater task will exit");
+    tracing::warn!("And now his watch has ended.");
 }
 
 fn form_light_client_state(leaf: &Leaf) -> LightClientState<BaseField> {
