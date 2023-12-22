@@ -22,17 +22,6 @@ use tagged_base64::tagged;
 )]
 pub struct EncodedPublicKey(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
 
-/// Type saftey wrapper for byte encoded signature
-#[derive(
-    Clone, custom_debug::Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub struct EncodedSignature(#[debug(with = "custom_debug::hexbuf")] pub Vec<u8>);
-
-impl AsRef<[u8]> for EncodedSignature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType {
     /// Get the stake value
