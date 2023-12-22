@@ -14,8 +14,8 @@ import { BN254 } from "bn254/BN254.sol";
 import { BLSSig } from "../src/libraries/BLSSig.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
-import { LightClient } from "../src/LightClient.sol";
-import { LightClientTest } from "../test/mocks/LightClientTest.sol";
+import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientTest as LCTest } from "../test/mocks/LightClientTest.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -30,7 +30,11 @@ contract StakeTable_Test is Test {
 
     S public stakeTable;
     ExampleToken public token;
-    LightClientTest public lightClientContract;
+
+    LCTest public lc;
+    LC.LightClientState public genesis;
+    uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
+
     uint256 constant INITIAL_BALANCE = 1_000_000_000;
     address exampleTokenCreator;
 
@@ -111,18 +115,18 @@ contract StakeTable_Test is Test {
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
 
-        LightClient.LightClientState memory genesis = LightClient.LightClientState({
-            viewNum: 0,
-            blockHeight: 0,
-            blockCommRoot: BN254.ScalarField.wrap(0),
-            feeLedgerComm: BN254.ScalarField.wrap(0),
-            stakeTableBlsKeyComm: BN254.ScalarField.wrap(0),
-            stakeTableSchnorrKeyComm: BN254.ScalarField.wrap(0),
-            stakeTableAmountComm: BN254.ScalarField.wrap(0),
-            threshold: 0
-        });
-        lightClientContract = new LightClientTest(genesis, 10);
-        stakeTable = new S(address(token), address(lightClientContract), 10);
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-genesis";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory state,,) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+
+        genesis = state;
+        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+        stakeTable = new S(address(token), address(lc), 10);
     }
 
     /// `register` function
@@ -179,7 +183,7 @@ contract StakeTable_Test is Test {
     }
 
     function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 rand) external {
-        lightClientContract.setCurrentEpoch(3);
+        lc.setCurrentEpoch(3);
         uint64 currentEpoch = stakeTable.currentEpoch();
 
         uint64 depositAmount = 10;
@@ -384,7 +388,7 @@ contract StakeTable_Test is Test {
         /// Try to deposit while an exit request is already in progress.
 
         // Ensure the registration is completed.
-        lightClientContract.setCurrentEpoch(3);
+        lc.setCurrentEpoch(3);
         vm.prank(exampleTokenCreator);
         stakeTable.requestExit(blsVK);
         vm.prank(exampleTokenCreator);
@@ -403,7 +407,7 @@ contract StakeTable_Test is Test {
         token.approve(address(stakeTable), rand);
 
         // Ensure the registration is completed.
-        lightClientContract.setCurrentEpoch(3);
+        lc.setCurrentEpoch(3);
         vm.expectRevert("TRANSFER_FROM_FAILED");
         vm.prank(exampleTokenCreator);
         stakeTable.deposit(blsVK, depositAmount);
@@ -425,7 +429,7 @@ contract StakeTable_Test is Test {
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
         uint64 stake = node.balance;
 
-        lightClientContract.setCurrentEpoch(3);
+        lc.setCurrentEpoch(3);
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit Deposit(stakeTable._hashBlsKey(blsVK), newDepositAmount);
         uint64 newBalance;
@@ -460,7 +464,7 @@ contract StakeTable_Test is Test {
         BN254.G2Point memory blsVK;
         (blsVK,) = runSuccessfulRegistration();
 
-        lightClientContract.setCurrentEpoch(5);
+        lc.setCurrentEpoch(5);
         // Request Exit once, nothing happens.
         vm.prank(exampleTokenCreator);
         stakeTable.requestExit(blsVK);
@@ -475,7 +479,7 @@ contract StakeTable_Test is Test {
         BN254.G2Point memory blsVK;
         (blsVK,) = runSuccessfulRegistration();
 
-        lightClientContract.setCurrentEpoch(0);
+        lc.setCurrentEpoch(0);
 
         // Request another time, an error is raised.
         vm.prank(exampleTokenCreator);
@@ -488,7 +492,7 @@ contract StakeTable_Test is Test {
         (blsVK,) = runSuccessfulRegistration();
 
         // Check the right event is emitted
-        lightClientContract.setCurrentEpoch(5);
+        lc.setCurrentEpoch(5);
 
         vm.expectEmit(false, false, false, true, address(stakeTable));
         bytes32 key = stakeTable._hashBlsKey(blsVK);
@@ -514,7 +518,7 @@ contract StakeTable_Test is Test {
         uint64 minWithdrawEpoch = node.exitEpoch + stakeTable.exitEscrowPeriod(node);
 
         withdrawEpoch = uint64(bound(withdrawEpoch, 0, minWithdrawEpoch - 1));
-        lightClientContract.setCurrentEpoch(withdrawEpoch);
+        lc.setCurrentEpoch(withdrawEpoch);
         vm.expectRevert(S.PrematureWithdrawal.selector);
         stakeTable.withdrawFunds(blsVK);
     }
@@ -526,7 +530,7 @@ contract StakeTable_Test is Test {
 
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(blsVK);
         uint64 withdrawEpoch = node.exitEpoch + stakeTable.exitEscrowPeriod(node);
-        lightClientContract.setCurrentEpoch(withdrawEpoch);
+        lc.setCurrentEpoch(withdrawEpoch);
 
         // Balance before
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
@@ -660,9 +664,9 @@ contract StakeTable_Test is Test {
 
     /// Helper function to handle epoch increments in testFuzz_SequencesOfEvents
     function handleAdvanceEpoch() private {
-        uint64 currentEpoch = lightClientContract.currentEpoch();
+        uint64 currentEpoch = lc.currentEpoch();
         uint64 nextEpoch = currentEpoch + 1;
-        lightClientContract.setCurrentEpoch(nextEpoch);
+        lc.setCurrentEpoch(nextEpoch);
         assertEq(stakeTable.currentEpoch(), nextEpoch);
     }
 

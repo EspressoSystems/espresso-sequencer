@@ -120,7 +120,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
     }
 
-    // TODO: malformed gensis would revert
+    // TODO: malformed genesis would revert
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
 

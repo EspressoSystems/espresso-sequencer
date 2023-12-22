@@ -394,11 +394,14 @@ fn main() {
             println!("args: {:?}", cli.args);
         }
         Action::GenClientWallet => {
-            let mut rng = jf_utils::test_rng();
-
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=senderAddress");
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=senderAddress arg2=seed");
             }
+
+            // Use seed from cli to generate different bls keys
+            let seed_value: u8 = cli.args[1].parse::<u8>().unwrap();
+            let seed = [seed_value; 32];
+            let mut rng = StdRng::from_seed(seed);
 
             let sender_address = cli.args[0].parse::<Address>().unwrap();
             let sender_address_bytes = AbiEncode::encode(sender_address);
@@ -416,26 +419,16 @@ fn main() {
             let vk = key_pair.ver_key();
             let vk_g2_affine: G2Affine = vk.to_affine();
 
-            let pk_x_c0 = field_to_u256::<Fq>(vk_g2_affine.x.c0);
-            let pk_x_c1 = field_to_u256::<Fq>(vk_g2_affine.x.c1);
-            let pk_y_c0 = field_to_u256::<Fq>(vk_g2_affine.y.c0);
-            let pk_y_c1 = field_to_u256::<Fq>(vk_g2_affine.y.c1);
+            let vk_parsed: ParsedG2Point = vk_g2_affine.into();
 
             // Sign the ethereum address with the BLS key
             let sig: Signature = key_pair.sign(&sender_address_bytes, CS_ID_BLS_BN254);
             let sig_affine_point = sig.sigma.into_affine();
-            let sig_x = field_to_u256::<Fq>(sig_affine_point.x);
-            let sig_y = field_to_u256::<Fq>(sig_affine_point.y);
+            let sig_parsed: ParsedG1Point = sig_affine_point.into();
 
-            // TODO (Alex) Return ParsedG1Point and ParsedG2Point
-            // in https://github.com/EspressoSystems/espresso-sequencer/issues/615 instead of field by field
             let res = (
-                sig_x,
-                sig_y,
-                pk_x_c0,
-                pk_x_c1,
-                pk_y_c0,
-                pk_y_c1,
+                sig_parsed,
+                vk_parsed,
                 schnorr_pk_x,
                 schnorr_pk_y,
                 sender_address,

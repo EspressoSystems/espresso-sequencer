@@ -72,8 +72,8 @@ contract LightClient {
             genesis.viewNum != 0 || genesis.blockHeight != 0
                 || BN254.ScalarField.unwrap(genesis.stakeTableBlsKeyComm) == 0
                 || BN254.ScalarField.unwrap(genesis.stakeTableSchnorrKeyComm) == 0
-                || BN254.ScalarField.unwrap(genesis.stakeTableAmountComm) == 0
-                || genesis.threshold == 0 || numBlockPerEpoch == 0
+                || BN254.ScalarField.unwrap(genesis.stakeTableAmountComm) == 0 || genesis.threshold == 0
+                || numBlockPerEpoch == 0
         ) {
             revert InvalidArgs();
         }
