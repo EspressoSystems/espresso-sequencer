@@ -4,7 +4,7 @@ use super::{
     data_source::SequencerDataSource, endpoints, fs, sql, update::update_loop, AppState, Context,
     SequencerNode,
 };
-use crate::{api::state_signature::state_signature_loop, network};
+use crate::{api::state_signature::state_signature_loop, network, persistence};
 use async_std::{
     sync::{Arc, RwLock},
     task::spawn,
@@ -17,40 +17,43 @@ use hotshot_query_service::{
     Error,
 };
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
-use std::path::PathBuf;
 use tide_disco::App;
 
 #[derive(Clone, Debug)]
 pub struct Options {
     pub http: Http,
-    pub query_sql: Option<Sql>,
-    pub query_fs: Option<Fs>,
+    pub query: Option<Query>,
     pub submit: Option<Submit>,
     pub status: Option<Status>,
+    pub storage_fs: Option<persistence::fs::Options>,
+    pub storage_sql: Option<persistence::sql::Options>,
 }
 
 impl From<Http> for Options {
     fn from(http: Http) -> Self {
         Self {
             http,
-            query_sql: None,
-            query_fs: None,
+            query: None,
             submit: None,
             status: None,
+            storage_fs: None,
+            storage_sql: None,
         }
     }
 }
 
 impl Options {
     /// Add a query API module backed by a Postgres database.
-    pub fn query_sql(mut self, opt: Sql) -> Self {
-        self.query_sql = Some(opt);
+    pub fn query_sql(mut self, query: Query, storage: persistence::sql::Options) -> Self {
+        self.query = Some(query);
+        self.storage_sql = Some(storage);
         self
     }
 
     /// Add a query API module backed by the file system.
-    pub fn query_fs(mut self, opt: Fs) -> Self {
-        self.query_fs = Some(opt);
+    pub fn query_fs(mut self, query: Query, storage: persistence::fs::Options) -> Self {
+        self.query = Some(query);
+        self.storage_fs = Some(storage);
         self
     }
 
@@ -68,7 +71,7 @@ impl Options {
 
     /// Whether these options will run the query API.
     pub fn has_query_module(&self) -> bool {
-        self.query_sql.is_some() || self.query_fs.is_some()
+        self.query.is_some() && (self.storage_fs.is_some() || self.storage_sql.is_some())
     }
 
     /// Start the server.
@@ -83,9 +86,9 @@ impl Options {
     {
         // The server state type depends on whether we are running a query or status API or not, so
         // we handle the two cases differently.
-        let node = if let Some(opt) = self.query_sql.take() {
+        let node = if let Some(opt) = self.storage_sql.take() {
             init_with_query_module::<N, sql::DataSource>(self, opt, init_context).await?
-        } else if let Some(opt) = self.query_fs.take() {
+        } else if let Some(opt) = self.storage_fs.take() {
             init_with_query_module::<N, fs::DataSource>(self, opt, init_context).await?
         } else if self.status.is_some() {
             // If a status API is requested but no availability API, we use the `MetricsDataSource`,
@@ -196,45 +199,9 @@ pub struct Submit;
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Status;
 
-/// Options for the query API module backed by a Postgres database.
-#[derive(Parser, Clone, Debug, Default)]
-pub struct Sql {
-    /// Hostname for the remote Postgres database server.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]
-    pub host: Option<String>,
-
-    /// Port for the remote Postgres database server.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PORT")]
-    pub port: Option<u16>,
-
-    /// Name of database to connect to.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_DATABASE")]
-    pub database: Option<String>,
-
-    /// Postgres user to connect as.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USER")]
-    pub user: Option<String>,
-
-    /// Password for Postgres user.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PASSWORD")]
-    pub password: Option<String>,
-
-    /// Reset database upon connecting.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
-    pub reset_store: bool,
-}
-
-/// Options for the query API module backed by the file system.
-#[derive(Parser, Clone, Debug)]
-pub struct Fs {
-    /// Storage path for HotShot query service data.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub storage_path: PathBuf,
-
-    /// Create new query storage instead of opening existing one.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_RESET_STORE")]
-    pub reset_store: bool,
-}
+/// Options for the query API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Query;
 
 async fn init_with_query_module<N, D>(
     opt: Options,
@@ -247,7 +214,7 @@ where
 {
     type State<N, D> = Arc<RwLock<AppState<N, D>>>;
 
-    let ds = D::create(mod_opt).await?;
+    let ds = D::create(mod_opt, false).await?;
     let metrics = ds.populate_metrics();
 
     // Start up handle

@@ -1,7 +1,5 @@
-use super::{
-    data_source::SequencerDataSource, endpoints::TimeWindowQueryData, options::Sql as Options,
-};
-use crate::{Header, SeqTypes};
+use super::{data_source::SequencerDataSource, endpoints::TimeWindowQueryData};
+use crate::{persistence::sql::Options, Header, SeqTypes};
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 use hotshot_query_service::{
@@ -17,9 +15,12 @@ pub type DataSource = SqlDataSource<SeqTypes>;
 impl SequencerDataSource for DataSource {
     type Options = Options;
 
-    async fn create(opt: Self::Options) -> anyhow::Result<Self> {
-        let mut cfg =
-            Config::default().migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
+    async fn create(opt: Self::Options, reset: bool) -> anyhow::Result<Self> {
+        let mut cfg = match opt.uri {
+            Some(uri) => uri.parse()?,
+            None => Config::default(),
+        };
+        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
 
         if let Some(host) = opt.host {
             cfg = cfg.host(host);
@@ -27,16 +28,19 @@ impl SequencerDataSource for DataSource {
         if let Some(port) = opt.port {
             cfg = cfg.port(port);
         }
-        if let Some(database) = opt.database {
+        if let Some(database) = &opt.database {
             cfg = cfg.database(database);
         }
-        if let Some(user) = opt.user {
+        if let Some(user) = &opt.user {
             cfg = cfg.user(user);
         }
-        if let Some(password) = opt.password {
+        if let Some(password) = &opt.password {
             cfg = cfg.password(password);
         }
-        if opt.reset_store {
+        if opt.use_tls {
+            cfg = cfg.tls();
+        }
+        if reset {
             cfg = cfg.reset_schema();
         }
 
@@ -200,12 +204,15 @@ mod impl_testable_data_source {
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
-            opt.query_sql(Options {
-                port: Some(storage.port()),
-                user: Some("postgres".into()),
-                password: Some("password".into()),
-                ..Default::default()
-            })
+            opt.query_sql(
+                Default::default(),
+                Options {
+                    port: Some(storage.port()),
+                    user: Some("postgres".into()),
+                    password: Some("password".into()),
+                    ..Default::default()
+                },
+            )
         }
     }
 }

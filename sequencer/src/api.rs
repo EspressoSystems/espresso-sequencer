@@ -5,7 +5,7 @@ use hotshot::types::SystemContextHandle;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::light_client::LightClientState;
 
-mod data_source;
+pub mod data_source;
 pub mod endpoints;
 pub mod fs;
 pub mod options;

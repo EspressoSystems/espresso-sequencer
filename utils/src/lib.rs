@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
 use commit::{Commitment, Committable};
@@ -353,15 +354,14 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
 
 pub async fn contract_send<M: Middleware, T: Detokenize>(
     call: &ContractCall<M, T>,
-) -> Option<(TransactionReceipt, u64)>
+) -> Result<(TransactionReceipt, u64), anyhow::Error>
 where
     M::Provider: Clone,
 {
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            tracing::error!("error sending transaction: {}", err);
-            return None;
+            return Err(anyhow!("error sending transaction: {}", err));
         }
     };
 
@@ -370,23 +370,22 @@ where
     tracing::debug!("submitted contract call {}", hash);
 
     if !wait_for_transaction_to_be_mined(&provider, hash).await {
-        return None;
+        return Err(anyhow!("transaction not mined"));
     }
 
     let receipt = match provider.get_transaction_receipt(hash).await {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
-            tracing::error!("contract call {hash}: no receipt");
-            return None;
+            return Err(anyhow!("contract call {hash}: no receipt"));
         }
         Err(err) => {
-            tracing::error!("contract call {hash}: error getting transaction receipt: {err}");
-            return None;
+            return Err(anyhow!(
+                "contract call {hash}: error getting transaction receipt: {err}"
+            ))
         }
     };
     if receipt.status != Some(1.into()) {
-        tracing::error!("contract call {hash}: transaction reverted");
-        return None;
+        return Err(anyhow!("contract call {hash}: transaction reverted"));
     }
 
     // If a transaction is mined and we get a receipt for it, the block number should _always_ be
@@ -394,7 +393,7 @@ where
     let block_number = receipt
         .block_number
         .expect("transaction mined but block number not set");
-    Some((receipt, block_number.as_u64()))
+    Ok((receipt, block_number.as_u64()))
 }
 
 async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(

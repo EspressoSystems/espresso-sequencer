@@ -5,13 +5,13 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "e61171e5f9f4c11183c465c3ff4b684ff7ec5537" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", rev = "fc48349b5ea7381442e7193f49efc32b9b81ed4d" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
@@ -28,7 +28,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", features =
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish" }
 
-surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.5" }
-tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.5" }
+surf-disco = { git = "https://github.com/EspressoSystems/surf-disco", tag = "v0.4.6" }
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", tag = "v0.4.6" }
 
 itertools = "0.12"
