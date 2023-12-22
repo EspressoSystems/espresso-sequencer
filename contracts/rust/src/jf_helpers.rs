@@ -86,13 +86,7 @@ pub fn open_key() -> OpenKey<Bn254> {
         ),
     );
 
-    OpenKey {
-        g,
-        h,
-        beta_h,
-        powers_of_g: vec![g],
-        powers_of_h: vec![h, beta_h],
-    }
+    OpenKey { g, h, beta_h }
 }
 
 /// an intermediate representation of the transcript parsed from abi.encode(transcript) from Solidity.
@@ -482,7 +476,6 @@ pub fn gen_plonk_proof_for_test(
             powers_of_g: aztec_srs.powers_of_g,
             h: aztec_srs.h,
             beta_h: aztec_srs.beta_h,
-            powers_of_h: vec![aztec_srs.h, aztec_srs.beta_h],
         }
     };
     let open_key = open_key();
