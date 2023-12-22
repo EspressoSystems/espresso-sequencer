@@ -5,12 +5,12 @@ resolver = "2"
 members = ["contract-bindings", "contracts/rust", "sequencer", "utils"]
 
 [workspace.dependencies]
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
-hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.4" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-signature-key = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.5" }
 
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "main" }
 
