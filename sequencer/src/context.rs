@@ -6,7 +6,7 @@ use hotshot_types::{
 use jf_primitives::signatures::SignatureScheme;
 use std::sync::{Arc, RwLock};
 
-use crate::state_signature::{self, signature_pool::StateSignaturePool};
+use crate::state_signature::{self, StateSignatureMemStorage};
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Clone)]
@@ -22,7 +22,7 @@ pub struct SequencerContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     state_key_pair: Arc<StateKeyPair>,
 
     /// The most recent light client state signatures
-    state_signatures: Arc<RwLock<StateSignaturePool>>,
+    state_signatures: Arc<RwLock<StateSignatureMemStorage>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SequencerContext<TYPES, I> {

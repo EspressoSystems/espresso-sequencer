@@ -1,13 +1,19 @@
+//! Utilities for generating and storing the most recent light client state signatures.
+
 use crate::{api::Context, network, Leaf, SeqTypes};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
+use hotshot_types::light_client::StateSignature;
 use hotshot_types::{light_client::LightClientState, traits::state::ConsensusTime};
+use std::collections::{HashMap, VecDeque};
 
-pub mod signature_pool;
-
+/// Types related to the underlying signature schemes.
 pub type StateSignatureScheme =
     jf_primitives::signatures::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;
 pub use hotshot_stake_table::vec_based::config::FieldType as BaseField;
+
+/// Capacity for the in memory signature storage.
+const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 pub(super) async fn state_signature_loop<N>(
     context: Context<N>,
@@ -46,5 +52,26 @@ fn form_light_client_state(leaf: &Leaf) -> LightClientState<BaseField> {
             BaseField::default(),
             BaseField::default(),
         ),
+    }
+}
+
+/// A rolling in-memory storage for the most recent light client state signatures.
+#[derive(Debug, Default)]
+pub struct StateSignatureMemStorage {
+    pool: HashMap<u64, StateSignature>,
+    deque: VecDeque<u64>,
+}
+
+impl StateSignatureMemStorage {
+    pub fn push(&mut self, height: u64, signature: StateSignature) {
+        self.pool.insert(height, signature);
+        self.deque.push_back(height);
+        if self.pool.len() > SIGNATURE_STORAGE_CAPACITY {
+            self.pool.remove(&self.deque.pop_front().unwrap());
+        }
+    }
+
+    pub fn get_signature(&self, height: u64) -> Option<StateSignature> {
+        self.pool.get(&height).cloned()
     }
 }

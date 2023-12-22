@@ -1,3 +1,4 @@
+use self::data_source::StateSignatureDataSource;
 use crate::{context::SequencerContext, network, state_signature, Node, SeqTypes};
 use async_std::task::JoinHandle;
 use data_source::SubmitDataSource;
@@ -13,8 +14,6 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
-
-use self::data_source::StateSignatureDataSource;
 
 pub type Context<N> = SequencerContext<SeqTypes, Node<N>>;
 
